@@ -1,0 +1,164 @@
+/* cyrillic-ext */
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Thin.ttf") format("truetype");
+    font-weight: 200;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-ExtraLight.ttf") format("truetype");
+    font-weight: 200;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Light.ttf") format("truetype");
+    font-weight: 300;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Regular.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Medium.ttf") format("truetype");
+    font-weight: 500;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-SemiBold.ttf") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Bold.ttf") format("truetype");
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-ExtraBold.ttf") format("truetype");
+    font-weight: 800;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Black.ttf") format("truetype");
+    font-weight: 900;
+    font-style: normal;
+}
+
+* {
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box
+}
+
+body {
+    font-family: Outfit, Helvetica, sans-serif;
+    padding: 0;
+    margin: 0
+}
+
+#notfound {
+    position: relative;
+    height: 100vh
+}
+
+#notfound .notfound {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    -webkit-transform: translate(-50%, -50%);
+    -ms-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%)
+}
+
+.notfound {
+    max-width: 520px;
+    width: 100%;
+    line-height: 1.4;
+    text-align: center
+}
+
+.notfound .notfound-404 {
+    position: relative;
+    height: 240px
+}
+
+.notfound .notfound-404 h1 {
+    font-family: montserrat, sans-serif;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    -webkit-transform: translate(-50%, -50%);
+    -ms-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+    font-size: 252px;
+    font-weight: 900;
+    margin-top: 30px;
+    color: #262626;
+    text-transform: uppercase;
+    letter-spacing: -40px;
+    margin-left: -20px
+}
+
+.notfound .notfound-404 h1>span {
+    text-shadow: -8px 0 0 #fff
+}
+
+.notfound .notfound-404 h3 {
+    font-family: Outfit, Helvetica, sans-serif;
+    font-weight: 400;
+    font-size: 20px;
+    margin-bottom: 25px;
+}
+
+.notfound h2 {
+    font-family: Outfit, Helvetica, sans-serif;
+    font-size: 20px;
+    font-weight: 400;
+    text-transform: capitalize;
+    color: #000;
+    margin-top: 30px;
+    margin-bottom: 25px
+}
+
+@media only screen and (max-width: 767px) {
+    .notfound .notfound-404 {
+      height: 200px
+    }
+
+    .notfound .notfound-404 h1 {
+      font-size: 200px
+    }
+}
+
+@media only screen and (max-width: 480px) {
+    .notfound .notfound-404 {
+      height: 162px
+    }
+
+    .notfound .notfound-404 h1 {
+      font-size: 162px;
+      height: 150px;
+      line-height: 162px
+    }
+
+    .notfound h2 {
+      font-size: 16px
+    }
+}

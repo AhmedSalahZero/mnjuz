@@ -1,0 +1,1 @@
+import{a7 as a}from"./index-58c6a9a2.js";import{E as r,f as t,g as l,L as n,u as p,o as c,J as f}from"./app-ac1f9e43.js";const _=r({__name:"TabsList",props:{loop:{type:Boolean},asChild:{type:Boolean},as:{},class:{}},setup(s){const e=s;return(o,m)=>(c(),t(p(a),n(e,{class:"flex w-full border-b"}),{default:l(()=>[f(o.$slots,"default")]),_:3},16))}});export{_};

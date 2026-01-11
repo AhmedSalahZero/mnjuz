@@ -1,0 +1,259 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Thin.ttf") format("truetype");
+    font-weight: 200;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-ExtraLight.ttf") format("truetype");
+    font-weight: 200;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Light.ttf") format("truetype");
+    font-weight: 300;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Regular.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Medium.ttf") format("truetype");
+    font-weight: 500;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-SemiBold.ttf") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Bold.ttf") format("truetype");
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-ExtraBold.ttf") format("truetype");
+    font-weight: 800;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Black.ttf") format("truetype");
+    font-weight: 900;
+    font-style: normal;
+}
+
+@layer base {
+    :root {
+        --primary: 164 90% 15%;
+    }
+}
+
+body {
+    font-family: Outfit, Helvetica, sans-serif;
+}
+
+h1 {
+    font-weight: 600;
+}
+
+h2 {
+    font-weight: 500;
+}
+
+/* Track */
+::-webkit-scrollbar {
+    width: 9px; /* Width of the scrollbar track */
+}
+
+/* Thumb (the draggable part of the scrollbar) */
+::-webkit-scrollbar-thumb {
+    background-color: #888; /* Color of the thumb */
+    border-radius: 6px; /* Rounded corners of the thumb */
+}
+
+/* Hover effect on the thumb */
+::-webkit-scrollbar-thumb:hover {
+    background-color: #555; /* Color of the thumb on hover */
+}
+
+/* Track when the scrollbar is in an inactive state (not being interacted with) */
+::-webkit-scrollbar-track {
+    background-color: transparent; /* Color of the track */
+}
+
+.vue-tel-input:focus-within {
+    box-shadow: none!important;
+}
+
+.vue-tel-input {
+    border-radius: 0.375rem!important;
+    display: flex;
+    border: 0px!important;
+    text-align: left;
+}
+
+.vti__dropdown {
+    background-color: inherit!important;
+}
+
+.vti__input {
+    border: none;
+    border-radius: 0 0.375rem 0.375rem 0!important;
+    width: 100%;
+    outline: none;
+    padding-left: 7px;
+}
+
+.vti__dropdown {
+    display: flex;
+    flex-direction: column;
+    align-content: center;
+    justify-content: center;
+    position: relative;
+    padding: 5px!important;
+    cursor: pointer;
+}
+
+.ql-editor p {
+    padding-top: 8px!important;
+    padding-bottom: 8px !important;
+}
+
+.main-gradient {
+    background: linear-gradient(rgba(229, 107, 38, 0.11), rgba(255, 167, 35, 0.11), rgba(255, 199, 0, 0.11));
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+}
+.bg-gradient-ember {
+    background: linear-gradient(to right, rgba(0, 128, 0, 1) 10%, rgba(150, 191, 140, 1) 30%,  rgba(150, 191, 140, 1)100%);
+}
+.border-ember {
+    border-color: #FF4500;
+    color: #FF4500;
+}
+@keyframes gradient {
+    0% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.hover\:animate-gradient:hover {
+    animation: gradient 0.1s linear forwards; /* Changed from 'infinite' to 'forwards' */
+    background: linear-gradient(to right, rgba(255, 69, 0, 1) 0%, rgba(255, 215, 0, 1) 50%, rgba(255, 99, 0, 1) 100%);
+    background-size: 200% 100%;
+    transition: background 0.5s ease;
+}
+
+.revealed {
+    opacity: 0;
+    visibility: hidden;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 100%, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+.animate__fadeInUp {
+    animation: fadeInUp 0.5s ease-out both;
+    opacity: 1;
+    visibility: visible;
+}
+
+.chat-bg {
+    background-image: url('/resources/images/whatsapp-bg-02.png');
+}
+
+.speech-bubble-right::before {
+    content: "";
+    width: 0px;
+    height: 0px;
+    position: absolute;
+    border-left: 5px solid #d8fad4;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #d8fad4;
+    border-bottom: 5px solid transparent;
+    right: -10px;
+    top: 0;
+}
+
+.speech-bubble-left::before {
+    content: "";
+    width: 0px;
+    height: 0px;
+    position: absolute;
+    border-left: 5px solid transparent;
+    border-right: 5px solid white;
+    border-top: 5px solid white;
+    border-bottom: 5px solid transparent;
+    left: -10px;
+    top: 0;
+}
+
+._7r39 {
+    background-color: transparent;
+    background-size: cover;
+    background-repeat: no-repeat;
+    border-radius: 4px;
+    box-sizing: border-box;
+    min-width: 24em;
+    min-height: 15em;
+}
+
+/* RTL Support */
+.direction-rtl {
+    direction: rtl;
+    text-align: right;
+}
+
+.direction-rtl .reverse-flex {
+    flex-direction: row-reverse;
+}
+
+.direction-ltr {
+    direction: ltr;
+    text-align: left;
+}
+
+/* RTL-specific margins and paddings */
+.direction-rtl .ml-auto {
+    margin-left: unset;
+    margin-right: auto;
+}
+
+.direction-rtl .mr-auto {
+    margin-right: unset;
+    margin-left: auto;
+}
