@@ -310,7 +310,7 @@ class Contact extends Model
 
             if (isset($metadata['tickets'])) {
                 // If the 'contacts' key exists, retrieve the 'location' value
-                $encryptContactsForAgents = $metadata['tickets']['encrypt_contacts_for_agents'];
+                $encryptContactsForAgents = $metadata['tickets']['encrypt_contacts_for_agents']??false;
 
                 // Now, you have the location value available
                 return $encryptContactsForAgents;
