@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { isVNode } from 'vue'
-import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from '.'
 import { useToast } from './use-toast'
+import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from '.'
 
-const props = defineProps(['class'])
+const props = defineProps(['class']);
 const { toasts } = useToast()
 </script>
 
 <template>
   <ToastProvider>
-    <Toast
-      v-for="toast in toasts"
-      :key="toast.id"
-      v-bind="toast"
-      :class="props.class">
+    <Toast v-for="toast in toasts" :key="toast.id" v-bind="toast" :class="props.class">
       <div class="grid gap-1">
         <ToastTitle v-if="toast.title">
           {{ toast.title }}
@@ -30,6 +26,6 @@ const { toasts } = useToast()
       </div>
       <component :is="toast.action" />
     </Toast>
-    <ToastViewport />
+    <ToastViewport/>
   </ToastProvider>
 </template>

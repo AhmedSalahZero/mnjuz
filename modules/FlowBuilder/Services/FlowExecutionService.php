@@ -219,6 +219,7 @@ logger('--from final query');
         if (!$flow || empty($flow->metadata)) {
             return;
         }
+
         $contact = Contact::find($contactId);
         if (!$contact) {
             return false;

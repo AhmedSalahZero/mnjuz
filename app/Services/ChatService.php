@@ -586,6 +586,7 @@ class ChatService
     }
     public function blockContact(Organization $organization, Contact $contact)
     {
+		logger('from block api');
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
         //	dd($contact);

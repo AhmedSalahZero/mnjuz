@@ -54,6 +54,7 @@ class FlowService
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
             $result = $validator->validateMessageNodes($metadataArray);
+
             if(is_array($result)){
                 $data['status'] = 'inactive';
             }

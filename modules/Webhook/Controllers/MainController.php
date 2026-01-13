@@ -2,15 +2,15 @@
 
 namespace Modules\Webhook\Controllers;
 
-use App\Helpers\CustomHelper;
 use App\Http\Controllers\Controller as BaseController;
+use App\Helpers\CustomHelper;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Modules\Webhook\Models\Webhook;
 use Modules\Webhook\Models\WebhookEvent; 
 use Modules\Webhook\Requests\StoreWebhook;
 use Modules\Webhook\Requests\UpdateWebhook;
 use Modules\Webhook\Resources\WebhookResource;
+use Inertia\Inertia;
 
 class MainController extends BaseController
 {
@@ -379,7 +379,6 @@ class MainController extends BaseController
         })->get();
 
         foreach ($webhooks as $webhook) {
-			// logger('webhook send notification to' . $organizationId);
             // Send a notification to the webhook URL
             $this->sendNotification($webhook->url, [
                 'event' => $event,
@@ -410,3 +409,5 @@ class MainController extends BaseController
         }
     }
 }
+
+
