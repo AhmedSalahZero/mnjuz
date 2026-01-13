@@ -186,7 +186,7 @@ Route::middleware(['auth:user'])->group(function () {
 
                 Route::get('/team', [App\Http\Controllers\User\TeamController::class, 'index'])->name('team');
 				// ['middleware' => 'check.client.role']
-                Route::group(['middleware' => 'check.client.role'], function () {
+                Route::group([], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);

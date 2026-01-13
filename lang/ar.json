@@ -984,5 +984,7 @@
 "Are You sure you want to unblock this contact":"هل انت متاكد من ازالة الحظر لجهه الاتصال",
 "Blocked":"محظور",
 "Cannot unblock contact":"لا يمكن ازالة الحظر",
-"Contact unblocked successfully":"تم ازالة الحظر بنجاح"
+"Contact unblocked successfully":"تم ازالة الحظر بنجاح",
+"Encrypt Contact Numbers For Agents ?":"تشفير رقم الجوال للوكلاء؟",
+"Enable this option, if you want to encrypt Contact Numbers For Agents For Example The Contact Number Will Be Displayed As 123******.":"فعّل هذا الخيار لتشفير رقم الجوال للوكلاء. على سبيل المثال، سيتم عرض رقم الجوال ك 123******."
 }

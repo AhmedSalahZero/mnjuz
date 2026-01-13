@@ -190,7 +190,7 @@
 
           <div
             v-if="form.active"
-            class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-20">
+            class="bg-white border border-slate-200 rounded-lg pt-2 text-sm px-4 mb-20">
             <div class="w-full py-2 mb-4 mt-2">
               <div class="flex w-full">
                 <div class="w-3/4 text-md">
@@ -198,7 +198,7 @@
                   <div class="mb-1 text-slate-500">
                     {{
                       $t(
-                        'Enable this option, if you want to encrypt Contact Numbers For Agents For Example The Contact Number Will Be Disabled As 123******.',
+                        'Enable this option, if you want to encrypt Contact Numbers For Agents For Example The Contact Number Will Be Displayed As 123******.',
                       )
                     }}
                   </div>
