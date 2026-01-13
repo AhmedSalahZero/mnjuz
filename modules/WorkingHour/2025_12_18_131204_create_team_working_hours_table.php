@@ -14,7 +14,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('teams', function (Blueprint $table) {
-            $table->boolean('has_working_hours')->default(false)->after('is_assignable');
+            $table->boolean('has_working_hours')->default(false)
+            // ->after('is_assignable')
+            ;
         });
 
         Schema::create('team_working_hours', function (Blueprint $table) {
