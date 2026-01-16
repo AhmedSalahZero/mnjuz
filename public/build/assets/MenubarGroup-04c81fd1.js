@@ -1,0 +1,1 @@
+import{Q as s}from"./index-c1df2e1e.js";import{E as r,f as t,g as n,a8 as p,a9 as u,u as l,o as c,J as f}from"./app-b42f2b4d.js";const _=r({__name:"MenubarGroup",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(o,i)=>(c(),t(l(s),p(u(e)),{default:n(()=>[f(o.$slots,"default")]),_:3},16))}});export{_ as default};
