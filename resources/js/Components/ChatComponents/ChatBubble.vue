@@ -911,8 +911,6 @@ const copyItem = async (token) => {
         :class="props.type === 'outbound' && content.user ? '' : 'mt-2'">
         <p class="text-gray-500 text-xs text-right leading-none">
           {{ content.created_at }}
-          {{ logger(content) }}
-          {{ logger(content.created_at) }}
         </p>
         <span
           class="relative group cursor-pointer"
