@@ -108,7 +108,7 @@ Route::middleware(['auth:user'])->group(function () {
 
     Route::post('/email/verification-notification', [App\Http\Controllers\AuthController::class, 'sendEmailVerification'])->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 
-    Route::group(['middleware' => ['check.email.verification']], function () {
+    Route::group(['middleware' => ['check.email.verification','check.active.organization']], function () {
         Route::get('/select-organization', [App\Http\Controllers\User\OrganizationController::class, 'index'])->name('user.organization.index');
         Route::post('/select-organization', [App\Http\Controllers\User\OrganizationController::class, 'selectOrganization'])->name('user.organization.selectOrganization');
         Route::post('/organization', [App\Http\Controllers\User\OrganizationController::class, 'store'])->name('user.organization.store');
@@ -185,8 +185,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::match(['get', 'post'], '/instances', [App\Http\Controllers\User\InstanceController::class, 'index']);
 
                 Route::get('/team', [App\Http\Controllers\User\TeamController::class, 'index'])->name('team');
-				// ['middleware' => 'check.client.role']
-                Route::group([], function () {
+                Route::group(['middleware' => 'check.client.role'], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);

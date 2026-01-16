@@ -71,6 +71,7 @@ class Kernel extends HttpKernel
         'check.subscription' => \App\Http\Middleware\CheckSubscriptionStatus::class,
         'check.organization' => \App\Http\Middleware\CheckOrganizationId::class,
         'check.email.verification' => \App\Http\Middleware\CheckEmailVerification::class,
+        'check.active.organization' => \App\Http\Middleware\CheckActiveOrganization::class,
         'check.client.role' => \App\Http\Middleware\CheckClientRole::class,
         'auth.bearer' => \App\Http\Middleware\AuthenticateBearerToken::class,
         'setOrganization' => \App\Http\Middleware\SetOrganizationFromSession::class,

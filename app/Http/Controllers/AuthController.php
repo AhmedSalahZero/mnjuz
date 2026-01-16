@@ -59,10 +59,9 @@ class AuthController extends BaseController
         $remember = $request->remember;
 		$userLanguage = $user->language ?? 'en';
 		// check if there is an active originization
-		$numberOfActiveOrganization = Team::with('organization')->whereHas('organization',function($q){
-			$q->where('is_banned',false);
-		})->where('user_id', $user->id)->count();
-		if(!$numberOfActiveOrganization && $user->role == 'user'){
+		// $numberOfActiveOrganization = $user->getActiveOrganizations()->count();
+		$canNotAccessDashboard = $user->canNotAccessDashboard();
+		if($canNotAccessDashboard){
 			 return redirect()->back()->withErrors(['email' => __('Your account is not associated with any active organization. Please contact support.',[],$userLanguage)])->withInput();
 		}
         if ($user->tfa && $addonActive == 1) {

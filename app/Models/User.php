@@ -106,6 +106,15 @@ class User extends Authenticatable implements MustVerifyEmail
             \Log::error('Failed to send verification email: ' . $e->getMessage());
         }
     }
-	
+	public function getActiveOrganizations()
+	{
+		return Team::with('organization')->whereHas('organization',function($q){
+			$q->where('is_banned',false);
+		})->where('user_id', $this->id);
+	}	
+	public function canNotAccessDashboard()
+	{
+		return $this->role == 'user' && $this->getActiveOrganizations()->count() == 0;
+	}
 	
 }

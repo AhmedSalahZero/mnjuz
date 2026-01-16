@@ -1,1 +1,0 @@
-import{c as s}from"./index-c8c8ce0a.js";import{E as r,f as t,g as n,a8 as l,a9 as p,u as c,o as f,J as i}from"./app-fd2e362e.js";const _=r({__name:"DialogClose",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(o,u)=>(f(),t(c(s),l(p(e)),{default:n(()=>[i(o.$slots,"default")]),_:3},16))}});export{_ as default};
