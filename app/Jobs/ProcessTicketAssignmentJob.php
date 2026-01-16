@@ -104,15 +104,15 @@ class ProcessTicketAssignmentJob implements ShouldQueue
             'contact_id' => $this->contactId,
             'assigned_to' => $assignedTo,
             'status' => 'open',
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId),
-            'updated_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId),
+            'created_at' =>  now(),
+            'updated_at' =>  now(),
         ]);
 
         // ✅ Log التذكرة
         $ticketLogId = ChatTicketLog::insertGetId([
             'contact_id' => $this->contactId,
             'description' => 'Conversation was opened',
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+            'created_at' =>  now()
         ]);
 
         // ✅ Chat Log
@@ -120,7 +120,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue
             'contact_id' => $this->contactId,
             'entity_type' => 'ticket',
             'entity_id' => $ticketLogId,
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+            'created_at' =>  now()
         ]);
 
         Log::info('Ticket created successfully', [
@@ -151,14 +151,14 @@ class ProcessTicketAssignmentJob implements ShouldQueue
 
         // ✅ تحديث الحالة
         $ticket->status = 'open';
-        $ticket->updated_at =  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+        $ticket->updated_at =  now();
         $ticket->save();
 
         // ✅ Log إعادة الفتح
         $ticketLogId = ChatTicketLog::insertGetId([
             'contact_id' => $this->contactId,
             'description' => 'Conversation was moved from closed to open',
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+            'created_at' =>  now()
         ]);
 
         // ✅ Chat Log
@@ -166,7 +166,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue
             'contact_id' => $this->contactId,
             'entity_type' => 'ticket',
             'entity_id' => $ticketLogId,
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+            'created_at' =>  now()
         ]);
 
         Log::info('Ticket reopened successfully', [

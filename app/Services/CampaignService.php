@@ -80,7 +80,7 @@ class CampaignService
                                 $chatMedia->path = $mediaUrl;
                                 $chatMedia->type = $contentType;
                                 $chatMedia->size = $mediaSize;
-                                $chatMedia->created_at =DateTimeHelper::convertToOrganizationTimezone(now(),$organizationId);
+                                $chatMedia->created_at =now();
                                 $chatMedia->save();
 
                                 $mediaId = $chatMedia->id;

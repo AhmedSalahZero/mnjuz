@@ -51,7 +51,7 @@ class ContactService
         if($uuid === null){
             $contact->organization_id = $this->organizationId;
             $contact->created_by = auth()->user() ? auth()->user()->id : 0;
-            $contact->created_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+            $contact->created_at =now();
         }
 
         $address = json_encode([
@@ -64,7 +64,7 @@ class ContactService
         
         $contact->address = $address;
         $contact->metadata = json_encode($request->metadata);
-        $contact->updated_at =DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+        $contact->updated_at =now();
         $contact->save();
 
         if($request->group){

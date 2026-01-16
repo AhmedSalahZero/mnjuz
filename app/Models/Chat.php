@@ -38,6 +38,7 @@ class Chat extends Model {
     
     public function getCreatedAtAttribute($value)
     {
+		
         return DateTimeHelper::convertToOrganizationTimezone($value,$this->attributes['organization_id'])->toDateTimeString();
     }
     

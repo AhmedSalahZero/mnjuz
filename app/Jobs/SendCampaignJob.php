@@ -121,7 +121,7 @@ class SendCampaignJob implements ShouldQueue
             return [
                 'campaign_id' => $campaign->id,
                 'contact_id' => $contactId,
-                'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$campaign->organization_id),
+                'created_at' =>  now(),
             ];
         })->toArray();
 
@@ -355,7 +355,7 @@ class SendCampaignJob implements ShouldQueue
             unset($responseObject->data->chat);
         }
         $log->metadata = json_encode($responseObject);
-        $log->updated_at =  DateTimeHelper::convertToOrganizationTimezone(now());
+        $log->updated_at =  now();
         $log->save();
     }
 

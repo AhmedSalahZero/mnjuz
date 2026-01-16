@@ -52,7 +52,7 @@ class ProcessMessageStatusJob implements ShouldQueue
                     ChatStatusLog::create([
                         'chat_id' => $chat->id,
                         'metadata' => json_encode($status),
-                        'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+                        'created_at' => now()
                     ]);
 
                     Log::info("Message status updated", [

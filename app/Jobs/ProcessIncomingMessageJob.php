@@ -80,7 +80,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
                     ProcessAutoReplyJob::dispatch(
                         $chat->id,
                         $this->organizationId
-                    )->onQueue('autoreplies')->delay(DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)->addSeconds(5));
+                    )->onQueue('autoreplies')->delay(now()->addSeconds(5));
                 }
                 
                 if (!$hasMedia) {
@@ -150,8 +150,8 @@ class ProcessIncomingMessageJob implements ShouldQueue
                 'last_name' => null,
                 'email' => null,
                 'created_by' => 0,
-                'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId),
-                'updated_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId),
+                'created_at' =>  now(),
+                'updated_at' =>  now(),
             ]
         );
     }
@@ -165,7 +165,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
             'contact_id' => $contact->id,
             'type' => 'inbound',
             'metadata' => json_encode($this->message),
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId),
+            'created_at' =>  now(),
             'status' => 'delivered',
             'is_read' => 0,
         ]);
@@ -195,7 +195,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
             'contact_id' => $contactId,
             'entity_type' => 'chat',
             'entity_id' => $chatId,
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)
+            'created_at' =>  now()
         ]);
     }
 

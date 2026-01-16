@@ -36,14 +36,14 @@ class ChatTicketController extends BaseController
         $ticketId = ChatTicketLog::insertGetId([
             'contact_id' => $contact->id,
             'description' => 'Conversation was moved from ' . $statusDescription,
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now())
+            'created_at' =>  now()
         ]);
 
         ChatLog::insert([
             'contact_id' => $contact->id,
             'entity_type' => 'ticket',
             'entity_id' => $ticketId,
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now())
+            'created_at' =>  now()
         ]);
 
         return Redirect::back()->with(
@@ -68,14 +68,14 @@ class ChatTicketController extends BaseController
             $ticketId = ChatTicketLog::insertGetId([
                 'contact_id' => $contact->id,
                 'description' => 'Conversation was assigned to ' . $user->first_name . ' ' . $user->last_name,
-                'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now())
+                'created_at' =>  now()
             ]);
 
             ChatLog::insert([
                 'contact_id' => $contact->id,
                 'entity_type' => 'ticket',
                 'entity_id' => $ticketId,
-                'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now())
+                'created_at' =>  now()
             ]);
 
             return Redirect::back()->with(

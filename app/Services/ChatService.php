@@ -121,8 +121,7 @@ class ChatService
 
         $contacts = $contactsQuery;
         $rowCount = $contacts->total();
-        // dd($contacts->first());
-        
+
     
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
@@ -149,7 +148,7 @@ class ChatService
 				 * @var Contact $contact
 				 */
 				$contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted());
-            
+   
             $ticket = ChatTicket::with('user')
                 ->where('contact_id', $contact->id)
                 ->first();
@@ -175,7 +174,6 @@ class ChatService
                     ->where('deleted_at', null)
                     ->where('is_read', 0)
                     ->count();
-
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
@@ -250,7 +248,7 @@ class ChatService
 
             DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId) {
                 if (!$ticket) {
-                    $now = DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId);
+                    $now = now();
                     // Create a new ticket if it doesn't exist
                     $ticket = new ChatTicket;
                     $ticket->contact_id = $contactId;
@@ -309,14 +307,14 @@ class ChatService
                         $ticketId = ChatTicketLog::insertGetId([
                             'contact_id' => $contactId,
                             'description' => 'Conversation was moved from closed to open',
-                            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)
+                            'created_at' =>  now()
                         ]);
     
                         ChatLog::insert([
                             'contact_id' => $contactId,
                             'entity_type' => 'ticket',
                             'entity_id' => $ticketId,
-                            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)
+                            'created_at' => now()
                         ]);
                     }
                 }
@@ -400,7 +398,7 @@ class ChatService
                         $chatMedia->path = $mediaUrl;
                         $chatMedia->type = $contentType;
                         $chatMedia->size = $mediaSize;
-                        $chatMedia->created_at =  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId);
+                        $chatMedia->created_at =  now();
                         $chatMedia->save();
 
                         $mediaId = $chatMedia->id;
@@ -435,7 +433,7 @@ class ChatService
         Chat::where('uuid', $uuid)
             ->update([
                 'deleted_by' => auth()->user()->id,
-                'deleted_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)
+                'deleted_at' => now()
             ]);
     }
 
@@ -444,12 +442,12 @@ class ChatService
         $contact = Contact::with('lastChat')->where('uuid', $uuid)->firstOrFail();
         Chat::where('contact_id', $contact->id)->update([
             'deleted_by' => auth()->user()->id,
-            'deleted_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)
+            'deleted_at' =>  now()
         ]);
 
         ChatLog::where('contact_id', $contact->id)->where('entity_type', 'chat')->update([
             'deleted_by' => auth()->user()->id,
-            'deleted_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId)
+            'deleted_at' =>  now()
         ]);
 
         //    $chat = Chat::with('contact','media')->where('id', $contact->lastChat->id)->first();
@@ -558,7 +556,7 @@ class ChatService
             }
 
             //  إنشاء دفعي - استعلام واحد فقط!
-            $now =  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId);
+            $now =  now();
             $ticketsData = $contactsWithoutTickets->map(function ($contactId) use ($now) {
                 return [
                     'contact_id' => $contactId,

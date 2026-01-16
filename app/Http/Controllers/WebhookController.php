@@ -202,7 +202,10 @@ class WebhookController extends BaseController
 		 */
 		logger('start webhook');
         $res = $request->entry[0]['changes'][0];
-		 $now = DateTimeHelper::convertToOrganizationTimezone(now(),$organization->id);
+		 $now = DateTimeHelper::convertToOrganizationTimezone(now(),null);
+		 /**
+		  * * هسجل التاريخ بال utc واستخدمه للمعالجة بناء علي الاعدادت بتاعت سواء كان الرياض او لندن مثلا
+		  */
         if ($res['field'] === 'messages') {
 logger('start webhook messages');
             $messages = $res['value']['messages'] ?? null;

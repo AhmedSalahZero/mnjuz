@@ -36,7 +36,7 @@ class ChatNoteService
             'contact_id' => $contact->id,
             'entity_type' => 'notes',
             'entity_id' => $note->id,
-            'created_at' => DateTimeHelper::convertToOrganizationTimezone(now())
+            'created_at' => now()
         ]);
 
         return $note;

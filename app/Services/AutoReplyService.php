@@ -74,12 +74,12 @@ class AutoReplyService
         }
 
         $model['metadata'] = json_encode($metadata);
-        $model['updated_at'] =  DateTimeHelper::convertToOrganizationTimezone(now(),$model->organization_id);
+        $model['updated_at'] =  now();
 
         if($uuid === null){
             $model['organization_id'] = session()->get('current_organization');
             $model['created_by'] = auth()->user()->id;
-            $model['created_at'] =  DateTimeHelper::convertToOrganizationTimezone(now(),$model['organization_id']);
+            $model['created_at'] =  now();
         }
 
         $model->save();

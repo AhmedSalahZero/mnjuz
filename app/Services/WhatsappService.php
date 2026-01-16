@@ -131,7 +131,7 @@ class WhatsappService
                 'user_id' => $userId,
                 'metadata' => json_encode($response),
                 'status' => 'delivered',
-				'created_at'=>DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+				'created_at'=>now()
             ]);
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
@@ -141,7 +141,7 @@ class WhatsappService
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
-                'created_at' => DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+                'created_at' =>now()
             ]);
 
             $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
@@ -201,7 +201,7 @@ class WhatsappService
                 'metadata' => $campaignId != NULL ? $this->buildCampaignTemplateChatMessage($templateMetadata, $contactUuId) : $this->buildTemplateChatMessage($templateContent, $contact),
                 'media_id' => $campaignId != NULL ? $this->getMediaIdFromCampaign($campaignId) : $mediaId,
                 'status' => isset($responseObject->data->messages[0]->message_status) ? $responseObject->data->messages[0]->message_status : 'sent',
-                'created_at' => DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+                'created_at' => now()
             ]);
 
 
@@ -212,7 +212,7 @@ class WhatsappService
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
-                'created_at' => DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+                'created_at' =>now()
             ]);
 
             $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
@@ -531,14 +531,14 @@ class WhatsappService
                 'type' => 'outbound',
                 'metadata' => json_encode($mediaData),
                 'status' => 'sent',
-				'created_at'=> DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+				'created_at'=>now()
             ]);
 
             $chatlogId = ChatLog::insertGetId([
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
-                'created_at' => DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+                'created_at' => now()
             ]);
 
             $media = ChatMedia::create([
@@ -547,7 +547,7 @@ class WhatsappService
                 'location' => $location,
                 'type' => $contentType,
                 'size' => $mediaSize,
-				 'created_at' => DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId)
+				 'created_at' => now()
             ]);
 
             Chat::where('id', $chat->id)->update([
@@ -859,8 +859,8 @@ class WhatsappService
             $template->metadata = json_encode($requestData);
             $template->status = $responseObject->data->status;
             $template->created_by = auth()->user()->id;
-            $template->created_at =DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
-            $template->updated_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+            $template->created_at =now();
+            $template->updated_at = now();
             $template->save();
         } catch (ConnectException $e) {
             $responseObject->success = false;
@@ -1087,7 +1087,7 @@ class WhatsappService
                 //$template->metadata = json_encode($requestData);
                 $template->status = 'PENDING';
                 $template->created_by = auth()->user()->id;
-                $template->updated_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId); // No need to set `created_at` when updating
+                $template->updated_at = now(); // No need to set `created_at` when updating
                 $template->save();
             } else {
                 // Handle case where template is not found (optional)
@@ -1144,7 +1144,7 @@ class WhatsappService
                     if($template){
                         $template->metadata = json_encode($templateData);
                         $template->status = $templateData->status;
-                        $template->updated_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+                        $template->updated_at = now();
                         $template->deleted_at = NULL;
                         $template->save();
                     } else {
@@ -1157,8 +1157,8 @@ class WhatsappService
                         $template->metadata = json_encode($templateData);
                         $template->status = $templateData->status;
                         $template->created_by = auth()->user()->id;
-                        $template->created_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
-                        $template->updated_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+                        $template->created_at = now();
+                        $template->updated_at = now();
                         $template->save();
                     }
                 };
@@ -1213,7 +1213,7 @@ class WhatsappService
         $responseObject = $this->sendHttpRequest('DELETE', $url, $requestData, $headers);
 
         if($responseObject->success){
-            $template->deleted_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->organizationId);
+            $template->deleted_at = now();
             $template->save();
         }
 

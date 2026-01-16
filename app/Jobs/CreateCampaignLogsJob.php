@@ -97,8 +97,8 @@ class CreateCampaignLogsJob implements ShouldQueue
                 'campaign_id' => $campaign->id,
                 'contact_id' => $contactId,
                 'status' => 'pending',
-                'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$organization->id),
-                'updated_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(),$organization->id),
+                'created_at' =>  now(),
+                'updated_at' => now(),
             ];
         })->toArray();
 

@@ -70,7 +70,7 @@ class ProcessMediaDownloadJob implements ShouldQueue
             'type' => $media['mime_type'],
             'size' => $media['file_size'],
             'location' => $downloadedFile['location'],
-            'created_at' =>  DateTimeHelper::convertToOrganizationTimezone(now(), $this->organizationId),
+            'created_at' =>  now(),
         ]);
       //  logger('saved media record for media id '.$mediaId.' with chat media id '.$chatMedia->id);
         // ✅ ربط بالـ chat

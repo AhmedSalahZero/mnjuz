@@ -82,7 +82,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         }
         
         $log->metadata = json_encode($responseObject);
-        $log->updated_at = DateTimeHelper::convertToOrganizationTimezone(now(),$this->campaignLog->campaign->organization_id);
+        $log->updated_at = now();
         $log->save();
 
         // Check if campaign is completed
