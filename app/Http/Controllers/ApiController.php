@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\StoreContact;
 use App\Http\Resources\AutoReplyResource;
-use App\Http\Resources\ContactResource;
 use App\Http\Resources\ContactGroupResource;
+use App\Http\Resources\ContactResource;
 use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
 use App\Models\Contact;
@@ -22,12 +22,12 @@ use App\Services\PhoneService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
+use DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use DB;
 
 class ApiController extends Controller
 {
@@ -45,7 +45,6 @@ class ApiController extends Controller
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
         ]);
-
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
@@ -56,7 +55,6 @@ class ApiController extends Controller
         $contacts = Contact::where('organization_id', $request->organization)
             ->where('deleted_at', NULL)
             ->paginate($perPage, ['*'], 'page', $page);
-
         return ContactResource::collection($contacts);
     }
 
@@ -71,7 +69,7 @@ class ApiController extends Controller
             'first_name' => $request->isMethod('post') ? 'required' : 'required|sometimes',
             //'last_name' => 'required',
             'phone' => [
-                'required',
+                $request->isMethod('post') ? 'required' : 'sometimes',
                 'string',
                 'max:255',
                 function ($attribute, $value, $fail) {
@@ -133,9 +131,9 @@ class ApiController extends Controller
      */
     public function destroyContact(Request $request, $uuid){
         try {
-            $contactService = new ContactService($request->organization);
+			$contactService = new ContactService($request->organization);
             $contactService->delete([$uuid]);
-
+			
             return response()->json([
                 'statusCode' => 200,
                 'id' => $uuid,

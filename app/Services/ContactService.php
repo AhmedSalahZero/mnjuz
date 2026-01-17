@@ -65,6 +65,9 @@ class ContactService
         $contact->address = $address;
         $contact->metadata = json_encode($request->metadata);
         $contact->updated_at =now();
+		if($request->has('is_blocked')){
+			$contact->is_blocked = $request->boolean('is_blocked');
+		}
         $contact->save();
 
         if($request->group){

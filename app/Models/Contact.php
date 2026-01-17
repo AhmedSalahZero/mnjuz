@@ -290,9 +290,13 @@ class Contact extends Model
 	}
 	public static function currentUserIsAgent()
 	{
-		$organizationId = session()->get('current_organization');
-		 $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
-		 return $team->role === 'agent';
+		$organizationId = session()->get('current_organization',Request()->get('organization_id'));
+		$user = auth()->user() ;
+		$team = null;
+		if($user){
+			$team = Team::where('organization_id', $organizationId)->where('user_id', $user->id)->first();
+		}
+		 return $team && $team->role === 'agent';
 	}
 	public static function contactPhoneNumberShouldEncrypted(?Organization $organization = null):bool
 	{
