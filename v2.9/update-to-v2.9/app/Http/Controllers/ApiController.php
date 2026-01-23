@@ -1,12 +1,12 @@
 <?php
 
 namespace App\Http\Controllers;
-
 use App\Helpers\WebhookHelper;
+
 use App\Http\Requests\StoreContact;
 use App\Http\Resources\AutoReplyResource;
-use App\Http\Resources\ContactResource;
 use App\Http\Resources\ContactGroupResource;
+use App\Http\Resources\ContactResource;
 use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
 use App\Models\Contact;
@@ -21,12 +21,13 @@ use App\Services\ContactService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
+use DB;
+use Dedoc\Scramble\Attributes\ExcludeRouteFromDocs;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use DB;
 
 class ApiController extends Controller
 {
@@ -39,6 +40,7 @@ class ApiController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
+	#[ExcludeRouteFromDocs]
     public function listContacts(Request $request){
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',

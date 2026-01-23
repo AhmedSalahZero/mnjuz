@@ -17,9 +17,6 @@ use Illuminate\Support\Str;
 |
 */
 
-/*Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});*/
 Route::get('/translations/{locale}', function ($locale) {
     if (Str::startsWith($locale, 'php_')) {
         return response()->json(['error' => 'Invalid locale'], 400);
@@ -35,15 +32,17 @@ Route::get('/translations/{locale}', function ($locale) {
 });
 
 Route::middleware([AuthenticateBearerToken::class])->group(function () {
-    Route::post('/send', [App\Http\Controllers\ApiController::class, 'sendMessage']);
+    Route::get('/contacts', [App\Http\Controllers\ApiController::class, 'listContacts']);
+    Route::post('/contacts', [App\Http\Controllers\ApiController::class, 'storeContact']);
+    Route::put('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'updateContact']);
+    Route::delete('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContact']);
+	
+	Route::middleware(['ExcludeRouteFromDocs'])->group(function () {
+		Route::post('/send', [App\Http\Controllers\ApiController::class, 'sendMessage']);
     Route::post('/send/template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessage']);
     Route::post('/send/media', [App\Http\Controllers\ApiController::class, 'sendMediaMessage']);
     Route::post('/campaigns', [App\Http\Controllers\ApiController::class, 'storeCampaign']);
     
-    Route::get('/contacts', [App\Http\Controllers\ApiController::class, 'listContacts']);
-    Route::post('/contacts', [App\Http\Controllers\ApiController::class, 'storeContact']);
-    Route::put('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContact']);
-    Route::delete('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContact']);
 
     Route::get('/contact-groups', [App\Http\Controllers\ApiController::class, 'listContactGroups']);
     Route::post('/contact-groups', [App\Http\Controllers\ApiController::class, 'storeContactGroup']);
@@ -57,4 +56,7 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
 
     Route::get('/templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
     Route::get('/verify', [App\Http\Controllers\ApiController::class, 'verifyApiKey']);
+	
+	});
+    
 });

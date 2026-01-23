@@ -42,6 +42,11 @@ class ContactService
             } else if($storage === 'aws') {
                 $file = $request->file('file');
                 $uploadedFile = $file->store('uploads/media/contacts/' . $this->organizationId, 's3');
+                
+                if (empty($uploadedFile)) {
+                    throw new \Exception('Failed to upload file to S3 storage');
+                }
+                
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
 
                 $contact->avatar = $mediaFilePath;

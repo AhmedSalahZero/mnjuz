@@ -293,3 +293,8 @@ Route::prefix('admin')->middleware(['web', 'auth:admin'])->group(function () {
     Route::get('/user-logs/notifications', [App\Http\Controllers\Admin\NotificationController::class, 'index']);
     Route::get('/user-logs/emails', [App\Http\Controllers\Admin\EmailLogController::class, 'index']);
 });
+
+Route::get('/docs/api', function () {
+
+    return view('scalar-docs');
+});

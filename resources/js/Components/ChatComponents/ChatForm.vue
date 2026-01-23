@@ -4,6 +4,7 @@ import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
+import { nextTick } from 'vue'
 
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
@@ -41,22 +42,28 @@ watchEffect(() => {
   form.value.uuid = props.contact.uuid
 })
 
-const emit = defineEmits(['response', 'viewTemplate'])
+const emit = defineEmits(['response', 'viewTemplate', 'newMessage'])
 
 const viewTemplate = () => {
   emit('viewTemplate', true)
 }
-
+const appendMessageIntoBody = (form) => {
+  emit('newMessage', form)
+}
 const sendMessage = async () => {
   form.value.message = formTextInput.value
   processingForm.value = true
 
   if (form.value.message != null || form.value.file != null) {
     const formData = new FormData()
-
+    const tempMessageId = crypto.randomUUID()
+    console.log('tempMessageId', tempMessageId)
+    form.value.tempMessageId = tempMessageId
+    appendMessageIntoBody(form)
     formData.append('message', form.value.message)
     formData.append('type', form.value.type)
     formData.append('uuid', form.value.uuid)
+    formData.append('tempMessageId', form.value.tempMessageId)
 
     if (form.value.file) {
       formData.append('file', form.value.file)
@@ -85,6 +92,9 @@ const sendMessage = async () => {
 
     processingForm.value = false
   }
+
+  await nextTick()
+  textInputRef.value?.focus()
 }
 
 const sendAudioMessage = async () => {
@@ -239,7 +249,9 @@ const deleteRecording = () => {
   form2.value.file = null
   stopPlaybackTimer()
 }
-
+const keepFocus = () => {
+  textInputRef.value.focus()
+}
 const togglePlayback = () => {
   if (!audioPlayer.value) return
 
@@ -461,6 +473,7 @@ onBeforeUnmount(() => {
         @input="adjustTextareaHeight"
         type="text"
         rows="1"
+        :autofocus="true"
         :placeholder="$t('Type your message...')"
         :disabled="processingForm">
       </textarea>
@@ -723,6 +736,7 @@ onBeforeUnmount(() => {
           @input="adjustTextareaHeight"
           type="text"
           rows="3"
+          :autofocus="true"
           :placeholder="$t('Type your message...')"
           :disabled="processingForm">
         </textarea>

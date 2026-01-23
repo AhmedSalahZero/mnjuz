@@ -98,7 +98,7 @@ class FlowExecutionService
                 } else {
                     $msg = strtolower(trim($message)); // Normalize the message
                     $words = explode(' ', $msg); // Split message into individual words
-		logger('--from else new');
+logger('--from else new');
                     $conditions = [];
                     $bindings = [];
 
@@ -112,7 +112,7 @@ class FlowExecutionService
                         $conditions[] = "FIND_IN_SET(?, keywords)";
                         $bindings[] = $word;
                     }
-		logger('--from final query');
+logger('--from final query');
                     // Final query
                     $flow = \DB::table('flows')->whereRaw(
                         '( `trigger` = ? AND organization_id = ?) AND (' . implode(' OR ', $conditions) . ')',
@@ -154,7 +154,7 @@ class FlowExecutionService
                     return $result;
                 }
             }
-
+			logger('not founnnd return false');
             return false;
         }
     }
@@ -184,7 +184,6 @@ class FlowExecutionService
             ->first();
 
         if (!$flowData) {
-			
             Log::warning("FlowUserData not found for delayed flow continuation: contact {$contactId}, flow {$flowId}");
             return false;
         }
@@ -238,12 +237,20 @@ class FlowExecutionService
                     logger('inside looping'.$iteration);
             // Get the current node metadata
             $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
-			if(empty($metadataArray) && $tryAnotherTime){
-				$tryAnotherTime = false ;
-				$flowData->current_step = 1 ;
-				$flowData->save();
-				 $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
+			if(empty($metadataArray)){
+				logger('empty data ');
+				FlowUserData::where('contact_id', $contactId)->delete();
+				logger($flowData->current_step);
+				logger($message);
+				 return false;
 			}
+			// if(empty($metadataArray) && $tryAnotherTime){
+			// 	logger('empty and try another time');
+			// 	$tryAnotherTime = false ;
+			// 	$flowData->current_step = 1 ;
+			// 	$flowData->save();
+			// 	 $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
+			// }
 			logger('inside loop - current step'.$flowData->current_step);
 			logger('inside loop - edges'.json_encode($flow->metadata));
             if(empty($metadataArray)){

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Helpers\WebhookHelper;
+use App\Http\Requests\Api\StoreContactRequest;
 use App\Http\Requests\StoreContact;
 use App\Http\Resources\AutoReplyResource;
 use App\Http\Resources\ContactGroupResource;
@@ -40,7 +41,8 @@ class ApiController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function listContacts(Request $request){
+    public function listContacts(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
@@ -53,7 +55,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
 
         $contacts = Contact::where('organization_id', $request->organization)
-            ->where('deleted_at', NULL)
+            ->where('deleted_at', null)
             ->paginate($perPage, ['*'], 'page', $page);
         return ContactResource::collection($contacts);
     }
@@ -64,64 +66,69 @@ class ApiController extends Controller
      * @param  \App\Http\Requests\CreateContactRequest  $request
      * @return \Illuminate\Http\Response
      */
-    public function storeContact(Request $request, $uuid = NULL){
-        $validator = Validator::make($request->all(), [
-            'first_name' => $request->isMethod('post') ? 'required' : 'required|sometimes',
-            //'last_name' => 'required',
-            'phone' => [
-                $request->isMethod('post') ? 'required' : 'sometimes',
-                'string',
-                'max:255',
-                function ($attribute, $value, $fail) {
-                    if (!PhoneService::isValid($value)) {
-                        $fail('The phone number is not valid.');
-                    }
-                },
-                new UniquePhone($request->organization, $uuid),
-            ],
-            //'email' => 'required|string|email|max:255',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'statusCode' => 400,
-                'message' => __('The given data was invalid.'),
-                'errors' => $validator->errors()
-            ], 400);
-        }
-
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
+    
+    public function storeContact(StoreContactRequest $request)
+    {
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
-                'message' => __('Please renew or subscribe to a plan to continue!'),
+                'message' => __('Please renew or subscribe to a plan to continue!',[],getApiLang()),
             ], 403);
         }
 
-        if ($request->isMethod('post')) {
-            if(!SubscriptionService::isSubscriptionFeatureLimitReached($request->organizationId, 'contacts_limit')){
-                return response()->json([
-                    'statusCode' => 403,
-                    'message' => __('You have reached your limit of contacts. Please upgrade your account to add more!'),
-                ], 403);
-            }
+        if (!SubscriptionService::isSubscriptionFeatureLimitReached($request->organizationId, 'contacts_limit')) {
+            return response()->json([
+                'statusCode' => 403,
+                'message' => __('You have reached your limit of contacts. Please upgrade your account to add more!',[],getApiLang()),
+            ], 403);
         }
 
         try {
             $contactService = new ContactService($request->organization);
-            $contact = $contactService->store($request, $uuid);
+            $contact = $contactService->store($request, null); // null for create
 
             return response()->json([
                 'statusCode' => 200,
                 'id' => $contact->uuid,
-                'message' => __('Request processed successfully')
+                'message' => __('Request processed successfully',[],getApiLang())
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'statusCode' => 500,
-                'message' => __('Request unable to be processed')
+                'message' => __('Request unable to be processed',[],getApiLang())
             ], 500);
         }
     }
+
+    /**
+     * Update an existing contact.
+     */
+    public function updateContact(StoreContactRequest $request, string $uuid)
+    {
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
+            return response()->json([
+                'statusCode' => 403,
+                'message' => __('Please renew or subscribe to a plan to continue!',[],getApiLang()),
+            ], 403);
+        }
+
+        try {
+            $contactService = new ContactService($request->organization);
+            $contact = $contactService->store($request, $uuid); // uuid for update
+
+            return response()->json([
+                'statusCode' => 200,
+                'id' => $contact->uuid,
+                'message' => __('Request processed successfully',[],getApiLang())
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'statusCode' => 500,
+                'message' => __('Request unable to be processed',[],getApiLang())
+            ], 500);
+        }
+    }
+
 
     /**
      * Delete a contact.
@@ -129,20 +136,20 @@ class ApiController extends Controller
      * @param  \App\Models\Contact  $contact
      * @return \Illuminate\Http\Response
      */
-    public function destroyContact(Request $request, $uuid){
+    public function destroyContact(Request $request, $uuid)
+    {
         try {
-			$contactService = new ContactService($request->organization);
+            $contactService = new ContactService($request->organization);
             $contactService->delete([$uuid]);
-			
             return response()->json([
                 'statusCode' => 200,
                 'id' => $uuid,
-                'message' => __('Request processed successfully')
+                'message' => __('Request processed successfully',[],getApiLang())
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'statusCode' => 500,
-                'message' => __('Request unable to be processed')
+                'message' => __('Request unable to be processed',[],getApiLang())
             ], 500);
         }
     }
@@ -152,7 +159,8 @@ class ApiController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function listContactGroups(Request $request){
+    public function listContactGroups(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
@@ -166,7 +174,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
 
         $contactGroups = ContactGroup::where('organization_id', $request->organization)
-            ->where('deleted_at', NULL)
+            ->where('deleted_at', null)
             ->paginate($perPage, ['*'], 'page', $page);
 
         return ContactGroupResource::collection($contactGroups);
@@ -178,7 +186,8 @@ class ApiController extends Controller
      * @param  \App\Http\Requests\CreateContactGroupRequest  $request
      * @return \Illuminate\Http\Response
      */
-    public function storeContactGroup(Request $request, $uuid = NULL){
+    public function storeContactGroup(Request $request, $uuid = null)
+    {
         $organizationId = $request->organization;
 
         if ($request->isMethod('post')) {
@@ -193,7 +202,7 @@ class ApiController extends Controller
             ];
         } else {
             $rules = [
-                'name' => [ 
+                'name' => [
                     'required',
                     Rule::unique('contact_groups', 'name')->where(function ($query) use ($organizationId, $uuid) {
                         return $query->where('organization_id', $organizationId)
@@ -214,7 +223,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
@@ -253,7 +262,8 @@ class ApiController extends Controller
      * @param  \App\Models\ContactGroup  $contactGroup
      * @return \Illuminate\Http\Response
      */
-    public function destroyContactGroup(Request $request, $uuid){
+    public function destroyContactGroup(Request $request, $uuid)
+    {
         try {
             $contactGroup = ContactGroup::where('organization_id', $request->organization)->where('uuid', $uuid)->firstOrFail();
             $contactGroup->deleted_at = date('Y-m-d H:i:s');
@@ -287,7 +297,8 @@ class ApiController extends Controller
         }
     }
 
-    public function listCannedReplies(Request $request){
+    public function listCannedReplies(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
@@ -301,7 +312,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
 
         $rows = AutoReply::where('organization_id', $request->organization)
-            ->where('deleted_at', NULL)
+            ->where('deleted_at', null)
             ->paginate($perPage, ['*'], 'page', $page);
 
         return AutoReplyResource::collection($rows);
@@ -313,7 +324,8 @@ class ApiController extends Controller
      * @param  \App\Http\Requests\CreateCannedReplyRequest  $request
      * @return \Illuminate\Http\Response
      */
-    public function storeCannedReply(Request $request, $uuid = NULL){
+    public function storeCannedReply(Request $request, $uuid = null)
+    {
         $rules = [
             'name' => 'required',
             'trigger' => 'required',
@@ -332,7 +344,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
@@ -340,7 +352,7 @@ class ApiController extends Controller
         }
 
         if ($request->isMethod('post')) {
-            if(!SubscriptionService::isSubscriptionFeatureLimitReached($request->organizationId, 'canned_replies_limit')){
+            if (!SubscriptionService::isSubscriptionFeatureLimitReached($request->organizationId, 'canned_replies_limit')) {
                 return response()->json([
                     'statusCode' => 403,
                     'message' => __('You\'ve reached your limit. Upgrade your account'),
@@ -355,8 +367,8 @@ class ApiController extends Controller
             $model['match_criteria'] = $request->match_criteria;
 
             $metadata['type'] = $request->response_type;
-            if($request->response_type === 'image' || $request->response_type === 'audio'){
-                if($request->hasFile('response')){
+            if ($request->response_type === 'image' || $request->response_type === 'audio') {
+                if ($request->hasFile('response')) {
                     $uploadedMedia = MediaService::upload($request->file('response'));
 
                     $metadata['data']['file']['name'] = $uploadedMedia['name'];
@@ -366,7 +378,7 @@ class ApiController extends Controller
                     $metadata['data']['file']['name'] = $media->file->name;
                     $metadata['data']['file']['location'] = $media->file->location;
                 }
-            } else if($request->response_type === 'text') {
+            } elseif ($request->response_type === 'text') {
                 $metadata['data']['text'] = $request->response;
             } else {
                 $metadata['data']['template'] = $request->response;
@@ -375,7 +387,7 @@ class ApiController extends Controller
             $model['metadata'] = json_encode($metadata);
             $model['updated_at'] = now();
 
-            if($uuid === null){
+            if ($uuid === null) {
                 $model['organization_id'] = $request->organization;
                 $model['created_by'] = 0;
                 $model['created_at'] = now();
@@ -408,7 +420,8 @@ class ApiController extends Controller
      * @param  \App\Models\CannedReply  $cannedReply
      * @return \Illuminate\Http\Response
      */
-    public function destroyCannedReply(Request $request, $uuid){
+    public function destroyCannedReply(Request $request, $uuid)
+    {
         try {
             $autoreply = AutoReply::where('organization_id', $request->organization)->where('uuid', $uuid)->firstOrFail();
             $autoreply->deleted_at = now();
@@ -442,7 +455,8 @@ class ApiController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function sendMessage(Request $request){
+    public function sendMessage(Request $request)
+    {
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -462,7 +476,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
@@ -470,7 +484,7 @@ class ApiController extends Controller
         }
 
         //Check if the whatsapp connection exists
-        if(!$this->isWhatsAppConnected($request->organization)){
+        if (!$this->isWhatsAppConnected($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please setup your whatsapp account!'),
@@ -489,7 +503,7 @@ class ApiController extends Controller
 
         $contact = Contact::where('organization_id', $request->organization)->where('phone', $phone)->first();
 
-        if(!$contact){
+        if (!$contact) {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
             $contact->first_name = $request->first_name;
@@ -505,7 +519,7 @@ class ApiController extends Controller
         $type = !isset($request->buttons) ? 'text' : 'interactive buttons';
 
         $header = [];
-        if($request->header){
+        if ($request->header) {
             $header['type'] = 'text';
             $header['text'] = clean($request->header);
         }
@@ -518,7 +532,8 @@ class ApiController extends Controller
         ], 200);
     }
 
-    public function sendTemplateMessage(Request $request){
+    public function sendTemplateMessage(Request $request)
+    {
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -539,7 +554,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
@@ -547,7 +562,7 @@ class ApiController extends Controller
         }
 
         //Check if the whatsapp connection exists
-        if(!$this->isWhatsAppConnected($request->organization)){
+        if (!$this->isWhatsAppConnected($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please setup your whatsapp account!'),
@@ -567,7 +582,7 @@ class ApiController extends Controller
         $contact = Contact::where('phone', $phone)->where('organization_id', $request->organization)
             ->whereNull('deleted_at')->first();
 
-        if(!$contact){
+        if (!$contact) {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
             $contact->first_name = $request->first_name;
@@ -588,7 +603,8 @@ class ApiController extends Controller
         ], 200);
     }
 
-    public function sendMediaMessage(Request $request){
+    public function sendMediaMessage(Request $request)
+    {
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -611,7 +627,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
+        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
@@ -619,7 +635,7 @@ class ApiController extends Controller
         }
 
         //Check if the whatsapp connection exists
-        if(!$this->isWhatsAppConnected($request->organization)){
+        if (!$this->isWhatsAppConnected($request->organization)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please setup your whatsapp account!'),
@@ -638,7 +654,7 @@ class ApiController extends Controller
 
         $contact = Contact::where('organization_id', $request->organization)->where('phone', $phone)->first();
 
-        if(!$contact){
+        if (!$contact) {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
             $contact->first_name = $request->first_name;
@@ -667,11 +683,13 @@ class ApiController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function storeCampaign(Request $request){
+    public function storeCampaign(Request $request)
+    {
         
     }
 
-    private function isWhatsAppConnected($organizationId){
+    private function isWhatsAppConnected($organizationId)
+    {
         $settings = Organization::where('id', $organizationId)->first();
         $metadata = $settings->metadata ? json_decode($settings->metadata, true) : [];
 
@@ -697,7 +715,8 @@ class ApiController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function listTemplates(Request $request){
+    public function listTemplates(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
@@ -711,7 +730,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
 
         $templates = Template::where('organization_id', $request->organization)
-            ->where('deleted_at', NULL)
+            ->where('deleted_at', null)
             ->paginate($perPage, ['uuid', 'name', 'metadata', 'updated_at'], 'page', $page);
 
         return TemplateResource::collection($templates);

@@ -23,17 +23,10 @@ class DateTimeHelper
 	{
 		
 	}
-    public static function convertToOrganizationTimezone($date,$organizationId = null)
-    {
-        $timezone = 'UTC'; // Default to UTC
+	public static function getCurrentTimeZone($organizationId = null):string
+	{
+		$timezone = 'UTC'; // Default to UTC
         $organizationId = session()->get('current_organization',$organizationId);
-	//	logger('organization id in datetime helper'.$organizationId);
-		// if(Cache::has("org_timezone_{$organizationId}")){
-		// 	$timezone = Cache::get("org_timezone_{$organizationId}");
-		// 	logger('used cached time zone'.$timezone);
-		// 	return Carbon::parse($date)->setTimezone($timezone);
-		// }
-		
         if ($organizationId) {
             $organization = Organization::find($organizationId);
             if ($organization) {
@@ -46,29 +39,11 @@ class DateTimeHelper
                 }
             }
         }
-
-		//  $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
-
- 		//    $caller = $trace[1] ?? null;
-	//  if ($caller && !$organizationId) {
-	// 	logger('called from ');
-    //     logger(json_encode([
-    //         'function' => $caller['function'] ?? null,
-    //         'class'    => $caller['class'] ?? null,
-    //         'type'     => $caller['type'] ?? null,
-    //         'file'     => $caller['file'] ?? null,
-    //         'line'     => $caller['line'] ?? null,
-	// 	]));
-    // }
-		//   $timezone = Cache::remember(
-        //     "org_timezone_{$organizationId}", 
-        //     3600, // ساعة واحدة
-        //     function() use ($timezone) {
-        //        return $timezone;
-        //     }
-        // );
-		// logger('used nn time zone'.$timezone);
-	//	logger('used on'.$timezone.'for organization id'.$organizationId);
+		return $timezone;
+	}
+    public static function convertToOrganizationTimezone($date,$organizationId = null)
+    {
+        $timezone = self::getCurrentTimeZone($organizationId);
         return Carbon::parse($date)->setTimezone($timezone);
     }
 

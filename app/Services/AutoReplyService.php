@@ -288,6 +288,7 @@ class AutoReplyService
         $normalizedTrigger = trim($trigger);
 
         if ($criteria === 'exact match') {
+			logger('inside exact match');
             // Check if the text contains Arabic characters
             $hasArabic = preg_match('/[\p{Arabic}]/u', $receivedMessage . $normalizedTrigger);
             
@@ -299,6 +300,7 @@ class AutoReplyService
                 return strtolower($receivedMessage) === " " . strtolower($normalizedTrigger);
             }
         } else if ($criteria === 'contains') {
+					logger('inside contains ');
             $triggerWords = explode(' ', $normalizedTrigger);
             
             // Check if the text contains Arabic characters
@@ -308,14 +310,22 @@ class AutoReplyService
                 // For Arabic text, use simple string matching without word boundaries
                 foreach ($triggerWords as $word) {
                     if (strpos($receivedMessage, $word) !== false) {
+								logger('good found ');
                         return true;
                     }
                 }
+						logger('not found !');
                 return false;
             } else {
                 // For non-Arabic text, use case-insensitive regex approach
                 $pattern = '/\b(' . implode('|', array_map('preg_quote', $triggerWords)) . ')\b/i';
-                return preg_match($pattern, strtolower($receivedMessage)) === 1;
+				$patternFound = preg_match($pattern, strtolower($receivedMessage)) === 1;
+				if($patternFound){
+					logger('pattern found !');
+					}else{
+					logger('pattern not found !');
+				}
+                return $patternFound ;
             }
         }
     

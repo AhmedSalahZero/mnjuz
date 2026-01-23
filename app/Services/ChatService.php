@@ -38,7 +38,7 @@ class ChatService
 {
     use TemplateTrait;
 
-    private $whatsappService;
+    private WhatsappService $whatsappService;
     private $organizationId;
 
     public function __construct($organizationId)
@@ -159,7 +159,7 @@ class ChatService
                 ->whereNull('deleted_at')
                 ->where('is_read', 0)
                 ->update(['is_read' => 1]);
-            
+       
             if (request()->expectsJson()) {
             
                 return response()->json([
@@ -174,6 +174,7 @@ class ChatService
                     ->where('deleted_at', null)
                     ->where('is_read', 0)
                     ->count();
+		
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
@@ -198,6 +199,8 @@ class ChatService
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
+					'user'=>auth()->user()->toArray(),
+					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
                 ]);
             }
@@ -226,6 +229,8 @@ class ChatService
                 'addon' => $aimodule,
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
+				'user'=>auth()->user()->toArray(),
+				'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
             ]);
         }
@@ -327,20 +332,23 @@ class ChatService
     public function sendMessage(object $request)
     {
         // $time = microtime(true);
+
+
+	
         if ($request->type === 'text') {
-            return $this->whatsappService->sendMessage($request->uuid, $request->message, auth()->user()->id);
+            return $this->whatsappService->sendMessage($request->uuid, $request->message, auth()->user()->id,);
         } else {
             $storage = Setting::where('key', 'storage_system')->first()->value;
+			
             $fileName = $request->file('file')->getClientOriginalName();
             $fileContent = $request->file('file');
-
             if ($storage === 'local') {
-                $location = 'local';
+				$location = 'local';
                 $file = Storage::disk('local')->put('public', $fileContent);
                 $mediaFilePath = $file;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
             } elseif ($storage === 'aws') {
-                $location = 'amazon';
+				$location = 'amazon';
                 $file = $request->file('file');
                 $filePath = 'uploads/media/received/'  . $this->organizationId . '/' . $fileName;
                 $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
@@ -348,12 +356,10 @@ class ChatService
                 $mediaUrl = $mediaFilePath;
             }
     
-            $this->whatsappService->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
+            $x = $this->whatsappService->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
+	
         }
-        // $end = microtime(true);
-        // if($end-$time > 1){
-        // 	logger('From ChatService -  sendMessage - '.$end-$time);
-        // }
+       
     }
 
     public function sendTemplateMessage(object $request, $uuid)
@@ -383,13 +389,23 @@ class ChatService
                         } elseif ($storage === 'aws') {
                             $file = $parameter['value'];
                             $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
+                            
+                            if (empty($uploadedFile)) {
+                                throw new \Exception('Failed to upload file to S3 storage');
+                            }
+                            
                             $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
             
                             $mediaUrl = $mediaFilePath;
                         }
 
-                        $contentType = $this->getContentTypeFromUrl($mediaUrl);
-                        $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
+                        if (!empty($mediaUrl)) {
+                            $contentType = $this->getContentTypeFromUrl($mediaUrl);
+                            $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
+                        } else {
+                            $contentType = null;
+                            $mediaSize = null;
+                        }
 
                         //save media
                         $chatMedia = new ChatMedia;
@@ -457,6 +473,10 @@ class ChatService
 
     private function getContentTypeFromUrl($url)
     {
+        if (empty($url)) {
+            return null;
+        }
+        
         try {
             // Make a HEAD request to fetch headers only
             $response = Http::head($url);
@@ -476,11 +496,19 @@ class ChatService
 
     private function getMediaSizeInBytesFromUrl($url)
     {
-        $url = ltrim($url, '/');
-        $imageContent = file_get_contents($url);
-    
-        if ($imageContent !== false) {
-            return strlen($imageContent);
+        if (empty($url)) {
+            return null;
+        }
+        
+        try {
+            $url = ltrim($url, '/');
+            $imageContent = file_get_contents($url);
+        
+            if ($imageContent !== false) {
+                return strlen($imageContent);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error getting media size from URL: ' . $e->getMessage());
         }
     
         return null;

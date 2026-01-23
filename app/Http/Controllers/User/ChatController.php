@@ -25,6 +25,7 @@ class ChatController extends BaseController
 
     public function index(Request $request, $uuid = null)
     {
+		
         return $this->chatService()->getChatList($request, $uuid, $request->query('search'));
     }
 
@@ -38,6 +39,7 @@ class ChatController extends BaseController
 
     public function sendMessage(Request $request)
     {
+		
         return $this->chatService()->sendMessage($request);
     }
 

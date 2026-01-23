@@ -18,7 +18,7 @@ class NewChatEvent implements ShouldBroadcast
 
     public $chat;
     public $organizationId;
-
+	public $queue = 'high';
     /**
      * Create a new event instance.
      *

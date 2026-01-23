@@ -2,6 +2,7 @@
 
 namespace App\Http;
 
+use App\Http\Middleware\ExcludeFromDocsMiddleware;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 
 class Kernel extends HttpKernel
@@ -76,5 +77,6 @@ class Kernel extends HttpKernel
         'auth.bearer' => \App\Http\Middleware\AuthenticateBearerToken::class,
         'setOrganization' => \App\Http\Middleware\SetOrganizationFromSession::class,
         'redirectIfAuthenticated' => \App\Http\Middleware\RedirectIfAuthenticated::class,
+		'ExcludeRouteFromDocs' => ExcludeFromDocsMiddleware::class
     ];
 }

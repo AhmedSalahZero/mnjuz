@@ -66,13 +66,23 @@ class CampaignService
                                 } else if($storage === 'aws') {
                                     $file = $parameter['value'];
                                     $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+                                    
+                                    if (empty($uploadedFile)) {
+                                        throw new \Exception('Failed to upload file to S3 storage');
+                                    }
+                                    
                                     $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                     
                                     $mediaUrl = $mediaFilePath;
                                 }
 
-                                $contentType = $this->getContentTypeFromUrl($mediaUrl);
-                                $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
+                                if (!empty($mediaUrl)) {
+                                    $contentType = $this->getContentTypeFromUrl($mediaUrl);
+                                    $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
+                                } else {
+                                    $contentType = null;
+                                    $mediaSize = null;
+                                }
 
                                 //save media
                                 $chatMedia = new ChatMedia;
@@ -158,6 +168,10 @@ class CampaignService
     }
 
     private function getContentTypeFromUrl($url) {
+        if (empty($url)) {
+            return null;
+        }
+        
         try {
             // Make a HEAD request to fetch headers only
             $response = Http::head($url);
@@ -176,11 +190,19 @@ class CampaignService
     }
 
     private function getMediaSizeInBytesFromUrl($url) {
-        $url = ltrim($url, '/');
-        $imageContent = file_get_contents($url);
-    
-        if ($imageContent !== false) {
-            return strlen($imageContent);
+        if (empty($url)) {
+            return null;
+        }
+        
+        try {
+            $url = ltrim($url, '/');
+            $imageContent = file_get_contents($url);
+        
+            if ($imageContent !== false) {
+                return strlen($imageContent);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error getting media size from URL: ' . $e->getMessage());
         }
     
         return null;

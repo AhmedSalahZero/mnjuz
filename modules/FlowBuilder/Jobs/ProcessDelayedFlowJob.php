@@ -4,6 +4,7 @@ namespace Modules\FlowBuilder\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -12,7 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Services\FlowExecutionService;
 
-class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUnique
+class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUniqueUntilProcessing
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -22,11 +23,6 @@ class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUnique
     protected $currentStep;
     protected $organizationId;
 
-    /**
-     * المدة التي يكون فيها الـ job فريد (بالثواني)
-     * يفضل أن تكون أطول من أقصى delay متوقع
-     */
-    public $uniqueFor = 3600; // ساعة واحدة
 
     /**
      * Create a new job instance.
@@ -57,7 +53,6 @@ class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUnique
 				$flowData = FlowUserData::find($this->flowDataId);
 			    $flowData->current_step = $this->currentStep;
         		$flowData->save();
-            logger('inside ProcessDelayedFlowJob for step'.$this->currentStep);
             $flowExecutionService = new FlowExecutionService($this->organizationId);
             $flowExecutionService->continueDelayedFlow($this->contactId, $this->flowId, $this->currentStep);
         } catch (\Exception $e) {

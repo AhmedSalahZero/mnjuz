@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\ServiceProvider;
+use App\Providers\ScrambleServiceProvider;
 //use Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider;
 //use Modules\Clickpay\Providers\ClickpayServiceProvider;
 
@@ -20,6 +21,7 @@ $providers = [
         App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
+	ScrambleServiceProvider::class
 ];
 
 // Conditionally add EmbeddedSignupServiceProvider if it exists

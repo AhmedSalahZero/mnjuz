@@ -60,10 +60,16 @@ class WhatsappService
      * @param string $messageContent The content of the message to be sent.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
+	
+	
+	
+	 public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
     {
-		logger('send message WhatsappService');
-        $contact = Contact::where('uuid', $contactUuId)->first();
+
+		$tempMessageId = Request()->get('tempMessageId') ; // when sending message only
+		
+		$service = function() use ($contactUuId, $messageContent, $userId, $type, $buttons, $header, $footer, $buttonLabel,$tempMessageId){
+			 $contact = Contact::where('uuid', $contactUuId)->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -147,10 +153,13 @@ class WhatsappService
             $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
             $chatArray = array([
                 'type' => 'chat',
-                'value' => $chatLogArray->relatedEntities
+                'value' => $chatLogArray->relatedEntities,
+				'tempMessageId'=>$tempMessageId,
+				// 'tempMessageId'=>$responseObject->data->messages[0]->id
             ]);
-            
+           
             event(new NewChatEvent($chatArray, $contact->organization_id));
+        
         }
 
         // Trigger webhook
@@ -159,7 +168,116 @@ class WhatsappService
         ], $contact->organization_id);
 
         return $responseObject;
+		}
+		;
+		if($tempMessageId){
+			dispatch($service)->onQueue('high');
+		}else{
+			return $service();
+		}
+       
     }
+  
+	//  public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
+    // {
+	// 	logger('send message WhatsappService');
+    //     $contact = Contact::where('uuid', $contactUuId)->first();
+    //     $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
+        
+    //     $headers = $this->setHeaders();
+
+    //     $requestData['messaging_product'] = 'whatsapp';
+    //     $requestData['recipient_type'] = 'individual';
+    //     $requestData['to'] = $contact->phone;
+    //     if($type == "text"){
+    //         $requestData['type'] = 'text';
+    //         $requestData['text']['preview_url'] = true; //If you have added url either http or https a preview will be displayed
+    //         $requestData['text']['body'] = clean($messageContent);
+    //     } else if($type == "interactive buttons" || $type == "interactive call to action url" || $type == "interactive list"){
+    //         $requestData['type'] = 'interactive';
+
+    //         if($type == "interactive buttons"){
+    //             $requestData['interactive']['type'] = 'button';
+    //         } else if($type == "interactive call to action url"){
+    //             $requestData['interactive']['type'] = 'cta_url';
+    //         } else if($type == "interactive list"){
+    //             $requestData['interactive']['type'] = 'list';
+    //         }
+
+    //         if($type == "interactive buttons"){
+    //             foreach($buttons as $button){
+    //                 $requestData['interactive']['action']['buttons'][] = [
+    //                     'type' => 'reply',
+    //                     'reply' => [
+    //                         'id' => $button['id'],
+    //                         'title' => $button['title'],
+    //                     ],
+    //                 ];
+    //             }
+    //         } else if($type == "interactive call to action url"){
+    //             $requestData['interactive']['action']['name'] = "cta_url";
+    //             $requestData['interactive']['action']['parameters'] = $buttons;
+    //         } else if($type == "interactive list"){
+    //             $requestData['interactive']['action']['sections'] = $buttons;
+    //             $requestData['interactive']['action']['button'] = $buttonLabel;
+    //         }
+
+    //         if (!empty($header)) {
+    //             $requestData['interactive']['header'] = $header;
+    //         }
+
+    //         $requestData['interactive']['body']['text'] = clean($messageContent);
+
+    //         if ($footer != null) {
+    //             $requestData['interactive']['footer'] = [
+    //                 'text' => clean($footer),
+    //             ];
+    //         }
+    //     }
+
+    //     $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
+
+    //     if($responseObject->success === true){
+    //         $response['text']['body'] = clean($messageContent);
+    //         $response['type'] = 'text';
+
+    //         $chat = Chat::create([
+    //             'organization_id' => $contact->organization_id,
+    //             'wam_id' => $responseObject->data->messages[0]->id,
+    //             'contact_id' => $contact->id,
+    //             'type' => 'outbound',
+    //             'user_id' => $userId,
+    //             'metadata' => json_encode($response),
+    //             'status' => 'delivered',
+	// 			'created_at'=>now()
+    //         ]);
+
+    //         $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
+    //         $responseObject->data->chat = $chat;
+
+    //         $chatlogId = ChatLog::insertGetId([
+    //             'contact_id' => $contact->id,
+    //             'entity_type' => 'chat',
+    //             'entity_id' => $chat->id,
+    //             'created_at' =>now()
+    //         ]);
+
+    //         $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
+    //         $chatArray = array([
+    //             'type' => 'chat',
+    //             'value' => $chatLogArray->relatedEntities
+    //         ]);
+            
+    //         event(new NewChatEvent($chatArray, $contact->organization_id));
+    //     }
+
+    //     // Trigger webhook
+    //     WebhookHelper::triggerWebhookEvent('message.sent', [
+    //         'data' => $responseObject,
+    //     ], $contact->organization_id);
+
+    //     return $responseObject;
+    // }
 
     /**
      * This function sends a text message via a POST request to the specified phone number using Facebook's messaging API.
@@ -577,6 +695,10 @@ class WhatsappService
     }
 
     function getContentTypeFromUrl($url) {
+        if (empty($url)) {
+            return null;
+        }
+        
         try {
             // Make a HEAD request to fetch headers only
             $response = Http::head($url);
@@ -611,10 +733,18 @@ class WhatsappService
     }
 
     function getMediaSizeInBytesFromUrl($url) {
-        $imageContent = file_get_contents($url);
-    
-        if ($imageContent !== false) {
-            return strlen($imageContent);
+        if (empty($url)) {
+            return null;
+        }
+        
+        try {
+            $imageContent = file_get_contents($url);
+        
+            if ($imageContent !== false) {
+                return strlen($imageContent);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error getting media size from URL: ' . $e->getMessage());
         }
     
         return null;
@@ -1363,6 +1493,11 @@ class WhatsappService
             } else if($storage === 'aws') {
                 $file = $request->file('profile_picture_url');
                 $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
+                
+                if (empty($uploadedFile)) {
+                    throw new \Exception('Failed to upload file to S3 storage');
+                }
+                
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $profile_picture_url = $mediaFilePath;
             }
