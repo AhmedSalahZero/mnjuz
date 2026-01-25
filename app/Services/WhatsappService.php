@@ -609,9 +609,9 @@ class WhatsappService
      * @param string $imageUrl The URL of the stored image.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL)
+    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL , $tempMessageId = null)
     {
-	//	logger('sendMedia WhatsappService');
+
         $contact = Contact::where('uuid', $contactUuId)->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
@@ -674,11 +674,14 @@ class WhatsappService
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;
-
+			
+		
+			
             $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
             $chatArray = array([
                 'type' => 'chat',
-                'value' => $chatLogArray->relatedEntities
+                'value' => $chatLogArray->relatedEntities,
+				'tempMessageId'=> $tempMessageId  // when sending message only
             ]);
 
             event(new NewChatEvent($chatArray, $contact->organization_id));

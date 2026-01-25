@@ -23,6 +23,7 @@ const props = defineProps({
 })
 
 const messages = ref(props.initialMessages)
+console.log('messages', messages)
 const loading = ref(false)
 const nextPage = ref(props.initialNextPage)
 const hasMore = ref(props.hasMoreMessages)

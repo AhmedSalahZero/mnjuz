@@ -1,55 +1,103 @@
 <template>
-	<AppLayout v-slot:default="slotProps">
-		<div class="md:flex md:flex-grow md:overflow-hidden">
-			<div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
-				<ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
-					:ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
-					:chatSortDirection="props.chat_sort_direction" />
-			</div>
-			<div class="min-w-0 bg-cover flex flex-col chat-bg"
-				:class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
-				<ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
-					:displayContactInfo="displayContactInfo" :ticket="ticket" :addon="addon"
-					@toggleView="toggleContactView" @deleteThread="deleteThread" @closeThread="closeThread" />
-				<div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
-					<ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
-						:initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
-					<Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full"
-						:fields="props.fields" :contact="contact" :locationSettings="props.locationSettings" />
-				</div>
-				<div v-if="props.contact?.is_blocked"
-					class="is-blocked flex justify-center items-center gap-2 px-3 py-1 h-[80px] text-center bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-lg">
-					<div class="relative flex h-2 w-2">
-						<span
-							class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-						<span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-					</div>
-					<span class="text-xs font-bold text-red-800 uppercase tracking-tighter">{{ $t('Blocked')
-					}}</span>
-				</div>
-				<div v-if="
-					contact &&
-					!contact.is_blocked &&
-					!displayContactInfo &&
-					!formLoading &&
-					!displayTemplate
-				" class="w-full py-4">
-					<ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
-						@viewTemplate="displayTemplate = true" @newMessage="generateNewMessage" />
-				</div>
-				<div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
-					<CampaignForm v-if="displayTemplate" class="bg-white h-full" :contact="contact.uuid"
-						:templates="templates" :contactGroups="[]" :settings="props.settings" :displayCancelBtn="false"
-						:displayTitle="true" :isCampaignFlow="false" :scheduleTemplate="false"
-						:sendText="'Send Message'" @viewTemplate="displayTemplate = false" />
-				</div>
-			</div>
-			<!--<div v-if="contact" class="md:w-[25%] min-w-0 bg-cover flex flex-col bg-white border-l">
+  <AppLayout v-slot:default="slotProps">
+    {{ logger(rows) }}
+    <div class="md:flex md:flex-grow md:overflow-hidden">
+      <div
+        class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l"
+        :class="contact ? 'hidden' : ''">
+        <ChatTable
+          :rows="rows"
+          :filters="props.filters"
+          :rowCount="props.rowCount"
+          :ticketingIsEnabled="ticketingIsEnabled"
+          :status="props?.status"
+          :chatSortDirection="props.chat_sort_direction" />
+      </div>
+      <div
+        class="min-w-0 bg-cover flex flex-col chat-bg"
+        :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
+        <ChatHeader
+          v-if="contact"
+          :ticketingIsEnabled="ticketingIsEnabled"
+          :contact="contact"
+          :displayContactInfo="displayContactInfo"
+          :ticket="ticket"
+          :addon="addon"
+          @toggleView="toggleContactView"
+          @deleteThread="deleteThread"
+          @closeThread="closeThread" />
+        <div
+          v-if="contact && !displayTemplate"
+          class="flex-1 overflow-y-auto"
+          ref="scrollContainer2">
+          <ChatThread
+            v-if="!displayContactInfo && !loadingThread && !displayTemplate"
+            :contactId="contact.id"
+            :initialMessages="chatThread"
+            :hasMoreMessages="hasMoreMessages"
+            :initialNextPage="nextPage" />
+          <Contact
+            v-if="displayContactInfo && !displayTemplate"
+            class="bg-white h-full"
+            :fields="props.fields"
+            :contact="contact"
+            :locationSettings="props.locationSettings" />
+        </div>
+        <div
+          v-if="props.contact?.is_blocked"
+          class="is-blocked flex justify-center items-center gap-2 px-3 py-1 h-[80px] text-center bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-lg">
+          <div class="relative flex h-2 w-2">
+            <span
+              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </div>
+          <span class="text-xs font-bold text-red-800 uppercase tracking-tighter">{{
+            $t('Blocked')
+          }}</span>
+        </div>
+        <div
+          v-if="
+            contact &&
+            !contact.is_blocked &&
+            !displayContactInfo &&
+            !formLoading &&
+            !displayTemplate
+          "
+          class="w-full py-4">
+          <ChatForm
+            :contact="contact"
+            :simpleForm="simpleForm"
+            :chatLimitReached="isChatLimitReached"
+            @viewTemplate="displayTemplate = true"
+            @newMessage="generateNewMessage" />
+        </div>
+        <div
+          v-if="displayTemplate"
+          class="flex-1 overflow-y-hidden">
+          <CampaignForm
+            v-if="displayTemplate"
+            class="bg-white h-full"
+            :contact="contact.uuid"
+            :templates="templates"
+            :contactGroups="[]"
+            :settings="props.settings"
+            :displayCancelBtn="false"
+            :displayTitle="true"
+            :isCampaignFlow="false"
+            :scheduleTemplate="false"
+            :sendText="'Send Message'"
+            @viewTemplate="displayTemplate = false" />
+        </div>
+      </div>
+      <!--<div v-if="contact" class="md:w-[25%] min-w-0 bg-cover flex flex-col bg-white border-l">
                 <ChatContact v-if="contact" class="bg-white h-full" :contact="contact" />
             </div>-->
-		</div>
-		<button class="hidden" ref="toggleNavbarBtn" @click="slotProps.toggleNavBar"></button>
-	</AppLayout>
+    </div>
+    <button
+      class="hidden"
+      ref="toggleNavbarBtn"
+      @click="slotProps.toggleNavBar"></button>
+  </AppLayout>
 </template>
 <script setup>
 import CampaignForm from '@/Components/CampaignForm.vue'
@@ -64,31 +112,34 @@ import { defineEmits, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getEchoInstance } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
 let echoChannel = null
+const logger = (message) => {
+  console.log(message)
+}
 const props = defineProps({
-	rows: Array,
-	rowCount: Number,
-	pusherSettings: Object,
-	organizationId: Number,
-	isChatLimitReached: Boolean,
-	toggleNavBar: Function,
-	state: String,
-	demoNumber: String,
-	settings: Object,
-	status: String,
-	chatThread: Array,
-	hasMoreMessages: Boolean,
-	nextPage: Number,
-	addon: Object,
-	contact: Object,
-	ticket: Object,
-	chat_sort_direction: String,
-	filters: Object,
-	templates: Array,
-	fields: Array,
-	locationSettings: Object,
-	simpleForm: Boolean,
-	user: Array,
-	timezone: String,
+  rows: Array,
+  rowCount: Number,
+  pusherSettings: Object,
+  organizationId: Number,
+  isChatLimitReached: Boolean,
+  toggleNavBar: Function,
+  state: String,
+  demoNumber: String,
+  settings: Object,
+  status: String,
+  chatThread: Array,
+  hasMoreMessages: Boolean,
+  nextPage: Number,
+  addon: Object,
+  contact: Object,
+  ticket: Object,
+  chat_sort_direction: String,
+  filters: Object,
+  templates: Array,
+  fields: Array,
+  locationSettings: Object,
+  simpleForm: Boolean,
+  user: Array,
+  timezone: String,
 })
 
 const rows = ref(props.rows)
@@ -108,159 +159,193 @@ const chatThread = ref(props.chatThread)
 const contact = ref(props.contact)
 
 watch(
-	() => props.rows,
-	(newRows) => {
-		rows.value = newRows
-		//	console.log('inside watch');
-	},
+  () => props.rows,
+  (newRows) => {
+    rows.value = newRows
+  },
 )
 
 const toggleDropdown = () => {
-	isOpen.value = !isOpen.value
+  isOpen.value = !isOpen.value
 }
 
 function toggleContactView(value) {
-	displayContactInfo.value = value
+  displayContactInfo.value = value
 }
 
 const scrollToBottom = () => {
-	const container = scrollContainer2.value
-	if (container) {
-		container.scrollTo({
-			top: container.scrollHeight,
-			behavior: 'smooth',
-		})
-	}
+  const container = scrollContainer2.value
+  if (container) {
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth',
+    })
+  }
 }
 
 const closeThread = () => {
-	toggleNavbarBtn.value.click()
-	contact.value = null
+  toggleNavbarBtn.value.click()
+  contact.value = null
 }
 
 const deleteThread = async () => {
-	chatThread.value = []
-	await axios.delete('/chats/' + contact.value.uuid)
+  chatThread.value = []
+  await axios.delete('/chats/' + contact.value.uuid)
 }
 function getCurrentDateTime(timezone) {
-	const now = new Date()
-	const options = {
-		timeZone: timezone,
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-		second: '2-digit',
-		hour12: false,
-	}
+  const now = new Date()
+  const options = {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }
 
-	const formatter = new Intl.DateTimeFormat('sv-SE', options)
-	return formatter.format(now).replace(',', '').replace(/\//g, '-') // "2026-01-21 14:30:45"
+  const formatter = new Intl.DateTimeFormat('sv-SE', options)
+  return formatter.format(now).replace(',', '').replace(/\//g, '-') // "2026-01-21 14:30:45"
 }
-
+const getFileTypeCategory = (mimeType) => {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'document'
+}
 const generateNewMessage = (form) => {
-	console.log(form.value.tempMessageId)
-	if (form.value.type == 'text') {
-		let chat = [
-			{
-				type: 'chat',
-				value: {
-					created_at: getCurrentDateTime(props.timezone),
-					deleted_at: null,
-					logs: [],
-					media: null,
-					media_id: null,
-					metadata: JSON.stringify({
-						text: {
-							body: form.value.message,
-						},
-						type: 'text',
-					}),
-					status: 'delivered',
-					type: 'outbound',
-					user: {
-						first_name: props.user.first_name,
-						last_name: props.user.last_name,
-					},
-					wam_id: form.value.tempMessageId,
-				},
-			},
-		]
+  console.log('messasge id')
+  console.log(form.value.tempMessageId)
+  const isText = form.value.type == 'text'
+  let file = null
+  const isMedia = !isText
+  let metadata = {
+    text: {
+      body: form.value.message,
+    },
+    type: 'text',
+  }
+  if (isMedia) {
+    file = form.value.file
+    const fileTypeCategory = getFileTypeCategory(file.type)
+    metadata = {
+      type: fileTypeCategory,
+    }
 
-		updateChatThread(chat)
-	}
+    // إضافة الخصائص المناسبة حسب نوع الملف
+    if (fileTypeCategory === 'image') {
+      metadata.image = {
+        mime_type: file.type,
+      }
+    } else if (fileTypeCategory === 'video') {
+      metadata.video = {
+        mime_type: file.type,
+      }
+    } else if (fileTypeCategory === 'audio') {
+      metadata.audio = {
+        mime_type: file.type,
+      }
+    } else {
+      metadata.document = {
+        mime_type: file.type,
+      }
+    }
+  }
+  let chat = [
+    {
+      type: 'chat',
+      value: {
+        created_at: getCurrentDateTime(props.timezone),
+        deleted_at: null,
+        logs: [],
+        media: isMedia
+          ? {
+              created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+              id: Math.floor(Math.random() * 100000),
+              name: file.name,
+              path: URL.createObjectURL(file),
+              size: file.size,
+              type: file.type,
+            }
+          : null,
+        media_id: null,
+        metadata: JSON.stringify(metadata),
+        status: 'delivered',
+        type: 'outbound',
+        user: {
+          first_name: props.user.first_name,
+          last_name: props.user.last_name,
+        },
+        wam_id: form.value.tempMessageId,
+      },
+    },
+  ]
+
+  updateChatThread(chat)
 }
+
 const updateChatThread = (chat) => {
-	const wamId = chat[0].value.wam_id
-	const wamIdExists = chatThread.value.some(
-		(existingChat) => existingChat[0].value.wam_id === wamId,
-	)
-	if (!wamIdExists && chat[0].value.deleted_at == null) {
-		if (chat[0].tempMessageId) {
-			const tempChatIndex = chatThread.value.findIndex(
-				(item) => item[0].value.wam_id === chat[0].tempMessageId,
-			)
-			if (tempChatIndex !== -1) {
-				chatThread.value[tempChatIndex] = chat
-			}
-			console.log(tempChatIndex, chatThread.value[tempChatIndex], chat)
-		} else {
-			console.log('push', chat)
-			chatThread.value.push(chat)
-		}
-		setTimeout(scrollToBottom, 100)
-	}
+  const wamId = chat[0].value.wam_id
+  const wamIdExists = chatThread.value.some(
+    (existingChat) => existingChat[0].value.wam_id === wamId,
+  )
+
+  if (!wamIdExists && chat[0].value.deleted_at == null) {
+    console.log('temp id', chat[0].tempMessageId)
+    if (chat[0].tempMessageId) {
+      const tempChatIndex = chatThread.value.findIndex(
+        (item) => item[0].value.wam_id === chat[0].tempMessageId,
+      )
+      console.log('is found ? ', tempChatIndex)
+      if (tempChatIndex !== -1) {
+        chatThread.value[tempChatIndex] = chat
+      }
+    } else {
+      chatThread.value.push(chat)
+    }
+    setTimeout(scrollToBottom, 100)
+  }
 }
 
 const debouncedUpdateSidePanel = debounce(async (chat) => {
-	if (contact.value && contact.value.id == chat[0].value.contact_id) {
-		updateChatThread(chat)
-	}
+  if (contact.value && contact.value.id == chat[0].value.contact_id) {
+    updateChatThread(chat)
+  }
 
-	try {
-		//	console.log('try11');
-		//	console.log('call api');
-		const response = await axios.get('/chats')
-		if (response?.data?.result) {
-			console.log('response', response.data.result)
-			//	console.log('inside watch');
-			//		console.log('rows')
-			//	console.log(response.data.result)
-			rows.value = response.data.result
-		}
-	} catch (error) {
-		console.error('Error updating side panel:', error)
-	}
+  try {
+    const response = await axios.get('/chats')
+    if (response?.data?.result) {
+      console.log('response', response.data.result)
+      rows.value = response.data.result
+    }
+  } catch (error) {
+    console.error('Error updating side panel:', error)
+  }
 }, 1000) // الانتظار ثانية واحدة قبل التنفيذ
 
 const onCloseDemoModal = () => {
-	isDemoModalOpen.value = false
+  isDemoModalOpen.value = false
 }
 
 onMounted(() => {
-	//	console.log('mount');
-	//	console.log('inside mounted');
-	const echo = getEchoInstance(
-		props.pusherSettings['pusher_app_key'],
-		props.pusherSettings['pusher_app_cluster'],
-	)
-	echoChannel = echo.channel('chats.ch' + props.organizationId)
-	echoChannel.listen('NewChatEvent', (event) => {
-		//	console.log('NewChatEvent');
-		//	console.log('new chat',event.chat);
-		debouncedUpdateSidePanel(event.chat)
-	})
+  const echo = getEchoInstance(
+    props.pusherSettings['pusher_app_key'],
+    props.pusherSettings['pusher_app_cluster'],
+  )
+  echoChannel = echo.channel('chats.ch' + props.organizationId)
+  echoChannel.listen('NewChatEvent', (event) => {
+    debouncedUpdateSidePanel(event.chat)
+  })
 
-	scrollToBottom()
+  scrollToBottom()
 })
 
 onUnmounted(() => {
-	//console.log('unmount');
-	if (echoChannel) {
-		echoChannel.stopListening('NewChatEvent')
-		// أو يمكن
-		// Echo.leave('chats.ch' + props.organizationId);
-	}
+  if (echoChannel) {
+    echoChannel.stopListening('NewChatEvent')
+    // أو يمكن
+    // Echo.leave('chats.ch' + props.organizationId);
+  }
 })
 </script>

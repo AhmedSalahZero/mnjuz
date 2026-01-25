@@ -1,10 +1,9 @@
 <script setup>
 import axios from 'axios'
 import MicRecorder from 'mic-recorder-to-mp3-fixed'
-import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
-import { nextTick } from 'vue'
 
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
@@ -53,11 +52,10 @@ const appendMessageIntoBody = (form) => {
 const sendMessage = async () => {
   form.value.message = formTextInput.value
   processingForm.value = true
-
+  console.log('send message')
   if (form.value.message != null || form.value.file != null) {
     const formData = new FormData()
     const tempMessageId = crypto.randomUUID()
-    console.log('tempMessageId', tempMessageId)
     form.value.tempMessageId = tempMessageId
     appendMessageIntoBody(form)
     formData.append('message', form.value.message)
@@ -88,6 +86,7 @@ const sendMessage = async () => {
   } else {
     if (isAudioRecording.value == true) {
       await sendAudioMessage()
+      console.log('file sent')
     }
 
     processingForm.value = false
@@ -98,12 +97,18 @@ const sendMessage = async () => {
 }
 
 const sendAudioMessage = async () => {
+  const tempMessageId = crypto.randomUUID()
+  form2.value.tempMessageId = tempMessageId
+  console.log('audio id ', tempMessageId, 'form2', form2)
+
   const formData = new FormData()
   formData.append('type', form2.value.type)
   formData.append('uuid', form2.value.uuid)
 
   if (form2.value.file) {
     formData.append('file', form2.value.file)
+    formData.append('tempMessageId', form2.value.tempMessageId)
+    appendMessageIntoBody(form2)
   }
 
   try {

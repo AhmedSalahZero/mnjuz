@@ -338,10 +338,15 @@ class ChatService
         if ($request->type === 'text') {
             return $this->whatsappService->sendMessage($request->uuid, $request->message, auth()->user()->id,);
         } else {
+			$fileType = $request->type;
+			$organizationId=$this->organizationId;
+			$uuid = $request->uuid;
+			$file = $request->file('file');
             $storage = Setting::where('key', 'storage_system')->first()->value;
+			$tempMessageId   = Request()->get('tempMessageId');
 			
-            $fileName = $request->file('file')->getClientOriginalName();
-            $fileContent = $request->file('file');
+			 $fileName = $file->getClientOriginalName();
+            $fileContent = $file;
             if ($storage === 'local') {
 				$location = 'local';
                 $file = Storage::disk('local')->put('public', $fileContent);
@@ -349,15 +354,23 @@ class ChatService
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
             } elseif ($storage === 'aws') {
 				$location = 'amazon';
-                $file = $request->file('file');
-                $filePath = 'uploads/media/received/'  . $this->organizationId . '/' . $fileName;
-                $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
+
+          //      $filePath = 'uploads/media/received/'  . $organizationId . '/' . $fileName;
+                $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $mediaUrl = $mediaFilePath;
             }
-    
-            $x = $this->whatsappService->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
-	
+			
+			$service = function() use($tempMessageId,$fileType,$uuid,$organizationId,$mediaUrl,$fileName,$mediaFilePath,$location) {
+             	$this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location,null,null,$tempMessageId);
+			};
+			
+			if($tempMessageId){
+			dispatch($service)->onQueue('high');
+		}else{
+			return $service();
+		}
+          
         }
        
     }
