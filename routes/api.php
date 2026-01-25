@@ -60,3 +60,46 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
 	});
     
 });
+
+
+// Public routes (no authentication required)
+Route::middleware([])->group(function () {
+    Route::post('login', [App\Http\Controllers\AuthController::class, 'login']);
+    Route::post('tfa/verify', [App\Http\Controllers\AuthController::class, 'tfaVerify']);
+});
+
+// Protected routes (require authentication via Sanctum)
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('logout', [App\Http\Controllers\AuthController::class, 'logout']);
+    Route::get('user', function (Request $request) {
+        $user = $request->user();
+        $organizations = [];
+        
+        if($user->role == 'user'){
+            $teams = \App\Models\Team::where('user_id', $user->id)->with('organization')->get();
+            $organizations = $teams->map(function($team) {
+                return [
+                    'id' => $team->organization_id,
+                    'name' => $team->organization->name ?? '',
+                    'role' => $team->role,
+                ];
+            })->toArray();
+        }
+        
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'user' => [
+                    'id' => $user->id,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'language' => $user->language ?? 'en',
+                    'avatar' => $user->avatar,
+                ],
+                'organizations' => $organizations,
+            ]
+        ]);
+    });
+});

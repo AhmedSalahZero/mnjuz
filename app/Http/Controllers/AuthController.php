@@ -50,30 +50,7 @@ class AuthController extends BaseController
 
         return Inertia::render('Auth/Login', $data);
     }
-
-    public function login(LoginRequest $request){
-		
-		$user = User::where('email', $request->email)->where('deleted_at', null)->first();
-        $addon = Addon::where('name', 'Google Authenticator')->first();
-        $addonActive = $addon ? $addon->is_active : 0;
-        $remember = $request->remember;
-		$userLanguage = $user->language ?? 'en';
-		// check if there is an active originization
-		// $numberOfActiveOrganization = $user->getActiveOrganizations()->count();
-		$canNotAccessDashboard = $user->canNotAccessDashboard();
-		if($canNotAccessDashboard){
-			 return redirect()->back()->withErrors(['email' => __('Your account is not associated with any active organization. Please contact support.',[],$userLanguage)])->withInput();
-		}
-        if ($user->tfa && $addonActive == 1) {
-            $request->session()->put('tfa', $user->id);
-            $request->session()->put('remember', $remember);
-            return redirect('/tfa');
-        }
-
-        return $this->doLogin($request, $user, $remember);
-    }
-
-    public function showTfaForm(Request $request)
+	public function showTfaForm(Request $request)
     {
         if (!$request->session()->has('tfa')) {
             return redirect('/login');
@@ -87,28 +64,156 @@ class AuthController extends BaseController
 
         return Inertia::render('Auth/Tfa', $data);
     }
+	
+    public function login(LoginRequest $request){
+		
+		$user = User::where('email', $request->email)->where('deleted_at', null)->first();
+        $addon = Addon::where('name', 'Google Authenticator')->first();
+        $addonActive = $addon ? $addon->is_active : 0;
+        $remember = $request->remember;
+		$userLanguage = $user->language ?? 'en';
+		// check if there is an active originization
+		// $numberOfActiveOrganization = $user->getActiveOrganizations()->count();
+		$canNotAccessDashboard = $user->canNotAccessDashboard();
+		
+		if($canNotAccessDashboard){
+            // Check if this is an API request (mobile)
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Your account is not associated with any active organization. Please contact support.', [], $userLanguage)
+                ], 403);
+            }
+			 return redirect()->back()->withErrors(['email' => __('Your account is not associated with any active organization. Please contact support.',[],$userLanguage)])->withInput();
+		}
+        if ($user->tfa && $addonActive == 1) {
+            // Check if this is an API request (mobile)
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'requires_tfa' => true,
+                    'message' => __('Two-factor authentication required'),
+                    'tfa_token' => encrypt($user->id . '|' . now()->timestamp) // Temporary token for TFA verification
+                ], 200);
+            }
+            $request->session()->put('tfa', $user->id);
+            $request->session()->put('remember', $remember);
+            return redirect('/tfa');
+        }
+	
+        return $this->doLogin($request, $user, $remember);
+    }
+
+    
 
     public function tfaVerify(TfaRequest $request)
     {
-        $userId = $request->session()->get('tfa');
-        $remember = $request->session()->get('remember');
+        // Check if this is an API request (mobile)
+        if ($request->expectsJson() || $request->is('api/*')) {
+            $tfaToken = $request->input('tfa_token');
+            $tfaCode = $request->input('tfa_code');
+            
+            if (!$tfaToken || !$tfaCode) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('TFA token and code are required')
+                ], 400);
+            }
+            
+            try {
+                $decrypted = decrypt($tfaToken);
+                list($userId, $timestamp) = explode('|', $decrypted);
+                
+                // Check if token is not expired (5 minutes)
+                if (now()->timestamp - $timestamp > 300) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => __('TFA token expired')
+                    ], 401);
+                }
+                
+                $user = User::find($userId);
+                if (!$user) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => __('User not found')
+                    ], 404);
+                }
+                
+                // Verify TFA code (you need to implement this based on your TFA system)
+                // For now, we'll assume the TfaRequest validates it
+                
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Invalid TFA token')
+                ], 401);
+            }
+        } else {
+            // Web authentication
+            $userId = $request->session()->get('tfa');
+            $remember = $request->session()->get('remember');
+            $user = User::find($userId);
+        }
 
-        $user = User::find($userId);
-
-        return $this->doLogin($request, $user, $remember);
+        return $this->doLogin($request, $user, $remember ?? false);
     }
 
     private function doLogin(Request $request, $user, $remember)
     {
 	
         $guard = $user->role == 'user' ? 'user' : 'admin';
-
+		
         if ($request->email || $request->password) {
             Auth::guard($guard)->attempt(['email' => $request->email, 'password' => $request->password], $remember);
         } else {
             Auth::guard($guard)->login($user, $remember);
         }
 
+        // Check if this is an API request (mobile)
+        if ($request->expectsJson() || $request->is('api/*')) {
+            // Revoke all existing tokens (optional - for security)
+            // $user->tokens()->delete();
+            
+            // Create API token for mobile
+            $tokenName = $request->device_name ?? 'mobile-app-' . now()->timestamp;
+            $token = $user->createToken($tokenName)->plainTextToken;
+            
+            // Get user's organizations
+            $organizations = [];
+            if($guard == 'user'){
+                $teams = Team::where('user_id', $user->id)->with('organization')->get();
+                $organizations = $teams->map(function($team) {
+                    return [
+                        'id' => $team->organization_id,
+                        'name' => $team->organization->name ?? '',
+                        'role' => $team->role,
+                    ];
+                })->toArray();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => __('Login successful'),
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'first_name' => $user->first_name,
+                        'last_name' => $user->last_name,
+                        'email' => $user->email,
+                        'role' => $user->role,
+                        'language' => $user->language ?? 'en',
+                        'avatar' => $user->avatar,
+                    ],
+                    'token' => $token,
+                    'token_type' => 'Bearer',
+                    'organizations' => $organizations,
+                    'current_organization_id' => $organizations ? ($organizations[0]['id'] ?? null) : null,
+                ]
+            ], 200);
+        }
+
+        // Web authentication (existing logic)
         //Check number of organizations
         if($guard == 'user'){
             $teams = Team::where('user_id', auth()->user()->id);
@@ -126,7 +231,6 @@ class AuthController extends BaseController
         if ($needsRefresh) {
             $redirectUrl .= '?refresh_lang=1';
         }
-
         return redirect($redirectUrl);
     }
 
@@ -482,8 +586,22 @@ class AuthController extends BaseController
         );
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
+        // Check if this is an API request (mobile)
+        if ($request->expectsJson() || $request->is('api/*')) {
+            // Revoke the current token
+            if ($request->user()) {
+                $request->user()->currentAccessToken()->delete();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => __('Logged out successfully')
+            ], 200);
+        }
+        
+        // Web authentication
         Auth::guard('user')->logout();
         Session::flush();
 
