@@ -274,8 +274,8 @@
 							</div>
 							<div v-if="debit.total > 0" class="bg-slate-100 px-2 py-2 space-y-2 rounded-md mt-2 mb-2">
 								<div class="flex justify-between text-sm">
-									<div>{{ $t('Available debits') }} <br><span class="text-xs">({{ $t('Applicable
-											debits due') }})</span></div>
+									<div>{{ $t('Available debits') }} <br><span class="text-xs">(
+											{{ $t('Applicable debits due') }} )</span></div>
 									<h3>{{ debit.total }}</h3>
 								</div>
 							</div>
@@ -391,10 +391,9 @@
 	</AppLayout>
 </template>
 <script setup>
-import AppLayout from "./../Layout/App.vue"
 import { router, useForm } from "@inertiajs/vue3"
 import { ref } from 'vue'
-import { Link } from "@inertiajs/vue3"
+import AppLayout from "./../Layout/App.vue"
 
 const props = defineProps(['addons', 'enable_ai_billing', 'plans', 'methods', 'subscription', 'subscriptionDetails'])
 const subscriptionDetails = ref(props.subscriptionDetails)
