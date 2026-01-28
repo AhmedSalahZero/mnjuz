@@ -263,8 +263,8 @@
 							</div>
 							<div v-if="credit.total > 0" class="bg-slate-100 px-2 py-2 space-y-2 rounded-md mt-2 mb-2">
 								<div class="flex justify-between text-sm">
-									<div>{{ $t('Available credits') }} <br><span class="text-xs">({{ $t('Applicable
-											credits for this invoice') }})</span></div>
+									<div>{{ $t('Available credits') }} <br><span class="text-xs">
+											{{ $t('Applicable credits for this invoice') }} </span></div>
 									<h3 v-if="parseFloat(-credit.total) <= parseFloat(netAmount)" class="text-red-500">
 										{{ credit.total }}
 									</h3>
