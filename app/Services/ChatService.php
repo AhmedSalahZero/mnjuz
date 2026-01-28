@@ -159,7 +159,6 @@ class ChatService
                 ->where('contact_id', $contact->id)
                 ->first();
             $initialMessages = $this->getChatMessages($contact->id);
-			dd($initialMessages);
             // Mark messages as read
             DB::table('chats')->where('contact_id', $contact->id)
                 ->where('type', 'inbound')

@@ -164,7 +164,7 @@ class ApiController extends Controller
                 'message' => __('Request processed successfully',[],getApiLang())
             ], 200);
         } catch (\Exception $e) {
-			dd($e->getMessage());
+		
 			if($request->expectsJson() && $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 500,
@@ -738,7 +738,6 @@ class ApiController extends Controller
 			],
 		//	'components' => $templateContent['components'],
 		];
-		//dd($templateContent);
 		$request->merge(['template' => $templateContent]);
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([

@@ -213,7 +213,6 @@ class Contact extends Model
 		 */
 		$perPage = Request()->input('per_page', 20);
 		//$page = Request()->input('page', null);
-		// dd($page);
 		// if($page){
 		// 	return  $query->paginate($perPage, ['*'], $page); // for mobile app pagination
 		// }

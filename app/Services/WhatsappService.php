@@ -452,7 +452,6 @@ class WhatsappService
             }
         }
 
-        //dd(json_encode($array));
         return json_encode($array);
     }
 
@@ -609,7 +608,6 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
-        dd($responseObject);
     }*/
 
     /**

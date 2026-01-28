@@ -61,7 +61,6 @@ class ContactController extends BaseController
 			// $phoneMustBeEncrypted = $isAgent && $encryptContactsForAgents ;
 			$contact  ? $contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted())   :'';
 			
-            //dd($contact);
             return Inertia::render('User/Contact/Index', [
                 'title' => __('Contacts'),
                 'rows' => ContactResource::collection($contacts),
