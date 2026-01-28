@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -207,9 +208,20 @@ class Contact extends Model
 
         // ✅ الترتيب باستخدام العمود الموجود
         $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
-
+		/**
+		 * @var Builder $query 
+		 */
+		$perPage = Request()->input('per_page', 20);
+		//$page = Request()->input('page', null);
+		// dd($page);
+		// if($page){
+		// 	return  $query->paginate($perPage, ['*'], $page); // for mobile app pagination
+		// }
+		return $query->paginate($perPage); // for web app pagination
         // ✅ Pagination
-        return $query->paginate(20); // زيادة العدد لتقليل الطلبات
+		// ->paginate($perPage, ['uuid', 'name', 'metadata', 'updated_at'], 'page', $page);
+        // return $query->paginate($perPage); // زيادة العدد لتقليل الطلبات
+      //  return $query->paginate($perPage, ['*'], $page); // زيادة العدد لتقليل الطلبات
     }
 
     

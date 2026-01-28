@@ -1,5 +1,8 @@
 <?php 
-function getApiLang():string
-{
-	return app()->getLocale();
+
+if (!function_exists('getApiLang')) {
+    function getApiLang(): string
+    {
+        return app()->getLocale() ?? 'ar';
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Throwable;
 
@@ -28,8 +29,47 @@ class Handler extends ExceptionHandler
         });
     }
 
+    /**
+     * Convert an authentication exception into a response.
+     */
+    protected function unauthenticated($request, AuthenticationException $exception)
+    {
+        // For API requests, return JSON response
+        if ($request->expectsJson() || $request->is('api/*')) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Unauthenticated'),
+                'error' => __('You are not authenticated. Please login first.'),
+            ], 401);
+        }
+
+        // For web requests, redirect to login
+        return redirect()->guest($exception->redirectTo() ?? route('login'));
+    }
+
     function render($request, Throwable $exception)
     {
+        // For API requests, return JSON responses instead of HTML views
+        if ($request->expectsJson() || $request->is('api/*')) {
+            if ($this->isHttpException($exception)) {
+                $statusCode = $exception->getStatusCode();
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => $this->getErrorMessage($statusCode),
+                    'error' => $exception->getMessage() ?: $this->getErrorMessage($statusCode),
+                ], $statusCode);
+            }
+            
+            // For other exceptions in API, return JSON
+            return response()->json([
+                'success' => false,
+                'message' => __('An error occurred'),
+                'error' => config('app.debug') ? $exception->getMessage() : __('An error occurred'),
+            ], 500);
+        }
+        
+        // For web requests, return HTML views
         if ($this->isHttpException($exception)) {
             if ($exception->getStatusCode() == 404) {
                 return response()->view('errors.404', [], 404);
@@ -39,5 +79,21 @@ class Handler extends ExceptionHandler
             }
         }
         return parent::render($request, $exception);
+    }
+    
+    /**
+     * Get error message based on status code
+     */
+    private function getErrorMessage($statusCode)
+    {
+        $messages = [
+            404 => __('Route not found'),
+            403 => __('Forbidden'),
+            401 => __('Unauthorized'),
+            500 => __('Internal server error'),
+            422 => __('Validation error'),
+        ];
+        
+        return $messages[$statusCode] ?? __('An error occurred');
     }
 }

@@ -11,6 +11,7 @@ use App\Http\Requests\SignupRequest;
 use App\Http\Requests\StoreUser;
 use App\Http\Requests\StoreUserInvite;
 use App\Http\Requests\TfaRequest;
+use App\Http\Requests\UserHasOrganizationRequest;
 use App\Models\Addon;
 use App\Models\Organization;
 use App\Models\PasswordResetToken;
@@ -24,14 +25,15 @@ use App\Services\PasswordResetService;
 use App\Services\SocialLoginService;
 use App\Services\TeamService;
 use App\Services\UserService;
-use DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
-use Session;
-use Str;
 
 class AuthController extends BaseController
 {
@@ -69,26 +71,33 @@ class AuthController extends BaseController
 		
 		$user = User::where('email', $request->email)->where('deleted_at', null)->first();
         $addon = Addon::where('name', 'Google Authenticator')->first();
-        $addonActive = $addon ? $addon->is_active : 0;
+        $addonActive = ($addon && ($addon->is_active == 1 || $addon->is_active === '1' || $addon->is_active === true)) ? 1 : 0;
         $remember = $request->remember;
 		$userLanguage = $user->language ?? 'en';
 		// check if there is an active originization
 		// $numberOfActiveOrganization = $user->getActiveOrganizations()->count();
 		$canNotAccessDashboard = $user->canNotAccessDashboard();
-		
 		if($canNotAccessDashboard){
             // Check if this is an API request (mobile)
             if ($request->expectsJson() || $request->is('api/*')) {
+                // Set locale based on user's language for proper translation
+                App::setLocale($userLanguage);
+                
                 return response()->json([
                     'success' => false,
-                    'message' => __('Your account is not associated with any active organization. Please contact support.', [], $userLanguage)
+                    'message' => __('Your account is not associated with any active organization. Please contact support.')
                 ], 403);
             }
 			 return redirect()->back()->withErrors(['email' => __('Your account is not associated with any active organization. Please contact support.',[],$userLanguage)])->withInput();
 		}
-        if ($user->tfa && $addonActive == 1) {
+        // Check TFA: user->tfa can be 1, '1', or true
+        $userTfaEnabled = ($user->tfa == 1 || $user->tfa === '1' || $user->tfa === true);
+        if ($userTfaEnabled && $addonActive == 1) {
             // Check if this is an API request (mobile)
             if ($request->expectsJson() || $request->is('api/*')) {
+                // Set locale based on user's language for proper translation
+                App::setLocale($userLanguage);
+                
                 return response()->json([
                     'success' => false,
                     'requires_tfa' => true,
@@ -108,47 +117,19 @@ class AuthController extends BaseController
 
     public function tfaVerify(TfaRequest $request)
     {
+        // TfaRequest already validated everything, now we just need to get the user
+        
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
+            // For mobile API, extract user from tfa_token
             $tfaToken = $request->input('tfa_token');
-            $tfaCode = $request->input('tfa_code');
+            $decrypted = decrypt($tfaToken);
+            list($userId, $timestamp) = explode('|', $decrypted);
+            $user = User::find($userId);
+            $remember = false; // Mobile uses tokens, not remember me
             
-            if (!$tfaToken || !$tfaCode) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('TFA token and code are required')
-                ], 400);
-            }
-            
-            try {
-                $decrypted = decrypt($tfaToken);
-                list($userId, $timestamp) = explode('|', $decrypted);
-                
-                // Check if token is not expired (5 minutes)
-                if (now()->timestamp - $timestamp > 300) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => __('TFA token expired')
-                    ], 401);
-                }
-                
-                $user = User::find($userId);
-                if (!$user) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => __('User not found')
-                    ], 404);
-                }
-                
-                // Verify TFA code (you need to implement this based on your TFA system)
-                // For now, we'll assume the TfaRequest validates it
-                
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('Invalid TFA token')
-                ], 401);
-            }
+            // Set locale based on user's language for proper translation
+            App::setLocale($user->language ?? 'en');
         } else {
             // Web authentication
             $userId = $request->session()->get('tfa');
@@ -172,6 +153,10 @@ class AuthController extends BaseController
 
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
+            // Set locale based on user's language for proper translation
+            $userLanguage = $user->language ?? 'en';
+            App::setLocale($userLanguage);
+            
             // Revoke all existing tokens (optional - for security)
             // $user->tokens()->delete();
             
@@ -181,6 +166,7 @@ class AuthController extends BaseController
             
             // Get user's organizations
             $organizations = [];
+            $currentOrganizationId = null;
             if($guard == 'user'){
                 $teams = Team::where('user_id', $user->id)->with('organization')->get();
                 $organizations = $teams->map(function($team) {
@@ -190,6 +176,11 @@ class AuthController extends BaseController
                         'role' => $team->role,
                     ];
                 })->toArray();
+                
+                // Set current organization only if user has exactly one organization
+                if(count($organizations) == 1){
+                    $currentOrganizationId = $organizations[0]['id'];
+                }
             }
             
             return response()->json([
@@ -202,13 +193,13 @@ class AuthController extends BaseController
                         'last_name' => $user->last_name,
                         'email' => $user->email,
                         'role' => $user->role,
-                        'language' => $user->language ?? 'en',
+                        'language' => $user->language ?? 'ar',
                         'avatar' => $user->avatar,
                     ],
                     'token' => $token,
                     'token_type' => 'Bearer',
                     'organizations' => $organizations,
-                    'current_organization_id' => $organizations ? ($organizations[0]['id'] ?? null) : null,
+                    'current_organization_id' => $currentOrganizationId,
                 ]
             ], 200);
         }
@@ -590,9 +581,14 @@ class AuthController extends BaseController
     {
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
-            // Revoke the current token
+            // Set locale based on user's language for proper translation
             if ($request->user()) {
-                $request->user()->currentAccessToken()->delete();
+                App::setLocale($request->user()->language ?? 'en');
+                // Revoke the current token
+				$request->user()->current_organization_id = null;
+				$request->user()->save();
+                // Delete all tokens for the user (more reliable than currentAccessToken in tests)
+                $request->user()->tokens()->delete();
             }
             
             return response()->json([
@@ -607,4 +603,21 @@ class AuthController extends BaseController
 
         return redirect('login');
     }
+	public function setCurrentOrganization(UserHasOrganizationRequest $request)
+	{
+		$organization = Organization::find($request->organization_id);
+		if(!$organization){
+			return response()->json([
+				'success' => false,
+				'message' => __('Organization not found')
+			], 404);
+		}
+		$user = $request->user();
+		$user->current_organization_id = $organization->id;
+		$user->save();
+		return response()->json([
+			'success' => true,
+			'message' => __('Organization set successfully')
+		], 200);
+	}
 }

@@ -61,45 +61,33 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     
 });
 
-
+Route::prefix('v1')->group(function () {
 // Public routes (no authentication required)
-Route::middleware([])->group(function () {
+Route::prefix('auth')->group(function () {
     Route::post('login', [App\Http\Controllers\AuthController::class, 'login']);
     Route::post('tfa/verify', [App\Http\Controllers\AuthController::class, 'tfaVerify']);
 });
 
 // Protected routes (require authentication via Sanctum)
-Route::middleware(['auth:sanctum'])->group(function () {
+
+Route::middleware(['auth:sanctum'])->prefix('auth')->group(function () {
     Route::post('logout', [App\Http\Controllers\AuthController::class, 'logout']);
-    Route::get('user', function (Request $request) {
-        $user = $request->user();
-        $organizations = [];
-        
-        if($user->role == 'user'){
-            $teams = \App\Models\Team::where('user_id', $user->id)->with('organization')->get();
-            $organizations = $teams->map(function($team) {
-                return [
-                    'id' => $team->organization_id,
-                    'name' => $team->organization->name ?? '',
-                    'role' => $team->role,
-                ];
-            })->toArray();
-        }
-        
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'first_name' => $user->first_name,
-                    'last_name' => $user->last_name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'language' => $user->language ?? 'en',
-                    'avatar' => $user->avatar,
-                ],
-                'organizations' => $organizations,
-            ]
-        ]);
-    });
+    Route::post('set-current-organization', [App\Http\Controllers\AuthController::class, 'setCurrentOrganization']);
+});
+
+Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','check.has.selected.organization'])->group(function () {
+	Route::get('/contacts', [App\Http\Controllers\ApiController::class, 'listContacts']);
+    Route::post('/contacts', [App\Http\Controllers\ApiController::class, 'storeContact']);
+    Route::put('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'updateContact']);
+    Route::delete('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContact']);
+	
+	Route::post('/send-text', [App\Http\Controllers\ApiController::class, 'sendMessage']);
+    Route::post('/send-media', [App\Http\Controllers\ApiController::class, 'sendFileMessage']);
+    Route::get('/list-templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
+    Route::post('/send-template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessageByUUID']);
+	Route::get('/list-chat-contacts', [App\Http\Controllers\ApiController::class, 'listChatContacts']);
+	Route::get('/list-messages-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'listChatContactsForContact']);
+	
+});
+
 });

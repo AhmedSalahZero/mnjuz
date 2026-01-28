@@ -50,7 +50,8 @@ class LoginRequest extends FormRequest
         ];
 	
         // Check if recaptcha_active is 1, then add recaptcha_response rule
-        if (Addon::where('name', 'Google Recaptcha')->first()->is_active === '1') {
+        $recaptchaAddon = Addon::where('name', 'Google Recaptcha')->first();
+        if ($recaptchaAddon && $recaptchaAddon->is_active === '1') {
             $rules['recaptcha_response'] = ['required', new Recaptcha];
         }
         return $rules;
@@ -59,5 +60,28 @@ class LoginRequest extends FormRequest
     private function emailExists(string $email): bool
     {
         return User::where('email', $email)->where('status', '1')->where('deleted_at', null)->exists();
+    }
+
+    /**
+     * Handle a failed validation attempt.
+     *
+     * @param  \Illuminate\Contracts\Validation\Validator  $validator
+     * @return void
+     *
+     * @throws \Illuminate\Http\Exceptions\HttpResponseException
+     */
+    protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
+    {
+        if ($this->expectsJson() || $this->is('api/*')) {
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                response()->json([
+                    'success' => false,
+                    'message' => __('The given data was invalid.'),
+                    'errors' => $validator->errors()
+                ], 422)
+            );
+        }
+
+        parent::failedValidation($validator);
     }
 }

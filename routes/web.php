@@ -116,7 +116,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::group(['middleware' => ['check.organization']], function () {
             //User Panel Routes
             Route::match(['get', 'post'], '/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('dashboard');
-
+			// ['middleware' => 'check.client.role']
             Route::group(['middleware' => 'check.client.role'], function () {
                 Route::delete('dismiss-notification/{type}', [App\Http\Controllers\User\DashboardController::class, 'dismissNotification'])->name('dashboard.team.notification.dismiss');
                 Route::match(['get', 'post'], '/billing', [App\Http\Controllers\User\BillingController::class, 'index'])->name('user.billing.index');
@@ -247,6 +247,7 @@ Route::prefix('admin')->middleware(['web', 'auth:admin'])->group(function () {
     Route::post('/addons/setup/google-analytics', [App\Http\Controllers\Admin\AddonController::class, 'store']);
     Route::post('/addons/setup/google-maps', [App\Http\Controllers\Admin\AddonController::class, 'store']);
     Route::post('/addons/setup/google-authenticator', [App\Http\Controllers\Admin\AddonController::class, 'store']);
+    Route::post('/addons/setup/mobile-app', [App\Http\Controllers\Admin\AddonController::class, 'store']);
     Route::resource('payment-gateways', App\Http\Controllers\Admin\PaymentGatewayController::class)->only(['index', 'show', 'update']);
     Route::get('/languages/{language}/export', [App\Http\Controllers\Admin\LanguageController::class, 'export']);
     Route::post('/languages/{language}/import', [App\Http\Controllers\Admin\LanguageController::class, 'import']);

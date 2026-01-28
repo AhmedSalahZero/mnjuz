@@ -286,10 +286,12 @@ class WhatsappService
      * @param string $messageContent The content of the message to be sent.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL)
+    public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL , $sendByQueue = false)
     {
 
-        $contact = Contact::where('uuid', $contactUuId)->first();
+        $service = function() use ($contactUuId, $templateContent, $userId, $campaignId, $mediaId){
+			
+			$contact = Contact::where('uuid', $contactUuId)->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -346,8 +348,16 @@ class WhatsappService
         WebhookHelper::triggerWebhookEvent('message.sent', [
             'data' => $responseObject,
         ], $contact->organization_id);
-
-        return $responseObject;
+		return $responseObject;
+		
+		};
+	
+		if($sendByQueue){
+			dispatch($service)->onQueue('high');
+		}else{
+			return $service();
+		}
+        
     }
 
     private function getMediaIdFromCampaign($campaignId){
@@ -622,7 +632,6 @@ class WhatsappService
         $requestData['to'] = $contact->phone;
         $requestData['type'] = $mediaType;
         $requestData[$mediaType]['link'] = $mediaUrl;
-
         if($mediaType == 'document'){
             $requestData[$mediaType]['filename'] = $mediaFileName;
         }

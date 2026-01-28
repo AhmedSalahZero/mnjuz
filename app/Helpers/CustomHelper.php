@@ -39,13 +39,19 @@ class CustomHelper {
             ->exists();
 
         $orgId = $organizationId != NULL ? $organizationId : session()->get('current_organization');
+        
+        // If no organization ID, return false
+        if (!$orgId) {
+            return false;
+        }
 
         $subscription = Subscription::with('plan')
             ->where('organization_id', $orgId)
             ->first();
 
         if($addon){
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
+            // Check if subscription exists and is in trial period
+            if($subscription && $subscription->status === 'trial' && $subscription->valid_until > now()){
                 return true; //Allow user to test features during trial period
             }
 

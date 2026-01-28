@@ -20,9 +20,9 @@ use App\Models\Team;
 use App\Models\User;
 use App\Resolvers\PaymentPlatformResolver;
 use Carbon\Carbon;
+use DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
-use DB;
 
 class SubscriptionService
 {
@@ -37,7 +37,6 @@ class SubscriptionService
                 return false;
             }
         }*/
-
         if ($subscription && $subscription->valid_until >= now()) {
             return true;
         }
@@ -352,7 +351,7 @@ class SubscriptionService
     public static function isSubscriptionFeatureLimitReached($organizationId, $feature)
     {
         $subscription = Subscription::where('organization_id', $organizationId)->first();
-
+		// return true;
         if (!$subscription) {
             return true;
         }

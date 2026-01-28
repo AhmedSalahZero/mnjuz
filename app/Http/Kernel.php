@@ -73,10 +73,12 @@ class Kernel extends HttpKernel
         'check.organization' => \App\Http\Middleware\CheckOrganizationId::class,
         'check.email.verification' => \App\Http\Middleware\CheckEmailVerification::class,
         'check.active.organization' => \App\Http\Middleware\CheckActiveOrganization::class,
+        'check.has.selected.organization' => \App\Http\Middleware\CheckApiUserHasOrganization::class,
         'check.client.role' => \App\Http\Middleware\CheckClientRole::class,
         'auth.bearer' => \App\Http\Middleware\AuthenticateBearerToken::class,
         'setOrganization' => \App\Http\Middleware\SetOrganizationFromSession::class,
         'redirectIfAuthenticated' => \App\Http\Middleware\RedirectIfAuthenticated::class,
-		'ExcludeRouteFromDocs' => ExcludeFromDocsMiddleware::class
+		'ExcludeRouteFromDocs' => ExcludeFromDocsMiddleware::class,
+		'has.mobile.app' => \App\Http\Middleware\CheckMobileApp::class,
     ];
 }

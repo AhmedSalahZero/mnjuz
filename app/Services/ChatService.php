@@ -66,14 +66,20 @@ class ChatService
     {
         //	$uuid = 'b27a5a63-05d4-4e2f-911c-4da76044328c';
         $role = auth()->user()->teams[0]->role;
+		
         $contact = new Contact;
         $config = Organization::find($this->organizationId);
         $ticketState = $request->status == null ? 'all' : $request->status;
-        $sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
+		$sortDirection = 'desc';
+		if($request->expectsJson() && $request->is('api/v1/*')){
+			$sortDirection = $request->sort_direction ?? 'desc';
+		}else{
+			$sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
+		}
         $allowAgentsToViewAllChats = true;
         $ticketingActive = false;
-        $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
-
+	
+        $aimodule = CustomHelper::isModuleEnabled('AI Assistant',$this->organizationId);
         //Check if tickets module has been enabled
         
         if ($config->metadata != null) {
@@ -153,6 +159,7 @@ class ChatService
                 ->where('contact_id', $contact->id)
                 ->first();
             $initialMessages = $this->getChatMessages($contact->id);
+			dd($initialMessages);
             // Mark messages as read
             DB::table('chats')->where('contact_id', $contact->id)
                 ->where('type', 'inbound')
@@ -207,6 +214,7 @@ class ChatService
         }
         
         if (request()->expectsJson()) {
+			
             return response()->json([
                 'result' => ContactResource::collection($contacts)->response()->getData(),
             ], 200);
@@ -360,11 +368,10 @@ class ChatService
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $mediaUrl = $mediaFilePath;
             }
-			
 			$service = function() use($tempMessageId,$fileType,$uuid,$organizationId,$mediaUrl,$fileName,$mediaFilePath,$location) {
-             	$this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location,null,null,$tempMessageId);
+             	return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location,null,null,$tempMessageId);
 			};
-			
+			return $service();
 			if($tempMessageId){
 			dispatch($service)->onQueue('high');
 		}else{
@@ -625,7 +632,7 @@ class ChatService
     }
     public function blockContact(Organization $organization, Contact $contact)
     {
-		logger('from block api');
+	//	logger('from block api');
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
         //	dd($contact);
