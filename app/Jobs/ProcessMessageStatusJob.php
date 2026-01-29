@@ -35,7 +35,7 @@ class ProcessMessageStatusJob implements ShouldQueue
     {
         try {
 			foreach($this->statuses as $status) {
-				logger('inside first job');
+		//		logger('inside first job');
                 $chatWamId = $status['id'];
                 $statusValue = $status['status'];
 

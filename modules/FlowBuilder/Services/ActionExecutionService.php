@@ -51,7 +51,7 @@ class ActionExecutionService
      */
     public function executeAction($actionType, $config, $contact, $userMessage = '', $flowData = null, $contactId = null)
     {
-		 logger('inside execute action');
+	//	 logger('inside execute action');
         try {
             switch ($actionType) {
                 case 'add_to_group':
@@ -300,7 +300,7 @@ class ActionExecutionService
             ]);
             return false;
         }
-        logger('trigger new job here');
+     //   logger('trigger new job here');
         // ✅ تحديث current_step للـ node الصحيح
     
         

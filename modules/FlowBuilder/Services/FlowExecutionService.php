@@ -53,19 +53,19 @@ class FlowExecutionService
             // Find the current step for the user in the flow
             $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
             $flowId = null;
-			logger('--inside execute flow');
+	//		logger('--inside execute flow');
             if($flowData && $flowData->exists){
                 // Check if the flow still exists in the database
                 $flow = Flow::find($flowData->flow_id);
                 
                 if(!$flow){
-						logger('--flow deleted');
+	//					logger('--flow deleted');
                     // Flow has been deleted, remove FlowUserData and proceed as if it doesn't exist
                     Log::warning("DELETION POINT 1: Flow not found, deleting FlowUserData for contact {$chat->contact_id}");
                     FlowUserData::where('contact_id', $chat->contact_id)->delete();
                     $flowData = null;
                 } else {
-					logger('--from else flow');
+		//			logger('--from else flow');
                     // Flow exists, proceed to process flow
                     $flowId = $flowData->flow_id;
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
@@ -86,19 +86,19 @@ class FlowExecutionService
 
             // If flowData doesn't exist or was deleted, proceed with flow determination logic
             if(!$flowData){
-						logger('--frow new flow');
+					//	logger('--frow new flow');
                 // Determine the flow based on trigger type
                 $flowQuery = Flow::where('organization_id', $chat->organization_id)->where('status', 'active');
                 $flow = null;
 
                 //Check if any flow trigger has been hit
                 if($isNewContact){
-						logger('--frow is new contact');
+			//			logger('--frow is new contact');
                     $flow = $flowQuery->where('trigger', 'new_contact')->first();
                 } else {
                     $msg = strtolower(trim($message)); // Normalize the message
                     $words = explode(' ', $msg); // Split message into individual words
-logger('--from else new');
+// logger('--from else new');
                     $conditions = [];
                     $bindings = [];
 
@@ -112,7 +112,7 @@ logger('--from else new');
                         $conditions[] = "FIND_IN_SET(?, keywords)";
                         $bindings[] = $word;
                     }
-logger('--from final query');
+// logger('--from final query');
                     // Final query
                     $flow = \DB::table('flows')->whereRaw(
                         '( `trigger` = ? AND organization_id = ?) AND (' . implode(' OR ', $conditions) . ')',
@@ -129,32 +129,32 @@ logger('--from final query');
 
                 // If a flow ID was found, create a new FlowUserData record
                 if ($flowId) {
-					logger('--from flow data');
+					// logger('--from flow data');
                     $flowData = new FlowUserData();
                     $flowData->fill([
                         'contact_id' => $chat->contact_id,
                         'flow_id' => $flowId,
                         'current_step' => 1
                     ])->save();
-                    	logger('--from pprocess flow data');
+                    	// logger('--from pprocess flow data');
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
                     
                     // If validation failed, don't delete flow data
                     if ($result === 'validation_failed') {
-						logger('--from validation failed');
+						// logger('--from validation failed');
                         return false; // Return false but don't delete flow data
                     }
                     
                     // If flow is delayed, don't delete flow data
                     if ($result === 'delayed') {
-						   	logger('--from delayed results');
+						   	// logger('--from delayed results');
                         return false; // Return false but don't delete flow data
                     }
                     
                     return $result;
                 }
             }
-			logger('not founnnd return false');
+		//	logger('not founnnd return false');
             return false;
         }
     }
@@ -163,7 +163,7 @@ logger('--from final query');
         $activeFlow = FlowUserData::where('contact_id', $chat->contact_id)->first();
 		$oneOrZero = $activeFlow? 1 : 0 ; 
 		$id = $activeFlow ? $activeFlow->id : 0 ;
-		logger('--has active flow ?'.$oneOrZero.'active id'.$id);
+	//	logger('--has active flow ?'.$oneOrZero.'active id'.$id);
         return $activeFlow ? true : false;
     }
 
@@ -177,7 +177,7 @@ logger('--from final query');
      */
     public function continueDelayedFlow($contactId, $flowId, $currentStep)
     {
-		logger('continue delayed flow');
+	//	logger('continue delayed flow');
         // Find the flow user data
         $flowData = FlowUserData::where('contact_id', $contactId)
             ->where('flow_id', $flowId)
@@ -212,7 +212,7 @@ logger('--from final query');
     }
 
     public function processFlow($chat, $isNewContact, $flowData, $contactId, $message){
-		logger('start process flow method');
+		//logger('start process flow method');
         $flow = Flow::find($flowData->flow_id);
 
         if (!$flow || empty($flow->metadata)) {
@@ -223,25 +223,25 @@ logger('--from final query');
         if (!$contact) {
             return false;
         }
-				logger('processing process flow method');
+			//	logger('processing process flow method');
         $edgesArray = json_decode($flow->metadata, true);
         $edges = \Arr::get($edgesArray, "edges", null);
-        	logger('flow id'.$flow->id);
+        //	logger('flow id'.$flow->id);
         // Process nodes continuously until we encounter a message node
         $maxIterations = 50; // Prevent infinite loops
         $iteration = 0;
 		$tryAnotherTime = true ;
-        logger('start looping');
+      //  logger('start looping');
         while ($iteration < $maxIterations) {
             $iteration++;
-                    logger('inside looping'.$iteration);
+              //      logger('inside looping'.$iteration);
             // Get the current node metadata
             $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
 			if(empty($metadataArray)){
-				logger('empty data ');
+			//	logger('empty data ');
 				FlowUserData::where('contact_id', $contactId)->delete();
-				logger($flowData->current_step);
-				logger($message);
+			//	logger($flowData->current_step);
+			//	logger($message);
 				 return false;
 			}
 			// if(empty($metadataArray) && $tryAnotherTime){
@@ -251,10 +251,10 @@ logger('--from final query');
 			// 	$flowData->save();
 			// 	 $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
 			// }
-			logger('inside loop - current step'.$flowData->current_step);
-			logger('inside loop - edges'.json_encode($flow->metadata));
+		//	logger('inside loop - current step'.$flowData->current_step);
+		//	logger('inside loop - edges'.json_encode($flow->metadata));
             if(empty($metadataArray)){
-				logger('empty edges sorry');
+		//		logger('empty edges sorry');
                 Log::warning("DELETION POINT 2: No next step found for contact {$contactId}, ending flow");
 				//  $fallbackMsg = "عذراً، لم أفهم ردك. اكتب 'مساعدة' أو تواصل مع الدعم.";
     		    // $this->whatsappService->sendMessage($contact->uuid, $fallbackMsg, 0, 'text');
@@ -264,9 +264,9 @@ logger('--from final query');
 
             // Check if this is an action node
             $nodeType = \Arr::get($metadataArray, "type", null);
-			logger('node type '.$nodeType);
+		//	logger('node type '.$nodeType);
             if ($nodeType === 'action') {
-				  logger('inside loop - action inside looping '.$iteration);
+		//		  logger('inside loop - action inside looping '.$iteration);
                 $result = $this->processActionNode($metadataArray, $contact, $message, $flowData, $contactId);
                 
                 if ($result === false) {
@@ -280,7 +280,7 @@ logger('--from final query');
                 }
                 
                 if ($result === 'delayed') {
-					logger('inside loop - delayed so return ');
+			//		logger('inside loop - delayed so return ');
                     // Flow is paused due to delay action, don't proceed to next step
                     return 'delayed'; // Return special value to indicate the flow is paused
                 }
@@ -293,7 +293,7 @@ logger('--from final query');
                 }
                 continue;
             }
-			logger('proceess message node and stop');
+		//	logger('proceess message node and stop');
             // This is a message node (text, media, interactive, etc.) - process it and stop
             return $this->processMessageNode($metadataArray, $contact, $flowData, $contactId);
         }
@@ -395,13 +395,13 @@ logger('--from final query');
      */
     private function processActionNode($metadataArray, $contact, $message, $flowData, $contactId)
     {
-					  logger('inside action node');
+			//		  logger('inside action node');
         $actionType = \Arr::get($metadataArray, "data.actionType", null);
         $config = \Arr::get($metadataArray, "data.config", []);
         $isActive = \Arr::get($metadataArray, "data.is_active", true);
 
         if (!$actionType || !$isActive) {
-			 logger('inside proceedToNextStep');
+	//		 logger('inside proceedToNextStep');
             // If action is not active or has no type, just proceed to next step
             $this->proceedToNextStep($flowData, $contactId);
             return true;
@@ -417,13 +417,13 @@ logger('--from final query');
         $result = $actionService->executeAction($actionType, $config, $contact, $message, $flowData, $contactId);
 
 		if ($result === 'delayed') {
-   			 logger('Delay action executed - flow paused');
+   		//	 logger('Delay action executed - flow paused');
   		  return 'delayed';
 			}
 
         // Handle conditional actions specially
         if ($actionType === 'conditional') {
-					 logger('inside conditional');
+		//			 logger('inside conditional');
             // Set current_step to this conditional node's ID before processing
             $conditionalNodeId = $metadataArray['id'] ?? null;
             if ($conditionalNodeId && $flowData->current_step != $conditionalNodeId) {
@@ -435,7 +435,7 @@ logger('--from final query');
 
         // For update_contact action, check if it failed due to validation BEFORE checking general failure
         if ($actionType === 'update_contact' && $result === false) {
-			logger('inside update contact');
+		//	logger('inside update contact');
             // Check if there's an invalid email message configured, which indicates validation failure
             $invalidMessage = $config['invalid_email_message'] ?? '';
             //Log::info("Update contact validation failed, staying on same node for contact {$contactId}");
@@ -448,7 +448,7 @@ logger('--from final query');
             FlowUserData::where('contact_id', $contactId)->delete();
             return false;
         }
-		logger('from execution got to next step');
+	//	logger('from execution got to next step');
         // For other actions, proceed to next step
         $this->proceedToNextStep($flowData, $contactId);
         return true;
@@ -510,7 +510,7 @@ logger('--from final query');
      */
     private function proceedToNextStep($flowData, $contactId)
     {
-		logger('iam inside process next step now');
+	//	logger('iam inside process next step now');
         // Find the next node by looking at the edges
         $flow = Flow::find($flowData->flow_id);
         if (!$flow || empty($flow->metadata)) {
@@ -534,7 +534,7 @@ logger('--from final query');
         if (!empty($nextNodes)) {
 			// Use the first next node found
             $nextStep = $nextNodes[0];
-			logger('will update to the next step number no '.$nextStep);
+		//	logger('will update to the next step number no '.$nextStep);
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
         } else {
             Log::warning("DELETION POINT 6: No next step found for current_step {$flowData->current_step}, ending flow");

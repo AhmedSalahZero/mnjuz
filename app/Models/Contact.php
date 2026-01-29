@@ -70,6 +70,11 @@ class Contact extends Model
         return $this->where('organization_id', $organizationId)->whereNull('deleted_at')->count();
     }
 
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class, 'organization_id', 'id');
+    }
+
     public function contactGroups()
     {
         return $this->belongsToMany(ContactGroup::class, 'contact_contact_group', 'contact_id', 'contact_group_id')
@@ -301,19 +306,30 @@ class Contact extends Model
 	}
 	public static function currentUserIsAgent()
 	{
-		$organizationId = session()->get('current_organization',Request()->get('organization_id'));
-		$user = auth()->user() ;
+		// تخزين مؤقت لكل طلب (نفس النتيجة لجميع جهات الاتصال في الصفحة)
+		static $cached = null;
+		if ($cached !== null) {
+			return $cached;
+		}
+		$organizationId = session()->get('current_organization', Request()->get('organization_id'));
+		$user = auth()->user();
 		$team = null;
-		if($user){
+		if ($user && $organizationId) {
 			$team = Team::where('organization_id', $organizationId)->where('user_id', $user->id)->first();
 		}
-		 return $team && $team->role === 'agent';
+		$cached = $team && $team->role === 'agent';
+		return $cached;
 	}
+
 	public static function contactPhoneNumberShouldEncrypted(?Organization $organization = null):bool
 	{
-			 $isAgent = self::currentUserIsAgent();
-			$encryptContactsForAgents = self::getTicketSettings($organization);
-			return $isAgent && $encryptContactsForAgents ;
+		// تخزين مؤقت لكل طلب ومُنظمة (تجنب N+1 في ContactResource)
+		$key = $organization ? $organization->id : (session()->get('current_organization') ?? 'session');
+		static $cache = [];
+		if (!isset($cache[$key])) {
+			$cache[$key] = self::currentUserIsAgent() && self::getTicketSettings($organization);
+		}
+		return $cache[$key];
 	}
 	private static function getTicketSettings(?Organization $organization = null){
         // Retrieve the settings for the current organization

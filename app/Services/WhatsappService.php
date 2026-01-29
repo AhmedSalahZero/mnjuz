@@ -782,7 +782,6 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
-        dd($responseObject);
     }
 
     /**
@@ -807,7 +806,6 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
-        dd($responseObject);
     }
 
     public function createTemplate(Request $request)
@@ -1275,7 +1273,6 @@ class WhatsappService
 
                 $responseObject = json_decode($response->getBody()->getContents());
 
-                //dd($responseObject);
 
                 foreach($responseObject->data as $templateData){
                     $template = Template::where('organization_id', session()->get('current_organization'))
@@ -1550,11 +1547,7 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('POST', $url, NULL, $headers);
 
-        if($responseObject->success === true){
-            dd($responseObject);
-        }
-
-        dd($responseObject);
+      
         return $responseObject;
     }
 
@@ -1665,7 +1658,7 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
 
-        dd($responseObject);
+ 
 
         return $responseObject;
     }

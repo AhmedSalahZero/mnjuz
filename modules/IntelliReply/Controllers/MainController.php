@@ -2,13 +2,13 @@
 
 namespace Modules\IntelliReply\Controllers;
 
-use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Controller as BaseController;
 use App\Models\Addon;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Modules\IntelliReply\Models\Document;
 use Modules\IntelliReply\Resources\DocumentResource;
@@ -38,7 +38,6 @@ class MainController extends BaseController
         $data['fbmodule'] = CustomHelper::isModuleEnabled('Flow builder');
         $keys = ['enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model'];
         $data['appSettings'] = Setting::whereIn('key', $keys)->get();
-        //dd($data);
 
         return Inertia::render('IntelliReply::User/Index', $data);
     }
@@ -169,5 +168,3 @@ class MainController extends BaseController
         }
     }
 }
-
-

@@ -91,7 +91,7 @@ class ProcessMediaDownloadJob implements ShouldQueue
         );
 		}
 		catch (\Exception $e){
-			logger('error in media download job: '.$e->getMessage());
+		//	logger('error in media download job: '.$e->getMessage());
 			return;
 		}
                     
@@ -116,7 +116,7 @@ class ProcessMediaDownloadJob implements ShouldQueue
             ];
 
             $response = $client->request('GET', $mediaInfo['url'], $requestOptions);
-            logger('response received for media download for org '.$organization->id);
+         //   logger('response received for media download for org '.$organization->id);
             $fileContent = $response->getBody();
             $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream'; // Default fallback
             $fileName = $this->generateFilename($fileContent, $mediaInfo['mime_type']);
@@ -128,7 +128,7 @@ class ProcessMediaDownloadJob implements ShouldQueue
                 $file = Storage::disk('local')->put('public/' . $fileName, $fileContent);
                 $mediaFilePath = $file;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . 'public/' . $fileName;
-                logger('from local-'.$organization->id.'--'.microtime(true)-$t);
+         //       logger('from local-'.$organization->id.'--'.microtime(true)-$t);
             } elseif ($storage === 'aws') {
                 $t = microtime(true);
                 $location = 'amazon';
@@ -137,7 +137,7 @@ class ProcessMediaDownloadJob implements ShouldQueue
                     'ContentType' => $mimeType
                 ]);
                 $mediaUrl = Storage::disk('s3')->url($filePath);
-                logger('from aws-'.$organization->id.'--'.microtime(true)-$t);
+   //             logger('from aws-'.$organization->id.'--'.microtime(true)-$t);
 
             }
 

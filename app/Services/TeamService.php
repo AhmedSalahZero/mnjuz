@@ -6,13 +6,13 @@ use App\Helpers\Email;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use Auth;
+use DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
-use Auth;
-use DB;
 use Str;
 use Validator;
 
@@ -104,7 +104,7 @@ class TeamService
             session()->put('current_organization', $invite->organization_id);
         } catch (\Exception $e) {
             Log::error('Exception: ' . $e->getMessage());
-            //dd($e->getMessage());
+   
             //return response()->view('errors.custom', [], 500); // Customize the error response as needed
         }
     }

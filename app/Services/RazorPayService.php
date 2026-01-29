@@ -2,17 +2,17 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
-use DB;
-use Helper;
-use GuzzleHttp\Client as HttpClient;
-use GuzzleHttp\Exception\RequestException;
-use Illuminate\Http\Request;
 use App\Models\BillingHistory;
 use App\Models\Coupon;
 use App\Models\User;
 use App\Models\UserSubscription;
 use App\Traits\ConsumesExternalServices;
+use Carbon\Carbon;
+use DB;
+use GuzzleHttp\Client as HttpClient;
+use GuzzleHttp\Exception\RequestException;
+use Helper;
+use Illuminate\Http\Request;
 
 class RazorPayService
 {
@@ -75,7 +75,7 @@ class RazorPayService
             $razorpayPlanQuery = $this->createSubscription($plan, $razorpayPlanQuery->data, $amount, $coupon, $taxRates, $interval);
             return redirect($razorpayPlanQuery->data->short_url);
         } else {
-            dd($razorpayPlanQuery);
+          
         }
     }
 

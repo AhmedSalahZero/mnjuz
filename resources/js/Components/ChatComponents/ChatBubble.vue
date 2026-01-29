@@ -110,7 +110,6 @@ const getErrors = (logIndex = 0) => {
   }
 }
 const logger = (message) => {
-  console.log('logger', message)
 }
 const errors = getErrors()
 const copiedRef = ref(null)

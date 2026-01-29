@@ -26,18 +26,16 @@ class DateTimeHelper
 	public static function getCurrentTimeZone($organizationId = null):string
 	{
 		$timezone = 'UTC'; // Default to UTC
-        $organizationId = session()->get('current_organization',$organizationId);
+        $organizationId = session()->get('current_organization', $organizationId);
         if ($organizationId) {
-            $organization = Organization::find($organizationId);
-            if ($organization) {
-			//	logger('inside if'.$organizationId);
-                $metadata = $organization->metadata;
-                $metadata = isset($metadata) ? json_decode($metadata, true) : null;
-                if ($metadata && isset($metadata['timezone'])) {
-			//			logger('time  from if zone'.$timezone);
-						$timezone = $metadata['timezone'];
-                }
+            // تخزين مؤقت لكل طلب لتجنب N+1 (مثلاً من Chat::getCreatedAtAttribute)
+            static $cache = [];
+            if (!isset($cache[$organizationId])) {
+                $organization = Organization::find($organizationId);
+                $meta = $organization ? json_decode($organization->metadata ?? '{}', true) : null;
+                $cache[$organizationId] = ($meta && isset($meta['timezone'])) ? $meta['timezone'] : 'UTC';
             }
+            $timezone = $cache[$organizationId];
         }
 		return $timezone;
 	}

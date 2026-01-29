@@ -13,7 +13,6 @@ trait TemplateTrait{
         $campaignTemplate = Template::where('id', $campaign->template_id)->first();
 
         $metadata = json_decode($campaign->metadata);
-        //dd($metadata);
 
         return $this->buildTemplate($campaignTemplate->name, $campaignTemplate->language, $metadata, $contact);
     }
@@ -45,7 +44,6 @@ trait TemplateTrait{
     }
 
     function buildHeaderComponent($metadata, $contact) {
-        //dd($metadata->header);
         $headerComponent = [
             'type' => 'header',
             'parameters' => [],
@@ -92,7 +90,6 @@ trait TemplateTrait{
     }
 
     function buildButtonComponent($metadata, $contact) {
-        //dd($metadata->buttons);
         $buttons = $metadata->buttons;
         $buttonComponent = [];
         $buttonIndex = 0;
@@ -130,7 +127,6 @@ trait TemplateTrait{
             }
         }
 
-        //dd($buttonComponent);
         return $buttonComponent;
     }
 

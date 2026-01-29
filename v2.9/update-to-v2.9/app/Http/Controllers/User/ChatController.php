@@ -22,7 +22,7 @@ class ChatController extends BaseController
 
     public function index(Request $request, $uuid = null)
     {
-		logger('getChatList from index');
+	//	logger('getChatList from index');
         return $this->chatService()->getChatList($request, $uuid, $request->query('search'));
     }
 

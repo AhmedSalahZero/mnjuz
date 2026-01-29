@@ -144,7 +144,7 @@ class WebhookController extends BaseController
 
     protected function handlePostRequest(Request $request, Organization $organization)
     {
-		logger('update-to-webhook');
+	//	logger('update-to-webhook');
         $res = $request->entry[0]['changes'][0];
 
         //Log::info($request);

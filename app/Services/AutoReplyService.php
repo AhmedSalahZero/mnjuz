@@ -117,7 +117,7 @@ class AutoReplyService
     private function replySequence($organizationId, $chat, $isNewContact)
     {
 	
-		logger('inside replay sequence');
+	//	logger('inside replay sequence');
         $organizationConfig = Organization::where('id', $organizationId)->first();
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $activeFlow = false;
@@ -132,10 +132,10 @@ class AutoReplyService
 
         // Override response sequence if there is an active flow
         if ($activeFlow) {
-			logger('inside $activeFlow if');
+	//		logger('inside $activeFlow if');
             $response_sequence = ['Automated Flows'];
         } else {
-			logger('inside $activeFlow else');
+	//		logger('inside $activeFlow else');
             // Use the response sequence from metadata or fallback to default
             $response_sequence = $metadataArray['automation']['response_sequence'] ?? ['Basic Replies', 'Automated Flows', 'AI Reply Assistant'];
         }
@@ -159,7 +159,7 @@ class AutoReplyService
         // Iterate through the sequence, applying each function in order
         foreach ($response_sequence as $sequenceItem) {
             if (isset($sequenceFunctions[$sequenceItem])) {
-				logger('inside if'.$sequenceItem);
+		//		logger('inside if'.$sequenceItem);
                 $response = $sequenceFunctions[$sequenceItem]();
 
                 // \Log::info($sequenceItem);
@@ -245,22 +245,22 @@ class AutoReplyService
 
     private function handleAutomatedFlows($organizationId, $chat, $isNewContact)
     {
-		logger('--inside automatted flow');
+	//	logger('--inside automatted flow');
         $text = '';
         $metadata = json_decode($chat->metadata, true);
 
         if($metadata['type'] == 'text'){
-			logger('--from automate text');
+		//	logger('--from automate text');
             $text = $metadata['text']['body'];
         } else if(json_decode($chat->metadata)->type == 'button'){
-			logger('--from automate button');
+			// logger('--from automate button');
             $text = $metadata['button']['payload'];
         } else if(json_decode($chat->metadata)->type == 'interactive'){
-			logger('--from interactive button reply');
+			// logger('--from interactive button reply');
             if($metadata['interactive']['type'] == 'button_reply'){
                 $text = $metadata['interactive']['button_reply']['title'];
             } else if($metadata['interactive']['type'] == 'list_reply'){
-				logger('--from interactive button list replay');
+		//		logger('--from interactive button list replay');
                 $text = $metadata['interactive']['list_reply']['title'];
             }
         }
@@ -268,7 +268,7 @@ class AutoReplyService
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/FlowBuilder/Services/FlowExecutionService.php'))) {
-				logger('--start execute flow');
+		//		logger('--start execute flow');
             $query = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId);
             return $query->executeFlow($chat, $isNewContact, $receivedMessage);
         }
@@ -276,7 +276,7 @@ class AutoReplyService
 
     private function getTriggerValues($trigger)
     {
-		logger('get trigger values');
+	//	logger('get trigger values');
         return is_string($trigger) && strpos($trigger, ',') !== false
             ? explode(',', $trigger)
             : (array) $trigger;
@@ -284,11 +284,11 @@ class AutoReplyService
 
     private function checkMatch($receivedMessage, $trigger, $criteria)
     {
-				logger('check matching');
+		//		logger('check matching');
         $normalizedTrigger = trim($trigger);
 
         if ($criteria === 'exact match') {
-			logger('inside exact match');
+	//		logger('inside exact match');
             // Check if the text contains Arabic characters
             $hasArabic = preg_match('/[\p{Arabic}]/u', $receivedMessage . $normalizedTrigger);
             
@@ -300,7 +300,7 @@ class AutoReplyService
                 return strtolower($receivedMessage) === " " . strtolower($normalizedTrigger);
             }
         } else if ($criteria === 'contains') {
-					logger('inside contains ');
+	//				logger('inside contains ');
             $triggerWords = explode(' ', $normalizedTrigger);
             
             // Check if the text contains Arabic characters
@@ -310,20 +310,20 @@ class AutoReplyService
                 // For Arabic text, use simple string matching without word boundaries
                 foreach ($triggerWords as $word) {
                     if (strpos($receivedMessage, $word) !== false) {
-								logger('good found ');
+				//				logger('good found ');
                         return true;
                     }
                 }
-						logger('not found !');
+					//	logger('not found !');
                 return false;
             } else {
                 // For non-Arabic text, use case-insensitive regex approach
                 $pattern = '/\b(' . implode('|', array_map('preg_quote', $triggerWords)) . ')\b/i';
 				$patternFound = preg_match($pattern, strtolower($receivedMessage)) === 1;
 				if($patternFound){
-					logger('pattern found !');
+			//		logger('pattern found !');
 					}else{
-					logger('pattern not found !');
+			//		logger('pattern not found !');
 				}
                 return $patternFound ;
             }
@@ -334,18 +334,18 @@ class AutoReplyService
 
     protected function sendReply(Chat $chat, AutoReply $autoreply)
     {
-		logger('send replay');
+	//	logger('send replay');
         $contact = Contact::where('id', $chat->contact_id)->first();
         $organization_id = $chat->organization_id;
         $metadata = json_decode($autoreply->metadata);
         $replyType = $metadata->type;
 
         if($replyType === 'text'){
-			logger('inside text');
+	//		logger('inside text');
             $message = $this->replacePlaceholders($organization_id, $contact->uuid, $metadata->data->text);
             $this->initializeWhatsappService($organization_id)->sendMessage($contact->uuid, $message);
         } else if($replyType === 'audio' || $replyType === 'image'){
-			logger('inside audio image');
+	//		logger('inside audio image');
             $location = strpos($metadata->data->file->location, 'public\\') === 0 ? 'local' : 'amazon';
             $this->initializeWhatsappService($organization_id)->sendMedia($contact->uuid, $replyType, $metadata->data->file->name, $metadata->data->file->location, $metadata->data->file->url, $location);
         }
@@ -353,7 +353,7 @@ class AutoReplyService
 
     private function initializeWhatsappService($organizationId)
     {
-		logger('inside initializeWhatsappService');
+//		logger('inside initializeWhatsappService');
         $config = Organization::where('id', $organizationId)->first()->metadata;
         $config = $config ? json_decode($config, true) : [];
 
@@ -367,7 +367,7 @@ class AutoReplyService
     }
 
     private function replacePlaceholders($organizationId, $contactUuid, $message){
-		logger('replace placeholders');
+	//	logger('replace placeholders');
         $organization = Organization::where('id', $organizationId)->first();
         $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
         $address = $contact->address ? json_decode($contact->address, true) : [];

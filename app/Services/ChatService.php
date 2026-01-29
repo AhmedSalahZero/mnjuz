@@ -10,6 +10,7 @@ use App\Models\Addon;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatMedia;
+use App\Models\ChatNote;
 use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
 use App\Models\Contact;
@@ -86,6 +87,7 @@ class ChatService
             $settings = json_decode($config->metadata);
             if (isset($settings->tickets) && $settings->tickets->active === true) {
                 $ticketingActive = true;
+		
                 $this->ensureChatTicketsExist();
                 //Check for chats that don't have corresponding chat ticket rows
                 // $contacts = $contact->contactsWithChats($this->organizationId, NULL);
@@ -128,7 +130,9 @@ class ChatService
         $contacts = $contactsQuery;
         $rowCount = $contacts->total();
 
-    
+        // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
+        $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
+
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
             'pusher_app_key',
@@ -559,17 +563,37 @@ class ChatService
     public function getChatMessages($contactId, $page = 1, $perPage = 50)
     {
         $chatLogs = ChatLog::where('contact_id', $contactId)
-        ->where('deleted_at', null)
-        ->orderBy('created_at', 'desc')
-        ->paginate($perPage, ['*'], 'page', $page)
-        ;
+            ->where('deleted_at', null)
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
+        $ticketIds = $chatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
+        $noteIds = $chatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
+
+        $chatsMap = !empty($chatIds)
+            ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
+            : collect();
+        $ticketLogsMap = !empty($ticketIds)
+            ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
+            : collect();
+        $notesMap = !empty($noteIds)
+            ? ChatNote::whereIn('id', $noteIds)->get()->keyBy('id')
+            : collect();
+
         $chats = [];
         foreach ($chatLogs as $chatLog) {
-            $chats[] = array([
-                'type' => $chatLog->entity_type,
-                'value' => $chatLog->relatedEntities
-            ]);
+            $value = null;
+            if ($chatLog->entity_type === 'chat') {
+                $value = $chatsMap->get($chatLog->entity_id);
+            } elseif ($chatLog->entity_type === 'ticket') {
+                $value = $ticketLogsMap->get($chatLog->entity_id);
+            } elseif ($chatLog->entity_type === 'notes') {
+                $value = $notesMap->get($chatLog->entity_id);
+            }
+            $chats[] = [['type' => $chatLog->entity_type, 'value' => $value]];
         }
+
         return [
             'messages' => array_reverse($chats),
             'hasMoreMessages' => $chatLogs->hasMorePages(),
@@ -579,14 +603,14 @@ class ChatService
     private function ensureChatTicketsExist()
     {
         // ✅ استخدام Cache لتجنب تشغيل هذا في كل طلب
-        $cacheKey = "chat_tickets_created_{$this->organizationId}";
+ //       $cacheKey = "chat_tickets_created_{$this->organizationId}";
         
         // تشغيل مرة واحدة كل ساعة
-        if (Cache::has($cacheKey)) {
-            return;
-        }
+        // if (Cache::has($cacheKey)) {
+        //     return;
+        // }
 
-        try {
+   //     try {
             // ✅ إيجاد جهات الاتصال بدون تذاكر (استعلام واحد)
             $contactsWithoutTickets = DB::table('contacts')
                 ->select('contacts.id')
@@ -597,10 +621,10 @@ class ChatService
                 ->whereNull('chat_tickets.id')
                 ->pluck('contacts.id');
 
-            if ($contactsWithoutTickets->isEmpty()) {
-                Cache::put($cacheKey, true, 3600); // ساعة واحدة
-                return;
-            }
+            // if ($contactsWithoutTickets->isEmpty()) {
+            //     Cache::put($cacheKey, true, 3600); // ساعة واحدة
+            //     return;
+            // }
 
             //  إنشاء دفعي - استعلام واحد فقط!
             $now =  now();
@@ -623,18 +647,17 @@ class ChatService
             }
 
             // وضع علامة أن العملية تمت
-            Cache::put($cacheKey, true, 3600); // ساعة واحدة
+         //   Cache::put($cacheKey, true, 3600); // ساعة واحدة
 
-        } catch (\Exception $e) {
-            Log::error('Error creating chat tickets: ' . $e->getMessage());
-        }
+        // } catch (\Exception $e) {
+        //     Log::error('Error creating chat tickets: ' . $e->getMessage());
+        // }
     }
     public function blockContact(Organization $organization, Contact $contact)
     {
 	//	logger('from block api');
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
-        //	dd($contact);
         $config = json_decode(Organization::where('id', $this->organizationId)->first()->metadata?:'{}', true);
     
         if (empty($metadata) || empty($metadata->whatsapp->access_token) || !isset($config['whatsapp'])) {
@@ -679,7 +702,7 @@ class ChatService
             
             if (isset($result['errors']['code']) && $result['errors']['code'] ==139100) {
     
-                logger('fail to block contact'.$result['errors']['message']);
+       //         logger('fail to block contact'.$result['errors']['message']);
                 return [
                     'status'=>false ,
                     'message'=>__('Cannot block contact. They must have messaged you within the last 24 hours.')
@@ -687,7 +710,7 @@ class ChatService
             }
             if (isset($result['errors']['code'])) {
     
-                logger('fail to block contact'.$result['errors']['message']);
+            //    logger('fail to block contact'.$result['errors']['message']);
                 return [
                     'status'=>false ,
                     'message'=>__('Cannot block contact.')
@@ -719,7 +742,6 @@ class ChatService
     {
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
-        //	dd($contact);
         $config = json_decode(Organization::where('id', $this->organizationId)->first()->metadata?:'{}', true);
     
         if (empty($metadata) || empty($metadata->whatsapp->access_token) || !isset($config['whatsapp'])) {
@@ -734,7 +756,7 @@ class ChatService
         $apiVersion = config('graph.api_version');
         //          $appId = $config['whatsapp']['app_id'] ?? null;
         $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
-        $wabaId = $config['whatsapp']['waba_id'] ?? null;
+   //     $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
         //     $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
         
