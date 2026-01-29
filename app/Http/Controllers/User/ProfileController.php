@@ -2,17 +2,20 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\User;
+use DB;
+use Hash;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Hash;
 use Validator;
 
 class ProfileController extends BaseController
 {
-
+	public function removedd()
+	{
+		return 'remove add(';
+	}
     public function update_password(Request $request){
         $validator = Validator::make($request->all(),[
             'old_password' => 'required',
