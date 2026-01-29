@@ -12,10 +12,7 @@ use Validator;
 
 class ProfileController extends BaseController
 {
-	public function removedd()
-	{
-		return 'remove add(';
-	}
+	
     public function update_password(Request $request){
         $validator = Validator::make($request->all(),[
             'old_password' => 'required',
