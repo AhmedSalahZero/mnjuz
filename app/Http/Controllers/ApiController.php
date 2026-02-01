@@ -56,7 +56,7 @@ class ApiController extends Controller
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         $contacts = Contact::where('organization_id', $organizationId)
@@ -75,7 +75,7 @@ class ApiController extends Controller
     public function storeContact(StoreContactRequest $request)
     {
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
 		
@@ -96,7 +96,7 @@ class ApiController extends Controller
         try {
             $contactService = new ContactService($organizationId);
             $contact = $contactService->store($request, null); // null for create
-			if($request->expectsJson() && $request->is('api/v1/*')){
+			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 200,
 					'success' => true,
@@ -113,7 +113,7 @@ class ApiController extends Controller
                 'message' => __('Request processed successfully',[],getApiLang())
             ], 200);
         } catch (\Exception $e) {
-			if($request->expectsJson() && $request->is('api/v1/*')){
+			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 500,
 					'success' => false,
@@ -135,7 +135,7 @@ class ApiController extends Controller
     public function updateContact(StoreContactRequest $request, string $uuid)
     {
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
@@ -148,7 +148,7 @@ class ApiController extends Controller
         try {
             $contactService = new ContactService($organizationId);
             $contact = $contactService->store($request, $uuid); // uuid for update
-			if($request->expectsJson() && $request->is('api/v1/*')){
+			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 200,
 					'success' => true,
@@ -165,7 +165,7 @@ class ApiController extends Controller
             ], 200);
         } catch (\Exception $e) {
 		
-			if($request->expectsJson() && $request->is('api/v1/*')){
+			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 500,
 					'success' => false,
@@ -190,13 +190,13 @@ class ApiController extends Controller
     public function destroyContact(Request $request, $uuid)
     {
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         try {
             $contactService = new ContactService($organizationId);
             $contactService->delete([$uuid]);
-			if($request->expectsJson() && $request->is('api/v1/*')){
+			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 200,
 					'success' => true,
@@ -210,7 +210,7 @@ class ApiController extends Controller
                 'message' => __('Request processed successfully',[],getApiLang())
             ], 200);
         } catch (\Exception $e) {
-			if($request->expectsJson() && $request->is('api/v1/*')){
+			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 500,
 					'success' => false,
@@ -240,7 +240,7 @@ class ApiController extends Controller
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         $contactGroups = ContactGroup::where('organization_id', $organizationId)
@@ -254,7 +254,7 @@ class ApiController extends Controller
     public function storeContactGroup(Request $request, $uuid = null)
     {
         $organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         if ($request->isMethod('post')) {
@@ -339,7 +339,7 @@ class ApiController extends Controller
     public function destroyContactGroup(Request $request, $uuid)
     {
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         try {
@@ -542,7 +542,7 @@ class ApiController extends Controller
     public function sendMessage(Request $request)
     {
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 			$request->merge(['tempMessageId' => -1]); // to use queue to send message in background
 		}
@@ -809,7 +809,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
 		
-		// if($request->expectsJson() && $request->is('api/v1/*')){
+		// if( $request->is('api/v1/*')){
 		// 	$organizationId = $request->user()->current_organization_id;
 		// }
         $rules = [
@@ -1051,7 +1051,7 @@ class ApiController extends Controller
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         $templates = Template::where('organization_id', $organizationId)
@@ -1085,7 +1085,7 @@ class ApiController extends Controller
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if($request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
        return  (new ChatService($organizationId))->getChatList($request);
@@ -1103,7 +1103,7 @@ class ApiController extends Controller
 	public function listChatContactsForContact(Request $request,$contactUuid)
     {
 		$organizationId = $request->organization;
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         $validator = Validator::make($request->all(), [

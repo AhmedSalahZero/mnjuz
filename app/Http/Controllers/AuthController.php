@@ -197,7 +197,7 @@ class AuthController extends BaseController
                         'avatar' => $user->avatar,
                     ],
                     'token' => $token,
-                    'token_type' => 'Bearer',
+                   // 'token_type' => 'Bearer',
                     'organizations' => $organizations,
                     'current_organization_id' => $currentOrganizationId,
                 ]

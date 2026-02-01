@@ -45,6 +45,7 @@ class Kernel extends HttpKernel
 
         'api' => [
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+			 \App\Http\Middleware\SetApiLanguage::class,
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
@@ -80,5 +81,6 @@ class Kernel extends HttpKernel
         'redirectIfAuthenticated' => \App\Http\Middleware\RedirectIfAuthenticated::class,
 		'ExcludeRouteFromDocs' => ExcludeFromDocsMiddleware::class,
 		'has.mobile.app' => \App\Http\Middleware\CheckMobileApp::class,
+	
     ];
 }

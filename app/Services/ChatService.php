@@ -72,7 +72,7 @@ class ChatService
         $config = Organization::find($this->organizationId);
         $ticketState = $request->status == null ? 'all' : $request->status;
 		$sortDirection = 'desc';
-		if($request->expectsJson() && $request->is('api/v1/*')){
+		if($request->is('api/v1/*')){
 			$sortDirection = $request->sort_direction ?? 'desc';
 		}else{
 			$sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
