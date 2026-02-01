@@ -15,11 +15,7 @@ class OrganizationController extends BaseController
 {
     private $organizationService;
 
-    /**
-     * OrganizationController constructor.
-     *
-     * @param UserService $organizationService
-     */
+   
     public function __construct()
     {
         $this->organizationService = new OrganizationService();

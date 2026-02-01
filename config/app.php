@@ -1,8 +1,8 @@
 <?php
 
+use App\Providers\ScrambleServiceProvider;
 use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\ServiceProvider;
-use App\Providers\ScrambleServiceProvider;
 //use Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider;
 //use Modules\Clickpay\Providers\ClickpayServiceProvider;
 
@@ -29,9 +29,9 @@ if (file_exists(base_path('modules/EmbeddedSignup/Providers/EmbeddedSignupServic
     $providers[] = \Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider::class;
 }
 
-if (file_exists(base_path('modules/Clickpaysa/Providers/ClickpayServiceProvider.php'))) {
-    $providers[] = \Modules\Clickpaysa\Providers\ClickpayServiceProvider::class;
-}
+// if (file_exists(base_path('modules/Clickpaysa/Providers/ClickpayServiceProvider.php'))) {
+//     $providers[] = \Modules\Clickpaysa\Providers\ClickpayServiceProvider::class;
+// }
 
 if (file_exists(base_path('modules/Razorpay/Providers/RazorpayServiceProvider.php'))) {
     $providers[] = \Modules\Razorpay\Providers\RazorpayServiceProvider::class;
@@ -45,9 +45,9 @@ if (file_exists(base_path('modules/FlowBuilder/Providers/FlowBuilderServiceProvi
     $providers[] = \Modules\FlowBuilder\Providers\FlowBuilderServiceProvider::class;
 }
 
-if (file_exists(base_path('modules/SocketIo/Providers/SocketIoServiceProvider.php'))) {
-    $providers[] = \Modules\SocketIo\Providers\SocketIoServiceProvider::class;
-}
+// if (file_exists(base_path('modules/SocketIo/Providers/SocketIoServiceProvider.php'))) {
+//     $providers[] = \Modules\SocketIo\Providers\SocketIoServiceProvider::class;
+// }
 
 if (file_exists(base_path('modules/Webhook/Providers/WebhookServiceProvider.php'))) {
     $providers[] = \Modules\Webhook\Providers\WebhookServiceProvider::class;

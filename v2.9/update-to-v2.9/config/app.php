@@ -26,9 +26,9 @@ if (is_dir(base_path('modules/EmbeddedSignup')) && class_exists(\Modules\Embedde
     $providers[] = \Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider::class;
 }
 
-if (is_dir(base_path('modules/Clickpaysa')) && class_exists(\Modules\Clickpaysa\Providers\ClickpayServiceProvider::class)) {
-    $providers[] = \Modules\Clickpaysa\Providers\ClickpayServiceProvider::class;
-}
+// if (is_dir(base_path('modules/Clickpaysa')) && class_exists(\Modules\Clickpaysa\Providers\ClickpayServiceProvider::class)) {
+//     $providers[] = \Modules\Clickpaysa\Providers\ClickpayServiceProvider::class;
+// }
 
 if (is_dir(base_path('modules/Razorpay')) && class_exists(\Modules\Razorpay\Providers\RazorpayServiceProvider::class)) {
     $providers[] = \Modules\Razorpay\Providers\RazorpayServiceProvider::class;

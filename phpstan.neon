@@ -1,0 +1,14 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - config/
+        - routes/
+
+    # المستوى (من 0 إلى 9) - 0 هو الأسهل و 9 هو الأكثر صرامة
+    level: 5
+
+    # منع الـ dd و dump
+    checkGenericClassInNonGenericObjectType: false

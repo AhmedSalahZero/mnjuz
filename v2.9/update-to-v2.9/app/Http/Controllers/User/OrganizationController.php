@@ -2,12 +2,12 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreUserOrganization;
 use App\Models\Organization;
 use App\Models\Team;
 use App\Services\OrganizationService;
+use DB;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -15,11 +15,7 @@ class OrganizationController extends BaseController
 {
     private $organizationService;
 
-    /**
-     * OrganizationController constructor.
-     *
-     * @param UserService $organizationService
-     */
+  
     public function __construct()
     {
         $this->organizationService = new OrganizationService();

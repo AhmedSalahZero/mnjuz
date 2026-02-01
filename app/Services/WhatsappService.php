@@ -53,16 +53,6 @@ class WhatsappService
         ]);
     }
 
-    /**
-     * This function sends a text message via a POST request to the specified phone number using Facebook's messaging API.
-     *
-     * @param string $phoneNumber The phone number of the recipient.
-     * @param string $messageContent The content of the message to be sent.
-     * @return mixed Returns the response from the HTTP request.
-     */
-	
-	
-	
 	 public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
     {
 
@@ -1657,8 +1647,6 @@ class WhatsappService
         $headers = $this->setHeaders();
 
         $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
-
- 
 
         return $responseObject;
     }

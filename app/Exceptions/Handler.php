@@ -52,8 +52,7 @@ class Handler extends ExceptionHandler
         // For API requests, return JSON responses instead of HTML views
         if ($request->expectsJson() || $request->is('api/*')) {
             if ($this->isHttpException($exception)) {
-                $statusCode = $exception->getStatusCode();
-                
+                $statusCode = method_exists($exception, 'getStatusCode') ? $exception->getStatusCode() : 500;
                 return response()->json([
                     'success' => false,
                     'message' => $this->getErrorMessage($statusCode),

@@ -81,6 +81,13 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
     Route::put('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'updateContact']);
     Route::delete('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContact']);
 	
+	
+	Route::get('/contact-groups', [App\Http\Controllers\ApiController::class, 'listContactGroups']);
+    Route::post('/contact-groups', [App\Http\Controllers\ApiController::class, 'storeContactGroup']);
+    Route::put('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContactGroup']);
+    Route::delete('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContactGroup']);
+	
+	
 	Route::post('/send-text', [App\Http\Controllers\ApiController::class, 'sendMessage']);
     Route::post('/send-media', [App\Http\Controllers\ApiController::class, 'sendFileMessage']);
     Route::get('/list-templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);

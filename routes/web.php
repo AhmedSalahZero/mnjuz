@@ -35,7 +35,8 @@ Route::get('/current-locale', function () {
 });
 
 Route::get('/locales', function () {
-    $locales = Language::all()->pluck('code');
+    $locales = Language::query()->pluck('code');
+
     return response()->json($locales);
 });
 

@@ -12,8 +12,7 @@ use Validator;
 
 class ProfileController extends BaseController
 {
-	
-    public function update_password(Request $request){
+	public function update_password(Request $request){
         $validator = Validator::make($request->all(),[
             'old_password' => 'required',
             'password' => 'required|confirmed',

@@ -225,11 +225,7 @@ class ApiController extends Controller
         }
     }
 
-    /**
-     * List all contact groups.
-     *
-     * @return \Illuminate\Http\Response
-     */
+   
     public function listContactGroups(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -243,24 +239,24 @@ class ApiController extends Controller
 
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
-
-        $contactGroups = ContactGroup::where('organization_id', $request->organization)
+		$organizationId = $request->organization;
+		if($request->expectsJson() && $request->is('api/v1/*')){
+			$organizationId = $request->user()->current_organization_id;
+		}
+        $contactGroups = ContactGroup::where('organization_id', $organizationId)
             ->where('deleted_at', null)
             ->paginate($perPage, ['*'], 'page', $page);
 
         return ContactGroupResource::collection($contactGroups);
     }
 
-    /**
-     * Create a new contact group.
-     *
-     * @param  \App\Http\Requests\CreateContactGroupRequest  $request
-     * @return \Illuminate\Http\Response
-     */
+   
     public function storeContactGroup(Request $request, $uuid = null)
     {
         $organizationId = $request->organization;
-
+		if($request->expectsJson() && $request->is('api/v1/*')){
+			$organizationId = $request->user()->current_organization_id;
+		}
         if ($request->isMethod('post')) {
             $rules = [
                 'name' => [
@@ -294,7 +290,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        if (!SubscriptionService::isSubscriptionActive($request->organization)) {
+        if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
@@ -303,7 +299,7 @@ class ApiController extends Controller
 
         try {
             $contactGroup = $request->isMethod('post') ? new ContactGroup() : ContactGroup::where('uuid', $uuid)->firstOrFail();
-            $contactGroup->organization_id = $request->organization;
+            $contactGroup->organization_id = $organizationId;
             $contactGroup->name = $request->name;
             $contactGroup->created_by = 0;
             $contactGroup->save();
@@ -316,12 +312,19 @@ class ApiController extends Controller
 
             return response()->json([
                 'statusCode' => 200,
+				'success' => true,
+				'data' => [
+					'uuid' => $contactGroup->uuid,
+				],
                 'id' => $contactGroup->uuid,
                 'message' => __('Request processed successfully')
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
+				
                 'statusCode' => 500,
+				'success' => false,
+				'data' => [],
                 'message' => __('Request unable to be processed')
             ], 500);
         }
@@ -335,8 +338,12 @@ class ApiController extends Controller
      */
     public function destroyContactGroup(Request $request, $uuid)
     {
+		$organizationId = $request->organization;
+		if($request->expectsJson() && $request->is('api/v1/*')){
+			$organizationId = $request->user()->current_organization_id;
+		}
         try {
-            $contactGroup = ContactGroup::where('organization_id', $request->organization)->where('uuid', $uuid)->firstOrFail();
+            $contactGroup = ContactGroup::where('organization_id', $organizationId)->where('uuid', $uuid)->firstOrFail();
             $contactGroup->deleted_at = date('Y-m-d H:i:s');
             $contactGroup->save();
 
@@ -353,15 +360,21 @@ class ApiController extends Controller
 
             WebhookHelper::triggerWebhookEvent('group.deleted', [
                 'list' => $deletedGroups
-            ], $request->organization);
+            ], $organizationId);
 
             return response()->json([
                 'statusCode' => 200,
+				'success' => true,
+				'data' => [
+					'uuid' => $uuid,
+				],
                 'id' => $uuid,
                 'message' => __('Request processed successfully')
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
+				'success' => false,
+				'data' => [],
                 'statusCode' => 500,
                 'message' => __('Request unable to be processed')
             ], 500);
