@@ -1128,14 +1128,49 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
 		
        return  (new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage);
-		// return response()->json([
-		// 	'statusCode' => 200,
-		// 	'success' => true,
-		// 	'message' => __('Templates fetched successfully'),
-		// 	'data' => TemplateResource::collection($templates)
-		// ], 200);
+		
     }
-	
+	public function deleteChatForContact(Request $request,$uuid)
+	{
+		$organizationId = $request->user()->current_organization_id;
+		$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
+		if(!$contact){
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'message' => __('Contact not found'),
+			], 404);
+		}
+		
+		$chatService = new ChatService($organizationId);
+		$chatService->clearContactChat($uuid);
+		
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'message' => __('Chat deleted successfully'),
+		], 200);
+	}
+	public function toggleTicketStatus(Request $request,$uuid)
+	{
+		$organizationId = $request->user()->current_organization_id;
+		$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
+		if(!$contact){
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'message' => __('Contact not found'),
+			], 404);
+		}
+		
+		$contact->toggleTicketStatus($request->status);
+		
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'message' => __('Status updated successfully!'),
+		], 200);
+	}
 	
     /**
      * Verify if the API key is active.

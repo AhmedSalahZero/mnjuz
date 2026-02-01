@@ -27,24 +27,7 @@ class ChatTicketController extends BaseController
     { 
         $contact = Contact::where('uuid', $uuid)->first();
 
-        ChatTicket::where('contact_id', $contact->id)->update([
-            'status' => $request->status,
-            'assigned_to' => auth()->user()->id
-        ]);
-        $statusDescription = $request->status == 'closed' ? 'opened to closed' : 'closed to open';
-
-        $ticketId = ChatTicketLog::insertGetId([
-            'contact_id' => $contact->id,
-            'description' => 'Conversation was moved from ' . $statusDescription,
-            'created_at' =>  now()
-        ]);
-
-        ChatLog::insert([
-            'contact_id' => $contact->id,
-            'entity_type' => 'ticket',
-            'entity_id' => $ticketId,
-            'created_at' =>  now()
-        ]);
+		$contact->toggleTicketStatus($request->status);
 
         return Redirect::back()->with(
             'status', [

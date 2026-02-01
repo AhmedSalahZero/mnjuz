@@ -352,5 +352,28 @@ class Contact extends Model
             return false;
         }
     }
+	
+    public function toggleTicketStatus(string $status)
+    {
+		ChatTicket::where('contact_id', $this->id)->update([
+            'status' => $status,
+            'assigned_to' => auth()->user()->id
+        ]);
+        $statusDescription = $status == 'closed' ? 'opened to closed' : 'closed to open';
+
+        $ticketId = ChatTicketLog::insertGetId([
+            'contact_id' => $this->id,
+            'description' => 'Conversation was moved from ' . $statusDescription,
+            'created_at' =>  now()
+        ]);
+
+        ChatLog::insert([
+            'contact_id' => $this->id,
+            'entity_type' => 'ticket',
+            'entity_id' => $ticketId,
+            'created_at' =>  now()
+        ]);
+		
+    }
 
 }

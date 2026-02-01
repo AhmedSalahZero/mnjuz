@@ -154,8 +154,8 @@ class AuthController extends BaseController
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
             // Set locale based on user's language for proper translation
-            $userLanguage = $user->language ?? 'en';
-            App::setLocale($userLanguage);
+            // $userLanguage = $user->language ?? 'en';
+            // App::setLocale($userLanguage);
             
             // Revoke all existing tokens (optional - for security)
             // $user->tokens()->delete();
@@ -184,7 +184,7 @@ class AuthController extends BaseController
 					$user->save();
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => __('Login successful'),

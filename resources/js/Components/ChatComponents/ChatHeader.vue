@@ -217,9 +217,11 @@ const submitForm3 = () => {
 							<DropdownItem v-if="ticketState === 'closed' && ticketingIsEnabled"
 								@click="changeTicketStatus('open')" as="button">{{ $t('Mark as open') }}</DropdownItem>
 							<DropdownItem v-if="!props.contact.is_blocked" @click="showBlockAlert = true" as="button">
-								{{ $t('Block') }}</DropdownItem>
+								{{ $t('Block') }}
+							</DropdownItem>
 							<DropdownItem v-if="props.contact.is_blocked" @click="showUnblockAlert = true" as="button">
-								{{ $t('Unblock') }}</DropdownItem>
+								{{ $t('Unblock') }}
+							</DropdownItem>
 							<DropdownItem @click="showAlert = true" as="button">{{ $t('Clear chat') }}</DropdownItem>
 						</DropdownItemGroup>
 					</template>
