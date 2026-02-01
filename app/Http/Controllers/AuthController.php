@@ -180,6 +180,8 @@ class AuthController extends BaseController
                 // Set current organization only if user has exactly one organization
                 if(count($organizations) == 1){
                     $currentOrganizationId = $organizations[0]['id'];
+					$user->current_organization_id = $currentOrganizationId;
+					$user->save();
                 }
             }
             
