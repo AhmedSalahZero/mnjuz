@@ -372,7 +372,7 @@ class ChatService
                 $mediaUrl = $mediaFilePath;
             }
 			$service = function() use($tempMessageId,$fileType,$uuid,$organizationId,$mediaUrl,$fileName,$mediaFilePath,$location) {
-             	return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location,null,null,$tempMessageId);
+             	return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId);
 			};
 			return $service();
 			if($tempMessageId){

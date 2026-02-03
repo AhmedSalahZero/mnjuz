@@ -607,7 +607,7 @@ class WhatsappService
      * @param string $imageUrl The URL of the stored image.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL , $tempMessageId = null)
+    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null)
     {
 
         $contact = Contact::where('uuid', $contactUuId)->first();
@@ -644,6 +644,7 @@ class WhatsappService
                 'wam_id' => $wamId,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
+                'user_id' => $userId,
                 'metadata' => json_encode($mediaData),
                 'status' => 'sent',
 				'created_at'=>now()

@@ -129,7 +129,8 @@ class ProcessMediaUploadJob implements ShouldQueue
                 $location,
                 $this->caption,
                 null, // transcription
-                $this->tempChatId // existing chat ID
+                $this->userId,
+                $this->tempMessageId
             );
 
             if ($response && isset($response->success) && $response->success === true) {

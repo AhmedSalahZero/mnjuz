@@ -76,12 +76,7 @@ class NewChatEvent implements ShouldBroadcast
         return ['chat' => $chat];
     }
 
-    /**
-     * Reduce chat value to only fields used in Vue. All keys are always present to avoid undefined.
-     *
-     * @param \Illuminate\Database\Eloquent\Model|array|null $value
-     * @return array
-     */
+   
     protected function minimalChatValue($value): array
     {
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
@@ -105,17 +100,7 @@ class NewChatEvent implements ShouldBroadcast
                 $logs[] = array_intersect_key($logArr, array_flip(['metadata']));
             }
         }
-logger(json_encode([
-	'contact_id' => $arr['contact_id'] ?? null,
-	'created_at' => $arr['created_at'] ?? null,
-	'deleted_at' => $arr['deleted_at'] ?? null,
-	'metadata' => $arr['metadata'] ?? '{}',
-	'type' => $arr['type'] ?? 'outbound',
-	'wam_id' => $arr['wam_id'] ?? null,
-	'media' => $media,
-	'logs' => $logs,
-	'user' => $user,
-]));
+
         return [
             'contact_id' => $arr['contact_id'] ?? null,
             'created_at' => $arr['created_at'] ?? null,
