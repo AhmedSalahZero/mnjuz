@@ -295,14 +295,14 @@ class Contact extends Model
 		$this->is_blocked = false ;
 		$this->save() ;
 	}
-	public function encryptPhoneNumber(bool $phoneMustBeEncrypted):string
+	public function encryptPhoneNumber(bool $phoneMustBeEncrypted):?string
 	{
 		if(!$phoneMustBeEncrypted){
-			return 	$this->formatted_phone_number ;
+			return 	$this->formatted_phone_number?:$this->phone ;
 		}
 		$mask =Str::mask($this->phone, '*', 4);
 		$this->phone= $mask;
-		return $this->formatted_phone_number= $mask;
+		return $this->formatted_phone_number?:'-';
 	}
 	public static function currentUserIsAgent()
 	{

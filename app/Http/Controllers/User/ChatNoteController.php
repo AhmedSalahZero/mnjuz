@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreChatNote;
 use App\Models\Contact;
 use App\Services\ChatNoteService;
+use DB;
+use Helper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule; 
 use Inertia\Inertia;
-use Helper;
 use Redirect;
 use Session;
 use Validator;
@@ -44,13 +44,10 @@ class ChatNoteController extends BaseController
 
     public function update(StoreFaq $request, $id)
     {
-        //
     }
-
     public function destroy($uuid)
     {
         $this->chatNoteService->delete($uuid);
-
         return redirect('/admin/faqs')->with(
             'status', [
                 'type' => 'success', 
@@ -58,4 +55,7 @@ class ChatNoteController extends BaseController
             ]
         );
     }
+	
+	
+	
 }
