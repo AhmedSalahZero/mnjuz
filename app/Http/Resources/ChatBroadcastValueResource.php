@@ -37,6 +37,8 @@ class ChatBroadcastValueResource extends JsonResource
     protected function filterUser(mixed $user): array
     {
         $arr = is_array($user) ? $user : (array) $user;
+		logger('user');
+		logger(json_encode(array_intersect_key($arr, array_flip(['first_name', 'last_name']))));
         return array_intersect_key($arr, array_flip(['first_name', 'last_name']));
     }
 
