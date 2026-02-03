@@ -2,7 +2,6 @@
 
 namespace App\Events;
 
-use App\Http\Resources\ChatBroadcastValueResource;
 use Exception;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
@@ -63,19 +62,6 @@ class NewChatEvent implements ShouldBroadcast
     public function broadcastWith()
     {
         $chat = $this->chat;
-logger('chat');
-logger(json_encode($chat));
-        if (is_array($chat) && isset($chat[0])) {
-			logger('chat is an array');
-            $item = $chat[0];
-            $item = is_array($item) ? $item : (array) $item;
-            if (($item['type'] ?? null) === 'chat' && array_key_exists('value', $item)) {
-                $item['value'] = (new ChatBroadcastValueResource($item['value']))->toArray(new \Illuminate\Http\Request());
-            }
-            $chat = [$item];
-        }else{
-			logger('chat is not an array');
-		}
 
         return ['chat' => $chat];
     }
