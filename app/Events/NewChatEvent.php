@@ -56,14 +56,66 @@ class NewChatEvent implements ShouldBroadcast
 
     /**
      * Get the data to broadcast (only fields used by the frontend).
+     * Shape: [{ type: 'chat', value: {...}, tempMessageId?: string }]
      *
      * @return array
      */
     public function broadcastWith()
     {
         $chat = $this->chat;
-		logger('chat');
-		logger(json_encode($chat));
+
+        if (is_array($chat) && isset($chat[0])) {
+            $item = $chat[0];
+            $item = is_array($item) ? $item : (array) $item;
+            if (($item['type'] ?? null) === 'chat' && array_key_exists('value', $item)) {
+                $item['value'] = $this->minimalChatValue($item['value']);
+            }
+            $chat = [$item];
+        }
+
         return ['chat' => $chat];
+    }
+
+    /**
+     * Reduce chat value to only fields used in Vue. All keys are always present to avoid undefined.
+     *
+     * @param \Illuminate\Database\Eloquent\Model|array|null $value
+     * @return array
+     */
+    protected function minimalChatValue($value): array
+    {
+        $arr = $value instanceof \Illuminate\Database\Eloquent\Model
+            ? $value->toArray()
+            : (array) $value;
+
+        $user = null;
+        if (!empty($arr['user']) && is_array($arr['user'])) {
+            $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
+        }
+
+        $media = null;
+        if (!empty($arr['media']) && is_array($arr['media'])) {
+            $media = array_intersect_key($arr['media'], array_flip(['path', 'name', 'type', 'size']));
+        }
+
+        $logs = [];
+        if (!empty($arr['logs']) && is_array($arr['logs'])) {
+            foreach ($arr['logs'] as $log) {
+                $logArr = is_array($log) ? $log : (array) $log;
+                $logs[] = array_intersect_key($logArr, array_flip(['metadata']));
+            }
+        }
+
+        return [
+            'contact_id' => $arr['contact_id'] ?? null,
+            'created_at' => $arr['created_at'] ?? null,
+            'deleted_at' => $arr['deleted_at'] ?? null,
+            'metadata' => $arr['metadata'] ?? '{}',
+            'type' => $arr['type'] ?? 'outbound',
+            'wam_id' => $arr['wam_id'] ?? null,
+            'media' => $media,
+            'logs' => $logs,
+            'user' => $user,
+        ];
     }
 }
