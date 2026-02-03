@@ -206,6 +206,8 @@ class ChatService
                     'locationSettings' => $this->getLocationSettings(),
                     'ticket' => $ticket,
                 //    'agents' => $agents,
+				
+				
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
