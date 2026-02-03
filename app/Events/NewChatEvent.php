@@ -62,7 +62,8 @@ class NewChatEvent implements ShouldBroadcast
     public function broadcastWith()
     {
         $chat = $this->chat;
-
+		logger('chat');
+		logger(json_encode($chat));
         return ['chat' => $chat];
     }
 }
