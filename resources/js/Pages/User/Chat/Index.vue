@@ -272,25 +272,65 @@ const debouncedUpdateSidePanel = debounce(async (chat) => {
 const onCloseDemoModal = () => {
 	isDemoModalOpen.value = false
 }
-
 onMounted(() => {
-	const echo = getEchoInstance(
-		props.pusherSettings['pusher_app_key'],
-		props.pusherSettings['pusher_app_cluster'],
-	)
-	echoChannel = echo.channel('chats.ch' + props.organizationId)
-	echoChannel.listen('NewChatEvent', (event) => {
-		debouncedUpdateSidePanel(event.chat)
-	})
+	try {
+		// ✅ حفظ الـ instance في متغير خارجي
+		echoInstance = getEchoInstance(
+			props.pusherSettings['pusher_app_key'],
+			props.pusherSettings['pusher_app_cluster'],
+		)
 
-	scrollToBottom()
+		// ✅ التحقق من وجود organizationId
+		if (!props.organizationId) {
+			console.error('Organization ID is missing')
+			return
+		}
+
+		const channelName = `chats.ch${props.organizationId}`
+		console.log('Joining channel:', channelName)
+
+		// ✅ الانضمام للقناة
+		echoChannel = echoInstance
+			.join(channelName)
+			.here((users) => {
+				console.log('Users currently in channel:', users)
+			})
+			.joining((user) => {
+				console.log('User joined:', user)
+			})
+			.leaving((user) => {
+				console.log('User left:', user)
+			})
+			.error((error) => {
+				console.error('Echo channel error:', error)
+			})
+			.listen('NewChatEvent', (event) => {
+				debouncedUpdateSidePanel(event.chat)
+			})
+
+		scrollToBottom()
+
+	} catch (error) {
+		console.error('Failed to initialize Echo:', error)
+	}
 })
 
+// ✅ التنظيف الصحيح
 onUnmounted(() => {
-	if (echoChannel) {
-		echoChannel.stopListening('NewChatEvent')
-		// أو يمكن
-		// Echo.leave('chats.ch' + props.organizationId);
+	try {
+		if (echoInstance && props.organizationId) {
+			const channelName = `chats.ch${props.organizationId}`
+			console.log('Leaving channel:', channelName)
+
+			// ✅ الطريقة الصحيحة للمغادرة
+			echoInstance.leave(channelName)
+
+			// ✅ تنظيف المتغيرات
+			echoChannel = null
+			echoInstance = null
+		}
+	} catch (error) {
+		console.error('Error during cleanup:', error)
 	}
 })
 </script>

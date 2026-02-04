@@ -8,6 +8,12 @@ export function getEchoInstance(pusherKey, pusherCluster) {
         window.Pusher = Pusher;
         echoInstance = new Echo({
             broadcaster: 'pusher',
+			authEndpoint: '/broadcasting/auth',
+			auth: {
+				headers: {
+					'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+				}
+			},
             key: pusherKey,
             cluster: pusherCluster,
             encrypted: true,

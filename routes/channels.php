@@ -12,11 +12,8 @@ use Illuminate\Support\Facades\Broadcast;
 | used to check if an authenticated user can listen to the channel.
 |
 */
-
-Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
-    return (int) $user->id === (int) $id;
-});
-
-Broadcast::channel('chats', function ($user) {
-    return true; // Adjust authentication logic if needed
+Broadcast::channel('chats.ch{organizationId}', function ($user, $organizationId) {
+	logger()->info('organizationId: ' . $organizationId);
+	return $user;
+  //  return (int) $user->id === (int) $organizationId;
 });

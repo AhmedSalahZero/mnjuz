@@ -5,6 +5,7 @@ namespace App\Events;
 use Exception;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -41,7 +42,7 @@ class NewChatEvent implements ShouldBroadcast
             // Check if Pusher settings are available
             if (config('broadcasting.connections.pusher.key') && config('broadcasting.connections.pusher.secret')) {
                 $channel = 'chats.' . 'ch' . $this->organizationId;
-                return new Channel($channel);
+                return new PresenceChannel($channel);
             } else {
                 // Log an error if Pusher settings are not configured
                 Log::error('Pusher settings are not configured.');
