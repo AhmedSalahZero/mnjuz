@@ -18,12 +18,12 @@ Broadcast::channel('chats.ch{organizationId}', function ($user, $organizationId)
 	logger()->info('organizationId: ' . $organizationId);
 
 	return [
-		'id' => $user->id,
-		'name' => $user->name,
-		'email' => $user->email,
-		'avatar' => $user->avatar,
-		'role' => $user->role,
-		'organizationId' => $organizationId,
+		// 'id' => $user->id,
+		// 'name' => $user->name,
+		// 'email' => $user->email,
+		// 'avatar' => $user->avatar,
+		// 'role' => $user->role,
+		// 'organizationId' => $organizationId,
 	
 	];
   //  return (int) $user->id === (int) $organizationId;
