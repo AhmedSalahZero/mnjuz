@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AuthenticateBearerToken;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -100,3 +101,6 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 });
 
 });
+Route::post('/broadcasting/auth', function (Request $request) {
+    return Broadcast::auth($request);
+})->middleware('auth:sanctum'); // أو auth:api
