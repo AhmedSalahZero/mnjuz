@@ -60,12 +60,10 @@ import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
 import { debounce } from 'lodash'
-import { defineEmits, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { getEchoInstance } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
-let echoChannel = null
-const logger = (message) => {
-}
+
 const props = defineProps({
 	rows: Array,
 	rowCount: Number,
@@ -93,6 +91,10 @@ const props = defineProps({
 	timezone: String,
 })
 
+// ✅ استخدام ref بدلاً من let
+const echoInstance = ref(null)
+const echoChannel = ref(null)
+
 const rows = ref(props.rows)
 const rowCount = ref(props.rowCount)
 const scrollContainer2 = ref(null)
@@ -114,10 +116,6 @@ watch(
 		rows.value = newRows
 	},
 )
-
-const toggleDropdown = () => {
-	isOpen.value = !isOpen.value
-}
 
 function toggleContactView(value) {
 	displayContactInfo.value = value
@@ -142,6 +140,7 @@ const deleteThread = async () => {
 	chatThread.value = []
 	await axios.delete('/chats/' + contact.value.uuid)
 }
+
 function getCurrentDateTime(timezone) {
 	const now = new Date()
 	const options = {
@@ -156,14 +155,16 @@ function getCurrentDateTime(timezone) {
 	}
 
 	const formatter = new Intl.DateTimeFormat('sv-SE', options)
-	return formatter.format(now).replace(',', '').replace(/\//g, '-') // "2026-01-21 14:30:45"
+	return formatter.format(now).replace(',', '').replace(/\//g, '-')
 }
+
 const getFileTypeCategory = (mimeType) => {
 	if (mimeType.startsWith('image/')) return 'image'
 	if (mimeType.startsWith('video/')) return 'video'
 	if (mimeType.startsWith('audio/')) return 'audio'
 	return 'document'
 }
+
 const generateNewMessage = (form) => {
 	const isText = form.value.type == 'text'
 	let file = null
@@ -174,6 +175,7 @@ const generateNewMessage = (form) => {
 		},
 		type: 'text',
 	}
+
 	if (isMedia) {
 		file = form.value.file
 		const fileTypeCategory = getFileTypeCategory(file.type)
@@ -181,7 +183,6 @@ const generateNewMessage = (form) => {
 			type: fileTypeCategory,
 		}
 
-		// إضافة الخصائص المناسبة حسب نوع الملف
 		if (fileTypeCategory === 'image') {
 			metadata.image = {
 				mime_type: file.type,
@@ -200,6 +201,7 @@ const generateNewMessage = (form) => {
 			}
 		}
 	}
+
 	let chat = [
 		{
 			type: 'chat',
@@ -259,38 +261,46 @@ const debouncedUpdateSidePanel = debounce(async (chat) => {
 		updateChatThread(chat)
 	}
 
+
 	try {
 		const response = await axios.get('/chats')
+		console.log('Response:', response)
 		if (response?.data?.result) {
 			rows.value = response.data.result
 		}
 	} catch (error) {
 		console.error('Error updating side panel:', error)
 	}
-}, 1000) // الانتظار ثانية واحدة قبل التنفيذ
+}, 1000)
 
-const onCloseDemoModal = () => {
-	isDemoModalOpen.value = false
-}
+// ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
 	try {
-		// ✅ حفظ الـ instance في متغير خارجي
-		echoInstance = getEchoInstance(
-			props.pusherSettings['pusher_app_key'],
-			props.pusherSettings['pusher_app_cluster'],
-		)
+		console.log('Initializing Echo...')
 
-		// ✅ التحقق من وجود organizationId
+		// ✅ التحقق من الإعدادات
+		if (!props.pusherSettings?.pusher_app_key || !props.pusherSettings?.pusher_app_cluster) {
+			console.error('Pusher settings are missing')
+			return
+		}
+
 		if (!props.organizationId) {
 			console.error('Organization ID is missing')
 			return
 		}
 
+		// ✅ إنشاء Echo instance
+		echoInstance.value = getEchoInstance(
+			props.pusherSettings.pusher_app_key,
+			props.pusherSettings.pusher_app_cluster,
+		)
+
+		console.log('Echo instance created:', echoInstance.value)
+
 		const channelName = `chats.ch${props.organizationId}`
 		console.log('Joining channel:', channelName)
 
-		// ✅ الانضمام للقناة
-		echoChannel = echoInstance
+		echoChannel.value = echoInstance.value
 			.join(channelName)
 			.here((users) => {
 				console.log('Users currently in channel:', users)
@@ -305,29 +315,32 @@ onMounted(() => {
 				console.error('Echo channel error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
+				console.log('New chat event received:', event)
 				debouncedUpdateSidePanel(event.chat)
 			})
+
 
 		scrollToBottom()
 
 	} catch (error) {
 		console.error('Failed to initialize Echo:', error)
+		console.error('Error stack:', error.stack)
 	}
 })
 
-// ✅ التنظيف الصحيح
+
 onUnmounted(() => {
 	try {
-		if (echoInstance && props.organizationId) {
+		if (echoInstance.value && props.organizationId) {
 			const channelName = `chats.ch${props.organizationId}`
 			console.log('Leaving channel:', channelName)
 
-			// ✅ الطريقة الصحيحة للمغادرة
-			echoInstance.leave(channelName)
+			echoInstance.value.leave(channelName)
 
-			// ✅ تنظيف المتغيرات
-			echoChannel = null
-			echoInstance = null
+			echoChannel.value = null
+			echoInstance.value = null
+
+			console.log('Successfully left channel')
 		}
 	} catch (error) {
 		console.error('Error during cleanup:', error)

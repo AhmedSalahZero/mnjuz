@@ -12,8 +12,19 @@ use Illuminate\Support\Facades\Broadcast;
 | used to check if an authenticated user can listen to the channel.
 |
 */
+
+
 Broadcast::channel('chats.ch{organizationId}', function ($user, $organizationId) {
 	logger()->info('organizationId: ' . $organizationId);
-	return $user;
+
+	return [
+		'id' => $user->id,
+		'name' => $user->name,
+		'email' => $user->email,
+		'avatar' => $user->avatar,
+		'role' => $user->role,
+		'organizationId' => $organizationId,
+	
+	];
   //  return (int) $user->id === (int) $organizationId;
 });
