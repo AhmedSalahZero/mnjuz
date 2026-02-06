@@ -18,7 +18,8 @@ class ContactResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-		$organization = $this->relationLoaded('organization') ? $this->organization : Organization::find($this->organization_id);
+
+		$organization =$this->organization ;
 		$shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
 		$this->encryptPhoneNumber($shouldBeEncrypted);
 		 return [

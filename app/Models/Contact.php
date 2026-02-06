@@ -94,22 +94,30 @@ class Contact extends Model
         ->orderBy('created_at', 'asc');
     }
 
+    /**
+     * آخر رسالة (مرتبطة بـ chat_log) — واحد فقط لكل contact عند Eager Load.
+     * استخدام ofMany يمنع تحميل كل الـ chats ثم أخذ الأول (آلاف السجلات).
+     * المعامل الثاني Closure يطبّق على الـ subquery؛ الثالث يجب أن يكون string (اسم العلاقة) أو null.
+     */
     public function lastChat()
     {
         return $this->hasOne(Chat::class, 'contact_id')
-            ->whereNull('deleted_at')
-			->whereHas('chatLog')
-            ->with('media')
-            ->latest();
+            ->ofMany(['created_at' => 'max'], function (Builder $q) {
+                $q->whereNull('deleted_at')->whereHas('chatLog');
+            })
+            ->with('media');
     }
 
+    /**
+     * آخر رسالة واردة — واحد فقط لكل contact عند Eager Load.
+     */
     public function lastInboundChat()
     {
         return $this->hasOne(Chat::class, 'contact_id')
-                    ->where('type', 'inbound')
-                    ->whereNull('deleted_at')
-                    ->with('media')
-                    ->latest();
+            ->ofMany(['created_at' => 'max'], function (Builder $q) {
+                $q->whereNull('deleted_at')->where('type', 'inbound');
+            })
+            ->with('media');
     }
 
     public function chatLogs()
@@ -156,17 +164,9 @@ class Contact extends Model
                   AND chats.deleted_at IS NULL) as unread_messages_count')
     	]);
     
-        // ✅ Eager load بشكل محسّن
-        $query->with([
-            'lastChat' => function ($q) {
-                $q->selectRaw('*')->whereNull('deleted_at');
-            },
-           'lastInboundChat' => function ($q) {
-               $q->selectRaw('*')
-                 ->where('type', 'inbound')
-                 ->whereNull('deleted_at');
-           }
-        ])->when(Request()->has('is_read'),function($q){
+        // ✅ Eager load — lastChat/lastInboundChat معرّفة بـ ofMany (سجل واحد فقط لكل contact)
+        $query->with(['lastChat', 'lastInboundChat'])
+        ->when(Request()->has('is_read'),function($q){
 			$q->whereHas('lastInboundChat',function($q){
 			$q->where('is_read',0);
 		});
