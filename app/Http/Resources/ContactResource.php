@@ -18,8 +18,6 @@ class ContactResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-
-		// استخدام الـ organization المحمّل مسبقاً إن وُجد (تجنب N+1)
 		$organization = $this->relationLoaded('organization') ? $this->organization : Organization::find($this->organization_id);
 		$shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
 		$this->encryptPhoneNumber($shouldBeEncrypted);
@@ -34,70 +32,55 @@ class ContactResource extends JsonResource
             'latest_chat_created_at' => $this->latest_chat_created_at,
             'is_blocked' => $this->is_blocked,
             'is_favorite' => $this->is_favorite,
-            
-            // ✅ من الـ JOIN في contactsWithChatsOptimized
-            'ticket_status' => $this->ticket_status ?? null,
-            'ticket_assigned_to' => $this->ticket_assigned_to ?? null,
-            
-            // ✅ Accessors البسيطة (لا تستدعي queries)
+            // 'ticket_status' => $this->ticket_status ?? null,
+            // 'ticket_assigned_to' => $this->ticket_assigned_to ?? null,
             'full_name' => $this->full_name,
             'formatted_phone_number' => $this->formatted_phone_number,
             
-            // ✅ Relations - محمّلة مسبقاً بـ with()
             'last_chat' => $this->whenLoaded('lastChat', function() {
+			
                 return [
-                    'id' => $this->lastChat->id,
-                    'uuid' => $this->lastChat->uuid,
-                    'organization_id' => $this->lastChat->organization_id,
-                    'wam_id' => $this->lastChat->wam_id,
-                    'contact_id' => $this->lastChat->contact_id,
-                    'user_id' => $this->lastChat->user_id,
-                    'type' => $this->lastChat->type,
+                 //   'id' => $this->lastChat->id,
+                   // 'uuid' => $this->lastChat->uuid,
+                 //   'organization_id' => $this->lastChat->organization_id,
+                 //   'wam_id' => $this->lastChat->wam_id,
+                  //  'contact_id' => $this->lastChat->contact_id,
+                   // 'user_id' => $this->lastChat->user_id,
+                   // 'type' => $this->lastChat->type,
                     'metadata' => $this->lastChat->metadata,
-                    'media_id' => $this->lastChat->media_id,
-                    'status' => $this->lastChat->status,
-                    'is_read' => $this->lastChat->is_read,
-                    'deleted_by' => $this->lastChat->deleted_by,
+                   // 'media_id' => $this->lastChat->media_id,
+                 //   'status' => $this->lastChat->status,
+                  //  'is_read' => $this->lastChat->is_read,
+                 //   'deleted_by' => $this->lastChat->deleted_by,
                     'deleted_at' => $this->lastChat->deleted_at,
                     'created_at' => $this->lastChat->created_at,
-                    'media' => $this->lastChat->media,
+              //     'media' => $this->lastChat->media,
                 ];
             }),
             
             'last_inbound_chat' => $this->whenLoaded('lastInboundChat', function() {
                 return $this->lastInboundChat ? [
-                    'id' => $this->lastInboundChat->id,
-                    'uuid' => $this->lastInboundChat->uuid,
-                    'organization_id' => $this->lastInboundChat->organization_id,
-                    'wam_id' => $this->lastInboundChat->wam_id,
-                    'contact_id' => $this->lastInboundChat->contact_id,
-                    'user_id' => $this->lastInboundChat->user_id,
-                    'type' => $this->lastInboundChat->type,
-                    'metadata' => $this->lastInboundChat->metadata,
-                    'media_id' => $this->lastInboundChat->media_id,
-                    'status' => $this->lastInboundChat->status,
-                    'is_read' => $this->lastInboundChat->is_read,
-                    'deleted_by' => $this->lastInboundChat->deleted_by,
-                    'deleted_at' => $this->lastInboundChat->deleted_at,
+                    // 'id' => $this->lastInboundChat->id,
+                    // 'uuid' => $this->lastInboundChat->uuid,
+                    // 'organization_id' => $this->lastInboundChat->organization_id,
+                    // 'wam_id' => $this->lastInboundChat->wam_id,
+                    // 'contact_id' => $this->lastInboundChat->contact_id,
+                    // 'user_id' => $this->lastInboundChat->user_id,
+                    // 'type' => $this->lastInboundChat->type,
+                    // 'metadata' => $this->lastInboundChat->metadata,
+                    // 'media_id' => $this->lastInboundChat->media_id,
+                    // 'status' => $this->lastInboundChat->status,
+                    // 'is_read' => $this->lastInboundChat->is_read,
+                    // 'deleted_by' => $this->lastInboundChat->deleted_by,
+                    // 'deleted_at' => $this->lastInboundChat->deleted_at,
                     'created_at' => $this->lastInboundChat->created_at,
-                    'media' => $this->lastInboundChat->media,
+                    // 'media' => $this->lastInboundChat->media,
                 ] : null;
             }),
-            
-            // ✅ عدد الرسائل غير المقروءة - من الـ subquery المحسوب مسبقاً!
-            // ❌ لا تستخدم: $this->chats()->where(...)->count()
-            // ✅ استخدم: العداد المحسوب في contactsWithChatsOptimized
+       
             'unread_messages' => $this->unread_messages_count ?? 0,
         ];
 		
-        // $data = parent::toArray($request);
-
-        // $data['unread_messages'] = $this->chats()
-        //     ->where('type', 'inbound')
-        //     ->whereNull('deleted_at')
-        //     ->where('is_read', 0)
-        //     ->count();
-        
-        // return $data;
+      
     }
 }

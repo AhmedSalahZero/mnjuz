@@ -179,10 +179,10 @@ class Contact extends Model
             });
 
             // إضافة أعمدة التذكرة
-            $query->addSelect([
-                'chat_tickets.status as ticket_status',
-                'chat_tickets.assigned_to as ticket_assigned_to'
-            ]);
+            // $query->addSelect([
+            //     'chat_tickets.status as ticket_status',
+            //     'chat_tickets.assigned_to as ticket_assigned_to'
+            // ]);
 
             // فلترة حسب الحالة
             if ($ticketState === 'unassigned') {

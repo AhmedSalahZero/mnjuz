@@ -272,7 +272,7 @@ const clearSearch = () => {
 									<path fill="currentColor"
 										d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
 								</svg>
-								<span class="ml-2">{{ getExtension(contact?.last_chat?.media?.type) }}
+								<span class="ml-2">{{ getExtension(contact?.last_chat?.metadata?.type) }}
 									{{ $t('File') }}</span>
 							</div>
 						</div>

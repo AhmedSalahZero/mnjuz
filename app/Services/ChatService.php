@@ -169,7 +169,6 @@ class ChatService
                 ->whereNull('deleted_at')
                 ->where('is_read', 0)
                 ->update(['is_read' => 1]);
-       
             if (request()->expectsJson()) {
             
                 return response()->json([
@@ -205,9 +204,6 @@ class ChatService
                     'fields' => ContactField::where('organization_id', $this->organizationId)->where('deleted_at', null)->get(),
                     'locationSettings' => $this->getLocationSettings(),
                     'ticket' => $ticket,
-                //    'agents' => $agents,
-				
-				
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
