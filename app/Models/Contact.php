@@ -143,6 +143,7 @@ class Contact extends Model
                 'contacts.email',
                 'contacts.organization_id',
                 'contacts.latest_chat_created_at',
+                'contacts.last_inbound_chat_created_at',
                 'contacts.is_blocked',
                 'contacts.is_favorite',
             ])
@@ -164,8 +165,8 @@ class Contact extends Model
                   AND chats.deleted_at IS NULL) as unread_messages_count')
     	]);
     
-        // ✅ Eager load — lastChat/lastInboundChat معرّفة بـ ofMany (سجل واحد فقط لكل contact)
-        $query->with(['lastChat', 'lastInboundChat'])
+        // ✅ Eager load lastChat فقط؛ last_inbound_chat نعتمد على العمود last_inbound_chat_created_at
+        $query->with(['lastChat'])
         ->when(Request()->has('is_read'),function($q){
 			$q->whereHas('lastInboundChat',function($q){
 			$q->where('is_read',0);

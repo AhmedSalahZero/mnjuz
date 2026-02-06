@@ -31,6 +31,7 @@ class ContactResource extends JsonResource
             'email' => $this->email,
             'organization_id' => $this->organization_id,
             'latest_chat_created_at' => $this->latest_chat_created_at,
+            'last_inbound_chat_created_at' => $this->last_inbound_chat_created_at ?? null,
             'is_blocked' => $this->is_blocked,
             'is_favorite' => $this->is_favorite,
             // 'ticket_status' => $this->ticket_status ?? null,
@@ -59,25 +60,10 @@ class ContactResource extends JsonResource
                 ];
             }),
             
-            'last_inbound_chat' => $this->whenLoaded('lastInboundChat', function() {
-                return $this->lastInboundChat ? [
-                    // 'id' => $this->lastInboundChat->id,
-                    // 'uuid' => $this->lastInboundChat->uuid,
-                    // 'organization_id' => $this->lastInboundChat->organization_id,
-                    // 'wam_id' => $this->lastInboundChat->wam_id,
-                    // 'contact_id' => $this->lastInboundChat->contact_id,
-                    // 'user_id' => $this->lastInboundChat->user_id,
-                    // 'type' => $this->lastInboundChat->type,
-                    // 'metadata' => $this->lastInboundChat->metadata,
-                    // 'media_id' => $this->lastInboundChat->media_id,
-                    // 'status' => $this->lastInboundChat->status,
-                    // 'is_read' => $this->lastInboundChat->is_read,
-                    // 'deleted_by' => $this->lastInboundChat->deleted_by,
-                    // 'deleted_at' => $this->lastInboundChat->deleted_at,
-                    'created_at' => $this->lastInboundChat->created_at,
-                    // 'media' => $this->lastInboundChat->media,
-                ] : null;
-            }),
+            // استخدام العمود last_inbound_chat_created_at بدل تحميل العلاقة (أسرع)
+            'last_inbound_chat' => $this->last_inbound_chat_created_at
+                ? ['created_at' => $this->last_inbound_chat_created_at]
+                : $this->whenLoaded('lastInboundChat', fn () => $this->lastInboundChat ? ['created_at' => $this->lastInboundChat->created_at] : null),
        
             'unread_messages' => $this->unread_messages_count ?? 0,
         ];

@@ -207,7 +207,6 @@ class WebhookController extends BaseController
 		  * * هسجل التاريخ بال utc واستخدمه للمعالجة بناء علي الاعدادت بتاعت سواء كان الرياض او لندن مثلا
 		  */
         if ($res['field'] === 'messages') {
-// logger('start webhook messages');
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
 
@@ -281,6 +280,7 @@ class WebhookController extends BaseController
                                 $chat->organization_id = $organization->id;
                                 $chat->wam_id = $response['id'];
                                 $chat->contact_id = $contact->id;
+								
                                 $chat->created_at =$now;
                                 $chat->type = 'inbound';
                                 $chat->metadata = json_encode($response);

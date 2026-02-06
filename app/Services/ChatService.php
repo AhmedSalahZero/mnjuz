@@ -151,7 +151,7 @@ class ChatService
         // 	logger('From ChatService -  getChatList - '.$end-$start);
         // }
         if ($uuid !== null) {
-            $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups'])
+            $contact = Contact::with(['lastChat', 'notes', 'contactGroups'])
                 ->where('uuid', $uuid)
                 ->first();
 				/**

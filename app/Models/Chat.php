@@ -22,6 +22,9 @@ class Chat extends Model {
             $contact = $chat->contact;
             if ($contact) {
                 $contact->latest_chat_created_at = $chat->created_at;
+                if ($chat->type === 'inbound') {
+                    $contact->last_inbound_chat_created_at = $chat->created_at;
+                }
                 $contact->save();
             }
         });
