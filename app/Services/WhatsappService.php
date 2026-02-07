@@ -41,14 +41,18 @@ class WhatsappService
         $this->phoneNumberId = $phoneNumberId;
         $this->wabaId = $wabaId;
         $this->organizationId = $organizationId;
+		$configs = [];
+		Setting::whereIn('key', ['pusher_app_key', 'pusher_app_secret', 'pusher_app_id', 'pusher_app_cluster'])->get()->each(function($setting) use (&$configs){
+			$configs[$setting->key] = $setting->value;
+		});
 
         Config::set('broadcasting.connections.pusher', [
             'driver' => 'pusher',
-            'key' => Setting::where('key', 'pusher_app_key')->first()->value,
-            'secret' => Setting::where('key', 'pusher_app_secret')->first()->value,
-            'app_id' => Setting::where('key', 'pusher_app_id')->first()->value,
+            'key' => $configs['pusher_app_key'],
+            'secret' => $configs['pusher_app_secret'],
+            'app_id' => $configs['pusher_app_id'],
             'options' => [
-                'cluster' => Setting::where('key', 'pusher_app_cluster')->first()->value,
+                'cluster' => $configs['pusher_app_cluster'],
             ],
         ]);
     }

@@ -28,9 +28,9 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping();*/
         
         // Monitor queue health
-        $schedule->command('queue:restart')
-            ->hourly()
-            ->evenInMaintenanceMode();
+        // $schedule->command('queue:restart')
+        //     ->hourly()
+        //     ->evenInMaintenanceMode();
         
         // Clean failed jobs table
         $schedule->command('queue:prune-failed --hours=24')

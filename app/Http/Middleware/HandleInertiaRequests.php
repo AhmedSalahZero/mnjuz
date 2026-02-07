@@ -93,8 +93,12 @@ class HandleInertiaRequests extends Middleware
                 $query->where('organization_id', $organizationId);
             }]);
 
-            $organizations = Team::with('organization')->where('user_id', $user->id)->get();
-            $organization = Organization::where('id', $organizationId)->first();
+            // Only columns used in shared UI: switcher (uuid, name), Pusher (id), Menu/Profile (name, address), App/Dashboard (metadata)
+            $organizations = Team::with('organization:id,uuid,name')
+                ->where('user_id', $user->id)
+                ->get();
+            $organization = Organization::where('id', $organizationId)
+                ->first(['id', 'uuid', 'name', 'metadata', 'address']);
             $unreadMessages = Chat::where('organization_id', $organizationId)
                 ->where('type', 'inbound')
                 ->where('deleted_at', NULL)
@@ -105,15 +109,34 @@ class HandleInertiaRequests extends Middleware
         if($this->isInstalled()){
             $keys = ['favicon', 'logo', 'company_name', 'address', 'currency' , 'email', 'phone', 'socials', 'trial_period', 'recaptcha_site_key', 'recaptcha_active', 'google_analytics_tracking_id', 'google_maps_api_key','pusher_app_key','pusher_app_cluster', 'google_auth_active', 'enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model', 'head_scripts', 'head_styles', 'body_scripts', 'meta_tags'];
             $config = Setting::whereIn('key', $keys)->get();
+            // Only columns used in shared UI: LangToggle/ProfileModal (code, name), dropdowns (id for key)
             $languages = Language::where('deleted_at', null)
-                               ->where('status', 'active')
-                               ->get();
-            $currentLanguage = Language::where('code', $language)->first();
-            $isRtl = $currentLanguage ? $currentLanguage->is_rtl : false;
+                ->where('status', 'active')
+                ->get(['id', 'code', 'name']);
+            $currentLanguage = Language::where('code', $language)->first(['is_rtl']);
+            $isRtl = $currentLanguage ? (bool) $currentLanguage->is_rtl : false;
         } else {
             $config = array();
             $languages = array();
             $isRtl = false;
+        }
+
+        // Only fields used in shared UI: Menu/Profile (name, email, phone, language), Dashboard (first_name, teams[].role), TicketTable (role)
+        $authUser = null;
+        if ($user) {
+            $authUser = [
+                'id' => $user->id,
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'full_name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'language' => $user->language ?? 'en',
+                'role' => $user->role,
+                'teams' => $user->relationLoaded('teams')
+                    ? $user->teams->map(fn ($t) => ['id' => $t->id, 'role' => $t->role, 'organization_id' => $t->organization_id])->values()->toArray()
+                    : [],
+            ];
         }
 
         return array_merge(parent::share($request), [
@@ -122,7 +145,7 @@ class HandleInertiaRequests extends Middleware
             'applicationReleaseDate' => fn () => Config::get('version.release_date'),
             'config' => $config,
             'auth' => [
-                'user' => $user ?: null,
+                'user' => $authUser,
             ],
             'organization' => $organization,
             'organizations' => $organizations,

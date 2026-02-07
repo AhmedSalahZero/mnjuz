@@ -5,8 +5,10 @@ namespace App\Http\Controllers\User;
 use App\Exports\CampaignDetailsExport;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreCampaign;
-use App\Http\Resources\CampaignResource;
 use App\Http\Resources\CampaignLogResource;
+use App\Http\Resources\CampaignResource;
+use App\Jobs\ProcessCampaignMessagesJob;
+use App\Jobs\RetryCampaignLogJob;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Models\ContactGroup;
@@ -126,4 +128,24 @@ class CampaignController extends BaseController
             ]
         );
     }
+	public function resendAllFailed(){
+		
+		$organizationId=session()->get('current_organization');
+		$count = CampaignLog::with(['campaign.organization', 'contact'])
+                	->where('status', 'failed')
+                ->whereHas('campaign', function ($query) use ($organizationId) {
+                    $query
+					->when($organizationId, function ($query) use ($organizationId) {
+						$query->where('organization_id', $organizationId);
+					});
+                })->update(['metadata' => null]);
+			
+		ProcessCampaignMessagesJob::dispatch('pending', $organizationId)->onQueue('campaign-messages');
+		return Redirect::back()->with(
+			'status', [
+				'type' => 'success', 
+				'message' => __('All failed campaigns resended successfully!')
+			]
+		);
+	}
 }

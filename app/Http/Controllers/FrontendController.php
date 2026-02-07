@@ -11,7 +11,6 @@ use App\Models\Page;
 use App\Models\Review;
 use App\Models\Setting;
 use App\Models\SubscriptionPlan;
-use App\Services\CampaignService;
 use App\Services\UpdateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -20,13 +19,6 @@ use Inertia\Inertia;
 
 class FrontendController extends BaseController
 {
-    private $campaignService;
-
-    public function __construct(CampaignService $campaignService)
-    {
-        $this->campaignService = $campaignService;
-    }
-    
     public function index(Request $request){
         $frontend = Setting::where('key', 'display_frontend')->first();
         $frontend_active = $frontend ? $frontend->value : 1;
@@ -64,10 +56,6 @@ class FrontendController extends BaseController
         $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
 
         return Inertia::render('Frontend/Dynamic', $data);
-    }
-
-    public function sendCampaign(){
-        $this->campaignService->sendCampaign();
     }
 
     public function changeLanguage($locale){

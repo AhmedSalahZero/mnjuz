@@ -45,7 +45,7 @@ class ChatService
     public function __construct($organizationId)
     {
         $this->organizationId = $organizationId;
-        $this->initializeWhatsappService();
+       
     }
 
     private function initializeWhatsappService()
@@ -131,7 +131,7 @@ class ChatService
         $rowCount = $contacts->total();
 
         // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
-        $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
+     //   $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
 
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
@@ -145,13 +145,14 @@ class ChatService
         $messageTemplates = Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
+            ->select(['uuid', 'name', 'language'])
             ->get();
         // $end = microtime(true);
         // if($end-$start > 1){
         // 	logger('From ChatService -  getChatList - '.$end-$start);
         // }
         if ($uuid !== null) {
-            $contact = Contact::with(['lastChat', 'notes', 'contactGroups'])
+            $contact = Contact::with(['lastChat', 'notes', 'contactGroups','organization'])
                 ->where('uuid', $uuid)
                 ->first();
 				/**
@@ -183,7 +184,6 @@ class ChatService
                     ->where('deleted_at', null)
                     ->where('is_read', 0)
                     ->count();
-
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
@@ -341,7 +341,7 @@ class ChatService
     public function sendMessage(object $request)
     {
         // $time = microtime(true);
-
+		$this->initializeWhatsappService();
 
 	
         if ($request->type === 'text') {
@@ -385,6 +385,7 @@ class ChatService
 
     public function sendTemplateMessage(object $request, $uuid)
     {
+		$this->initializeWhatsappService();
         $template = Template::where('uuid', $request->template)->first();
         $contact = Contact::where('uuid', $uuid)->first();
         $mediaId = null;
@@ -672,7 +673,6 @@ class ChatService
         $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
         $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
-        //     $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
         
     
 
@@ -756,7 +756,6 @@ class ChatService
         $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
    //     $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
-        //     $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
         
     
 

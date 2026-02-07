@@ -213,7 +213,9 @@ class Contact extends Model
         }
 
         // ✅ الترتيب باستخدام العمود الموجود
-        $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
+        $query
+		->with('organization')
+		->orderBy('contacts.latest_chat_created_at', $sortDirection);
 		/**
 		 * @var Builder $query 
 		 */

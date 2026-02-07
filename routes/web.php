@@ -1,7 +1,6 @@
 <?php
 
 use App\Jobs\CreateCampaignLogsJob;
-use App\Jobs\ProcessCampaignMessagesJob;
 use App\Models\Language;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
@@ -73,7 +72,6 @@ Route::match(['get', 'post'], '/webhook/waba', [App\Http\Controllers\WebhookCont
 Route::match(['get', 'post'], '/webhook/{processor}', [App\Http\Controllers\WebhookController::class, 'processWebhook']);
 Route::match(['get', 'post'], '/payment/{processor}', [App\Http\Controllers\PaymentController::class, 'processPayment']);
 
-Route::get('/campaign-send', [App\Http\Controllers\FrontendController::class, 'sendCampaign']);
 Route::get('/migrate-upgrade', [App\Http\Controllers\FrontendController::class, 'migrate']);
 
 Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(function () {
@@ -160,6 +158,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);
+                Route::get('/resend-all-failed-campaigns', [App\Http\Controllers\User\CampaignController::class, 'resendAllFailed']);
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
 
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
