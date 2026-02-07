@@ -183,7 +183,7 @@ class ChatService
                     ->where('deleted_at', null)
                     ->where('is_read', 0)
                     ->count();
-		
+
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
@@ -192,22 +192,22 @@ class ChatService
                     'filters' => request()->all(),
                     'pusherSettings' => $pusherSettings,
                     'organizationId' => $this->organizationId,
-                    'state' => app()->environment(),
-                    'demoNumber' => env('DEMO_NUMBER'),
+              //      'state' => app()->environment(),
+          //          'demoNumber' => env('DEMO_NUMBER'),
                     'settings' => $config,
                     'templates' => $messageTemplates,
                     'status' => $request->status ?? 'all',
                     'chatThread' => $initialMessages['messages'],
                     'hasMoreMessages' => $initialMessages['hasMoreMessages'],
                     'nextPage' => $initialMessages['nextPage'],
-                    'contact' => $contact,
+                    'contact' => self::contactPayloadForChatView($contact),
                     'fields' => ContactField::where('organization_id', $this->organizationId)->where('deleted_at', null)->get(),
                     'locationSettings' => $this->getLocationSettings(),
                     'ticket' => $ticket,
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
-					'user'=>auth()->user()->toArray(),
+					'user' => auth()->user()->only(['first_name', 'last_name']),
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
                 ]);
@@ -230,7 +230,7 @@ class ChatService
                 'filters' => request()->all(),
                 'pusherSettings' => $pusherSettings,
                 'organizationId' => $this->organizationId,
-                'state' => app()->environment(),
+            //    'state' => app()->environment(),
                 'settings' => $config,
                 'templates' => $messageTemplates,
                 'status' => $request->status ?? 'all',
@@ -238,7 +238,7 @@ class ChatService
                 'addon' => $aimodule,
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
-				'user'=>auth()->user()->toArray(),
+				'user' => auth()->user()->only(['first_name', 'last_name']),
 				'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
             ]);
@@ -806,6 +806,37 @@ class ChatService
           
         }
     }
-    
 
+    /**
+     * مصفوفة مختصرة للـ contact المستخدم في صفحة المحادثة فقط (بدل إرسال الـ model كاملاً).
+     * المفاتيح مأخوذة من: Index.vue، ChatHeader، ChatForm، ContactInfo، CampaignForm.
+     */
+    public static function contactPayloadForChatView(Contact $contact): array
+    {
+        return array_merge(
+            $contact->only([
+                'id',
+                'uuid',
+                'is_blocked',
+                'first_name',
+                'last_name',
+                'email',
+                'metadata',
+                'is_favorite',
+                'address',
+                'avatar',
+                'last_inbound_chat_created_at',
+            ]),
+            [
+                'full_name' => $contact->full_name,
+                'formatted_phone_number' => $contact->formatted_phone_number,
+                'last_inbound_chat' => $contact->last_inbound_chat_created_at
+                    ? ['created_at' => $contact->last_inbound_chat_created_at]
+                    : null,
+                'contact_groups' => $contact->relationLoaded('contactGroups')
+                    ? $contact->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all()
+                    : [],
+            ]
+        );
+    }
 }

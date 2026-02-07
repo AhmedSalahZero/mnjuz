@@ -71,8 +71,6 @@ const props = defineProps({
 	organizationId: Number,
 	isChatLimitReached: Boolean,
 	toggleNavBar: Function,
-	state: String,
-	demoNumber: String,
 	settings: Object,
 	status: String,
 	chatThread: Array,
@@ -278,16 +276,7 @@ onMounted(() => {
 	try {
 		console.log('Initializing Echo...')
 
-		// ✅ التحقق من الإعدادات
-		if (!props.pusherSettings?.pusher_app_key || !props.pusherSettings?.pusher_app_cluster) {
-			console.error('Pusher settings are missing')
-			return
-		}
 
-		if (!props.organizationId) {
-			console.error('Organization ID is missing')
-			return
-		}
 
 		// ✅ إنشاء Echo instance
 		echoInstance.value = getEchoInstance(
