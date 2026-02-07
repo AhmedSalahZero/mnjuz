@@ -6,5 +6,6 @@
             chmod -R 775 bootstrap/cache
             chmod 777 -R storage/*
 	    $(which php) artisan migrate --force
-	   sudo chmod 777 ./deploy 
+	   sudo chmod 777 ./deploy
+	  $(which php) artisan optimize:clear 
             sudo supervisorctl restart all
