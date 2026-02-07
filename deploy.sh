@@ -7,5 +7,4 @@
             chmod 777 -R storage/*
 	    $(which php) artisan migrate --force
     
-            supervisord -c /etc/supervisord.conf
-            supervisorctl restart all
+            sudo supervisorctl restart all
