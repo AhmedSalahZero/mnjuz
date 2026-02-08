@@ -11,6 +11,7 @@ use App\Http\Resources\ContactResource;
 use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
 use App\Models\Chat;
+use App\Models\ChatMedia;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
@@ -27,6 +28,7 @@ use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Locale;
@@ -79,7 +81,6 @@ class ApiController extends Controller
 		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
-		
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
@@ -1256,5 +1257,72 @@ class ApiController extends Controller
                 'message' => __('Request unable to be processed')
             ], 500);
         }
+    }
+
+    /**
+     * Return a temporary signed URL for chat media stored on S3 so the mobile app can load it without AWS credentials.
+     * Mobile sends only the app Bearer token; the backend uses AWS to generate a signed URL valid for a short time.
+     *
+     * GET /api/v1/media/signed-url?chat_id=123
+     */
+    public function getSignedMediaUrl(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'chat_id' => 'required|integer|min:1',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 400);
+        }
+
+        $organizationId = $request->user()->current_organization_id;
+        $chat = Chat::with('media')->where('id', $request->chat_id)
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if (!$chat || !$chat->media_id) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Chat or media not found'),
+            ], 404);
+        }
+
+        $media = $chat->media;
+        $minutes = 60;
+
+        if ($media->location === 'amazon' && $media->path) {
+            $path = $media->path;
+            $key = ltrim(parse_url($path, PHP_URL_PATH) ?? '', '/');
+            if ($key === '') {
+                return response()->json([
+                    'statusCode' => 400,
+                    'success' => false,
+                    'message' => __('Invalid media path'),
+                ], 400);
+            }
+            try {
+                $signedUrl = Storage::disk('s3')->temporaryUrl($key, now()->addMinutes($minutes));
+                return response()->json([
+                    'statusCode' => 200,
+                    'success' => true,
+                    'url' => $signedUrl,
+                    'expires_in_seconds' => $minutes * 60,
+                ], 200);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'statusCode' => 500,
+                    'success' => false,
+                    'message' => __('Failed to generate media URL'),
+                ], 500);
+            }
+        }
+
+        // Local storage: return the existing public URL as-is
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'url' => $media->path,
+            'expires_in_seconds' => null,
+        ], 200);
     }
 }
