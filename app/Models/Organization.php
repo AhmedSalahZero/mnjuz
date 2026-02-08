@@ -47,4 +47,8 @@ class Organization extends Model {
     {
         return $this->belongsTo(Subscription::class, 'id', 'organization_id');
     }
+	public function contacts()
+	{
+		return $this->hasMany(Contact::class, 'organization_id', 'id')->orderBy('latest_chat_created_at', 'desc');
+	}
 }

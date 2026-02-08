@@ -10,6 +10,7 @@ use App\Http\Resources\ContactGroupResource;
 use App\Http\Resources\ContactResource;
 use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
+use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
@@ -1107,7 +1108,6 @@ class ApiController extends Controller
 			$organizationId = $request->user()->current_organization_id;
 		}
         $validator = Validator::make($request->all(), [
-		
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
         ]);
@@ -1130,6 +1130,41 @@ class ApiController extends Controller
        return  (new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage);
 		
     }
+	public function listChatMessagesFromChatIdToEnd(Request $request)
+	{
+		$organizationId = $request->organization;
+		if( $request->is('api/v1/*')){
+			$organizationId = $request->user()->current_organization_id;
+		}
+        $validator = Validator::make($request->all(), [
+            'page' => 'integer|min:1',
+			'chat_log_id' => 'required|integer|min:1',
+			'chat_log_type' => 'required|string|max:255',
+            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+        ]);
+		if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 400);
+        }
+		$chatLogId = $request->input('chat_log_id', null);
+		$chatLogType = $request->input('chat_log_type', null);
+		$page = $request->input('page', 1);
+		$perPage = $request->input('per_page', 10);
+		$organization = Organization::where('id', $organizationId)->first();
+		$contacts = $organization->contacts;
+		$results = [];
+		foreach($contacts as $contact){
+			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage,$chatLogId,$chatLogType);
+			if(isset($result['messages']) && count($result['messages']) > 0){
+				$results[$contact->uuid] = $result;
+			}
+		}
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'message' => __('Chat messages fetched successfully'),
+			'data' => $results
+		], 200);
+	}
 	public function deleteChatForContact(Request $request,$uuid)
 	{
 		$organizationId = $request->user()->current_organization_id;
