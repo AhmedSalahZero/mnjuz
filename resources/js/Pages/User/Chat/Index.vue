@@ -233,59 +233,37 @@ const generateNewMessage = (form) => {
 	updateChatThread(chat)
 }
 
-// توحيد المقارنة: wam_id قد يأتي string أو number من الـ API
-const sameWamId = (a, b) => (a != null && b != null && String(a) === String(b))
-
-// هل الرسالة في الثريد تطابق هذا الـ event؟ (بالـ wam_id أو tempMessageId لأن أول status قد يرسل أحدهما فقط)
-const existingMatchesEvent = (existing, eventWamId, eventTempMessageId) => {
-	const existingWam = existing?.[0]?.value?.wam_id
-	return sameWamId(existingWam, eventWamId) || sameWamId(existingWam, eventTempMessageId)
-}
-
 const updateChatThread = (chat) => {
-	const item = chat?.[0]
-	if (!item?.value) return
-
-	const value = item.value
-	const eventWamId = value.wam_id
-	const tempMessageId = item.tempMessageId
+	const wamId = chat[0].value.wam_id
 	const wamIdExists = chatThread.value.some(
-		(existing) => existingMatchesEvent(existing, eventWamId, tempMessageId),
+		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
 
-	// تحديث رسالة موجودة (تغيير الـ status من الويب هوك): استبدال بنفس wam_id أو tempMessageId
-	if (wamIdExists && (eventWamId != null || tempMessageId != null)) {
-		const index = chatThread.value.findIndex(
-			(existing) => existingMatchesEvent(existing, eventWamId, tempMessageId),
-		)
-		if (index !== -1) {
-			chatThread.value[index] = chat
-		}
-		return
-	}
-
-	// رسالة جديدة أو استبدال الرسالة المؤقتة (بعد الإرسال)
-	if (value.deleted_at != null) return
-
-	if (tempMessageId != null) {
-		const tempIndex = chatThread.value.findIndex(
-			(existing) => sameWamId(existing?.[0]?.value?.wam_id, tempMessageId),
-		)
-		if (tempIndex !== -1) {
-			chatThread.value[tempIndex] = chat
+	if (!wamIdExists && chat[0].value.deleted_at == null) {
+		if (chat[0].tempMessageId) {
+			const tempChatIndex = chatThread.value.findIndex(
+				(item) => item[0].value.wam_id === chat[0].tempMessageId,
+			)
+			if (tempChatIndex !== -1) {
+				chatThread.value[tempChatIndex] = chat
+			}
 		} else {
-			// رسالة جديدة (مثلاً واردة) مع tempMessageId لكن بدون رسالة مؤقتة في الواجهة
 			chatThread.value.push(chat)
 		}
+		setTimeout(scrollToBottom, 100)
 	} else {
-		chatThread.value.push(chat)
+		console.log('chat already exists')
+		const tempChatIndex = chatThread.value.findIndex(
+			(item) => item[0].value.wam_id === chat[0].tempMessageId,
+		)
+		if (tempChatIndex !== -1) {
+			chatThread.value[tempChatIndex] = chat
+		}
 	}
-	setTimeout(scrollToBottom, 100)
 }
 
 const debouncedUpdateSidePanel = debounce(async (chat) => {
-	const contactId = chat?.[0]?.value?.contact_id
-	if (contact.value && contactId != null && contact.value.id === contactId) {
+	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)
 	}
 

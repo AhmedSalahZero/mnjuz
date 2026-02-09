@@ -287,9 +287,9 @@ class WebhookController extends BaseController
                                     'first_name' => $contactData['name'],
                                 ]);
                             }
-							$contact->update([
-								'is_new_contact'=>false 
-							]);
+							// $contact->update([
+							// 	'is_new_contact'=>false 
+							// ]);
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
 							if($chat){
