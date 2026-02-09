@@ -59,7 +59,6 @@ import ChatTable from '@/Components/ChatComponents/ChatTable.vue'
 import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
-import { debounce } from 'lodash'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { getEchoInstance } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
@@ -258,7 +257,10 @@ const updateChatThread = (chat) => {
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
+			console.log('chat already exists', chat)
 			chatThread.value[tempChatIndex] = chat
+		} else {
+			console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
