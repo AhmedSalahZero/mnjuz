@@ -232,6 +232,7 @@ class WebhookController extends BaseController
                         $chatStatusLog->created_at = $now;
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
+						new NewChatEvent([['type'=>'chat','value'=>$chat]], $organization->id);
                     }
                 }
 
