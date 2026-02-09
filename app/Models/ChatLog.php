@@ -41,8 +41,6 @@ class ChatLog extends Model {
         switch ($entityType) {
             case 'chat':
                 $relatedEntity = Chat::with('media', 'user', 'logs')->find($entityId);
-				// logger('chat log entity id'.$entityId);
-				// logger('current created at'.$relatedEntity->created_at);
                 break;
             case 'ticket':
                 $relatedEntity = ChatTicketLog::find($entityId);

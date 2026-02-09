@@ -41,17 +41,12 @@ class ProcessIncomingMessageJob implements ShouldQueue
         try {
             // ✅ تحقق من duplicate
             if ($this->isDuplicate()) {
-                //	logger('is dup');
                 return;
             }
 
             // ✅ الحصول على/إنشاء contact
             $contact = $this->getOrCreateContact();
-            // logger('create new chat');
-            // ✅ إنشاء chat
             $chat = $this->createChat($contact);
-            // logger('chat created with id '.$chat->id);
-            // logger('chat created with uuid '.$chat->uuid);
             if ($chat) {
                 
                 
@@ -112,16 +107,12 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function isDuplicate()
     {
-        //	logger('check deup');
         $wamId = $this->message['id'];
         
         // ✅ تحقق سريع من cache أولاً
         if (Cache::has("msg_processed_{$wamId}")) {
-            //	logger('already dup');
             return true;
         }
-        // logger('no dup');
-        // ✅ تحقق من DB
         $exists = Chat::where('wam_id', $wamId)
             ->where('organization_id', $this->organizationId)
             ->exists();
@@ -139,7 +130,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
         $phone = PhoneService::getE164Format(
             '+' . ltrim($this->message['from'], '+')
         );
-        //	logger('get or create new contact');
         return Contact::firstOrCreate(
             [
                 'organization_id' => $this->organizationId,
@@ -158,7 +148,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function createChat($contact)
     {
-        //	logger('crete chat method');
         return Chat::create([
             'organization_id' => $this->organizationId,
             'wam_id' => $this->message['id'],
@@ -174,7 +163,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
     private function hasMedia()
     {
         
-      //  logger('has media?'.$this->message['type']);
         return in_array($this->message['type'], [
             'image', 'video', 'audio', 'document', 'sticker'
         ]);
@@ -182,7 +170,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function shouldCheckAutoReply()
     {
-        //	logger('should auto replay');
         return in_array($this->message['type'], [
             'text', 'button', 'audio', 'interactive'
         ]);
@@ -190,7 +177,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function createChatLog($contactId, $chatId)
     {
-        //	logger('create log');
         $chatlogId = ChatLog::insertGetId([
             'contact_id' => $contactId,
             'entity_type' => 'chat',
@@ -201,7 +187,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function formatChatForEvent($chat)
     {
-        //	logger('format chat for event');
         $chatLog = ChatLog::where('entity_id', $chat->id)
             ->where('entity_type', 'chat')
             ->first();

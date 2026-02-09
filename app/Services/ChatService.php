@@ -158,10 +158,7 @@ class ChatService
             ->where('status', 'APPROVED')
             ->select(['uuid', 'name', 'language'])
             ->get();
-        // $end = microtime(true);
-        // if($end-$start > 1){
-        // 	logger('From ChatService -  getChatList - '.$end-$start);
-        // }
+   
         if ($uuid !== null) {
             $contact = Contact::with(['lastChat', 'notes', 'contactGroups','organization'])
                 ->where('uuid', $uuid)
@@ -704,7 +701,6 @@ class ChatService
     }
     public function blockContact(Organization $organization, Contact $contact)
     {
-	//	logger('from block api');
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
         $config = json_decode(Organization::where('id', $this->organizationId)->first()->metadata?:'{}', true);
@@ -749,8 +745,6 @@ class ChatService
             $result = json_decode($response->getBody()->getContents(), true);
             
             if (isset($result['errors']['code']) && $result['errors']['code'] ==139100) {
-    
-       //         logger('fail to block contact'.$result['errors']['message']);
                 return [
                     'status'=>false ,
                     'message'=>__('Cannot block contact. They must have messaged you within the last 24 hours.')
@@ -758,7 +752,6 @@ class ChatService
             }
             if (isset($result['errors']['code'])) {
     
-            //    logger('fail to block contact'.$result['errors']['message']);
                 return [
                     'status'=>false ,
                     'message'=>__('Cannot block contact.')

@@ -133,7 +133,6 @@ class ChatController extends BaseController
 
     public function loadMoreMessages(Request $request, $contactId)
     {
-	//	logger('from load more messages');
         $page = $request->query('page', 1);
         $messages = $this->chatService()->getChatMessages($contactId, $page);
         

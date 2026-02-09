@@ -194,7 +194,6 @@ class WebhookController extends BaseController
 	
     protected function handlePostRequest(Request $request, Organization $organization)
     {
-		logger('start handlePostRequest ');
 		
 		
 		// if($organization->id == 1) { // for ladyes only
@@ -203,7 +202,6 @@ class WebhookController extends BaseController
 		/**
 		 * * دا الكود القديم قبل ما نستخدم ال jobs
 		 */
-	//	logger('start webhook');
         $res = $request->entry[0]['changes'][0];
 		 $now = DateTimeHelper::convertToOrganizationTimezone(now(),null);
 		 /**
@@ -216,8 +214,6 @@ class WebhookController extends BaseController
             if ($statuses) {
 		
                 foreach ($statuses as $response) {
-					logger('statuses =');
-					logger(json_encode($response));
                         
                     $chatWamId = $response['id'];
                     $status = $response['status'];
@@ -300,9 +296,7 @@ class WebhookController extends BaseController
 							// ]);
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
-							// if($chat){
-							// 	logger('chat already exists =');
-							// }
+						
                             if (!$chat) {
                                 (new ChatService($organization->id))->handleTicketAssignment($contact->id);
                                 $chat = new Chat;
@@ -326,8 +320,6 @@ class WebhookController extends BaseController
                                         $chatMedia = new ChatMedia;
                                         $chatMedia->name = $type === 'document' ? $response[$type]['filename'] : 'N/A';
                                         $chatMedia->path = $downloadedFile['media_url'];
-										// logger('path =');
-										// logger($chatMedia->path);
                                         $chatMedia->type = $media['mime_type'];
                                         $chatMedia->size = $media['file_size'];
                                         $chatMedia->location = $downloadedFile['location'];
@@ -368,8 +360,6 @@ class WebhookController extends BaseController
                                 $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($organization->id, 'message_limit');
 
                                 if (!$isMessageLimitReached) {
-									// logger('start webhook checkAutoReply');
-									// logger($response['type']);
                                     if ($response['type'] === 'text' || $response['type'] === 'button'|| $response['type'] === 'audio'|| $response['type'] === 'interactive') {
                                         (new AutoReplyService)->checkAutoReply($chat, $isNewContact);
                                     }
