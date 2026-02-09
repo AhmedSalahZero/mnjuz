@@ -67,7 +67,15 @@ class ChatService
     {
         //	$uuid = 'b27a5a63-05d4-4e2f-911c-4da76044328c';
         $role = auth()->user()->teams[0]->role;
-		
+		$contact = null ;
+		if($uuid !== null){
+			$contact = Contact::where('uuid', $uuid)->first();
+			DB::table('chats')->where('contact_id', $contact->id)
+			->where('type', 'inbound')
+			->whereNull('deleted_at')
+			->where('is_read', 0)
+			->update(['is_read' => 1]);
+		}
         $contact = new Contact;
         $config = Organization::find($this->organizationId);
         $ticketState = $request->status == null ? 'all' : $request->status;
@@ -125,6 +133,7 @@ class ChatService
             $sortDirection,
             $role,
             $allowAgentsToViewAllChats,
+			
         );
 
         $contacts = $contactsQuery;
@@ -164,28 +173,22 @@ class ChatService
                 ->first();
             $initialMessages = $this->getChatMessages($contact->id);
             // Mark messages as read
-            DB::table('chats')->where('contact_id', $contact->id)
-                ->where('type', 'inbound')
-                ->whereNull('deleted_at')
-                ->where('is_read', 0)
-                ->update(['is_read' => 1]);
+         
             if (request()->expectsJson()) {
+            
                 return response()->json([
                     'result' => ContactResource::collection($contacts)->response()->getData(),
                 ], 200);
             } else {
                 $settings = json_decode($config->metadata);
-				DB::table('chats')->where('organization_id', $this->organizationId)
-                    ->where('type', 'inbound')
-                    ->where('deleted_at', null)
-                    ->where('is_read', 0)->where('contact_id', $contact->id)->update(['is_read' => 1]);
-					
+// dd('e');
                 //To ensure the unread message counter is updated
                 $unreadMessages = DB::table('chats')->where('organization_id', $this->organizationId)
                     ->where('type', 'inbound')
                     ->where('deleted_at', null)
                     ->where('is_read', 0)
                     ->count();
+					dd($contacts);
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
