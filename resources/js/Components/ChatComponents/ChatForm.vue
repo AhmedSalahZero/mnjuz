@@ -134,6 +134,7 @@ const handleEnterKey = (event) => {
 }
 
 const isInboundChatWithin24Hours = computed(() => {
+
 	if (props.contact.last_inbound_chat) {
 		const lastInboundChatTime = new Date(props.contact.last_inbound_chat.created_at)
 		const currentTime = new Date()

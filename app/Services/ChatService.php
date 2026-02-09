@@ -20,9 +20,11 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
+use App\Jobs\SendMediaJob;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
+use Illuminate\Support\Str;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -349,39 +351,44 @@ class ChatService
 	
         if ($request->type === 'text') {
             return $this->whatsappService->sendMessage($request->uuid, $request->message, auth()->user()->id,);
-        } else {
+        } elseif($request->file('file')) {
 			$fileType = $request->type;
-			$organizationId=$this->organizationId;
+			$organizationId = $this->organizationId;
 			$uuid = $request->uuid;
 			$file = $request->file('file');
-            $storage = Setting::where('key', 'storage_system')->first()->value;
-			$tempMessageId   = Request()->get('tempMessageId');
-			
-			 $fileName = $file->getClientOriginalName();
-            $fileContent = $file;
-            if ($storage === 'local') {
-				$location = 'local';
-                $file = Storage::disk('local')->put('public', $fileContent);
-                $mediaFilePath = $file;
-                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-            } elseif ($storage === 'aws') {
-				$location = 'amazon';
+			$tempMessageId = Request()->get('tempMessageId');
+			$fileName = $file->getClientOriginalName();
 
-          //      $filePath = 'uploads/media/received/'  . $organizationId . '/' . $fileName;
-                $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
-                $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
-                $mediaUrl = $mediaFilePath;
-            }
-			$service = function() use($tempMessageId,$fileType,$uuid,$organizationId,$mediaUrl,$fileName,$mediaFilePath,$location) {
-             	return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId);
-			};
-			return $service();
-			if($tempMessageId){
-			dispatch($service)->onQueue('high');
-		}else{
-			return $service();
-		}
-          
+			if ($tempMessageId) {
+				$tempFilePath = 'temp/send-media/' . uniqid() . '_' . Str::slug(pathinfo($fileName, PATHINFO_FILENAME)) . '.' . pathinfo($fileName, PATHINFO_EXTENSION);
+				Storage::disk('local')->put($tempFilePath, file_get_contents($file->getRealPath()));
+
+				SendMediaJob::dispatch(
+					$organizationId,
+					$uuid,
+					$fileType,
+					$fileName,
+					$tempFilePath,
+					auth()->id(),
+					$tempMessageId
+				)->onQueue('high');
+
+				return null;
+			}
+
+			$storage = Setting::where('key', 'storage_system')->first()->value;
+			if ($storage === 'local') {
+				$location = 'local';
+				$mediaFilePath = Storage::disk('local')->put('public/' . uniqid() . '_' . $fileName, file_get_contents($file->getRealPath()));
+				$mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
+			} elseif ($storage === 'aws') {
+				$location = 'amazon';
+				$uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+				$mediaFilePath = Storage::disk('s3')->url($uploadedFile);
+				$mediaUrl = $mediaFilePath;
+			}
+
+			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId);
         }
        
     }
