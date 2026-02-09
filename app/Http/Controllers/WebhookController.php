@@ -194,6 +194,8 @@ class WebhookController extends BaseController
 	
     protected function handlePostRequest(Request $request, Organization $organization)
     {
+		logger('start handlePostRequest ');
+		
 		
 		// if($organization->id == 1) { // for ladyes only
 		// 	return $this->handleAjaxPostRequest($request, $organization);
@@ -214,7 +216,8 @@ class WebhookController extends BaseController
             if ($statuses) {
 		
                 foreach ($statuses as $response) {
-		
+					logger('statuses =');
+					logger(json_encode($response));
                         
                     $chatWamId = $response['id'];
                     $status = $response['status'];
@@ -279,7 +282,9 @@ class WebhookController extends BaseController
 							]);
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
-
+							if($chat){
+								logger('chat already exists =');
+							}
                             if (!$chat) {
                                 (new ChatService($organization->id))->handleTicketAssignment($contact->id);
                                 $chat = new Chat;
