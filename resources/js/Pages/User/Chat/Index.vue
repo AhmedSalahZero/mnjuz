@@ -234,16 +234,20 @@ const generateNewMessage = (form) => {
 }
 
 const updateChatThread = (chat) => {
-	const wamId = chat[0].value?.wam_id ?? chat[0].tempMessageId
-	const tempMessageId = chat[0].tempMessageId
+	const item = chat?.[0]
+	if (!item?.value) return
+
+	const value = item.value
+	const wamId = value.wam_id ?? item.tempMessageId
+	const tempMessageId = item.tempMessageId
 	const wamIdExists = chatThread.value.some(
-		(existingChat) => existingChat[0].value?.wam_id === wamId,
+		(existing) => existing?.[0]?.value?.wam_id === wamId,
 	)
 
-	// تحديث رسالة موجودة (مثلاً تغيير الـ status من الويب هوك)
-	if (wamIdExists && wamId) {
+	// تحديث رسالة موجودة (تغيير الـ status من الويب هوك): استبدال بنفس wam_id
+	if (wamId && wamIdExists) {
 		const index = chatThread.value.findIndex(
-			(item) => item[0].value?.wam_id === wamId,
+			(existing) => existing?.[0]?.value?.wam_id === wamId,
 		)
 		if (index !== -1) {
 			chatThread.value[index] = chat
@@ -251,23 +255,28 @@ const updateChatThread = (chat) => {
 		return
 	}
 
-	if (!wamIdExists && chat[0].value?.deleted_at == null) {
-		if (tempMessageId) {
-			const tempChatIndex = chatThread.value.findIndex(
-				(item) => item[0].value?.wam_id === tempMessageId,
-			)
-			if (tempChatIndex !== -1) {
-				chatThread.value[tempChatIndex] = chat
-			}
+	// رسالة جديدة أو استبدال الرسالة المؤقتة (بعد الإرسال)
+	if (value.deleted_at != null) return
+
+	if (tempMessageId) {
+		const tempIndex = chatThread.value.findIndex(
+			(existing) => existing?.[0]?.value?.wam_id === tempMessageId,
+		)
+		if (tempIndex !== -1) {
+			chatThread.value[tempIndex] = chat
 		} else {
+			// رسالة جديدة (مثلاً واردة) مع tempMessageId لكن بدون رسالة مؤقتة في الواجهة
 			chatThread.value.push(chat)
 		}
-		setTimeout(scrollToBottom, 100)
+	} else {
+		chatThread.value.push(chat)
 	}
+	setTimeout(scrollToBottom, 100)
 }
 
 const debouncedUpdateSidePanel = debounce(async (chat) => {
-	if (contact.value && contact.value.id == chat[0].value.contact_id) {
+	const contactId = chat?.[0]?.value?.contact_id
+	if (contact.value && contactId != null && contact.value.id === contactId) {
 		updateChatThread(chat)
 	}
 
