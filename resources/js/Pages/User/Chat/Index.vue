@@ -233,6 +233,9 @@ const generateNewMessage = (form) => {
 	updateChatThread(chat)
 }
 
+// توحيد المقارنة: wam_id قد يأتي string أو number من الـ API
+const sameWamId = (a, b) => (a != null && b != null && String(a) === String(b))
+
 const updateChatThread = (chat) => {
 	const item = chat?.[0]
 	if (!item?.value) return
@@ -241,13 +244,13 @@ const updateChatThread = (chat) => {
 	const wamId = value.wam_id ?? item.tempMessageId
 	const tempMessageId = item.tempMessageId
 	const wamIdExists = chatThread.value.some(
-		(existing) => existing?.[0]?.value?.wam_id === wamId,
+		(existing) => sameWamId(existing?.[0]?.value?.wam_id, wamId),
 	)
 
 	// تحديث رسالة موجودة (تغيير الـ status من الويب هوك): استبدال بنفس wam_id
-	if (wamId && wamIdExists) {
+	if (wamId != null && wamIdExists) {
 		const index = chatThread.value.findIndex(
-			(existing) => existing?.[0]?.value?.wam_id === wamId,
+			(existing) => sameWamId(existing?.[0]?.value?.wam_id, wamId),
 		)
 		if (index !== -1) {
 			chatThread.value[index] = chat
@@ -258,9 +261,9 @@ const updateChatThread = (chat) => {
 	// رسالة جديدة أو استبدال الرسالة المؤقتة (بعد الإرسال)
 	if (value.deleted_at != null) return
 
-	if (tempMessageId) {
+	if (tempMessageId != null) {
 		const tempIndex = chatThread.value.findIndex(
-			(existing) => existing?.[0]?.value?.wam_id === tempMessageId,
+			(existing) => sameWamId(existing?.[0]?.value?.wam_id, tempMessageId),
 		)
 		if (tempIndex !== -1) {
 			chatThread.value[tempIndex] = chat
