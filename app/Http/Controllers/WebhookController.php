@@ -341,6 +341,8 @@ class WebhookController extends BaseController
 								logger('relatedEntities =');
 								logger($chatLogArray->relatedEntities);
 					
+								
+								
 					
                                 event(new NewChatEvent($chatArray, $organization->id));
 
