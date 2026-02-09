@@ -238,7 +238,7 @@ class WebhookController extends BaseController
 								'is_new_contact' => false,
 								'type' => 'chat',
 								'value' => $chatLogArray->relatedEntities,
-								// 'tempMessageId' => $response['id'],
+								'tempMessageId' => $response['id'],
 							]);
 							event(new NewChatEvent($chatArray, $organization->id));
 						}

@@ -252,12 +252,12 @@ const updateChatThread = (chat) => {
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
-		console.log('chat already exists')
+		console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
-			console.log('chat already exists', chat)
+			console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
 			console.log('chat not found', chatThread.value, chat)
