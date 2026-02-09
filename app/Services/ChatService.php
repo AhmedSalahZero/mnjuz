@@ -6,6 +6,7 @@ use App\Events\NewChatEvent;
 use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
 use App\Http\Resources\ContactResource;
+use App\Jobs\SendMediaJob;
 use App\Models\Addon;
 use App\Models\Chat;
 use App\Models\ChatLog;
@@ -20,11 +21,9 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
-use App\Jobs\SendMediaJob;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
-use Illuminate\Support\Str;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -34,6 +33,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -357,6 +357,7 @@ class ChatService
 			$uuid = $request->uuid;
 			$file = $request->file('file');
 			$tempMessageId = Request()->get('tempMessageId');
+
 			$fileName = $file->getClientOriginalName();
 
 			if ($tempMessageId) {
