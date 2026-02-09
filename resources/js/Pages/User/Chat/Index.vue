@@ -236,21 +236,27 @@ const generateNewMessage = (form) => {
 // توحيد المقارنة: wam_id قد يأتي string أو number من الـ API
 const sameWamId = (a, b) => (a != null && b != null && String(a) === String(b))
 
+// هل الرسالة في الثريد تطابق هذا الـ event؟ (بالـ wam_id أو tempMessageId لأن أول status قد يرسل أحدهما فقط)
+const existingMatchesEvent = (existing, eventWamId, eventTempMessageId) => {
+	const existingWam = existing?.[0]?.value?.wam_id
+	return sameWamId(existingWam, eventWamId) || sameWamId(existingWam, eventTempMessageId)
+}
+
 const updateChatThread = (chat) => {
 	const item = chat?.[0]
 	if (!item?.value) return
 
 	const value = item.value
-	const wamId = value.wam_id ?? item.tempMessageId
+	const eventWamId = value.wam_id
 	const tempMessageId = item.tempMessageId
 	const wamIdExists = chatThread.value.some(
-		(existing) => sameWamId(existing?.[0]?.value?.wam_id, wamId),
+		(existing) => existingMatchesEvent(existing, eventWamId, tempMessageId),
 	)
 
-	// تحديث رسالة موجودة (تغيير الـ status من الويب هوك): استبدال بنفس wam_id
-	if (wamId != null && wamIdExists) {
+	// تحديث رسالة موجودة (تغيير الـ status من الويب هوك): استبدال بنفس wam_id أو tempMessageId
+	if (wamIdExists && (eventWamId != null || tempMessageId != null)) {
 		const index = chatThread.value.findIndex(
-			(existing) => sameWamId(existing?.[0]?.value?.wam_id, wamId),
+			(existing) => existingMatchesEvent(existing, eventWamId, tempMessageId),
 		)
 		if (index !== -1) {
 			chatThread.value[index] = chat
