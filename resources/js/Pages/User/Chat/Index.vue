@@ -239,7 +239,7 @@ const updateChatThread = (chat) => {
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
 
-	if (!wamIdExists && chat[0].value.deleted_at == null) {
+	if (chat[0].value.deleted_at == null) {
 		if (chat[0].tempMessageId) {
 			const tempChatIndex = chatThread.value.findIndex(
 				(item) => item[0].value.wam_id === chat[0].tempMessageId,
