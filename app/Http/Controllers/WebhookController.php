@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Events\NewChatEvent;
+use App\Helpers\ChatMetadataHelper;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\WebhookHelper;
 use App\Http\Controllers\Controller as BaseController;
@@ -283,7 +284,7 @@ class WebhookController extends BaseController
 								
                                 $chat->created_at =$now;
                                 $chat->type = 'inbound';
-                                $chat->metadata = json_encode($response);
+                                $chat->metadata = json_encode(ChatMetadataHelper::minimalPayloadForStorage($response));
                                 $chat->status = 'delivered';
                                 $chat->save();
 						

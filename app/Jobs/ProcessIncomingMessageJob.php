@@ -164,7 +164,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
             'wam_id' => $this->message['id'],
             'contact_id' => $contact->id,
             'type' => 'inbound',
-            'metadata' => json_encode($this->message),
+            'metadata' => json_encode(\App\Helpers\ChatMetadataHelper::minimalPayloadForStorage($this->message)),
             'created_at' =>  now(),
             'status' => 'delivered',
             'is_read' => 0,
