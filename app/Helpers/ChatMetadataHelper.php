@@ -15,6 +15,8 @@ class ChatMetadataHelper
      */
     public static function minimalPayloadForStorage(array $message): array
     {
+		logger('minimalPayloadForStorage');
+		logger($message);
         $type = $message['type'] ?? null;
         if (!$type) {
             return $message;
