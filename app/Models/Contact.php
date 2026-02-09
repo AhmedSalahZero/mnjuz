@@ -131,7 +131,7 @@ class Contact extends Model
         $ticketState = null,
         $sortDirection = 'desc',
         $role = 'owner',
-        $allowAgentsViewAllChats = true
+        $allowAgentsViewAllChats = true,
  	   ) {
         $query = $this->newQuery()
             ->select([

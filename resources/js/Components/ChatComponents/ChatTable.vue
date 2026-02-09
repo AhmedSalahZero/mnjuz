@@ -141,7 +141,6 @@ const search = debounce(() => {
 
 const runSearch = () => {
 	const url = window.location.pathname
-
 	router.visit(url, {
 		method: 'get',
 		data: params.value,

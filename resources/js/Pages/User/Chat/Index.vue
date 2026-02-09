@@ -238,7 +238,6 @@ const updateChatThread = (chat) => {
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
-	console.log('wamIdExists =', wamIdExists)
 	if (!wamIdExists && chat[0].value.deleted_at == null) {
 		if (chat[0].tempMessageId) {
 			const tempChatIndex = chatThread.value.findIndex(
@@ -273,7 +272,6 @@ const updateSidePanel = async (chat) => {
 
 	try {
 		const response = await axios.get('/chats')
-		console.log('Response:', response)
 		if (response?.data?.result) {
 			rows.value = response.data.result
 		}
@@ -285,8 +283,6 @@ const updateSidePanel = async (chat) => {
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
 	try {
-		console.log('Initializing Echo...')
-
 
 
 		// ✅ إنشاء Echo instance
@@ -295,10 +291,8 @@ onMounted(() => {
 			props.pusherSettings.pusher_app_cluster,
 		)
 
-		console.log('Echo instance created:', echoInstance.value)
 
 		const channelName = `chats.ch${props.organizationId}`
-
 
 		echoChannel.value = echoInstance.value
 			.join(channelName)

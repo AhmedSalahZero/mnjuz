@@ -124,7 +124,7 @@ class ChatService
             $ticketState,
             $sortDirection,
             $role,
-            $allowAgentsToViewAllChats
+            $allowAgentsToViewAllChats,
         );
 
         $contacts = $contactsQuery;
@@ -159,7 +159,6 @@ class ChatService
 				 * @var Contact $contact
 				 */
 				$contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted());
-   
             $ticket = ChatTicket::with('user')
                 ->where('contact_id', $contact->id)
                 ->first();
@@ -177,7 +176,11 @@ class ChatService
                 ], 200);
             } else {
                 $settings = json_decode($config->metadata);
-
+				DB::table('chats')->where('organization_id', $this->organizationId)
+                    ->where('type', 'inbound')
+                    ->where('deleted_at', null)
+                    ->where('is_read', 0)->where('contact_id', $contact->id)->update(['is_read' => 1]);
+					
                 //To ensure the unread message counter is updated
                 $unreadMessages = DB::table('chats')->where('organization_id', $this->organizationId)
                     ->where('type', 'inbound')
