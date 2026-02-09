@@ -242,7 +242,10 @@ const updateChatThread = (chat) => {
 	if (chat[0].value.deleted_at == null) {
 		if (chat[0].tempMessageId) {
 			const tempChatIndex = chatThread.value.findIndex(
-				(item) => item[0].value.wam_id === chat[0].tempMessageId,
+				(item) => {
+					console.log('item =', item[0].value.wam_id, '--', chat[0].tempMessageId)
+					return item[0].value.wam_id === chat[0].tempMessageId
+				},
 			)
 			console.log('tempChatIndex =', tempChatIndex, '--', chat[0].tempMessageId)
 			if (tempChatIndex !== -1) {
