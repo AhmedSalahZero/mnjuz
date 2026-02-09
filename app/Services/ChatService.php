@@ -181,14 +181,12 @@ class ChatService
                 ], 200);
             } else {
                 $settings = json_decode($config->metadata);
-// dd('e');
                 //To ensure the unread message counter is updated
                 $unreadMessages = DB::table('chats')->where('organization_id', $this->organizationId)
                     ->where('type', 'inbound')
                     ->where('deleted_at', null)
                     ->where('is_read', 0)
                     ->count();
-					dd($contacts);
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
