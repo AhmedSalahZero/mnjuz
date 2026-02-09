@@ -274,7 +274,6 @@ const debouncedUpdateSidePanel = debounce(async (chat) => {
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
 	try {
-		console.log('Initializing Echo...')
 
 
 
@@ -284,27 +283,22 @@ onMounted(() => {
 			props.pusherSettings.pusher_app_cluster,
 		)
 
-		console.log('Echo instance created:', echoInstance.value)
 
 		const channelName = `chats.ch${props.organizationId}`
-		console.log('Joining channel:', channelName)
+
 
 		echoChannel.value = echoInstance.value
 			.join(channelName)
 			.here((users) => {
-				console.log('Users currently in channel:', users)
 			})
 			.joining((user) => {
-				console.log('User joined:', user)
 			})
 			.leaving((user) => {
-				console.log('User left:', user)
 			})
 			.error((error) => {
-				console.error('Echo channel error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
-				console.log('New chat event received:', event)
+				console.log('res', event.chat)
 				debouncedUpdateSidePanel(event.chat)
 			})
 

@@ -303,6 +303,8 @@ class WebhookController extends BaseController
                                         $chatMedia = new ChatMedia;
                                         $chatMedia->name = $type === 'document' ? $response[$type]['filename'] : 'N/A';
                                         $chatMedia->path = $downloadedFile['media_url'];
+										logger('path =');
+										logger($chatMedia->path);
                                         $chatMedia->type = $media['mime_type'];
                                         $chatMedia->size = $media['file_size'];
                                         $chatMedia->location = $downloadedFile['location'];
@@ -336,6 +338,8 @@ class WebhookController extends BaseController
                                     'type' => 'chat',
                                     'value' => $chatLogArray->relatedEntities
                                 ]);
+								logger('relatedEntities =');
+								logger($chatLogArray->relatedEntities);
 					
 					
                                 event(new NewChatEvent($chatArray, $organization->id));
