@@ -41,7 +41,7 @@ class NewChatEvent implements ShouldBroadcast
 	
             // Check if Pusher settings are available
             if (config('broadcasting.connections.pusher.key') && config('broadcasting.connections.pusher.secret')) {
-                $channel = 'chats.' . 'ch' . $this->organizationId;
+                $channel = 'chats.ch' . $this->organizationId;
                 return new PresenceChannel($channel);
             } else {
                 // Log an error if Pusher settings are not configured

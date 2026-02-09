@@ -251,6 +251,7 @@ class WebhookController extends BaseController
                         $isNewContact = false;
                         if (!$contact) {
                             $contactData = $res['value']['contacts'][0]['profile'] ?? null;
+							$isNewContact = true;
 
                             $contact = Contact::create([
                                 'first_name' => $contactData['name'] ?? null,
@@ -261,17 +262,21 @@ class WebhookController extends BaseController
                                 'created_by' => 0,
                                 'created_at' =>  $now,
                                 'updated_at' => $now,
+								'is_new_contact'=>$isNewContact
                             ]);
-                            $isNewContact = true;
                         }
 
                         if ($contact) {
+							
                             if ($contact->first_name == null && isset($res['value']['contacts'][0]['profile'])) {
                                 $contactData = $res['value']['contacts'][0]['profile'];
                                 $contact->update([
                                     'first_name' => $contactData['name'],
                                 ]);
                             }
+							$contact->update([
+								'is_new_contact'=>false 
+							]);
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
 
@@ -327,6 +332,7 @@ class WebhookController extends BaseController
                                 
                                 $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
                                 $chatArray = array([
+									'is_new_contact'=>$isNewContact,
                                     'type' => 'chat',
                                     'value' => $chatLogArray->relatedEntities
                                 ]);
