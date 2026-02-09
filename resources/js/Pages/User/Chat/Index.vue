@@ -234,20 +234,28 @@ const generateNewMessage = (form) => {
 }
 
 const updateChatThread = (chat) => {
-	const wamId = chat[0].value.wam_id
+	const wamId = chat[0].value?.wam_id ?? chat[0].tempMessageId
+	const tempMessageId = chat[0].tempMessageId
 	const wamIdExists = chatThread.value.some(
-		(existingChat) => existingChat[0].value.wam_id === wamId,
+		(existingChat) => existingChat[0].value?.wam_id === wamId,
 	)
 
-	if (chat[0].value.deleted_at == null) {
-		if (chat[0].tempMessageId) {
+	// تحديث رسالة موجودة (مثلاً تغيير الـ status من الويب هوك)
+	if (wamIdExists && wamId) {
+		const index = chatThread.value.findIndex(
+			(item) => item[0].value?.wam_id === wamId,
+		)
+		if (index !== -1) {
+			chatThread.value[index] = chat
+		}
+		return
+	}
+
+	if (!wamIdExists && chat[0].value?.deleted_at == null) {
+		if (tempMessageId) {
 			const tempChatIndex = chatThread.value.findIndex(
-				(item) => {
-					console.log('item =', item[0].value.wam_id, '--', chat[0].tempMessageId)
-					return item[0].value.wam_id === chat[0].tempMessageId
-				},
+				(item) => item[0].value?.wam_id === tempMessageId,
 			)
-			console.log('tempChatIndex =', tempChatIndex, '--', chat[0].tempMessageId)
 			if (tempChatIndex !== -1) {
 				chatThread.value[tempChatIndex] = chat
 			}
@@ -278,6 +286,7 @@ const debouncedUpdateSidePanel = debounce(async (chat) => {
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
 	try {
+		console.log('Initializing Echo...')
 
 
 
@@ -287,6 +296,7 @@ onMounted(() => {
 			props.pusherSettings.pusher_app_cluster,
 		)
 
+		console.log('Echo instance created:', echoInstance.value)
 
 		const channelName = `chats.ch${props.organizationId}`
 
@@ -294,15 +304,19 @@ onMounted(() => {
 		echoChannel.value = echoInstance.value
 			.join(channelName)
 			.here((users) => {
+				console.log('Users currently in channel:', users)
 			})
 			.joining((user) => {
+				console.log('User joined:', user)
 			})
 			.leaving((user) => {
+				console.log('User left:', user)
 			})
 			.error((error) => {
+				console.error('Echo channel error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
-				console.log('res', event.chat)
+				console.log('New chat event received:', event)
 				debouncedUpdateSidePanel(event.chat)
 			})
 
