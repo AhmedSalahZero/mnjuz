@@ -244,6 +244,7 @@ const updateChatThread = (chat) => {
 			const tempChatIndex = chatThread.value.findIndex(
 				(item) => item[0].value.wam_id === chat[0].tempMessageId,
 			)
+			console.log('tempChatIndex =', tempChatIndex, '--', chat[0].tempMessageId)
 			if (tempChatIndex !== -1) {
 				chatThread.value[tempChatIndex] = chat
 			}
