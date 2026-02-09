@@ -6,6 +6,9 @@ import vue from '@vitejs/plugin-vue'
 import path from 'path';
 
 export default defineConfig({
+    server: {
+        cors: true,
+    },
     resolve: {
         alias: {
             '@modules': path.resolve(__dirname, 'modules'),

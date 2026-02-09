@@ -170,7 +170,6 @@ class ChatService
                 ->where('is_read', 0)
                 ->update(['is_read' => 1]);
             if (request()->expectsJson()) {
-            
                 return response()->json([
                     'result' => ContactResource::collection($contacts)->response()->getData(),
                 ], 200);
