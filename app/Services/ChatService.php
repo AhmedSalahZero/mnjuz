@@ -357,13 +357,10 @@ class ChatService
 			$uuid = $request->uuid;
 			$file = $request->file('file');
 			$tempMessageId = Request()->get('tempMessageId');
-
 			$fileName = $file->getClientOriginalName();
-
 			if ($tempMessageId) {
 				$tempFilePath = 'temp/send-media/' . uniqid() . '_' . Str::slug(pathinfo($fileName, PATHINFO_FILENAME)) . '.' . pathinfo($fileName, PATHINFO_EXTENSION);
 				Storage::disk('local')->put($tempFilePath, file_get_contents($file->getRealPath()));
-
 				SendMediaJob::dispatch(
 					$organizationId,
 					$uuid,

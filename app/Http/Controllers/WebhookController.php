@@ -300,9 +300,9 @@ class WebhookController extends BaseController
 							// ]);
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
-							if($chat){
-								logger('chat already exists =');
-							}
+							// if($chat){
+							// 	logger('chat already exists =');
+							// }
                             if (!$chat) {
                                 (new ChatService($organization->id))->handleTicketAssignment($contact->id);
                                 $chat = new Chat;
@@ -326,8 +326,8 @@ class WebhookController extends BaseController
                                         $chatMedia = new ChatMedia;
                                         $chatMedia->name = $type === 'document' ? $response[$type]['filename'] : 'N/A';
                                         $chatMedia->path = $downloadedFile['media_url'];
-										logger('path =');
-										logger($chatMedia->path);
+										// logger('path =');
+										// logger($chatMedia->path);
                                         $chatMedia->type = $media['mime_type'];
                                         $chatMedia->size = $media['file_size'];
                                         $chatMedia->location = $downloadedFile['location'];
