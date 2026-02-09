@@ -235,10 +235,11 @@ const generateNewMessage = (form) => {
 
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
+	console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
-
+	console.log('wamIdExists =', wamIdExists)
 	if (!wamIdExists && chat[0].value.deleted_at == null) {
 		if (chat[0].tempMessageId) {
 			const tempChatIndex = chatThread.value.findIndex(
@@ -262,7 +263,7 @@ const updateChatThread = (chat) => {
 	}
 }
 
-const debouncedUpdateSidePanel = debounce(async (chat) => {
+const updateSidePanel = async (chat) => {
 	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)
 	}
@@ -277,7 +278,7 @@ const debouncedUpdateSidePanel = debounce(async (chat) => {
 	} catch (error) {
 		console.error('Error updating side panel:', error)
 	}
-}, 1000)
+}
 
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
@@ -313,7 +314,7 @@ onMounted(() => {
 			})
 			.listen('NewChatEvent', (event) => {
 				console.log('New chat event received:', event)
-				debouncedUpdateSidePanel(event.chat)
+				updateSidePanel(event.chat)
 			})
 
 
