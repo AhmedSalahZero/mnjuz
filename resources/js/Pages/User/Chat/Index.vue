@@ -59,7 +59,6 @@ import ChatTable from '@/Components/ChatComponents/ChatTable.vue'
 import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
-import debounce from 'lodash/debounce'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { getEchoInstance } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
@@ -235,6 +234,7 @@ const generateNewMessage = (form) => {
 
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
+	console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
@@ -251,12 +251,15 @@ const updateChatThread = (chat) => {
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
+		console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
+			console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
+			console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
@@ -273,6 +276,7 @@ const updateSidePanel = async (chat) => {
 			rows.value = response.data.result
 		}
 	} catch (error) {
+		console.error('Error updating side panel:', error)
 	}
 }
 
@@ -302,10 +306,10 @@ onMounted(() => {
 				console.log('User left:', user)
 			})
 			.error((error) => {
-				console.log('Error:', error)
+				console.error('Echo channel error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
-				console.log('list to channel:', event)
+				console.log('New chat event received:', event)
 				updateSidePanel(event.chat)
 			})
 
@@ -313,25 +317,27 @@ onMounted(() => {
 		scrollToBottom()
 
 	} catch (error) {
+		console.error('Failed to initialize Echo:', error)
+		console.error('Error stack:', error.stack)
 	}
 })
 
 
 onUnmounted(() => {
 	try {
-		const channelName = props.organizationId ? `chats.ch${props.organizationId}` : null
-		// إزالة مستمع الحدث أولاً (Laravel Echo: leave() وحده لا يزيل الـ listeners → تسرب ذاكرة و callbacks مكررة)
-		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
-			console.log('Stop listening to NewChatEvent')
-			echoChannel.value.stopListening('NewChatEvent')
-		}
-		if (echoInstance.value && channelName) {
+		if (echoInstance.value && props.organizationId) {
+			const channelName = `chats.ch${props.organizationId}`
+			console.log('Leaving channel:', channelName)
+
 			echoInstance.value.leave(channelName)
+
+			echoChannel.value = null
+			echoInstance.value = null
+
+			console.log('Successfully left channel')
 		}
-		echoChannel.value = null
-		echoInstance.value = null
 	} catch (error) {
-		// تجاهل أخطاء التنظيف
+		console.error('Error during cleanup:', error)
 	}
 })
 </script>
