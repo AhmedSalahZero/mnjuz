@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Models\Contact;
 use Exception;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
@@ -108,11 +109,31 @@ class NewChatEvent implements ShouldBroadcast
         }
 
         $logs = $this->minimalLogs($arr['logs'] ?? []);
+		/**
+		 * Start Only Needed For Mobile Api
+		 */
+        $contactId = $arr['contact_id'] ?? null;
+        $contactPhone = null;
+        $contactFullName = null;
+        if ($contactId) {
+            $contact = Contact::where('id', $contactId)
+                ->first(['phone', 'first_name', 'last_name']);
+            if ($contact) {
+                $contactPhone = $contact->phone;
+                $contactFullName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
+            }
+        }
+		/**
+		 * End Only Needed For Mobile Api
+		 */
 
         return [
             'id' => $arr['id'] ?? null,
+            'chat_id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
-            'contact_id' => $arr['contact_id'] ?? null,
+            'contact_id' => $contactId,
+            'contact_phone' => $contactPhone,
+            'contact_full_name' => $contactFullName ?: null,
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
             'metadata' => $arr['metadata'] ?? '{}',
