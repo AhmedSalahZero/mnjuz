@@ -234,7 +234,6 @@ const generateNewMessage = (form) => {
 
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
-	console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
@@ -251,15 +250,12 @@ const updateChatThread = (chat) => {
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
-		console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
-			console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
-			console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
@@ -276,7 +272,6 @@ const updateSidePanel = async (chat) => {
 			rows.value = response.data.result
 		}
 	} catch (error) {
-		console.error('Error updating side panel:', error)
 	}
 }
 
@@ -297,16 +292,12 @@ onMounted(() => {
 		echoChannel.value = echoInstance.value
 			.join(channelName)
 			.here((users) => {
-				console.log('Users currently in channel:', users)
 			})
 			.joining((user) => {
-				console.log('User joined:', user)
 			})
 			.leaving((user) => {
-				console.log('User left:', user)
 			})
 			.error((error) => {
-				console.error('Echo channel error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
 				console.log('New chat event received:', event)
@@ -317,8 +308,6 @@ onMounted(() => {
 		scrollToBottom()
 
 	} catch (error) {
-		console.error('Failed to initialize Echo:', error)
-		console.error('Error stack:', error.stack)
 	}
 })
 
@@ -327,17 +316,14 @@ onUnmounted(() => {
 	try {
 		if (echoInstance.value && props.organizationId) {
 			const channelName = `chats.ch${props.organizationId}`
-			console.log('Leaving channel:', channelName)
 
 			echoInstance.value.leave(channelName)
 
 			echoChannel.value = null
 			echoInstance.value = null
 
-			console.log('Successfully left channel')
 		}
 	} catch (error) {
-		console.error('Error during cleanup:', error)
 	}
 })
 </script>
