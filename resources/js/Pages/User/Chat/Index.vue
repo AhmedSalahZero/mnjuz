@@ -322,16 +322,18 @@ onMounted(() => {
 
 onUnmounted(() => {
 	try {
-		if (echoInstance.value && props.organizationId) {
-			const channelName = `chats.ch${props.organizationId}`
-
-			echoInstance.value.leave(channelName)
-
-			echoChannel.value = null
-			echoInstance.value = null
-
+		const channelName = props.organizationId ? `chats.ch${props.organizationId}` : null
+		// إزالة مستمع الحدث أولاً (Laravel Echo: leave() وحده لا يزيل الـ listeners → تسرب ذاكرة و callbacks مكررة)
+		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
+			echoChannel.value.stopListening('NewChatEvent')
 		}
+		if (echoInstance.value && channelName) {
+			echoInstance.value.leave(channelName)
+		}
+		echoChannel.value = null
+		echoInstance.value = null
 	} catch (error) {
+		// تجاهل أخطاء التنظيف
 	}
 })
 </script>
