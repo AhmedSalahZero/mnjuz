@@ -235,7 +235,6 @@ const generateNewMessage = (form) => {
 
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
-	// console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
@@ -252,15 +251,12 @@ const updateChatThread = (chat) => {
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
-		// console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
-			// console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
-			// console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
@@ -296,7 +292,6 @@ function ensureLeaveChannel() {
 		props.pusherSettings.pusher_app_cluster,
 	)
 	echo.leave(name)
-	console.log(ECHO_LOG, '1) ترك القناة قبل الاشتراك (إن وُجد):', name)
 }
 
 onMounted(() => {
@@ -314,15 +309,14 @@ onMounted(() => {
 
 		echoChannel.value = echoInstance.value
 			.join(name)
-			.here(() => {})
-			.joining(() => {})
-			.leaving(() => {})
-			.error(() => {})
+			.here(() => { })
+			.joining(() => { })
+			.leaving(() => { })
+			.error(() => { })
 			.listen('NewChatEvent', (event) => {
 				updateSidePanel(event.chat)
 			})
 
-		console.log(ECHO_LOG, '2) اشترك في القناة:', name)
 		scrollToBottom()
 	} catch (error) {
 		// تجاهل
@@ -335,15 +329,12 @@ onUnmounted(() => {
 		// ١) إيقاف الاستماع ثم المغادرة (لا نعتمد على leave وحده — يمنع تسرب المستمعين)
 		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
 			echoChannel.value.stopListening('NewChatEvent')
-			console.log(ECHO_LOG, '3) أوقف الاستماع لـ NewChatEvent')
 		}
 		if (echoInstance.value && name) {
 			echoInstance.value.leave(name)
-			console.log(ECHO_LOG, '4) غادر القناة:', name)
 		}
 		echoChannel.value = null
 		echoInstance.value = null
-		console.log(ECHO_LOG, '5) تنظيف الـ refs (unmount انتهى)')
 	} catch (error) {
 		// تجاهل أخطاء التنظيف
 	}
