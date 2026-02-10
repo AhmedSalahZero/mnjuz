@@ -265,10 +265,7 @@ const updateChatThread = (chat) => {
 	}
 }
 
-const updateSidePanel = async (chat) => {
-	if (contact.value && contact.value.id == chat[0].value.contact_id) {
-		updateChatThread(chat)
-	}
+const refetchChatsList = debounce(async () => {
 	try {
 		const response = await axios.get('/chats')
 		if (response?.data?.result) {
@@ -277,6 +274,13 @@ const updateSidePanel = async (chat) => {
 	} catch (error) {
 		// تجاهل أخطاء تحديث القائمة
 	}
+}, 1500)
+
+const updateSidePanel = async (chat) => {
+	if (contact.value && contact.value.id == chat[0].value.contact_id) {
+		updateChatThread(chat)
+	}
+	refetchChatsList()
 }
 
 // ✅ الكود الصحيح مع استخدام ref
