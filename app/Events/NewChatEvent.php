@@ -17,17 +17,19 @@ class NewChatEvent implements ShouldBroadcast
 
     public $chat;
     public $organizationId;
-	public $queue = 'high';
+    public $queue = 'high';
+
     /**
      * Create a new event instance.
+     * يُخزّن فقط النسخة المُصغّرة من الـ chat (في الـ queue والـ broadcast والـ listeners).
      *
      * @param mixed $chat
      * @param int $organizationId
      */
     public function __construct($chat, $organizationId)
     {
-        $this->chat = $chat;
         $this->organizationId = $organizationId;
+        $this->chat = $this->buildMinimalChatPayload($chat);
     }
 
     /**
@@ -56,27 +58,33 @@ class NewChatEvent implements ShouldBroadcast
     }
 
     /**
-     * Get the data to broadcast (only fields used by the frontend).
-     * Shape: [{ type: 'chat', value: {...}, tempMessageId?: string }]
+     * Get the data to broadcast. الـ chat مُصغّر مسبقاً في الـ constructor.
      *
      * @return array
      */
     public function broadcastWith()
     {
-        $chat = $this->chat;
+        return ['chat' => $this->chat];
+    }
 
+    /**
+     * إرجاع الـ chat بالشكل المُصغّر فقط (للتخزين في الـ event والـ queue والـ broadcast).
+     */
+    protected function buildMinimalChatPayload($chat): array
+    {
         if (is_array($chat) && isset($chat[0])) {
             $item = $chat[0];
             $item = is_array($item) ? $item : (array) $item;
             if (($item['type'] ?? null) === 'chat' && array_key_exists('value', $item)) {
                 $item['value'] = $this->minimalChatValue($item['value']);
             }
-            $chat = [$item];
-        } elseif (is_array($chat) && array_key_exists('value', $chat)) {
-            $chat['value'] = $this->minimalChatValue($chat['value']);
+            return [$item];
         }
-
-        return ['chat' => $chat];
+        if (is_array($chat) && array_key_exists('value', $chat)) {
+            $chat['value'] = $this->minimalChatValue($chat['value']);
+            return $chat;
+        }
+        return is_array($chat) ? $chat : [];
     }
 
     /** الحقول فقط التي تستخدمها الواجهة من metadata كل log (ChatBubble: status, errors, id) */
@@ -101,12 +109,15 @@ class NewChatEvent implements ShouldBroadcast
         $logs = $this->minimalLogs($arr['logs'] ?? []);
 
         return [
+            'id' => $arr['id'] ?? null,
+            'uuid' => $arr['uuid'] ?? null,
             'contact_id' => $arr['contact_id'] ?? null,
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
             'metadata' => $arr['metadata'] ?? '{}',
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
+            'status' => $arr['status'] ?? null,
             'media' => $media,
             'logs' => $logs,
             'user' => $user,
