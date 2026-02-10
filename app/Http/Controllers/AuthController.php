@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\DateTimeHelper;
 use App\Helpers\Email;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\LoginRequest;
@@ -174,6 +175,7 @@ class AuthController extends BaseController
                         'id' => $team->organization_id,
                         'name' => $team->organization->name ?? '',
                         'role' => $team->role,
+						'timezone' => DateTimeHelper::getCurrentTimeZone($team->organization_id),
                     ];
                 })->toArray();
                 
