@@ -316,6 +316,7 @@ onMounted(() => {
 			.leaving(() => { })
 			.error(() => { })
 			.listen('NewChatEvent', (event) => {
+				console.log('new event', event)
 				updateSidePanel(event.chat)
 			})
 
