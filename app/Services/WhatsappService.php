@@ -61,8 +61,8 @@ class WhatsappService
     {
 
 		$tempMessageId = Request()->get('tempMessageId') ; // when sending message only
-		
-		$service = function() use ($contactUuId, $messageContent, $userId, $type, $buttons, $header, $footer, $buttonLabel,$tempMessageId){
+		$messageUUID = Request()->get('messageUUID');
+		$service = function() use ($messageUUID,$contactUuId, $messageContent, $userId, $type, $buttons, $header, $footer, $buttonLabel,$tempMessageId){
 			 $contact = Contact::where('uuid', $contactUuId)->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
@@ -125,6 +125,7 @@ class WhatsappService
 
             $chat = Chat::create([
                 'organization_id' => $contact->organization_id,
+				'uuid'=>123,
                 'wam_id' => $responseObject->data->messages[0]->id,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
