@@ -72,10 +72,16 @@ class NewChatEvent implements ShouldBroadcast
                 $item['value'] = $this->minimalChatValue($item['value']);
             }
             $chat = [$item];
+        } elseif (is_array($chat) && array_key_exists('value', $chat)) {
+            $chat['value'] = $this->minimalChatValue($chat['value']);
         }
+
         return ['chat' => $chat];
     }
-	
+
+    /** الحقول فقط التي تستخدمها الواجهة من metadata كل log (ChatBubble: status, errors, id) */
+    private const LOG_METADATA_KEYS = ['status', 'errors', 'id'];
+
     protected function minimalChatValue($value): array
     {
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
@@ -92,20 +98,7 @@ class NewChatEvent implements ShouldBroadcast
             $media = array_intersect_key($arr['media'], array_flip(['path', 'name', 'type', 'size']));
         }
 
-        $logs = [];
-        if (!empty($arr['logs']) && is_array($arr['logs'])) {
-            $usedMetadataKeys = ['status', 'errors', 'id'];
-            foreach ($arr['logs'] as $log) {
-                $logArr = is_array($log) ? $log : (array) $log;
-                $rawMetadata = $logArr['metadata'] ?? '{}';
-                $decoded = is_string($rawMetadata) ? json_decode($rawMetadata, true) : $rawMetadata;
-                if (!is_array($decoded)) {
-                    $decoded = [];
-                }
-                $minimal = array_intersect_key($decoded, array_flip($usedMetadataKeys));
-                $logs[] = ['metadata' => json_encode($minimal)];
-            }
-        }
+        $logs = $this->minimalLogs($arr['logs'] ?? []);
 
         return [
             'contact_id' => $arr['contact_id'] ?? null,
@@ -118,5 +111,30 @@ class NewChatEvent implements ShouldBroadcast
             'logs' => $logs,
             'user' => $user,
         ];
+    }
+
+    /**
+     * إرجاع مصفوفة logs بأقل حجم: كل عنصر فقط { "metadata": "{\"status\":\"...\",\"id\":\"...\"}" }
+     * لا نرسل: id, chat_id, created_at من الـ log ولا أي حقول داخل metadata غير status, errors, id.
+     */
+    protected function minimalLogs($rawLogs): array
+    {
+        if (empty($rawLogs) || !is_array($rawLogs)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rawLogs as $log) {
+            $logArr = is_array($log) ? $log : (array) $log;
+            $rawMetadata = $logArr['metadata'] ?? '{}';
+            $decoded = is_string($rawMetadata) ? json_decode($rawMetadata, true) : $rawMetadata;
+            if (!is_array($decoded)) {
+                $decoded = [];
+            }
+            $minimal = array_intersect_key($decoded, array_flip(self::LOG_METADATA_KEYS));
+            $out[] = ['metadata' => json_encode($minimal)];
+        }
+
+        return $out;
     }
 }
