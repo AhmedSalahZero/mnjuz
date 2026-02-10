@@ -304,12 +304,15 @@ class WebhookController extends BaseController
                                 $chat->wam_id = $response['id'];
                                 $chat->contact_id = $contact->id;
 								
-                                $chat->created_at =$now;
+                                $chat->created_at = $now;
                                 $chat->type = 'inbound';
                                 $chat->metadata = json_encode(ChatMetadataHelper::minimalPayloadForStorage($response));
                                 $chat->status = 'delivered';
                                 $chat->save();
-						
+
+                                // ضمان تحديث نافذة الـ 24 ساعة عند أي رد inbound (مثل موافقة المستخدم على القالب)
+                                $contact->update(['last_inbound_chat_created_at' => $now]);
+
                                 if ($chat) {
                                     if ($response['type'] === 'image' || $response['type'] === 'video' || $response['type'] === 'audio' || $response['type'] === 'document' || $response['type'] === 'sticker') {
                                         $type = $response['type'];

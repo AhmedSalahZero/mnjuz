@@ -235,7 +235,7 @@ const generateNewMessage = (form) => {
 
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
-	console.log('wamId =', wamId)
+	// console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
@@ -252,15 +252,15 @@ const updateChatThread = (chat) => {
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
-		console.log('chat already exists', chat[0].tempMessageId)
+		// console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
-			console.log('chat already exists', chat[0].tempMessageId,)
+			// console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
-			console.log('chat not found', chatThread.value, chat)
+			// console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
@@ -296,16 +296,16 @@ onMounted(() => {
 		echoChannel.value = echoInstance.value
 			.join(channelName)
 			.here((users) => {
-				console.log('Users currently in channel:', users)
+				// console.log('Users currently in channel:', users)
 			})
 			.joining((user) => {
-				console.log('User joined:', user)
+				// console.log('User joined:', user)
 			})
 			.leaving((user) => {
-				console.log('User left:', user)
+				// console.log('User left:', user)
 			})
 			.error((error) => {
-				console.log('Error:', error)
+				// console.log('Error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
 				console.log('list to channel:', event)
@@ -325,7 +325,7 @@ onUnmounted(() => {
 		const channelName = props.organizationId ? `chats.ch${props.organizationId}` : null
 		// إزالة مستمع الحدث أولاً (Laravel Echo: leave() وحده لا يزيل الـ listeners → تسرب ذاكرة و callbacks مكررة)
 		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
-			console.log('Stop listening to NewChatEvent')
+			//		console.log('Stop listening to NewChatEvent')
 			echoChannel.value.stopListening('NewChatEvent')
 		}
 		if (echoInstance.value && channelName) {
