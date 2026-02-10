@@ -283,59 +283,67 @@ const updateSidePanel = async (chat) => {
 	refetchChatsList()
 }
 
-// ✅ الكود الصحيح مع استخدام ref
+const ECHO_LOG = '[Chat Echo]' // للتصفية في الـ Console: Filter → Chat Echo
+
+const channelName = () => (props.organizationId ? `chats.ch${props.organizationId}` : null)
+
+// مغادرة القناة قبل أي join جديد (ضمان عدم اشتراك مزدوج عند عدة mount متتالية)
+function ensureLeaveChannel() {
+	const name = channelName()
+	if (!name) return
+	const echo = getEchoInstance(
+		props.pusherSettings.pusher_app_key,
+		props.pusherSettings.pusher_app_cluster,
+	)
+	echo.leave(name)
+	console.log(ECHO_LOG, '1) ترك القناة قبل الاشتراك (إن وُجد):', name)
+}
+
 onMounted(() => {
 	try {
+		const name = channelName()
+		if (!name) return
 
+		// ١) مغادرة القناة أولاً إن وُجد اشتراك سابق (مثلاً unmount لم يُنفّذ أو تنقل سريع)
+		ensureLeaveChannel()
 
-		// ✅ إنشاء Echo instance
 		echoInstance.value = getEchoInstance(
 			props.pusherSettings.pusher_app_key,
 			props.pusherSettings.pusher_app_cluster,
 		)
 
-
-		const channelName = `chats.ch${props.organizationId}`
-
 		echoChannel.value = echoInstance.value
-			.join(channelName)
-			.here((users) => {
-				// console.log('Users currently in channel:', users)
-			})
-			.joining((user) => {
-				// console.log('User joined:', user)
-			})
-			.leaving((user) => {
-				// console.log('User left:', user)
-			})
-			.error((error) => {
-				// console.log('Error:', error)
-			})
+			.join(name)
+			.here(() => {})
+			.joining(() => {})
+			.leaving(() => {})
+			.error(() => {})
 			.listen('NewChatEvent', (event) => {
-				console.log('New chat event received:', event)
 				updateSidePanel(event.chat)
 			})
+
+		console.log(ECHO_LOG, '2) اشترك في القناة:', name)
 		scrollToBottom()
 	} catch (error) {
+		// تجاهل
 	}
 })
 
-
 onUnmounted(() => {
 	try {
-		const channelName = props.organizationId ? `chats.ch${props.organizationId}` : null
-		// إزالة مستمع الحدث أولاً (Laravel Echo: leave() وحده لا يزيل الـ listeners → تسرب ذاكرة و callbacks مكررة)
+		const name = channelName()
+		// ١) إيقاف الاستماع ثم المغادرة (لا نعتمد على leave وحده — يمنع تسرب المستمعين)
 		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
-			//		console.log('Stop listening to NewChatEvent')
-			console.log('Stop listening to NewChatEvent')
 			echoChannel.value.stopListening('NewChatEvent')
+			console.log(ECHO_LOG, '3) أوقف الاستماع لـ NewChatEvent')
 		}
-		if (echoInstance.value && channelName) {
-			console.log('Leaving channel:', channelName)
-			echoInstance.value.leave(channelName)
+		if (echoInstance.value && name) {
+			echoInstance.value.leave(name)
+			console.log(ECHO_LOG, '4) غادر القناة:', name)
 		}
 		echoChannel.value = null
 		echoInstance.value = null
+		console.log(ECHO_LOG, '5) تنظيف الـ refs (unmount انتهى)')
 	} catch (error) {
 		// تجاهل أخطاء التنظيف
 	}
