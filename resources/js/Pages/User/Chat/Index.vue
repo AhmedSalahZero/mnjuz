@@ -265,7 +265,7 @@ const updateChatThread = (chat) => {
 	}
 }
 
-const updateSidePanel = debounce(async (chat) => {
+const updateSidePanel = async (chat) => {
 	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)
 	}
@@ -277,7 +277,7 @@ const updateSidePanel = debounce(async (chat) => {
 	} catch (error) {
 		// تجاهل أخطاء تحديث القائمة
 	}
-}, 1500)
+}
 
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
