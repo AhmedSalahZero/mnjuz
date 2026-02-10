@@ -245,6 +245,9 @@ const updateChatThread = (chat) => {
 			)
 			if (tempChatIndex !== -1) {
 				chatThread.value[tempChatIndex] = chat
+			} else {
+				// رسالة جديدة (مثل inbound) ذات tempMessageId دون رسالة مؤقتة للاستبدال → نضيفها
+				chatThread.value.push(chat)
 			}
 		} else {
 			chatThread.value.push(chat)
