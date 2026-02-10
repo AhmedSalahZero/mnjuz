@@ -247,7 +247,7 @@ const updateChatThread = (chat) => {
 				chatThread.value[tempChatIndex] = chat
 			} else {
 				// testing
-				chatThread.value.push(chat)
+				//	chatThread.value.push(chat)
 			}
 		} else {
 			chatThread.value.push(chat)
