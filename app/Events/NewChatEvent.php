@@ -92,12 +92,13 @@ class NewChatEvent implements ShouldBroadcast
             $media = array_intersect_key($arr['media'], array_flip(['path', 'name', 'type', 'size']));
         }
 
-        $logs = [];
+        // $logs = [];
         if (!empty($arr['logs']) && is_array($arr['logs'])) {
-            foreach ($arr['logs'] as $log) {
-                $logArr = is_array($log) ? $log : (array) $log;
-                $logs[] = array_intersect_key($logArr, array_flip(['metadata']));
-            }
+            unset($arr['logs']);
+			// foreach ($arr['logs'] as $log) {
+            //     $logArr = is_array($log) ? $log : (array) $log;
+            //     $logs[] = array_intersect_key($logArr, array_flip(['metadata']));
+            // }
         }
 
         return [
@@ -108,7 +109,7 @@ class NewChatEvent implements ShouldBroadcast
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
             'media' => $media,
-            'logs' => $logs,
+        //    'logs' => $logs,
             'user' => $user,
         ];
     }
