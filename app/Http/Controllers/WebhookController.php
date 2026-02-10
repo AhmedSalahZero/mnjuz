@@ -195,7 +195,6 @@ class WebhookController extends BaseController
     protected function handlePostRequest(Request $request, Organization $organization)
     {
 		
-		logger('event');
 		// if($organization->id == 1) { // for ladyes only
 		// 	return $this->handleAjaxPostRequest($request, $organization);
 		// }

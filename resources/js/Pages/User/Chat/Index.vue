@@ -315,10 +315,7 @@ onMounted(() => {
 				console.log('New chat event received:', event)
 				updateSidePanel(event.chat)
 			})
-
-
 		scrollToBottom()
-
 	} catch (error) {
 	}
 })
