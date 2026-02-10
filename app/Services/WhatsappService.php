@@ -125,7 +125,6 @@ class WhatsappService
 
             $chat = Chat::create([
                 'organization_id' => $contact->organization_id,
-				'uuid'=>123,
                 'wam_id' => $responseObject->data->messages[0]->id,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
@@ -134,6 +133,10 @@ class WhatsappService
                 'status' => 'delivered',
 				'created_at'=>now()
             ]);
+			if($messageUUID){
+				$chat->uuid = $messageUUID;
+				$chat->save();
+			}
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;
