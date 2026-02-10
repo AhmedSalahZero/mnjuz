@@ -265,26 +265,24 @@ const updateChatThread = (chat) => {
 }
 
 // تجنب إعادة جلب قائمة المحادثات عند كل رسالة — ترويج الطلبات فقط عند تغيير محادثة أخرى
-const refetchChatsList = debounce(async () => {
+
+
+
+const updateSidePanel = async (chat) => {
+	if (contact.value && contact.value.id == chat[0].value.contact_id) {
+		updateChatThread(chat)
+	}
+
+
 	try {
 		const response = await axios.get('/chats')
+		console.log('Response:', response)
 		if (response?.data?.result) {
 			rows.value = response.data.result
 		}
 	} catch (error) {
-		// تجاهل الأخطاء
+		console.error('Error updating side panel:', error)
 	}
-}, 1500)
-
-const updateSidePanel = async (chat) => {
-	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
-	if (isCurrentContact) {
-		updateChatThread(chat)
-		// لا حاجة لإعادة جلب القائمة — المحادثة الحالية محدّثة بالفعل
-		return
-	}
-	// رسالة في محادثة أخرى: تحديث القائمة مرة واحدة (مروجة) لظهور آخر رسالة وترتيب المحادثات
-	refetchChatsList()
 }
 
 // ✅ الكود الصحيح مع استخدام ref
