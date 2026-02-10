@@ -237,7 +237,7 @@ class WebhookController extends BaseController
 								// 'is_new_contact' => false,
 								'type' => 'chat',
 								'value' => $chatLogArray->relatedEntities,
-								// 'tempMessageId' => $response['id'],
+								'tempMessageId' => $response['id'],
 								// 'status'=>$response['status'],
 								// 'contact_name'=>$contact->first_name . ' ' . $contact->last_name,
 								// 'contact_phone'=>$contact->formatted_phone_number,
