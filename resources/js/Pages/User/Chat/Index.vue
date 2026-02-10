@@ -59,6 +59,7 @@ import ChatTable from '@/Components/ChatComponents/ChatTable.vue'
 import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
+import debounce from 'lodash/debounce'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { getEchoInstance } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
@@ -260,19 +261,27 @@ const updateChatThread = (chat) => {
 	}
 }
 
-const updateSidePanel = async (chat) => {
-	if (contact.value && contact.value.id == chat[0].value.contact_id) {
-		updateChatThread(chat)
-	}
-
-
+// تجنب إعادة جلب قائمة المحادثات عند كل رسالة — ترويج الطلبات فقط عند تغيير محادثة أخرى
+const refetchChatsList = debounce(async () => {
 	try {
 		const response = await axios.get('/chats')
 		if (response?.data?.result) {
 			rows.value = response.data.result
 		}
 	} catch (error) {
+		// تجاهل الأخطاء
 	}
+}, 1500)
+
+const updateSidePanel = async (chat) => {
+	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
+	if (isCurrentContact) {
+		updateChatThread(chat)
+		// لا حاجة لإعادة جلب القائمة — المحادثة الحالية محدّثة بالفعل
+		return
+	}
+	// رسالة في محادثة أخرى: تحديث القائمة مرة واحدة (مروجة) لظهور آخر رسالة وترتيب المحادثات
+	refetchChatsList()
 }
 
 // ✅ الكود الصحيح مع استخدام ref
@@ -300,7 +309,6 @@ onMounted(() => {
 			.error((error) => {
 			})
 			.listen('NewChatEvent', (event) => {
-				console.log('New chat event received:', event)
 				updateSidePanel(event.chat)
 			})
 

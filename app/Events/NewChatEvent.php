@@ -109,6 +109,7 @@ class NewChatEvent implements ShouldBroadcast
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
             'media' => $media,
+           'logs' => [],
         //    'logs' => $logs,
             'user' => $user,
         ];
