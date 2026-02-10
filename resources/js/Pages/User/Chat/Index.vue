@@ -235,7 +235,6 @@ const generateNewMessage = (form) => {
 
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
-	console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
@@ -252,15 +251,12 @@ const updateChatThread = (chat) => {
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
-		console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
-			console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
-			console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
@@ -277,10 +273,8 @@ const updateSidePanel = async (chat) => {
 			rows.value = response.data.result
 		}
 	} catch (error) {
-		console.error('Error updating side panel:', error)
 	}
 }
-
 
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
