@@ -301,15 +301,19 @@ onMounted(() => {
 		echoChannel.value = echoInstance.value
 			.join(channelName)
 			.here((users) => {
+				console.log('Users currently in channel:', users)
 			})
 			.joining((user) => {
+				console.log('User joined:', user)
 			})
 			.leaving((user) => {
+				console.log('User left:', user)
 			})
 			.error((error) => {
+				console.log('Error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
-				console.log('New chat event received:', event)
+				console.log('list to channel:', event)
 				updateSidePanel(event.chat)
 			})
 
