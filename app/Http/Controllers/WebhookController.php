@@ -231,18 +231,18 @@ class WebhookController extends BaseController
 						$chatLogArray = $chat->chatLog;
 						if ($chatLogArray) {
 							$contact = $chat->contact;
-							$shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
-							$contact->encryptPhoneNumber($shouldBeEncrypted);
+							// $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
+							// $contact->encryptPhoneNumber($shouldBeEncrypted);
 							$chatArray = array([
-								'is_new_contact' => false,
+								// 'is_new_contact' => false,
 								'type' => 'chat',
 								'value' => $chatLogArray->relatedEntities,
-								'tempMessageId' => $response['id'],
-								'status'=>$response['status'],
-								'contact_name'=>$contact->first_name . ' ' . $contact->last_name,
-								'contact_phone'=>$contact->formatted_phone_number,
-								'chat_id'=>$chat->id,
-								'chat_log_id'=>$chatLogArray->id,
+								// 'tempMessageId' => $response['id'],
+								// 'status'=>$response['status'],
+								// 'contact_name'=>$contact->first_name . ' ' . $contact->last_name,
+								// 'contact_phone'=>$contact->formatted_phone_number,
+								// 'chat_id'=>$chat->id,
+								// 'chat_log_id'=>$chatLogArray->id,
 							]);
 							event(new NewChatEvent($chatArray, $organization->id));
 						}

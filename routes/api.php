@@ -89,8 +89,8 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
     Route::delete('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContactGroup']);
 	
 	
-	Route::post('/send-text', [App\Http\Controllers\ApiController::class, 'sendMessage']);
-    Route::post('/send-media', [App\Http\Controllers\ApiController::class, 'sendFileMessage']);
+	Route::post('/send-msg', [App\Http\Controllers\ApiController::class, 'sendMsg']);
+    // Route::post('/send-media', [App\Http\Controllers\ApiController::class, 'sendFileMessage']);
     Route::get('/list-templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
     Route::post('/send-template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessageByUUID']);
 	Route::get('/list-chat-contacts', [App\Http\Controllers\ApiController::class, 'listChatContacts']);

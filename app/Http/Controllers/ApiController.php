@@ -626,7 +626,12 @@ class ApiController extends Controller
             'data' => $message
         ], 200);
     }
-
+	public function sendMsg(Request $request){
+		if($request->get('type') == 'text'){
+			return $this->sendMessage($request);
+		}
+		return $this->sendMediaMessage($request);
+	}
     public function sendTemplateMessage(Request $request)
     {
         $rules = [

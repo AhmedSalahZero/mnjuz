@@ -73,11 +73,9 @@ class NewChatEvent implements ShouldBroadcast
             }
             $chat = [$item];
         }
-
         return ['chat' => $chat];
     }
-
-   
+	
     protected function minimalChatValue($value): array
     {
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model

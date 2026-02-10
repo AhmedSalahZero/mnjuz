@@ -151,8 +151,8 @@ class WhatsappService
 				'tempMessageId'=>$tempMessageId,
 				// 'tempMessageId'=>$responseObject->data->messages[0]->id
             ]);
-           logger('from sendMessage =');
-           logger(json_encode($chatArray));
+        //    logger('from sendMessage =');
+        //    logger(json_encode($chatArray));
             event(new NewChatEvent($chatArray, $contact->organization_id));
         
         }
