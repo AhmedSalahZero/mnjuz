@@ -79,7 +79,8 @@ const sendMessage = async () => {
 
 			processingForm.value = false
 		} catch (error) {
-			// Handle the error
+			processingForm.value = false
+			form.value.file = null
 			// console.error('Error:', error);
 		}
 	} else {
@@ -147,11 +148,20 @@ const isInboundChatWithin24Hours = computed(() => {
 })
 
 const handleFileUpload = (event) => {
-	const file = event.target.files[0]
+	const file = event.target.files?.[0]
+	if (!file) {
+		event.target.value = ''
+		return
+	}
+	// Reset input so the same (or another) file can be selected again — otherwise 'change' may not fire next time
+	event.target.value = ''
 	const reader = new FileReader()
-	reader.onload = (e) => {
+	reader.onload = () => {
 		form.value.file = file
 		sendMessage()
+	}
+	reader.onerror = () => {
+		event.target.value = ''
 	}
 	reader.readAsDataURL(file)
 }

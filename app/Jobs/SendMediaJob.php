@@ -36,16 +36,17 @@ class SendMediaJob implements ShouldQueue
         $fileContent = file_get_contents($tempFullPath);
 
         $storage = Setting::where('key', 'storage_system')->first()->value;
+        $safeFileName = sanitize_filename_for_storage($this->fileName);
 
         if ($storage === 'local') {
             $location = 'local';
-            $relativePath = 'public/' . uniqid() . '_' . $this->fileName;
+            $relativePath = 'public/' . uniqid() . '_' . $safeFileName;
             Storage::disk('local')->put($relativePath, $fileContent);
             $mediaFilePath = $relativePath;
             $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
         } elseif ($storage === 'aws') {
             $location = 'amazon';
-            $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . uniqid() . '_' . $this->fileName;
+            $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . uniqid() . '_' . $safeFileName;
             Storage::disk('s3')->put($s3Path, $fileContent);
             $mediaFilePath = Storage::disk('s3')->url($s3Path);
             $mediaUrl = $mediaFilePath;

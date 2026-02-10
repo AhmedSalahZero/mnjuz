@@ -279,7 +279,7 @@ class WebhookController extends BaseController
                                 'created_by' => 0,
                                 'created_at' =>  $now,
                                 'updated_at' => $now,
-								'is_new_contact'=>$isNewContact
+								// 'is_new_contact'=>$isNewContact
                             ]);
                         }
 

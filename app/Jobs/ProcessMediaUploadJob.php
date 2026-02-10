@@ -81,7 +81,7 @@ class ProcessMediaUploadJob implements ShouldQueue
                 // Move file from local to S3
                 if (Storage::disk('local')->exists($this->filePath)) {
                     $fileContent = Storage::disk('local')->get($this->filePath);
-                    $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . $this->fileName;
+                    $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . sanitize_filename_for_storage($this->fileName);
 
                     $uploaded = Storage::disk('s3')->put($s3Path, $fileContent, [
                         'ContentType' => mime_content_type(storage_path('app/' . $this->filePath))

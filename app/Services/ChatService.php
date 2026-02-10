@@ -374,7 +374,7 @@ class ChatService
 			$storage = Setting::where('key', 'storage_system')->first()->value;
 			if ($storage === 'local') {
 				$location = 'local';
-				$mediaFilePath = Storage::disk('local')->put('public/' . uniqid() . '_' . $fileName, file_get_contents($file->getRealPath()));
+				$mediaFilePath = Storage::disk('local')->put('public/' . uniqid() . '_' . sanitize_filename_for_storage($fileName), file_get_contents($file->getRealPath()));
 				$mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
 			} elseif ($storage === 'aws') {
 				$location = 'amazon';
