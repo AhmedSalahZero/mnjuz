@@ -268,22 +268,19 @@ const updateChatThread = (chat) => {
 
 
 
-const updateSidePanel = async (chat) => {
+const updateSidePanel = debounce(async (chat) => {
 	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)
 	}
-
-
 	try {
 		const response = await axios.get('/chats')
-		console.log('Response:', response)
 		if (response?.data?.result) {
 			rows.value = response.data.result
 		}
 	} catch (error) {
-		console.error('Error updating side panel:', error)
+		// تجاهل أخطاء تحديث القائمة
 	}
-}
+}, 1500)
 
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
