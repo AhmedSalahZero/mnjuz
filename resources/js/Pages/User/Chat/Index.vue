@@ -233,8 +233,10 @@ const generateNewMessage = (form) => {
 	updateChatThread(chat)
 }
 
+
 const updateChatThread = (chat) => {
 	const wamId = chat[0].value.wam_id
+	console.log('wamId =', wamId)
 	const wamIdExists = chatThread.value.some(
 		(existingChat) => existingChat[0].value.wam_id === wamId,
 	)
@@ -245,24 +247,55 @@ const updateChatThread = (chat) => {
 			)
 			if (tempChatIndex !== -1) {
 				chatThread.value[tempChatIndex] = chat
-			} else {
-				// رسالة جديدة (مثل inbound) ذات tempMessageId دون رسالة مؤقتة للاستبدال → نضيفها
-				//	chatThread.value.push(chat)
 			}
 		} else {
 			chatThread.value.push(chat)
 		}
 		setTimeout(scrollToBottom, 100)
 	} else {
+		console.log('chat already exists', chat[0].tempMessageId)
 		const tempChatIndex = chatThread.value.findIndex(
 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
 		)
 		if (tempChatIndex !== -1) {
+			console.log('chat already exists', chat[0].tempMessageId,)
 			chatThread.value[tempChatIndex] = chat
 		} else {
+			console.log('chat not found', chatThread.value, chat)
 		}
 	}
 }
+
+// const updateChatThread = (chat) => {
+// 	const wamId = chat[0].value.wam_id
+// 	const wamIdExists = chatThread.value.some(
+// 		(existingChat) => existingChat[0].value.wam_id === wamId,
+// 	)
+// 	if (!wamIdExists && chat[0].value.deleted_at == null) {
+// 		if (chat[0].tempMessageId) {
+// 			const tempChatIndex = chatThread.value.findIndex(
+// 				(item) => item[0].value.wam_id === chat[0].tempMessageId,
+// 			)
+// 			if (tempChatIndex !== -1) {
+// 				chatThread.value[tempChatIndex] = chat
+// 			} else {
+// 				// رسالة جديدة (مثل inbound) ذات tempMessageId دون رسالة مؤقتة للاستبدال → نضيفها
+// 				//	chatThread.value.push(chat)
+// 			}
+// 		} else {
+// 			chatThread.value.push(chat)
+// 		}
+// 		setTimeout(scrollToBottom, 100)
+// 	} else {
+// 		const tempChatIndex = chatThread.value.findIndex(
+// 			(item) => item[0].value.wam_id === chat[0].tempMessageId,
+// 		)
+// 		if (tempChatIndex !== -1) {
+// 			chatThread.value[tempChatIndex] = chat
+// 		} else {
+// 		}
+// 	}
+// }
 
 // تجنب إعادة جلب قائمة المحادثات عند كل رسالة — ترويج الطلبات فقط عند تغيير محادثة أخرى
 
