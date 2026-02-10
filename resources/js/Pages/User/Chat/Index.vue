@@ -279,7 +279,6 @@ const updateSidePanel = async (chat) => {
 	refetchChatsList()
 }
 
-const ECHO_LOG = '[Chat Echo]' // للتصفية في الـ Console: Filter → Chat Echo
 
 const channelName = () => (props.organizationId ? `chats.ch${props.organizationId}` : null)
 
