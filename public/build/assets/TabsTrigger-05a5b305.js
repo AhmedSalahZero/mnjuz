@@ -1,1 +1,0 @@
-import{_ as o}from"./TabsTrigger.vue_vue_type_script_setup_true_lang-eb8d176a.js";import"./index-e5332f63.js";import"./app-281200b8.js";export{o as default};

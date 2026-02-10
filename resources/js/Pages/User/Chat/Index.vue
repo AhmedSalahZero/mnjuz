@@ -280,6 +280,7 @@ const updateSidePanel = async (chat) => {
 	}
 }
 
+
 // ✅ الكود الصحيح مع استخدام ref
 onMounted(() => {
 	try {
@@ -306,10 +307,10 @@ onMounted(() => {
 				console.log('User left:', user)
 			})
 			.error((error) => {
-				console.error('Echo channel error:', error)
+				console.log('Error:', error)
 			})
 			.listen('NewChatEvent', (event) => {
-				console.log('New chat event received:', event)
+				console.log('list to channel:', event)
 				updateSidePanel(event.chat)
 			})
 
@@ -317,27 +318,26 @@ onMounted(() => {
 		scrollToBottom()
 
 	} catch (error) {
-		console.error('Failed to initialize Echo:', error)
-		console.error('Error stack:', error.stack)
 	}
 })
 
 
 onUnmounted(() => {
 	try {
-		if (echoInstance.value && props.organizationId) {
-			const channelName = `chats.ch${props.organizationId}`
-			console.log('Leaving channel:', channelName)
-
-			echoInstance.value.leave(channelName)
-
-			echoChannel.value = null
-			echoInstance.value = null
-
-			console.log('Successfully left channel')
+		const channelName = props.organizationId ? `chats.ch${props.organizationId}` : null
+		// إزالة مستمع الحدث أولاً (Laravel Echo: leave() وحده لا يزيل الـ listeners → تسرب ذاكرة و callbacks مكررة)
+		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
+			console.log('Stop listening to NewChatEvent')
+			echoChannel.value.stopListening('NewChatEvent')
 		}
+		if (echoInstance.value && channelName) {
+			echoInstance.value.leave(channelName)
+		}
+		echoChannel.value = null
+		echoInstance.value = null
 	} catch (error) {
-		console.error('Error during cleanup:', error)
+		// تجاهل أخطاء التنظيف
 	}
 })
+
 </script>
