@@ -12,9 +12,9 @@ use App\Rules\ContactLimit;
 use App\Services\PhoneService;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder implements ToModel, WithHeadingRow, WithCustomValueBinder, WithChunkReading
 {
@@ -49,7 +49,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             // If first_name fails, stop further validation and return the error
             if ($validator->fails()) {
                 $this->failedImports[] = [
-                    'row' => $row['phone'],
+                    'row' => $row['phone']??'-',
                     'error' => __('First name required!')
                 ];
                 $this->failedImportsDueToFormat++;
@@ -241,5 +241,3 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         return $usageLimit;
     }
 }
-
-

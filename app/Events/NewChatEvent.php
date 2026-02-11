@@ -235,7 +235,7 @@ class NewChatEvent implements ShouldBroadcast
             return [];
         }
         $rawLogs = array_slice($rawLogs, -self::MAX_LOGS_ENTRIES, self::MAX_LOGS_ENTRIES);
-
+		
         $out = [];
         foreach ($rawLogs as $log) {
             $logArr = is_array($log) ? $log : (array) $log;
