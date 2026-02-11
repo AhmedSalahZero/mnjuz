@@ -129,7 +129,7 @@ class NewChatEvent implements ShouldBroadcast
 
         return [
             'id' => $arr['id'] ?? null,
-            'chat_id' => $arr['id'] ?? null,
+            // 'chat_id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
             'contact_id' => $contactId,
             'contact_phone' => $contactPhone,
