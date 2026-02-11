@@ -60,14 +60,65 @@ class NewChatEvent implements ShouldBroadcast
         }
     }
 
+    /** حد حجم رسالة Pusher (بايت) */
+    private const PUSHER_MAX_PAYLOAD_BYTES = 10240;
+
     /**
      * Get the data to broadcast. الـ chat مُصغّر مسبقاً في الـ constructor.
+     * إذا تجاوز الحجم حد Pusher نُقلّص حقولاً اختيارية حتى نبقى تحت الحد.
      *
      * @return array
      */
     public function broadcastWith()
     {
-        return ['chat' => $this->chat];
+        $payload = ['chat' => $this->chat];
+        $encoded = json_encode($payload);
+        if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
+            return $payload;
+        }
+        return $this->shrinkPayloadToLimit($payload);
+    }
+
+    /**
+     * تقليص الـ payload بإزالة/تقصير حقول اختيارية حتى يصبح تحت حد Pusher.
+     */
+    private function shrinkPayloadToLimit(array $payload): array
+    {
+        $chat = &$payload['chat'];
+        if (!is_array($chat)) {
+            return $payload;
+        }
+        $value = null;
+        if (isset($chat[0]['value'])) {
+            $value = &$chat[0]['value'];
+        } elseif (isset($chat['value'])) {
+            $value = &$chat['value'];
+        }
+        if (!is_array($value)) {
+            return $payload;
+        }
+        $steps = [
+            function (array &$v) {
+                $v['contact_full_name'] = null;
+            },
+            function (array &$v) {
+                $v['contact_phone'] = null;
+            },
+            function (array &$v) {
+                $v['metadata'] = '{}';
+            },
+            function (array &$v) {
+                $v['logs'] = array_slice($v['logs'] ?? [], -2, 2);
+            },
+        ];
+        foreach ($steps as $step) {
+            $step($value);
+            $encoded = json_encode($payload);
+            if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
+                return $payload;
+            }
+        }
+        return $payload;
     }
 
     /**
@@ -93,6 +144,11 @@ class NewChatEvent implements ShouldBroadcast
     /** الحقول فقط التي تستخدمها الواجهة من metadata كل log (ChatBubble: status, errors, id) */
     private const LOG_METADATA_KEYS = ['status', 'errors', 'id'];
 
+    /** حد Pusher 10240 بايت — ن truncate الحقول الكبيرة لضمان عدم تجاوزه */
+    private const MAX_METADATA_BYTES = 1800;
+    private const MAX_MEDIA_PATH_BYTES = 200;
+    private const MAX_LOGS_ENTRIES = 6;
+
     protected function minimalChatValue($value): array
     {
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
@@ -106,13 +162,16 @@ class NewChatEvent implements ShouldBroadcast
 
         $media = null;
         if (!empty($arr['media']) && is_array($arr['media'])) {
-            $media = array_intersect_key($arr['media'], array_flip(['path', 'name', 'type', 'size']));
+            $media = [
+                'type' => $arr['media']['type'] ?? null,
+                'size' => $arr['media']['size'] ?? null,
+                'path' => $this->truncateToBytes($arr['media']['path'] ?? '', self::MAX_MEDIA_PATH_BYTES),
+                'name' => $this->truncateToBytes($arr['media']['name'] ?? '', 80),
+            ];
         }
 
         $logs = $this->minimalLogs($arr['logs'] ?? []);
-		/**
-		 * Start Only Needed For Mobile Api
-		 */
+
         $contactId = $arr['contact_id'] ?? null;
         $contactPhone = null;
         $contactFullName = null;
@@ -121,24 +180,28 @@ class NewChatEvent implements ShouldBroadcast
                 ->first(['phone', 'first_name', 'last_name']);
             if ($contact) {
                 $contactPhone = $contact->phone;
-                $contactFullName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
+                $contactFullName = $this->truncateToBytes(
+                    trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
+                    120
+                ) ?: null;
             }
         }
-		/**
-		 * End Only Needed For Mobile Api
-		 */
+
+        $metadataRaw = $arr['metadata'] ?? '{}';
+        $metadata = is_string($metadataRaw)
+            ? $this->truncateToBytes($metadataRaw, self::MAX_METADATA_BYTES)
+            : $this->truncateToBytes(json_encode($metadataRaw), self::MAX_METADATA_BYTES);
 
         return [
             'id' => $arr['id'] ?? null,
-            // 'chat_id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
             'contact_id' => $contactId,
-			'is_new_contact' => $this->isNewContact,
+            'is_new_contact' => $this->isNewContact,
             'contact_phone' => $contactPhone,
             'contact_full_name' => $contactFullName ?: null,
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
-            'metadata' => $arr['metadata'] ?? '{}',
+            'metadata' => $metadata,
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
             'status' => $arr['status'] ?? null,
@@ -146,6 +209,15 @@ class NewChatEvent implements ShouldBroadcast
             'logs' => $logs,
             'user' => $user,
         ];
+    }
+
+    /** truncate string to max bytes (UTF-8 safe) لضمان عدم تجاوز حد Pusher */
+    private function truncateToBytes(string $s, int $maxBytes): string
+    {
+        if (strlen($s) <= $maxBytes) {
+            return $s;
+        }
+        return mb_strcut($s, 0, $maxBytes, 'UTF-8') ?: '';
     }
 
     /**
@@ -157,6 +229,7 @@ class NewChatEvent implements ShouldBroadcast
         if (empty($rawLogs) || !is_array($rawLogs)) {
             return [];
         }
+        $rawLogs = array_slice($rawLogs, -self::MAX_LOGS_ENTRIES, self::MAX_LOGS_ENTRIES);
 
         $out = [];
         foreach ($rawLogs as $log) {
