@@ -244,7 +244,12 @@ class WebhookController extends BaseController
 								// 'chat_log_id'=>$chatLogArray->id,
 							]);
 				// remove it temporary
-				logger('new event stauts');
+			
+				
+				if($organization->id == 1){
+					logger('new event stauts');
+				}
+				
 										event(new NewChatEvent($chatArray, $organization->id, false));
 						}
                     }
@@ -359,7 +364,9 @@ class WebhookController extends BaseController
 							//		'tempMessageId'=>$response['id'],
 									
                                 ]);
-								logger('new event received');
+								if($organization->id == 1){
+									logger('new event received');
+								}
                                 event(new NewChatEvent($chatArray, $organization->id, $isNewContact));
 
                                 $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($organization->id, 'message_limit');
