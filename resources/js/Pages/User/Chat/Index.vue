@@ -278,12 +278,14 @@ const refetchChatsList = debounce(async () => {
 const updateSidePanel = async (chat, statusChanged) => {
 	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
 	if (isCurrentContact) {
+		console.log('updateChatThread', isCurrentContact)
 		updateChatThread(chat)
 		// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
 		return
 	}
 	console.log('statusChanged', statusChanged)
 	if (!statusChanged) {
+		console.log('refetchChatsList')
 		refetchChatsList()
 	}
 
