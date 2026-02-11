@@ -20,6 +20,7 @@ class NewChatEvent implements ShouldBroadcast
     public $organizationId;
     public $queue = 'high';
 	public $isNewContact = false;
+	public $statusChanged = false;
     /**
      * Create a new event instance.
      * يُخزّن فقط النسخة المُصغّرة من الـ chat (في الـ queue والـ broadcast والـ listeners).
@@ -27,10 +28,11 @@ class NewChatEvent implements ShouldBroadcast
      * @param mixed $chat
      * @param int $organizationId
      */
-    public function __construct($chat, $organizationId, $isNewContact = false)
+    public function __construct($chat, $organizationId, $isNewContact = false,$statusChanged = false)
     {
         $this->organizationId = $organizationId;
 		$this->isNewContact = $isNewContact;
+		$this->statusChanged = $statusChanged;
         //$this->chat = $chat;
          $this->chat = $this->buildMinimalChatPayload($chat);
     }
@@ -72,6 +74,9 @@ class NewChatEvent implements ShouldBroadcast
     public function broadcastWith()
     {
         $payload = ['chat' => $this->chat];
+		if($this->statusChanged){
+			$payload['statusChanged'] = $this->statusChanged;
+		}
         $encoded = json_encode($payload);
         if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
             return $payload;

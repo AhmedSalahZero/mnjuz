@@ -275,11 +275,18 @@ const refetchChatsList = debounce(async () => {
 	}
 }, 1500)
 
-const updateSidePanel = async (chat) => {
-	if (contact.value && contact.value.id == chat[0].value.contact_id) {
+const updateSidePanel = async (chat, statusChanged) => {
+	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
+	if (isCurrentContact) {
 		updateChatThread(chat)
+		// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
+		return
 	}
-	refetchChatsList()
+	console.log('statusChanged', statusChanged)
+	if (!statusChanged) {
+		refetchChatsList()
+	}
+
 }
 
 
@@ -317,7 +324,7 @@ onMounted(() => {
 			.error(() => { })
 			.listen('NewChatEvent', (event) => {
 				console.log('new event', event)
-				updateSidePanel(event.chat)
+				updateSidePanel(event.chat, event.statusChanged)
 			})
 
 		scrollToBottom()
