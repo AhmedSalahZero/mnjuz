@@ -625,6 +625,7 @@ class ApiController extends Controller
         return response()->json([
             'statusCode' => 200,
 			'success' => true,
+            'message' => $message === null ? __('Message queued for sending.') : null,
             'data' => $message
         ], 200);
     }

@@ -59,123 +59,144 @@ class WhatsappService
 
 	 public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
     {
+		$tempMessageId = Request()->get('tempMessageId');
+		$messageUUID = Request()->get('msg_uuid');
 
-		$tempMessageId = Request()->get('tempMessageId') ; // when sending message only
-		$messageUUID = Request()->get('msg_uuid'); // when sending message from mobile api only
-		$service = function() use ($messageUUID,$contactUuId, $messageContent, $userId, $type, $buttons, $header, $footer, $buttonLabel,$tempMessageId){
-			 $contact = Contact::where('uuid', $contactUuId)->first();
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
-        
-        $headers = $this->setHeaders();
+		if ($tempMessageId !== null && $tempMessageId !== '') {
+			\App\Jobs\SendTextMessageJob::dispatch(
+				$this->organizationId,
+				$contactUuId,
+				$messageContent,
+				$userId,
+				$type,
+				$buttons,
+				$header,
+				$footer,
+				$buttonLabel,
+				$messageUUID,
+				$tempMessageId
+			)->onQueue('high');
+			return null;
+		}
 
-        $requestData['messaging_product'] = 'whatsapp';
-        $requestData['recipient_type'] = 'individual';
-        $requestData['to'] = $contact->phone;
-        if($type == "text"){
-            $requestData['type'] = 'text';
-            $requestData['text']['preview_url'] = true; //If you have added url either http or https a preview will be displayed
-            $requestData['text']['body'] = clean($messageContent);
-        } else if($type == "interactive buttons" || $type == "interactive call to action url" || $type == "interactive list"){
-            $requestData['type'] = 'interactive';
+		return $this->executeSendMessage(
+			$contactUuId,
+			$messageContent,
+			$userId,
+			$type,
+			$buttons,
+			$header,
+			$footer,
+			$buttonLabel,
+			$messageUUID,
+			$tempMessageId
+		);
+    }
 
-            if($type == "interactive buttons"){
-                $requestData['interactive']['type'] = 'button';
-            } else if($type == "interactive call to action url"){
-                $requestData['interactive']['type'] = 'cta_url';
-            } else if($type == "interactive list"){
-                $requestData['interactive']['type'] = 'list';
-            }
+	/**
+	 * تنفيذ إرسال الرسالة النصية فعلياً (يُستدعى من الـ job أو مباشرة).
+	 * تفادي تسلسل الـ closure والـ WhatsappService في الـ queue لتقليل استهلاك CPU.
+	 */
+	public function executeSendMessage(
+		$contactUuId,
+		$messageContent,
+		$userId = null,
+		$type = 'text',
+		$buttons = [],
+		$header = [],
+		$footer = null,
+		$buttonLabel = null,
+		$messageUUID = null,
+		$tempMessageId = null
+	) {
+		$contact = Contact::where('uuid', $contactUuId)->first();
+		if (!$contact) {
+			return (object) ['success' => false];
+		}
 
-            if($type == "interactive buttons"){
-                foreach($buttons as $button){
-                    $requestData['interactive']['action']['buttons'][] = [
-                        'type' => 'reply',
-                        'reply' => [
-                            'id' => $button['id'],
-                            'title' => $button['title'],
-                        ],
-                    ];
-                }
-            } else if($type == "interactive call to action url"){
-                $requestData['interactive']['action']['name'] = "cta_url";
-                $requestData['interactive']['action']['parameters'] = $buttons;
-            } else if($type == "interactive list"){
-                $requestData['interactive']['action']['sections'] = $buttons;
-                $requestData['interactive']['action']['button'] = $buttonLabel;
-            }
+		$url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
+		$headers = $this->setHeaders();
 
-            if (!empty($header)) {
-                $requestData['interactive']['header'] = $header;
-            }
+		$requestData['messaging_product'] = 'whatsapp';
+		$requestData['recipient_type'] = 'individual';
+		$requestData['to'] = $contact->phone;
+		if ($type == 'text') {
+			$requestData['type'] = 'text';
+			$requestData['text']['preview_url'] = true;
+			$requestData['text']['body'] = clean($messageContent);
+		} else if ($type == 'interactive buttons' || $type == 'interactive call to action url' || $type == 'interactive list') {
+			$requestData['type'] = 'interactive';
+			if ($type == 'interactive buttons') {
+				$requestData['interactive']['type'] = 'button';
+			} else if ($type == 'interactive call to action url') {
+				$requestData['interactive']['type'] = 'cta_url';
+			} else if ($type == 'interactive list') {
+				$requestData['interactive']['type'] = 'list';
+			}
+			if ($type == 'interactive buttons') {
+				foreach ($buttons as $button) {
+					$requestData['interactive']['action']['buttons'][] = [
+						'type' => 'reply',
+						'reply' => [
+							'id' => $button['id'],
+							'title' => $button['title'],
+						],
+					];
+				}
+			} else if ($type == 'interactive call to action url') {
+				$requestData['interactive']['action']['name'] = 'cta_url';
+				$requestData['interactive']['action']['parameters'] = $buttons;
+			} else if ($type == 'interactive list') {
+				$requestData['interactive']['action']['sections'] = $buttons;
+				$requestData['interactive']['action']['button'] = $buttonLabel;
+			}
+			if (!empty($header)) {
+				$requestData['interactive']['header'] = $header;
+			}
+			$requestData['interactive']['body']['text'] = clean($messageContent);
+			if ($footer != null) {
+				$requestData['interactive']['footer'] = ['text' => clean($footer)];
+			}
+		}
 
-            $requestData['interactive']['body']['text'] = clean($messageContent);
+		$responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
-            if ($footer != null) {
-                $requestData['interactive']['footer'] = [
-                    'text' => clean($footer),
-                ];
-            }
-        }
-
-        $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
-        if($responseObject->success === true){
-            $response['text']['body'] = clean($messageContent);
-            $response['type'] = 'text';
-
-            $chat = Chat::create([
-                'organization_id' => $contact->organization_id,
-                'wam_id' => $responseObject->data->messages[0]->id,
-                'contact_id' => $contact->id,
-                'type' => 'outbound',
-                'user_id' => $userId,
-                'metadata' => json_encode($response),
-                'status' => 'delivered',
-				'created_at'=>now()
-            ]);
-			if($messageUUID){
+		if ($responseObject->success === true) {
+			$response = ['text' => ['body' => clean($messageContent)], 'type' => 'text'];
+			$chat = Chat::create([
+				'organization_id' => $contact->organization_id,
+				'wam_id' => $responseObject->data->messages[0]->id,
+				'contact_id' => $contact->id,
+				'type' => 'outbound',
+				'user_id' => $userId,
+				'metadata' => json_encode($response),
+				'status' => 'delivered',
+				'created_at' => now(),
+			]);
+			if ($messageUUID) {
 				$chat->uuid = $messageUUID;
 				$chat->save();
 			}
 
-            $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
-            $responseObject->data->chat = $chat;
+			$chat = Chat::with('contact', 'media')->where('id', $chat->id)->first();
+			$responseObject->data->chat = $chat;
 
-            $chatlogId = ChatLog::insertGetId([
-                'contact_id' => $contact->id,
-                'entity_type' => 'chat',
-                'entity_id' => $chat->id,
-                'created_at' =>now()
-            ]);
+			$chatlogId = ChatLog::insertGetId([
+				'contact_id' => $contact->id,
+				'entity_type' => 'chat',
+				'entity_id' => $chat->id,
+				'created_at' => now(),
+			]);
 
-            $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
-            $chatArray = array([
-                'type' => 'chat',
-                'value' => $chatLogArray->relatedEntities,
-				'tempMessageId'=>$tempMessageId,
-				// 'tempMessageId'=>$responseObject->data->messages[0]->id
-            ]);
-        //    logger('from sendMessage =');
-        //    logger(json_encode($chatArray));
-            event(new NewChatEvent($chatArray, $contact->organization_id));
-        
-        }
-
-        // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $contact->organization_id);
-
-        return $responseObject;
+			$chatLogArray = ChatLog::where('id', $chatlogId)->whereNull('deleted_at')->first();
+			$chatArray = [['type' => 'chat', 'value' => $chatLogArray->relatedEntities, 'tempMessageId' => $tempMessageId]];
+			event(new NewChatEvent($chatArray, $contact->organization_id));
 		}
-		;
-		if($tempMessageId){
-			dispatch($service)->onQueue('high');
-		}else{
-			return $service();
-		}
-       
-    }
+
+		WebhookHelper::triggerWebhookEvent('message.sent', ['data' => $responseObject], $contact->organization_id);
+
+		return $responseObject;
+	}
   
 	//  public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
     // {
