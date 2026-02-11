@@ -630,10 +630,8 @@ class ApiController extends Controller
     }
 	public function sendMsg(Request $request){
 		if($request->get('type') == 'text'){
-			logger('from sendMsg text');
 			return $this->sendMessage($request);
 		}
-		logger('from sendMsg file');
 		return $this->sendFileMessage($request);
 	}
     public function sendTemplateMessage(Request $request)
@@ -905,7 +903,6 @@ class ApiController extends Controller
 	public function sendFileMessage(Request $request)
     {
 		$organizationId = $request->user()->current_organization_id;
-		logger('from 1');
 		$request->merge(['tempMessageId' => -1]); // to use queue to send message in background
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
@@ -927,7 +924,6 @@ class ApiController extends Controller
                 'errors' => $validator->errors()
             ], 400);
         }
-		logger('from 2');
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
@@ -956,7 +952,6 @@ class ApiController extends Controller
         $phone = $phone->formatE164();
 
         $contact = Contact::where('organization_id', $organizationId )->where('phone', $phone)->first();
-		logger('from 3');
         if (!$contact) {
             $contact = new Contact();
             $contact->organization_id = $organizationId;
@@ -968,15 +963,13 @@ class ApiController extends Controller
             $contact->save();
         }
 		$file = $request->file('file');
-		logger('from 4');
 		$request->merge([
 			'uuid' => $contact->uuid,
 			'file' => $file,
 			'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
 			'caption' => $request->caption,
-			'messageUUID' => $request->messageUUID,
+			'messageUUID' => $request->get('msg_uuid'),
 		]);
-		logger('from 5'.$request->messageUUID);
 		
 		// +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
 
@@ -984,7 +977,6 @@ class ApiController extends Controller
 	
 		$chatService = new ChatService($organizationId);
 		 $chatService->sendMessage($request);
-		logger('from 6');
         return response()->json([
             'statusCode' => 200,
 			'success' => true,
