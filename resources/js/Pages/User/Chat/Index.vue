@@ -284,6 +284,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 		return
 	}
 	console.log('statusChanged', statusChanged)
+	console.log('statusChanged', statusChanged)
 	if (!statusChanged) {
 		console.log('refetchChatsList')
 		refetchChatsList()
