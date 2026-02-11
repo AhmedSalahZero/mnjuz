@@ -630,8 +630,10 @@ class ApiController extends Controller
     }
 	public function sendMsg(Request $request){
 		if($request->get('type') == 'text'){
+			logger('from sendMsg text');
 			return $this->sendMessage($request);
 		}
+		logger('from sendMsg file');
 		return $this->sendFileMessage($request);
 	}
     public function sendTemplateMessage(Request $request)
