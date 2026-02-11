@@ -616,7 +616,7 @@ class WhatsappService
      * @param string $imageUrl The URL of the stored image.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null)
+    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null, $messageUUID = null)
     {
 
         $contact = Contact::where('uuid', $contactUuId)->first();
@@ -674,10 +674,13 @@ class WhatsappService
                 'size' => $mediaSize,
 				 'created_at' => now()
             ]);
-
-            Chat::where('id', $chat->id)->update([
-                'media_id' => $media->id
-            ]);
+			$updateData = [
+				'media_id' => $media->id,
+			];
+			if($messageUUID){ // when sending message from mobile api only
+				$updateData['uuid'] = $messageUUID;
+			}
+            Chat::where('id', $chat->id)->update($updateData);
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;

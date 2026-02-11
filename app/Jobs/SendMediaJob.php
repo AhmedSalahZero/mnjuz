@@ -23,7 +23,8 @@ class SendMediaJob implements ShouldQueue
         public string $fileName,
         public string $tempFilePath,
         public ?int $userId,
-        public ?string $tempMessageId
+        public ?string $tempMessageId,
+		public ?string $messageUUID
     ) {}
 
     public function handle(): void
@@ -88,7 +89,8 @@ class SendMediaJob implements ShouldQueue
             null,
             null,
             $this->userId,
-            $this->tempMessageId
+            $this->tempMessageId,
+			$this->messageUUID
         );
     }
 }

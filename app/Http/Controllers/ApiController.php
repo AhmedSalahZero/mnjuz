@@ -12,6 +12,8 @@ use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
 use App\Models\Chat;
 use App\Models\ChatMedia;
+use App\Models\ChatNote;
+use App\Models\ChatTicket;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
@@ -630,7 +632,7 @@ class ApiController extends Controller
 		if($request->get('type') == 'text'){
 			return $this->sendMessage($request);
 		}
-		return $this->sendMediaMessage($request);
+		return $this->sendFileMessage($request);
 	}
     public function sendTemplateMessage(Request $request)
     {
@@ -969,6 +971,7 @@ class ApiController extends Controller
 			'file' => $file,
 			'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
 			'caption' => $request->caption,
+			'messageUUID' => $request->messageUUID,
 		]);
 		
 		// +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
@@ -1136,30 +1139,48 @@ class ApiController extends Controller
        return  (new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage);
 		
     }
-	public function listChatMessagesFromChatIdToEnd(Request $request)
+	public function listChatMessagesFromUuidToEnd(Request $request)
 	{
 		$organizationId = $request->organization;
 		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
 		}
         $validator = Validator::make($request->all(), [
-            'page' => 'integer|min:1',
-			'chat_log_id' => 'required|integer|min:1',
-			'chat_log_type' => 'required|string|max:255',
-            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+            // 'page' => 'integer|min:1',
+			'uuid' => 'required|string|max:255',
+			'type' => 'required|string|in:chat,ticket,notes',
+            // 'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
         ]);
 		if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
-		$chatLogId = $request->input('chat_log_id', null);
-		$chatLogType = $request->input('chat_log_type', null);
-		$page = $request->input('page', 1);
-		$perPage = $request->input('per_page', 10);
+		$uuid = $request->input('uuid', null);
+		$type = $request->input('type', null);
+		$model = null ;
+		if($type == 'chat'){
+			$model = Chat::class;
+		}elseif($type == 'ticket'){
+			$model = ChatTicket::class;
+		}elseif($type == 'notes'){
+			$model = ChatNote::class;
+		}
+		$model = $model::where('uuid', $uuid)->first();
+		
+		if(!$model){
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'message' => __('Record with uuid :uuid and type :type not found', ['uuid' => $uuid, 'type' => $type]	),
+			], 404);
+		}
+		$chatLogId = $model->chatLog->id;
+		// $page = $request->input('page', 1);
+		// $perPage = $request->input('per_page', 10);
 		$organization = Organization::where('id', $organizationId)->first();
 		$contacts = $organization->contacts;
 		$results = [];
 		foreach($contacts as $contact){
-			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage,$chatLogId,$chatLogType);
+			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$chatLogId,$type);
 			if(isset($result['messages']) && count($result['messages']) > 0){
 				$results[$contact->uuid] = $result;
 			}

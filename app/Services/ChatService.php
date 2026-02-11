@@ -353,6 +353,7 @@ class ChatService
 			$organizationId = $this->organizationId;
 			$uuid = $request->uuid;
 			$file = $request->file('file');
+			$messageUUID = $request->messageUUID;
 			$tempMessageId = Request()->get('tempMessageId');
 			$fileName = $file->getClientOriginalName();
 			if ($tempMessageId) {
@@ -365,7 +366,9 @@ class ChatService
 					$fileName,
 					$tempFilePath,
 					auth()->id(),
-					$tempMessageId
+					$tempMessageId,
+					$messageUUID
+					
 				)->onQueue('high');
 
 				return null;
@@ -383,7 +386,7 @@ class ChatService
 				$mediaUrl = $mediaFilePath;
 			}
 
-			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId);
+			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId, $messageUUID);
         }
        
     }
@@ -564,15 +567,18 @@ class ChatService
         }
     }
 
-    public function getChatMessages($contactId, $page = 1, $perPage = 50,?int $chatLogId = null,?string $chatLogType = null)
+    public function getChatMessages($contactId, $page = 1, $perPage = 50, ?int $chatLogId = null, ?string $chatLogType = null)
     {
-        $chatLogs = ChatLog::where('contact_id', $contactId)
+        $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
-			->when($chatLogId && $chatLogType , function($query) use ($chatLogId, $chatLogType){
-				$query->where('entity_id','>', $chatLogId)->where('entity_type', $chatLogType);
-			})
-            ->paginate($perPage, ['*'], 'page', $page);
+            ->when($chatLogId && $chatLogType, function ($q) use ($chatLogId, $chatLogType) {
+                $q->where('entity_id', '>', $chatLogId)->where('entity_type', $chatLogType);
+            });
+
+        $chatLogs = ($page && $perPage)
+            ? $query->paginate($perPage, ['*'], 'page', $page)
+            : $query->get();
 
         $chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
         $ticketIds = $chatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
@@ -601,10 +607,12 @@ class ChatService
             $chats[] = [['type' => $chatLog->entity_type, 'value' => $value]];
         }
 
+        $isPaginated = $chatLogs instanceof \Illuminate\Pagination\LengthAwarePaginator;
+
         return [
             'messages' => array_reverse($chats),
-            'hasMoreMessages' => $chatLogs->hasMorePages(),
-            'nextPage' => $chatLogs->currentPage() + 1
+            'hasMoreMessages' => $isPaginated ? $chatLogs->hasMorePages() : false,
+            'nextPage' => $isPaginated ? $chatLogs->currentPage() + 1 : null,
         ];
     }
 	// public function listChatMessagesFromChatIdToEnd($page,$perPage)

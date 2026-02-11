@@ -95,7 +95,7 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
     Route::post('/send-template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessageByUUID']);
 	Route::get('/list-chat-contacts', [App\Http\Controllers\ApiController::class, 'listChatContacts']);
 	Route::get('/list-messages-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'listChatContactsForContact']);
-	Route::get('/list-messages-from-chat-id-to-end', [App\Http\Controllers\ApiController::class, 'listChatMessagesFromChatIdToEnd']);
+	Route::get('/list-messages-from-uuid-to-end', [App\Http\Controllers\ApiController::class, 'listChatMessagesFromUuidToEnd']);
 	Route::post('/toggle-ticket-status/{uuid}', [App\Http\Controllers\ApiController::class, 'toggleTicketStatus']);
 	Route::delete('/delete-chat-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'deleteChatForContact']);
 	// Route::get('/media/signed-url', [App\Http\Controllers\ApiController::class, 'getSignedMediaUrl']);
