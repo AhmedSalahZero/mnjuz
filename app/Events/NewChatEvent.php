@@ -76,6 +76,11 @@ class NewChatEvent implements ShouldBroadcast
         if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
             return $payload;
         }
+		logger('pusher_max_limit_reached');
+		logger('before_shrink');
+		logger(json_encode($payload));
+		logger('after_shrink');
+		logger(json_encode($this->shrinkPayloadToLimit($payload)));
         return $this->shrinkPayloadToLimit($payload);
     }
 
