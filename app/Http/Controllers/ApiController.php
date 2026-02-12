@@ -29,6 +29,7 @@ use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -1179,10 +1180,12 @@ class ApiController extends Controller
 		$results = [];
 		foreach($contacts as $contact){
 			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$createdAt);
+			
 			if(isset($result['messages']) && count($result['messages']) > 0){
-				$results[$contact->uuid] = $result;
+				$results[$contact->uuid] = Arr::first($result['messages']);
 			}
 		}
+		
 		return response()->json([
 			'statusCode' => 200,
 			'success' => true,
