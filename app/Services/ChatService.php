@@ -566,7 +566,7 @@ class ChatService
         }
     }
 
-    public function getChatMessages($contactId, $page = 1, $perPage = 50, ?string $createdAt = null)
+    public function getChatMessages($contactId, $page = 1, $perPage = 50, ?string $createdAt = null , $entityTypes = [])
     {
         $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
@@ -576,6 +576,9 @@ class ChatService
             // })
 			->when($createdAt, function ($q) use ($createdAt) {
 				$q->where('created_at', '>=', $createdAt);
+			})
+			->when(count($entityTypes), function ($q) use ($entityTypes) {
+				$q->whereIn('entity_type', $entityTypes);
 			})
 			;
 

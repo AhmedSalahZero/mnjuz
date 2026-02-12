@@ -1146,15 +1146,17 @@ class ApiController extends Controller
         $validator = Validator::make($request->all(), [
             // 'page' => 'integer|min:1',
 			'created_at' => 'sometimes|max:255',
+			'message_types' => 'sometimes|array|in:chat,ticket,notes',
 		//	'type' => 'required|string|in:chat,ticket,notes',
             // 'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
         ]);
 		if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
-		$uuid = $request->input('uuid', null);
+		$entityTypes = $request->input('message_types', []);
+		// $uuid = $request->input('uuid', null);
 	//	$type = $request->input('type', null);
-		$model = null ;
+		// $model = null ;
 		// if($type == 'chat'){
 		// 	$model = Chat::class;
 		// }elseif($type == 'ticket'){
@@ -1179,7 +1181,7 @@ class ApiController extends Controller
 		$contacts = $organization->contacts;
 		$results = [];
 		foreach($contacts as $contact){
-			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$createdAt);
+			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$createdAt,$entityTypes);
 			
 			if(isset($result['messages']) && count($result['messages']) > 0){
 				$results[$contact->uuid] = Arr::first($result['messages']);
