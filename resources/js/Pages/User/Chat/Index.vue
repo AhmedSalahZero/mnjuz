@@ -264,6 +264,7 @@ const updateChatThread = (chat) => {
 	}
 }
 
+// 1s: يوازن بين استجابة سريعة وتجميع أحداث متتالية (تجنب طلبات متكررة)
 const refetchChatsList = debounce(async () => {
 	try {
 		const response = await axios.get('/chats')
@@ -273,18 +274,23 @@ const refetchChatsList = debounce(async () => {
 	} catch (error) {
 		// تجاهل أخطاء تحديث القائمة
 	}
-}, 1500)
+}, 2000)
 
 const updateSidePanel = async (chat, statusChanged) => {
-	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
-	if (isCurrentContact && !statusChanged) {
-		console.log('updateChatThread', isCurrentContact)
+	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
+	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)
-		// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
-		return
 	}
-	updateChatThread(chat)
 	refetchChatsList()
+
+	//	if (isCurrentContact && !statusChanged) {
+	//	console.log('updateChatThread', isCurrentContact)
+	//	updateChatThread(chat)
+	// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
+	//	return
+	//	}
+	// updateChatThread(chat)
+	// refetchChatsList()
 
 }
 
