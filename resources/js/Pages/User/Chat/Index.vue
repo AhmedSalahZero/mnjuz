@@ -281,15 +281,16 @@ const updateSidePanel = async (chat, statusChanged) => {
 		console.log('updateChatThread', isCurrentContact)
 		updateChatThread(chat)
 		// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
-
+		return
 	}
 	console.log('statusChanged', statusChanged)
 	console.log('statusChanged', statusChanged)
+	console.log('statusChanged', !statusChanged)
 	if (!statusChanged) {
 		console.log('refetchChatsList')
-
+		refetchChatsList()
 	}
-	refetchChatsList()
+
 }
 
 
