@@ -212,7 +212,6 @@ const clearSearch = () => {
 	</div>
 	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
 		<Link :href="'/chats/' + contact.uuid + '?page=' + props.rows.meta.current_page"
-			:prefetch="false"
 			class="block border-b group-hover:pr-0" :class="contact.unread_messages > 0 ? 'bg-green-50' : ''"
 			v-for="(contact, index) in rows.data" :key="index">
 			<div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
