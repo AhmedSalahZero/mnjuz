@@ -566,14 +566,18 @@ class ChatService
         }
     }
 
-    public function getChatMessages($contactId, $page = 1, $perPage = 50, ?int $chatLogId = null, ?string $chatLogType = null)
+    public function getChatMessages($contactId, $page = 1, $perPage = 50, ?string $createdAt = null)
     {
         $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
-            ->when($chatLogId && $chatLogType, function ($q) use ($chatLogId, $chatLogType) {
-                $q->where('entity_id', '>', $chatLogId)->where('entity_type', $chatLogType);
-            });
+            // ->when($chatLogId && $chatLogType, function ($q) use ($chatLogId, $chatLogType) {
+            //     $q->where('entity_id', '>', $chatLogId)->where('entity_type', $chatLogType);
+            // })
+			->when($createdAt, function ($q) use ($createdAt) {
+				$q->where('created_at', '>=', $createdAt);
+			})
+			;
 
         $chatLogs = ($page && $perPage)
             ? $query->paginate($perPage, ['*'], 'page', $page)

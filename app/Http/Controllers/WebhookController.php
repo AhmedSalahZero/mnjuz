@@ -230,6 +230,8 @@ class WebhookController extends BaseController
 						$chatLogArray = $chat->chatLog;
 						if ($chatLogArray) {
 							$contact = $chat->contact;
+							// $chatLogArray->updated_at = $now;
+							// $chatLogArray->save();
 							// $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
 							// $contact->encryptPhoneNumber($shouldBeEncrypted);
 							$chatArray = array([
@@ -347,7 +349,8 @@ class WebhookController extends BaseController
                                     'contact_id' => $contact->id,
                                     'entity_type' => 'chat',
                                     'entity_id' => $chat->id,
-                                    'created_at' => $now
+                                    'created_at' => $now,
+									// 'updated_at' => $now
                                 ]);
                                 
                                 $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();

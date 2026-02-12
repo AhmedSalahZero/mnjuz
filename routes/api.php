@@ -94,7 +94,7 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
     Route::get('/list-templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
     Route::post('/send-template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessageByUUID']);
 	Route::get('/list-chat-contacts', [App\Http\Controllers\ApiController::class, 'listChatContacts']);
-	Route::get('/list-messages-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'listChatContactsForContact']);
+	// Route::get('/list-messages-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'listChatContactsForContact']);
 	Route::get('/list-messages-from-uuid-to-end', [App\Http\Controllers\ApiController::class, 'listChatMessagesFromUuidToEnd']);
 	Route::post('/toggle-ticket-status/{uuid}', [App\Http\Controllers\ApiController::class, 'toggleTicketStatus']);
 	Route::delete('/delete-chat-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'deleteChatForContact']);

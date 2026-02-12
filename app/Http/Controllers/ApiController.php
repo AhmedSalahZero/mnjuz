@@ -1107,35 +1107,35 @@ class ApiController extends Controller
 		 * *
 		 * * هنا بنجيب الرسايل الخاصة بجهه اتصال معينه
 	 */
-	public function listChatContactsForContact(Request $request,$contactUuid)
-    {
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
-        $validator = Validator::make($request->all(), [
-            'page' => 'integer|min:1',
-            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
-        ]);
-		$uuid = $contactUuid;
-		$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
-		if(!$contact){
-			return response()->json([
-				'statusCode' => 404,
-				'success' => false,
-				'message' => __('Contact not found'),
-			], 404);
-		}
-        if ($validator->fails()) {
-            return response()->json(['error' => $validator->errors()], 400);
-        }
+	// public function listChatContactsForContact(Request $request,$contactUuid)
+    // {
+	// 	$organizationId = $request->organization;
+	// 	if( $request->is('api/v1/*')){
+	// 		$organizationId = $request->user()->current_organization_id;
+	// 	}
+    //     $validator = Validator::make($request->all(), [
+    //         'page' => 'integer|min:1',
+    //         'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+    //     ]);
+	// 	$uuid = $contactUuid;
+	// 	$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
+	// 	if(!$contact){
+	// 		return response()->json([
+	// 			'statusCode' => 404,
+	// 			'success' => false,
+	// 			'message' => __('Contact not found'),
+	// 		], 404);
+	// 	}
+    //     if ($validator->fails()) {
+    //         return response()->json(['error' => $validator->errors()], 400);
+    //     }
 
-        $page = $request->input('page', 1);
-        $perPage = $request->input('per_page', 10);
+    //     $page = $request->input('page', 1);
+    //     $perPage = $request->input('per_page', 10);
 		
-       return  (new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage);
+    //    return  (new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage);
 		
-    }
+    // }
 	public function listChatMessagesFromUuidToEnd(Request $request)
 	{
 		$organizationId = $request->organization;
@@ -1144,40 +1144,41 @@ class ApiController extends Controller
 		}
         $validator = Validator::make($request->all(), [
             // 'page' => 'integer|min:1',
-			'uuid' => 'required|string|max:255',
-			'type' => 'required|string|in:chat,ticket,notes',
+			'created_at' => 'sometimes|max:255',
+		//	'type' => 'required|string|in:chat,ticket,notes',
             // 'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
         ]);
 		if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
 		$uuid = $request->input('uuid', null);
-		$type = $request->input('type', null);
+	//	$type = $request->input('type', null);
 		$model = null ;
-		if($type == 'chat'){
-			$model = Chat::class;
-		}elseif($type == 'ticket'){
-			$model = ChatTicket::class;
-		}elseif($type == 'notes'){
-			$model = ChatNote::class;
-		}
-		$model = $model::where('uuid', $uuid)->first();
+		// if($type == 'chat'){
+		// 	$model = Chat::class;
+		// }elseif($type == 'ticket'){
+		// 	$model = ChatTicket::class;
+		// }elseif($type == 'notes'){
+		// 	$model = ChatNote::class;
+		// }
+		// $model = $model::where('uuid', $uuid)->first();
 		
-		if(!$model){
-			return response()->json([
-				'statusCode' => 404,
-				'success' => false,
-				'message' => __('Record with uuid :uuid and type :type not found', ['uuid' => $uuid, 'type' => $type]	),
-			], 404);
-		}
-		$chatLogId = $model->chatLog->id;
+		// if(!$model){
+		// 	return response()->json([
+		// 		'statusCode' => 404,
+		// 		'success' => false,
+		// 		'message' => __('Record with uuid :uuid and type :type not found', ['uuid' => $uuid, 'type' => $type]	),
+		// 	], 404);
+		// }
+		// $chatLogId = $model->chatLog->id;
+		$createdAt = $request->input('created_at', null);
 		// $page = $request->input('page', 1);
 		// $perPage = $request->input('per_page', 10);
 		$organization = Organization::where('id', $organizationId)->first();
 		$contacts = $organization->contacts;
 		$results = [];
 		foreach($contacts as $contact){
-			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$chatLogId,$type);
+			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$createdAt);
 			if(isset($result['messages']) && count($result['messages']) > 0){
 				$results[$contact->uuid] = $result;
 			}
