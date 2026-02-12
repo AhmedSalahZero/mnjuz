@@ -288,8 +288,8 @@ const updateSidePanel = async (chat, statusChanged) => {
 	console.log('statusChanged', !statusChanged)
 	if (!statusChanged) {
 		console.log('refetchChatsList')
-		refetchChatsList()
 	}
+	refetchChatsList()
 
 }
 
