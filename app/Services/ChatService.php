@@ -67,9 +67,6 @@ class ChatService
 
     public function getChatList($request, $uuid = null, $searchTerm = null)
     {
-		if($this->organizationId == 1){
-			logger('getChatList'.$uuid);
-		}
         //	$uuid = 'b27a5a63-05d4-4e2f-911c-4da76044328c';
         $role = auth()->user()->teams[0]->role;
 		$contact = null ;

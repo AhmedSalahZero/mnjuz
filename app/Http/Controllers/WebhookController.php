@@ -243,14 +243,8 @@ class WebhookController extends BaseController
 								// 'chat_id'=>$chat->id,
 								// 'chat_log_id'=>$chatLogArray->id,
 							]);
-	
-			
-				
-				if($organization->id == 1){
-					logger('new event stauts');
-				}
-							// remove it temporary
-										event(new NewChatEvent($chatArray, $organization->id, false,true));
+
+							event(new NewChatEvent($chatArray, $organization->id, false, true));
 						}
                     }
                 }
