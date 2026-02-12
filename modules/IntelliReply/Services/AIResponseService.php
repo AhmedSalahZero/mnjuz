@@ -64,7 +64,7 @@ class AIResponseService
         // Get and process last message
         $lastMessage = $this->extractLastMessage($organizationId, $contactId);
 
-        $this->updateAIAssistanceState($contactId, $lastMessage['message'], $aiConfig);
+        $this->updateAIAssistanceState($contactId, $lastMessage['message']??'', $aiConfig);
 
         if($autoResponseCheck){
             $contact = Contact::find($contactId);
