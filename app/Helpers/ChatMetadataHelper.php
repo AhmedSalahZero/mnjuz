@@ -101,13 +101,20 @@ class ChatMetadataHelper
     /**
      * استخراج من كتلة ميديا (image/video/audio/document/sticker) المفاتيح المسموح بها فقط.
      * لا نضمّن: id, url, sha256, mime_type (غير مستخدمة في العرض؛ الملف من content.media).
+     * إذا كانت القيمة list فارغة [] أو مفاتيح رقمية، نُرجع map بالمفاتيح المسموحة (قيم null)
+     * حتى لا تُستقبل كـ list وتُستخدم كـ map فتُسبب خطأ.
      */
     private static function minimalMediaBlock(array $block, array $allowedKeys): array
     {
-        if (empty($block)) {
-            return [];
-        }
         $allowed = array_flip($allowedKeys);
+        if (empty($block)) {
+            return array_fill_keys($allowedKeys, null);
+        }
+        // إذا كانت list (مفاتيح رقمية فقط) نعاملها كفارغة ونُرجع map
+        $keys = array_keys($block);
+        if ($keys === array_keys(array_values($block))) {
+            return array_fill_keys($allowedKeys, null);
+        }
         return array_intersect_key($block, $allowed);
     }
 }
