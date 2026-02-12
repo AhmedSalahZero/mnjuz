@@ -274,7 +274,7 @@ const refetchChatsList = debounce(async () => {
 	} catch (error) {
 		// تجاهل أخطاء تحديث القائمة
 	}
-}, 2000)
+}, 1500)
 
 const updateSidePanel = async (chat, statusChanged) => {
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
