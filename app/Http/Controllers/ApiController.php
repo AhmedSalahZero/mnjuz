@@ -11,9 +11,11 @@ use App\Http\Resources\ContactResource;
 use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
 use App\Models\Chat;
+use App\Models\ChatLog;
 use App\Models\ChatMedia;
 use App\Models\ChatNote;
 use App\Models\ChatTicket;
+use App\Models\ChatTicketLog;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
@@ -1144,36 +1146,16 @@ class ApiController extends Controller
 			$organizationId = $request->user()->current_organization_id;
 		}
         $validator = Validator::make($request->all(), [
-            // 'page' => 'integer|min:1',
+
 			'created_at' => 'sometimes|max:255',
 			'message_types' => 'sometimes|array|in:chat,ticket,notes',
-		//	'type' => 'required|string|in:chat,ticket,notes',
-            // 'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+
         ]);
 		if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
 		$entityTypes = $request->input('message_types', []);
-		// $uuid = $request->input('uuid', null);
-	//	$type = $request->input('type', null);
-		// $model = null ;
-		// if($type == 'chat'){
-		// 	$model = Chat::class;
-		// }elseif($type == 'ticket'){
-		// 	$model = ChatTicket::class;
-		// }elseif($type == 'notes'){
-		// 	$model = ChatNote::class;
-		// }
-		// $model = $model::where('uuid', $uuid)->first();
 		
-		// if(!$model){
-		// 	return response()->json([
-		// 		'statusCode' => 404,
-		// 		'success' => false,
-		// 		'message' => __('Record with uuid :uuid and type :type not found', ['uuid' => $uuid, 'type' => $type]	),
-		// 	], 404);
-		// }
-		// $chatLogId = $model->chatLog->id;
 		$createdAt = $request->input('created_at', null);
 		// $page = $request->input('page', 1);
 		// $perPage = $request->input('per_page', 10);
@@ -1181,11 +1163,11 @@ class ApiController extends Controller
 		$contacts = $organization->contacts;
 		$results = [];
 		foreach($contacts as $contact){
-			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$createdAt,$entityTypes);
-			
-			if(isset($result['messages']) && count($result['messages']) > 0){
+			$result = $this->getChatMessages($contact->id,$createdAt,$entityTypes);
+		
+			if( count($result) ){
 				$data['contact_id']=$contact->id;
-				$data['messages'] = Arr::first($result['messages']);
+				$data['messages'] = Arr::first($result);
 				$results[] = $data;
 			}
 		}
@@ -1196,6 +1178,49 @@ class ApiController extends Controller
 			'message' => __('Chat messages fetched successfully'),
 			'data' => $results
 		], 200);
+	}
+	protected function getChatMessages($contactId,$createdAt,$entityTypes){
+		$query = ChatLog::where('contact_id', $contactId)
+            ->where('deleted_at', null)
+            ->orderBy('created_at', 'desc')
+          
+			->when($createdAt, function ($q) use ($createdAt) {
+				$q->where('created_at', '>=', $createdAt);
+			})
+			->when(count($entityTypes), function ($q) use ($entityTypes) {
+				$q->whereIn('entity_type', $entityTypes);
+			})
+			;
+
+        $chatLogs = $query->get() ;
+        $chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
+        $ticketIds = $chatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
+        $noteIds = $chatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
+
+        $chatsMap = !empty($chatIds)
+            ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
+            : collect();
+        $ticketLogsMap = !empty($ticketIds)
+            ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
+            : collect();
+        $notesMap = !empty($noteIds)
+            ? ChatNote::whereIn('id', $noteIds)->get()->keyBy('id')
+            : collect();
+
+        $chats = [];
+        foreach ($chatLogs as $chatLog) {
+            $value = null;
+            if ($chatLog->entity_type === 'chat') {
+                $value = $chatsMap->get($chatLog->entity_id);
+				$value = minimalChatValue($value);
+            } elseif ($chatLog->entity_type === 'ticket') {
+                $value = $ticketLogsMap->get($chatLog->entity_id);
+            } elseif ($chatLog->entity_type === 'notes') {
+                $value = $notesMap->get($chatLog->entity_id);
+            }
+            $chats[] = [['type' => $chatLog->entity_type, 'value' => $value]];
+        }
+		return array_reverse($chats) ;
 	}
 	public function deleteChatForContact(Request $request,$uuid)
 	{

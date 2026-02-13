@@ -33,7 +33,6 @@ class NewChatEvent implements ShouldBroadcast
         $this->organizationId = $organizationId;
 		$this->isNewContact = $isNewContact;
 		$this->statusChanged = $statusChanged;
-        //$this->chat = $chat;
          $this->chat = $this->buildMinimalChatPayload($chat);
     }
 
@@ -81,11 +80,11 @@ class NewChatEvent implements ShouldBroadcast
         if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
             return $payload;
         }
-		logger('pusher_max_limit_reached');
-		logger('before_shrink');
-		logger(json_encode($payload));
-		logger('after_shrink');
-		logger(json_encode($this->shrinkPayloadToLimit($payload)));
+		// logger('pusher_max_limit_reached');
+		// logger('before_shrink');
+		// logger(json_encode($payload));
+		// logger('after_shrink');
+		// logger(json_encode($this->shrinkPayloadToLimit($payload)));
         return $this->shrinkPayloadToLimit($payload);
     }
 
@@ -159,7 +158,7 @@ class NewChatEvent implements ShouldBroadcast
     private const MAX_MEDIA_PATH_BYTES = 200;
     private const MAX_LOGS_ENTRIES = 6;
 
-    protected function minimalChatValue($value): array
+    public function minimalChatValue($value): array
     {
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
             ? $value->toArray()

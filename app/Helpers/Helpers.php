@@ -1,5 +1,7 @@
 <?php
 
+use App\Events\NewChatEvent;
+
 if (!function_exists('getApiLang')) {
     function getApiLang(): string
     {
@@ -30,5 +32,12 @@ if (!function_exists('sanitize_filename_for_storage')) {
         $ext = preg_replace('/\p{C}+/u', '', $ext);
 
         return $ext !== '' ? $base . '.' . $ext : $base;
+    }
+}
+
+if (!function_exists('minimalChatValue')) {
+    function minimalChatValue($chat): array
+    {
+        return (new NewChatEvent($chat, $chat->organization_id))->minimalChatValue($chat);
     }
 }
