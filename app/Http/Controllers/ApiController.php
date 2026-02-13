@@ -1184,7 +1184,9 @@ class ApiController extends Controller
 			$result =(new ChatService($organizationId))->getChatMessages( $contact->id,null,null,$createdAt,$entityTypes);
 			
 			if(isset($result['messages']) && count($result['messages']) > 0){
-				$results[$contact->uuid] = Arr::first($result['messages']);
+				$data['contact_id']=$contact->id;
+				$data['messages'] = Arr::first($result['messages']);
+				$results[] = $data;
 			}
 		}
 		
