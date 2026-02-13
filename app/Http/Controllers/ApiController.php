@@ -1167,7 +1167,11 @@ class ApiController extends Controller
 		
 			if( count($result) ){
 				$data['contact_id']=$contact->id;
-				$data['messages'] = Arr::first($result);
+				foreach($result as $item){
+					foreach($item as $item2){
+						$data['messages'][] =$item2;
+					}
+				}
 				$results[] = $data;
 			}
 		}
@@ -1183,7 +1187,6 @@ class ApiController extends Controller
 		$query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
-          
 			->when($createdAt, function ($q) use ($createdAt) {
 				$q->where('created_at', '>=', $createdAt);
 			})
