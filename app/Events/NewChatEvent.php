@@ -133,7 +133,7 @@ class NewChatEvent implements ShouldBroadcast
     /**
      * إرجاع الـ chat بالشكل المُصغّر فقط (للتخزين في الـ event والـ queue والـ broadcast).
      */
-    protected function buildMinimalChatPayload($chat): array
+    public function buildMinimalChatPayload($chat): array
     {
         if (is_array($chat) && isset($chat[0])) {
             $item = $chat[0];
@@ -184,15 +184,34 @@ class NewChatEvent implements ShouldBroadcast
         $contactId = $arr['contact_id'] ?? null;
         $contactPhone = null;
         $contactFullName = null;
+        // $contactFirstName = null;
+        // $contactLastName = null;
+        $contactEmail = null;
+        $contactOrganizationId = null;
+        $contactLatestChatCreatedAt = null;
+        $contactIsBlocked = null;
+        $contactIsFavorite = null;
+        $contactFormattedPhoneNumber = null;
         if ($contactId) {
             $contact = Contact::where('id', $contactId)
-                ->first(['phone', 'first_name', 'last_name']);
+                ->first([
+                    'phone', 'first_name', 'last_name', 'email', 'organization_id',
+                    'latest_chat_created_at', 'is_blocked', 'is_favorite',
+                ]);
             if ($contact) {
                 $contactPhone = $contact->phone;
                 $contactFullName = $this->truncateToBytes(
                     trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
                     120
                 ) ?: null;
+                // $contactFirstName = $contact->first_name;
+                // $contactLastName = $contact->last_name;
+                $contactEmail = $contact->email;
+                $contactOrganizationId = $contact->organization_id;
+                $contactLatestChatCreatedAt = $contact->latest_chat_created_at;
+                $contactIsBlocked = $contact->is_blocked;
+                $contactIsFavorite = $contact->is_favorite;
+                $contactFormattedPhoneNumber = $contact->formatted_phone_number;
             }
         }
 
@@ -206,7 +225,18 @@ class NewChatEvent implements ShouldBroadcast
             'uuid' => $arr['uuid'] ?? null,
             'contact_id' => $contactId,
             'is_new_contact' => $this->isNewContact,
-            'contact_phone' => $contactPhone,
+            // 'contact_phone' => $contactPhone,
+			'phone' => $contactPhone,
+			'formatted_phone_number' => $contactFormattedPhoneNumber,
+			'organization_id' => $contactOrganizationId,
+            'latest_chat_created_at' => $contactLatestChatCreatedAt,
+            'is_blocked' => $contactIsBlocked,
+            'is_favorite' => $contactIsFavorite,
+            // 'ticket_status' => $arr['ticket_status'] ?? null,
+            // 'ticket_assigned_to' => $arr['ticket_assigned_to'] ?? null,
+            // 'full_name' => $contactFullName ?: null,
+           
+			// 'email' => $contactEmail,
             'contact_full_name' => $contactFullName ?: null,
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
@@ -217,6 +247,12 @@ class NewChatEvent implements ShouldBroadcast
             'media' => $media,
             'logs' => $logs,
             'user' => $user,
+            // حقول الـ contact المطلوبة للواجهة
+            // 'first_name' => $contactFirstName,
+            // 'last_name' => $contactLastName,
+          
+           
+            
         ];
     }
 

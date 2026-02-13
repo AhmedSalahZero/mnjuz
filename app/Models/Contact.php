@@ -187,6 +187,7 @@ class Contact extends Model
 
             // فلترة حسب الحالة
             if ($ticketState === 'unassigned') {
+				
                 $query->whereNull('chat_tickets.assigned_to');
             } elseif ($ticketState !== null && $ticketState !== 'all') {
                 $query->where('chat_tickets.status', $ticketState);
