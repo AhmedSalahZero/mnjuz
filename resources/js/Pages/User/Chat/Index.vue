@@ -281,6 +281,11 @@ const updateSidePanel = async (chat, statusChanged) => {
 	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)
 	}
+	if (statusChanged) {
+		console.log('status changed do nothing')
+		return false
+	}
+	console.log('refetching chats list')
 	refetchChatsList()
 
 	//	if (isCurrentContact && !statusChanged) {
