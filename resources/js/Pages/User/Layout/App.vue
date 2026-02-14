@@ -19,7 +19,7 @@ import { usePage } from "@inertiajs/vue3"
 import { computed, defineProps, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
-import { getEchoInstance } from '../../../echo'
+import { getOrJoinChatChannel } from '../../../echo'
 import MobileSidebar from "./MobileSidebar.vue"
 import Sidebar from "./Sidebar.vue"
 
@@ -73,16 +73,16 @@ const playSound = () => {
 onMounted(() => {
 	setupSound()
 
-	const echo = getEchoInstance(
+	const { subscribe } = getOrJoinChatChannel(
+		organization.value.id,
 		getValueByKey('pusher_app_key'),
 		getValueByKey('pusher_app_cluster')
 	)
-
-	echo.channel('chats.ch' + organization.value.id).listen('NewChatEvent', (event) => {
+	subscribe((event) => {
 		const chat = event.chat
 		if (chat[0].value.deleted_at == null && chat[0].value.type === 'inbound') {
-			playSound() // Play sound for inbound messages
-			unreadMessages.value += 1 // Increment unread messages count
+			playSound()
+			unreadMessages.value += 1
 		}
 	})
 })

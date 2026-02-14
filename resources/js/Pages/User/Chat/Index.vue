@@ -61,7 +61,7 @@ import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { getEchoInstance } from '../../../echo'
+import { getOrJoinChatChannel } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
 
 const props = defineProps({
@@ -89,9 +89,8 @@ const props = defineProps({
 	timezone: String,
 })
 
-// ✅ استخدام ref بدلاً من let
-const echoInstance = ref(null)
-const echoChannel = ref(null)
+/** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
+const unsubscribeChatChannel = ref(null)
 
 const rows = ref(props.rows)
 const rowCount = ref(props.rowCount)
@@ -300,42 +299,18 @@ const updateSidePanel = async (chat, statusChanged) => {
 }
 
 
-const channelName = () => (props.organizationId ? `chats.ch${props.organizationId}` : null)
-
-// مغادرة القناة قبل أي join جديد (ضمان عدم اشتراك مزدوج عند عدة mount متتالية)
-function ensureLeaveChannel() {
-	const name = channelName()
-	if (!name) return
-	const echo = getEchoInstance(
-		props.pusherSettings.pusher_app_key,
-		props.pusherSettings.pusher_app_cluster,
-	)
-	echo.leave(name)
-}
-
 onMounted(() => {
 	try {
-		const name = channelName()
-		if (!name) return
+		if (!props.organizationId) return
 
-		// ١) مغادرة القناة أولاً إن وُجد اشتراك سابق (مثلاً unmount لم يُنفّذ أو تنقل سريع)
-		ensureLeaveChannel()
-
-		echoInstance.value = getEchoInstance(
+		const { subscribe } = getOrJoinChatChannel(
+			props.organizationId,
 			props.pusherSettings.pusher_app_key,
 			props.pusherSettings.pusher_app_cluster,
 		)
-
-		echoChannel.value = echoInstance.value
-			.join(name)
-			.here(() => { })
-			.joining(() => { })
-			.leaving(() => { })
-			.error(() => { })
-			.listen('NewChatEvent', (event) => {
-				console.log('new event', event)
-				updateSidePanel(event.chat, event.statusChanged)
-			})
+		unsubscribeChatChannel.value = subscribe((event) => {
+			updateSidePanel(event.chat, event.statusChanged)
+		})
 
 		scrollToBottom()
 	} catch (error) {
@@ -345,18 +320,12 @@ onMounted(() => {
 
 onUnmounted(() => {
 	try {
-		const name = channelName()
-		// ١) إيقاف الاستماع ثم المغادرة (لا نعتمد على leave وحده — يمنع تسرب المستمعين)
-		if (echoChannel.value && typeof echoChannel.value.stopListening === 'function') {
-			echoChannel.value.stopListening('NewChatEvent')
+		if (typeof unsubscribeChatChannel.value === 'function') {
+			unsubscribeChatChannel.value()
 		}
-		if (echoInstance.value && name) {
-			echoInstance.value.leave(name)
-		}
-		echoChannel.value = null
-		echoInstance.value = null
+		unsubscribeChatChannel.value = null
 	} catch (error) {
-		// تجاهل أخطاء التنظيف
+		// تجاهل
 	}
 })
 
