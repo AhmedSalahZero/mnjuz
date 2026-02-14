@@ -230,6 +230,7 @@ class NewChatEvent implements ShouldBroadcast
 			unset($metadata[$type]['url']);
 		}
 		$metadata = is_string($metadata) ? $metadata : json_encode($metadata);
+		
         return [
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
