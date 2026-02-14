@@ -1,79 +1,139 @@
-import { createApp, h, watchEffect } from 'vue';
-import { createInertiaApp } from '@inertiajs/vue3';
-import VueApexCharts from 'vue3-apexcharts';
-import VueTelInput from 'vue-tel-input';
-import { createI18n } from 'vue-i18n';
-import axios from 'axios';
+import { createInertiaApp } from '@inertiajs/vue3'
+import axios from 'axios'
+import { createApp, h, watchEffect } from 'vue'
+import { createI18n } from 'vue-i18n'
+import VueTelInput from 'vue-tel-input'
+import VueApexCharts from 'vue3-apexcharts'
 
-// Function to load locale messages via API
-async function loadLocaleMessages(locale) {
-  const response = await axios.get(`/translations/${locale}`);
+const I18N_CACHE_KEY = 'mnjuz_i18n_bootstrap';
+const I18N_TRANSLATIONS_PREFIX = 'mnjuz_i18n_translations_';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 ساعة
+
+function getCachedBootstrap() {
+  try {
+    const raw = localStorage.getItem(I18N_CACHE_KEY);
+    if (!raw) return null;
+    const { locale, locales, translations, at } = JSON.parse(raw);
+    if (at && Date.now() - at > CACHE_TTL_MS) return null;
+    return { locale, locales, translations };
+  } catch {
+    return null;
+  }
+}
+
+function setCachedBootstrap(data) {
+  try {
+    localStorage.setItem(I18N_CACHE_KEY, JSON.stringify({
+      ...data,
+      at: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+function getCachedTranslations(locale) {
+  try {
+    const raw = localStorage.getItem(I18N_TRANSLATIONS_PREFIX + locale);
+    if (!raw) return null;
+    const { messages, at } = JSON.parse(raw);
+    if (at && Date.now() - at > CACHE_TTL_MS) return null;
+    return messages;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedTranslations(locale, messages) {
+  try {
+    localStorage.setItem(I18N_TRANSLATIONS_PREFIX + locale, JSON.stringify({
+      messages,
+      at: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+/** حذف كاش اللغة والترجمات (يُستدعى عند تغيير اللغة من الـ profile) */
+function clearI18nCache() {
+  try {
+    localStorage.removeItem(I18N_CACHE_KEY);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(I18N_TRANSLATIONS_PREFIX)) localStorage.removeItem(k);
+    }
+  } catch (_) {}
+}
+if (typeof window !== 'undefined') window.clearI18nCache = clearI18nCache;
+
+/** طلب واحد فقط: /bootstrap-locale يعيد locale + locales + translations */
+async function fetchBootstrapLocale() {
+  const response = await axios.get('/bootstrap-locale');
   return response.data;
 }
 
-// Function to fetch available locales from Laravel backend
-async function fetchAvailableLocales() {
-  const response = await axios.get('/locales');
-  return response.data;
+async function loadLocaleMessages(locale) {
+  const cached = getCachedTranslations(locale);
+  if (cached) return cached;
+  const response = await axios.get(`/translations/${locale}`);
+  const messages = response.data;
+  setCachedTranslations(locale, messages);
+  return messages;
 }
 
 createInertiaApp({
   resolve: async (name) => {
-    // Define paths to the components
     const pages = import.meta.glob('./Pages/**/*.vue');
     const modulePages = import.meta.glob('../../modules/**/Pages/**/*.vue');
-    
-    // Check if the name refers to a module component
     const [moduleName, pageName] = name.split('::');
-    
+
     if (pageName) {
       const key = `../../modules/${moduleName}/Pages/${pageName}.vue`;
       const component = modulePages[key];
-      
       if (component) {
         const resolvedComponent = await component();
         return resolvedComponent.default || resolvedComponent;
       }
     }
-    
-    // Otherwise, resolve from the standard Pages directory
+
     const component = pages[`./Pages/${name}.vue`];
     if (component) {
       const resolvedComponent = await component();
       return resolvedComponent.default || resolvedComponent;
     }
-    
     throw new Error(`Page not found: ${name}`);
   },
   setup({ el, App, props, plugin }) {
-    // Fetch the current locale and available locales from the Laravel backend
-    axios.get('/current-locale').then(async (response) => {
-      const currentLocale = response.data.locale;
-      const availableLocales = await fetchAvailableLocales();
-
+    (async () => {
+      let currentLocale;
+      let availableLocales;
+      let initialMessages = {};
+      const cached = getCachedBootstrap();
+      if (cached) {
+        currentLocale = cached.locale;
+        availableLocales = cached.locales;
+        initialMessages = { [currentLocale]: cached.translations };
+      } else {
+        const data = await fetchBootstrapLocale();
+        currentLocale = data.locale;
+        availableLocales = data.locales || [];
+        initialMessages = { [currentLocale]: data.translations || {} };
+        setCachedBootstrap({
+          locale: currentLocale,
+          locales: availableLocales,
+          translations: data.translations || {},
+        });
+      }
       const i18n = createI18n({
         legacy: false,
-        locale: currentLocale, // Default locale
-        fallbackLocale: 'en', // Fallback locale
-        messages: {}, // Initial empty messages
+        locale: currentLocale,
+        fallbackLocale: 'ar',
+        messages: initialMessages,
       });
-
       const app = createApp({ render: () => h(App, props) });
-
       app.use(plugin)
         .use(VueApexCharts)
         .use(VueTelInput)
         .use(i18n)
         .mount(el);
 
-      // Load the default locale messages
-      if (availableLocales.includes(currentLocale)) {
-        loadLocaleMessages(currentLocale).then(messages => {
-          i18n.global.setLocaleMessage(currentLocale, messages);
-        });
-      }
-
-      // Watch for locale changes and dynamically load new locale messages
       watchEffect(async () => {
         const newLocale = i18n.global.locale.value;
         if (!i18n.global.availableLocales.includes(newLocale) && availableLocales.includes(newLocale)) {
@@ -81,7 +141,7 @@ createInertiaApp({
           i18n.global.setLocaleMessage(newLocale, messages);
         }
       });
-    });
+    })();
   },
   progress: {
     delay: 250,

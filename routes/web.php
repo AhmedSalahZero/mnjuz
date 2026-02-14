@@ -49,6 +49,22 @@ Route::get('/translations/{locale}', function ($locale) {
     }
 });
 
+/** طلب واحد للغة + القائمة + ترجمات اللغة الحالية (لتقليل الطلبات مع الكاش) */
+Route::get('/bootstrap-locale', function () {
+    $locale = app()->getLocale();
+    $locales = Language::query()->pluck('code')->toArray();
+    $path = base_path("lang/{$locale}.json");
+    $translations = [];
+    if (File::exists($path)) {
+        $translations = json_decode(File::get($path), true) ?? [];
+    }
+    return response()->json([
+        'locale' => $locale,
+        'locales' => $locales,
+        'translations' => $translations,
+    ]);
+});
+
 //Frontend Routes
 Route::match(['get', 'post'], '/', [App\Http\Controllers\FrontendController::class, 'index']);
 Route::match(['get', 'post'], '/pages/{slug}', [App\Http\Controllers\FrontendController::class, 'pages']);

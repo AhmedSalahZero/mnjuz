@@ -85,6 +85,7 @@
                 isLoading.value = false;
                 // Check if we need to refresh the page for language change
                 if (usePage().props.refresh_lang) {
+                    if (typeof window.clearI18nCache === 'function') window.clearI18nCache();
                     window.location.reload();
                 }
             }
