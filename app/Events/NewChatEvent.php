@@ -160,6 +160,7 @@ class NewChatEvent implements ShouldBroadcast
 
     public function minimalChatValue($value): array
     {
+		return $value;
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
             ? $value->toArray()
             : (array) $value;
