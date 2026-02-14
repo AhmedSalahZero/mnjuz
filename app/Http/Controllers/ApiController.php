@@ -1219,7 +1219,7 @@ class ApiController extends Controller
 				if(isset($value['metadata']) && (isset(json_decode($value['metadata'],true)['buttons']) || isset(json_decode($value['metadata'],true)['context']))
 				
 				){
-					continue;	
+				//	continue;	
 				}
 				$value = minimalChatValue($value);
             } elseif ($chatLog->entity_type === 'ticket') {
