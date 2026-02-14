@@ -224,8 +224,8 @@ class NewChatEvent implements ShouldBroadcast
 			$metadata = json_decode($metadata, true);
 		}
 		$type = $metadata['type'] ?? null;
-		if($metadata && isset($metadata['type']) && $type && $type=='video' && !empty($metadata[$type])  ){
-			dd($metadata);
+		if($metadata && isset($metadata['type']) && $type && empty($metadata[$type])  ){
+			$metadata[$type] = null;
 		}
         return [
             'id' => $arr['id'] ?? null,
