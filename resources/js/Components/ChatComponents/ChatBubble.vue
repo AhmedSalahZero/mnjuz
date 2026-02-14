@@ -130,8 +130,8 @@ const copyItem = async (token) => {
 </script>
 <template>
 	<div class="rounded-lg my-1 p-2 text-sm flex flex-col relative" :class="props.type === 'outbound'
-			? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right'
-			: 'mr-auto rounded-tl-none bg-white speech-bubble-left'
+		? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right'
+		: 'mr-auto rounded-tl-none bg-white speech-bubble-left'
 		">
 		<div>
 			<!--Text message formatting-->
