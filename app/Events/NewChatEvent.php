@@ -163,7 +163,7 @@ class NewChatEvent implements ShouldBroadcast
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
             ? $value->toArray()
             : (array) $value;
-
+		
         $user = null;
         if (!empty($arr['user']) && is_array($arr['user'])) {
             $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
@@ -186,7 +186,7 @@ class NewChatEvent implements ShouldBroadcast
         $contactFullName = null;
         // $contactFirstName = null;
         // $contactLastName = null;
-        $contactEmail = null;
+     //   $contactEmail = null;
         $contactOrganizationId = null;
         $contactLatestChatCreatedAt = null;
         $contactIsBlocked = null;
@@ -206,7 +206,7 @@ class NewChatEvent implements ShouldBroadcast
                 ) ?: null;
                 // $contactFirstName = $contact->first_name;
                 // $contactLastName = $contact->last_name;
-                $contactEmail = $contact->email;
+            //    $contactEmail = $contact->email;
                 $contactOrganizationId = $contact->organization_id;
                 $contactLatestChatCreatedAt = $contact->latest_chat_created_at;
                 $contactIsBlocked = $contact->is_blocked;
@@ -215,11 +215,18 @@ class NewChatEvent implements ShouldBroadcast
             }
         }
 
-        $metadataRaw = $arr['metadata'] ?? '{}';
+        $metadataRaw = $arr['metadata'] ?? null;
         $metadata = is_string($metadataRaw)
             ? $this->truncateToBytes($metadataRaw, self::MAX_METADATA_BYTES)
             : $this->truncateToBytes(json_encode($metadataRaw), self::MAX_METADATA_BYTES);
 
+		if($metadata){
+			$metadata = json_decode($metadata, true);
+		}
+		$type = $metadata['type'] ?? null;
+		if($metadata && isset($metadata['type']) && $type && empty($metadata[$type])  ){
+			dd($metadata);
+		}
         return [
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
