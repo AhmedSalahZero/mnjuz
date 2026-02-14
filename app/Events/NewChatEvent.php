@@ -153,7 +153,7 @@ class NewChatEvent implements ShouldBroadcast
     /** الحقول فقط التي تستخدمها الواجهة من metadata كل log (ChatBubble: status, errors, id) */
     private const LOG_METADATA_KEYS = ['status', 'errors', 'id'];
 
-    /** حد Pusher 10240 بايت — ن truncate الحقول الكبيرة لضمان عدم تجاوزه */
+    /** حد Pusher 10240 بايت — ن ate الحقول الكبيرة لضمان عدم تجاوزه */
     private const MAX_METADATA_BYTES = 1800;
     private const MAX_MEDIA_PATH_BYTES = 200;
     private const MAX_LOGS_ENTRIES = 6;
@@ -175,8 +175,8 @@ class NewChatEvent implements ShouldBroadcast
             $media = [
                 'type' => $arr['media']['type'] ?? null,
                 'size' => $arr['media']['size'] ?? null,
-                'path' => $this->truncateToBytes($arr['media']['path'] ?? '', self::MAX_MEDIA_PATH_BYTES),
-                'name' => $this->truncateToBytes($arr['media']['name'] ?? '', 80),
+                'path' => $this->ateToBytes($arr['media']['path'] ?? '', self::MAX_MEDIA_PATH_BYTES),
+                'name' => $this->ateToBytes($arr['media']['name'] ?? '', 80),
             ];
         }
 
@@ -201,7 +201,7 @@ class NewChatEvent implements ShouldBroadcast
                 ]);
             if ($contact) {
                 $contactPhone = $contact->phone;
-                $contactFullName = $this->truncateToBytes(
+                $contactFullName = $this->ateToBytes(
                     trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
                     120
                 ) ?: null;
@@ -267,8 +267,8 @@ class NewChatEvent implements ShouldBroadcast
         ];
     }
 
-    /** truncate string to max bytes (UTF-8 safe) لضمان عدم تجاوز حد Pusher */
-    private function truncateToBytes(string $s, int $maxBytes): string
+    /** ate string to max bytes (UTF-8 safe) لضمان عدم تجاوز حد Pusher */
+    private function ateToBytes(string $s, int $maxBytes): string
     {
         if (strlen($s) <= $maxBytes) {
             return $s;

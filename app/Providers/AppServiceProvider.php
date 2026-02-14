@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Chat;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -21,6 +22,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+	//	$chat = Chat::with('media')->find(85364);
+		
+		
         Schema::defaultStringLength(191);
         include app_path('Helpers/Helpers.php');
 		Gate::define('viewApiDocs', function () {
