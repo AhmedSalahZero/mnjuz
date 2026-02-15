@@ -1146,7 +1146,6 @@ class ApiController extends Controller
 			$organizationId = $request->user()->current_organization_id;
 		}
         $validator = Validator::make($request->all(), [
-
 			'created_at' => 'sometimes|max:255',
 			'message_types' => 'sometimes|array|in:chat,ticket,notes',
 
@@ -1164,7 +1163,7 @@ class ApiController extends Controller
 		$results = [];
 		foreach($contacts as $contact){
 			$result = $this->getChatMessages($contact->id,$createdAt,$entityTypes);
-		
+			$data = [] ;
 			if( count($result) ){
 				$data['contact_id']=$contact->id;
 				foreach($result as $item){
