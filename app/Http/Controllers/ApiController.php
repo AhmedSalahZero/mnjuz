@@ -1215,11 +1215,13 @@ class ApiController extends Controller
             if ($chatLog->entity_type === 'chat') {
                 $value = $chatsMap->get($chatLog->entity_id);
 				// temp condition to skip buttons and context for mobile testing now
-				// if(isset($value['metadata']) && (isset(json_decode($value['metadata'],true)['buttons']) || isset(json_decode($value['metadata'],true)['context']))
+				if(env('APP_ENV') == 'development'){
+					if(isset($value['metadata']) && (isset(json_decode($value['metadata'],true)['buttons']) || isset(json_decode($value['metadata'],true)['context']))
+				){
+					continue;	
+				}
+				}
 				
-				// ){
-				// 	continue;	
-				// }
 				$value = minimalChatValue($value);
             } elseif ($chatLog->entity_type === 'ticket') {
                 $value = $ticketLogsMap->get($chatLog->entity_id);
