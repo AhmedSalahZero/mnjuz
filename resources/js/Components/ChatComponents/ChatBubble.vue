@@ -127,6 +127,34 @@ const copyItem = async (token) => {
 		copiedRef.value = null
 	}, 2000)
 }
+
+const escapeHtml = (str) => {
+	if (str == null) return ''
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#039;')
+}
+
+/** يحوّل النص إلى HTML مع تحويل الروابط إلى <a href target="_blank"> */
+const linkifyText = (text) => {
+	if (!text || typeof text !== 'string') return ''
+	const urlRegex = /(https?:\/\/[^\s]+)/g
+	let result = ''
+	let lastIndex = 0
+	let match
+	while ((match = urlRegex.exec(text)) !== null) {
+		result += escapeHtml(text.slice(lastIndex, match.index))
+		const url = match[1]
+		const safeHref = escapeHtml(url)
+		result += `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="text-[#00a5f4] underline break-all">${safeHref}</a>`
+		lastIndex = match.index + url.length
+	}
+	result += escapeHtml(text.slice(lastIndex))
+	return result
+}
 </script>
 <template>
 	<div class="rounded-lg my-1 p-2 text-sm flex flex-col relative" :class="props.type === 'outbound'
@@ -143,8 +171,8 @@ const copyItem = async (token) => {
 						{{ JSON.parse(content.metadata).header.text }}
 					</p>
 				</div>
-				<!-- Body -->
-				<p class="normal-case whitespace-pre-wrap">{{ JSON.parse(content.metadata).text?.body }}</p>
+				<!-- Body: الروابط تظهر كـ <a href target="_blank"> -->
+				<p class="normal-case whitespace-pre-wrap" v-html="linkifyText(JSON.parse(content.metadata).text?.body || '')"></p>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -228,9 +256,7 @@ const copyItem = async (token) => {
 					{{ $t('Content not available') }}
 				</div>
 				<div v-if="JSON.parse(content.metadata).image?.caption" style="overflow-wrap: break-word"
-					class="max-w-[320px]">
-					{{ JSON.parse(content.metadata).image?.caption }}
-				</div>
+					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(JSON.parse(content.metadata).image?.caption || '')"></div>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -552,9 +578,7 @@ const copyItem = async (token) => {
 					{{ $t('Content not available') }}
 				</div>
 				<div v-if="JSON.parse(content.metadata).video?.caption" style="overflow-wrap: break-word"
-					class="max-w-[320px]">
-					{{ JSON.parse(content.metadata).video?.caption }}
-				</div>
+					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(JSON.parse(content.metadata).video?.caption || '')"></div>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"

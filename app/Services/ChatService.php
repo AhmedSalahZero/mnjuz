@@ -36,6 +36,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use App\Events\ContactChatDeletedEvent;
 
 class ChatService
 {
@@ -494,6 +495,8 @@ class ChatService
             'deleted_by' => auth()->user()->id,
             'deleted_at' =>  now()
         ]);
+		
+		event(new ContactChatDeletedEvent($this->organizationId, $contact->id));
 
         //    $chat = Chat::with('contact','media')->where('id', $contact->lastChat->id)->first();
 

@@ -80,11 +80,7 @@ class NewChatEvent implements ShouldBroadcast
         if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
             return $payload;
         }
-		// logger('pusher_max_limit_reached');
-		// logger('before_shrink');
-		// logger(json_encode($payload));
-		// logger('after_shrink');
-		// logger(json_encode($this->shrinkPayloadToLimit($payload)));
+	
         return $this->shrinkPayloadToLimit($payload);
     }
 
@@ -226,17 +222,14 @@ class NewChatEvent implements ShouldBroadcast
 		// }
 		$metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
 		$type = $metadata['type'] ?? null;
-		$logger= 0 ;
 		
 		if($metadata && isset($metadata['type']) && $type && empty($metadata[$type])  ){
-			$logger = 1 ;
 			$metadata[$type] = null;
 		}
 		if(is_array($metadata)){
 			$metadata = json_encode($metadata);
 		}
         return [
-			'logger' => $logger,
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
             'contact_id' => $contactId,
