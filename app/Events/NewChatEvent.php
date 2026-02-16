@@ -153,7 +153,7 @@ class NewChatEvent implements ShouldBroadcast
     /** الحقول فقط التي تستخدمها الواجهة من metadata كل log (ChatBubble: status, errors, id) */
     private const LOG_METADATA_KEYS = ['status', 'errors', 'id'];
 
-    /** حد Pusher 10240 بايت — ن ate الحقول الكبيرة لضمان عدم تجاوزه */
+    /** حد Pusher 10240 بايت — ن truncate الحقول الكبيرة لضمان عدم تجاوزه */
     private const MAX_METADATA_BYTES = 1800;
     private const MAX_MEDIA_PATH_BYTES = 200;
     private const MAX_LOGS_ENTRIES = 6;
@@ -175,8 +175,8 @@ class NewChatEvent implements ShouldBroadcast
             $media = [
                 'type' => $arr['media']['type'] ?? null,
                 'size' => $arr['media']['size'] ?? null,
-                'path' => $this->ateToBytes($arr['media']['path'] ?? '', self::MAX_MEDIA_PATH_BYTES),
-                'name' => $this->ateToBytes($arr['media']['name'] ?? '', 80),
+                'path' => $this->truncateToBytes($arr['media']['path'] ?? '', self::MAX_MEDIA_PATH_BYTES),
+                'name' => $this->truncateToBytes($arr['media']['name'] ?? '', 80),
             ];
         }
 
@@ -201,7 +201,7 @@ class NewChatEvent implements ShouldBroadcast
                 ]);
             if ($contact) {
                 $contactPhone = $contact->phone;
-                $contactFullName = $this->ateToBytes(
+                $contactFullName = $this->truncateToBytes(
                     trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
                     120
                 ) ?: null;
@@ -217,8 +217,10 @@ class NewChatEvent implements ShouldBroadcast
         }
 
         $metadataRaw = $arr['metadata'] ?? null;
-        $metadata = $metadataRaw;
-      
+        $metadata = is_string($metadataRaw)
+            ? $this->truncateToBytes($metadataRaw, self::MAX_METADATA_BYTES)
+            : $this->truncateToBytes(json_encode($metadataRaw), self::MAX_METADATA_BYTES);
+
 		if($metadata){
 			$metadata = json_decode($metadata, true);
 		}
@@ -226,11 +228,6 @@ class NewChatEvent implements ShouldBroadcast
 		if($metadata && isset($metadata['type']) && $type && empty($metadata[$type])  ){
 			$metadata[$type] = null;
 		}
-		if(isset($metadata[$type])){
-			unset($metadata[$type]['url']);
-		}
-		$metadata = is_string($metadata) ? $metadata : json_encode($metadata);
-		
         return [
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
@@ -267,8 +264,8 @@ class NewChatEvent implements ShouldBroadcast
         ];
     }
 
-    /** ate string to max bytes (UTF-8 safe) لضمان عدم تجاوز حد Pusher */
-    private function ateToBytes(string $s, int $maxBytes): string
+    /** truncate string to max bytes (UTF-8 safe) لضمان عدم تجاوز حد Pusher */
+    private function truncateToBytes(string $s, int $maxBytes): string
     {
         if (strlen($s) <= $maxBytes) {
             return $s;

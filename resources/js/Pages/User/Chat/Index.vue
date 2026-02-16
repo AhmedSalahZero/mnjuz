@@ -276,6 +276,7 @@ const refetchChatsList = debounce(async () => {
 }, 1500)
 
 const updateSidePanel = async (chat, statusChanged) => {
+	console.log('event chat', chat)
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
 	if (contact.value && contact.value.id == chat[0].value.contact_id) {
 		updateChatThread(chat)

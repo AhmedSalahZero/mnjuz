@@ -1191,8 +1191,7 @@ class ApiController extends Controller
 			})
 			->when(count($entityTypes), function ($q) use ($entityTypes) {
 				$q->whereIn('entity_type', $entityTypes);
-			})
-			;
+			});
 
         $chatLogs = $query->get() ;
         $chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
