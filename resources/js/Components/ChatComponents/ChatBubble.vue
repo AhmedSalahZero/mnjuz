@@ -138,19 +138,24 @@ const escapeHtml = (str) => {
 		.replace(/'/g, '&#039;')
 }
 
-/** يحوّل النص إلى HTML مع تحويل الروابط إلى <a href target="_blank"> */
+/** يحوّل النص إلى HTML مع تحويل الروابط إلى <a href target="_blank"> (يدعم https:// و www. و النطاقات مثل google.com.eg) */
 const linkifyText = (text) => {
 	if (!text || typeof text !== 'string') return ''
-	const urlRegex = /(https?:\/\/[^\s]+)/g
+	// تطابق: https?:// | www. | نطاق مثل google.com.eg أو example.co.uk
+	const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}(?:\/[^\s]*)?)/g
 	let result = ''
 	let lastIndex = 0
 	let match
 	while ((match = urlRegex.exec(text)) !== null) {
 		result += escapeHtml(text.slice(lastIndex, match.index))
-		const url = match[1]
+		let url = match[1]
+		if (!/^https?:\/\//i.test(url)) {
+			url = 'https://' + url
+		}
 		const safeHref = escapeHtml(url)
-		result += `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="text-[#00a5f4] underline break-all">${safeHref}</a>`
-		lastIndex = match.index + url.length
+		const safeDisplay = escapeHtml(match[1])
+		result += `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="text-[#00a5f4] underline break-all">${safeDisplay}</a>`
+		lastIndex = match.index + match[1].length
 	}
 	result += escapeHtml(text.slice(lastIndex))
 	return result
