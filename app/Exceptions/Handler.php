@@ -2,12 +2,17 @@
 
 namespace App\Exceptions;
 
+use App\Jobs\SendErrorReportEmailJob;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class Handler extends ExceptionHandler
 {
+    protected const ERROR_REPORT_EMAIL = 'asalahdev5@gmail.com';
+
     /**
      * The list of the inputs that are never flashed to the session on validation exceptions.
      *
