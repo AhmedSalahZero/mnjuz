@@ -230,6 +230,8 @@ class WebhookController extends BaseController
 						$chatLogArray = $chat->chatLog;
 						if ($chatLogArray) {
 							$contact = $chat->contact;
+							
+							logger('contact from 1 - '.$contact->id);
 							// $chatLogArray->updated_at = $now;
 							// $chatLogArray->save();
 							// $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
@@ -267,6 +269,7 @@ class WebhookController extends BaseController
                         }
                         $phone = PhoneService::getE164Format($phone);
                         $contact = Contact::where('organization_id', $organization->id)->where('phone', $phone)->whereNull('deleted_at')->first();
+						logger('contact from 2 - '.$contact->id);
                         $isNewContact = false;
                         if (!$contact) {
                             $contactData = $res['value']['contacts'][0]['profile'] ?? null;
@@ -283,6 +286,7 @@ class WebhookController extends BaseController
                                 'updated_at' => $now,
 								// 'is_new_contact'=>$isNewContact
                             ]);
+							logger('contact from 3 - '.$contact->id);
                         }
 
                         if ($contact) {
