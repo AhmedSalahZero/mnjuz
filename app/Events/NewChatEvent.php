@@ -221,13 +221,16 @@ class NewChatEvent implements ShouldBroadcast
             ? $this->truncateToBytes($metadataRaw, self::MAX_METADATA_BYTES)
             : $this->truncateToBytes(json_encode($metadataRaw), self::MAX_METADATA_BYTES);
 
-		if($metadata){
-			$metadata = json_decode($metadata, true);
-		}
+		
 		$type = $metadata['type'] ?? null;
 		if($metadata && isset($metadata['type']) && $type && empty($metadata[$type])  ){
 			$metadata[$type] = null;
 		}
+		
+		if($metadata){
+			$metadata = json_decode($metadata, true);
+		}
+		
         return [
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
