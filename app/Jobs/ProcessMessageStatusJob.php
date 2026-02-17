@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\NewChatEvent;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
@@ -34,26 +35,34 @@ class ProcessMessageStatusJob implements ShouldQueue
     public function handle()
     {
         try {
-			foreach($this->statuses as $status) {
-		//		logger('inside first job');
+            $now = DateTimeHelper::convertToOrganizationTimezone(now(), null);
+
+            foreach ($this->statuses as $status) {
                 $chatWamId = $status['id'];
                 $statusValue = $status['status'];
 
-                // ✅ البحث عن الـ chat
                 $chat = Chat::where('wam_id', $chatWamId)
                     ->where('organization_id', $this->organizationId)
                     ->first();
 
-                if($chat) {
-                    // ✅ تحديث الحالة
+                if ($chat) {
                     $chat->update(['status' => $statusValue]);
 
-                    // ✅ حفظ Log
                     ChatStatusLog::create([
                         'chat_id' => $chat->id,
                         'metadata' => json_encode($status),
-                        'created_at' => now()
+                        'created_at' => $now,
                     ]);
+
+                    $chatLog = $chat->chatLog;
+                    if ($chatLog) {
+                        $chatArray = [[
+                            'type' => 'chat',
+                            'value' => $chatLog->relatedEntities,
+                            'tempMessageId' => $status['id'],
+                        ]];
+                        event(new NewChatEvent($chatArray, $this->organizationId, false, true));
+                    }
 
                     Log::info("Message status updated", [
                         'chat_id' => $chat->id,
@@ -68,7 +77,6 @@ class ProcessMessageStatusJob implements ShouldQueue
                 }
             }
 
-            // ✅ Trigger webhook
             WebhookHelper::triggerWebhookEvent(
                 'message.status.update',
                 ['data' => $this->statuses],
@@ -84,5 +92,4 @@ class ProcessMessageStatusJob implements ShouldQueue
             throw $e;
         }
     }
-	
 }

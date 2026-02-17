@@ -194,9 +194,9 @@ class WebhookController extends BaseController
 	
     protected function handlePostRequest(Request $request, Organization $organization)
     {
+		return $this->handleAjaxPostRequest($request, $organization);
 		
-		// if($organization->id == 1) { // for ladyes only
-		// 	return $this->handleAjaxPostRequest($request, $organization);
+		// if($organization->id) { // for ladyes only
 		// }
 		/**
 		 * * دا الكود القديم قبل ما نستخدم ال jobs
@@ -362,7 +362,7 @@ class WebhookController extends BaseController
 									'is_new_contact'=>$isNewContact,
                                     'type' => 'chat',
                                     'value' => $chatLogArray->relatedEntities,
-							//		'tempMessageId'=>$response['id'],
+		
 									
                                 ]);
                                 event(new NewChatEvent($chatArray, $organization->id, $isNewContact));

@@ -8,6 +8,7 @@ use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Services\PhoneService;
+use App\Services\SubscriptionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,18 +46,21 @@ class ProcessIncomingMessageJob implements ShouldQueue
             }
 
             // ✅ الحصول على/إنشاء contact
-            $contact = $this->getOrCreateContact();
+            [$contact, $isNewContact] = $this->getOrCreateContact();
+            $this->updateContactNameIfNull($contact);
+
             $chat = $this->createChat($contact);
             if ($chat) {
-                
-                
+                $contact->update(['last_inbound_chat_created_at' => DateTimeHelper::convertToOrganizationTimezone(now(), null)]);
+
                 // ✅ Media في job منفصل (لا ينتظر)
                 $hasMedia = $this->hasMedia();
                 if ($hasMedia) {
                     ProcessMediaDownloadJob::dispatch(
                         $chat->id,
                         $this->message,
-                        $this->organizationId
+                        $this->organizationId,
+                        $isNewContact
                     )->onQueue('media');
                 }
 
@@ -70,29 +74,29 @@ class ProcessIncomingMessageJob implements ShouldQueue
                     true // isNewChat
                 )->onQueue('tickets');
 
-                // ✅ AutoReply في job منفصل
-                if ($this->shouldCheckAutoReply()) {
+                // ✅ AutoReply في job منفصل (مع التحقق من حد الرسائل)
+                $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit');
+                if (!$isMessageLimitReached && $this->shouldCheckAutoReply()) {
                     ProcessAutoReplyJob::dispatch(
                         $chat->id,
-                        $this->organizationId
+                        $this->organizationId,
+                        $isNewContact
                     )->onQueue('autoreplies')->delay(now()->addSeconds(5));
                 }
-                
+
                 if (!$hasMedia) {
                     event(new \App\Events\NewChatEvent(
-                        $this->formatChatForEvent($chat),
-                        $this->organizationId
+                        $this->formatChatForEvent($chat, $isNewContact),
+                        $this->organizationId,
+                        $isNewContact
                     ));
 
-                    // ✅ Webhook
                     WebhookHelper::triggerWebhookEvent(
                         'message.received',
                         ['data' => $this->message],
                         $this->organizationId
                     );
                 }
-                // ✅ Event
-              
             }
         } catch (\Exception $e) {
             Log::error('ProcessIncomingMessageJob failed', [
@@ -125,12 +129,12 @@ class ProcessIncomingMessageJob implements ShouldQueue
         return false;
     }
 
-    private function getOrCreateContact()
+    private function getOrCreateContact(): array
     {
         $phone = PhoneService::getE164Format(
             '+' . ltrim($this->message['from'], '+')
         );
-        return Contact::firstOrCreate(
+        $contact = Contact::firstOrCreate(
             [
                 'organization_id' => $this->organizationId,
                 'phone' => $phone,
@@ -140,10 +144,18 @@ class ProcessIncomingMessageJob implements ShouldQueue
                 'last_name' => null,
                 'email' => null,
                 'created_by' => 0,
-                'created_at' =>  now(),
-                'updated_at' =>  now(),
+                'created_at' => now(),
+                'updated_at' => now(),
             ]
         );
+        return [$contact, $contact->wasRecentlyCreated];
+    }
+
+    private function updateContactNameIfNull(Contact $contact): void
+    {
+        if ($contact->first_name === null && isset($this->contactData['profile']['name'])) {
+            $contact->update(['first_name' => $this->contactData['profile']['name']]);
+        }
     }
 
     private function createChat($contact)
@@ -185,15 +197,16 @@ class ProcessIncomingMessageJob implements ShouldQueue
         ]);
     }
 
-    private function formatChatForEvent($chat)
+    private function formatChatForEvent($chat, bool $isNewContact = false)
     {
         $chatLog = ChatLog::where('entity_id', $chat->id)
             ->where('entity_type', 'chat')
             ->first();
 
         return [[
+            'is_new_contact' => $isNewContact,
             'type' => 'chat',
-            'value' => $chatLog->relatedEntities ?? $chat
+            'value' => $chatLog->relatedEntities ?? $chat,
         ]];
     }
 }

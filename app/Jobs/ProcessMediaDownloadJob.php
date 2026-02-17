@@ -32,12 +32,14 @@ class ProcessMediaDownloadJob implements ShouldQueue
     protected $chatId;
     protected $message;
     protected $organizationId;
-    
-    public function __construct($chatId, $message, $organizationId)
+    protected $isNewContact;
+
+    public function __construct($chatId, $message, $organizationId, $isNewContact = false)
     {
         $this->chatId = $chatId;
         $this->message = $message;
         $this->organizationId = $organizationId;
+        $this->isNewContact = $isNewContact;
     }
     
     public function handle()
@@ -80,7 +82,8 @@ class ProcessMediaDownloadJob implements ShouldQueue
         
         event(new \App\Events\NewChatEvent(
             $this->formatChatForEvent($chat),
-            $this->organizationId
+            $this->organizationId,
+            $this->isNewContact
         ));
 
         // ✅ Webhook
