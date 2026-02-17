@@ -284,7 +284,6 @@ class WebhookController extends BaseController
                                 'created_by' => 0,
                                 'created_at' =>  $now,
                                 'updated_at' => $now,
-								// 'is_new_contact'=>$isNewContact
                             ]);
 							logger('contact from 3 - '.$contact->id);
                         }
@@ -297,9 +296,7 @@ class WebhookController extends BaseController
                                     'first_name' => $contactData['name'],
                                 ]);
                             }
-							// $contact->update([
-							// 	'is_new_contact'=>false 
-							// ]);
+							
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
 						

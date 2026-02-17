@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\ContactChatDeletedEvent;
 use App\Events\NewChatEvent;
 use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
@@ -36,7 +37,6 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use App\Events\ContactChatDeletedEvent;
 
 class ChatService
 {
@@ -140,7 +140,8 @@ class ChatService
         );
 
         $contacts = $contactsQuery;
-        $rowCount = $contacts->total();
+        // $rowCount = $contacts->total();
+        $rowCount = count($contacts);
 
         // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
      //   $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
