@@ -198,14 +198,10 @@ class WebhookController extends BaseController
 		// if($organization->id == 1) { // for ladyes only
 		// 	return $this->handleAjaxPostRequest($request, $organization);
 		// }
-		/**
-		 * * دا الكود القديم قبل ما نستخدم ال jobs
-		 */
+		
         $res = $request->entry[0]['changes'][0];
 		 $now = DateTimeHelper::convertToOrganizationTimezone(now(),null);
-		 /**
-		  * * هسجل التاريخ بال utc واستخدمه للمعالجة بناء علي الاعدادت بتاعت سواء كان الرياض او لندن مثلا
-		  */
+		
         if ($res['field'] === 'messages') {
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
@@ -230,22 +226,12 @@ class WebhookController extends BaseController
 						$chatLogArray = $chat->chatLog;
 						if ($chatLogArray) {
 							$contact = $chat->contact;
-							
-							logger('contact from 1 - '.$contact->id);
-							// $chatLogArray->updated_at = $now;
-							// $chatLogArray->save();
-							// $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
-							// $contact->encryptPhoneNumber($shouldBeEncrypted);
 							$chatArray = array([
-								// 'is_new_contact' => false,
+					
 								'type' => 'chat',
 								'value' => $chatLogArray->relatedEntities,
 								'tempMessageId' => $response['id'],
-								// 'status'=>$response['status'],
-								// 'contact_name'=>$contact->first_name . ' ' . $contact->last_name,
-								// 'contact_phone'=>$contact->formatted_phone_number,
-								// 'chat_id'=>$chat->id,
-								// 'chat_log_id'=>$chatLogArray->id,
+								
 							]);
 
 							event(new NewChatEvent($chatArray, $organization->id, false, true));
