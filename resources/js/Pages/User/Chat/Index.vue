@@ -286,25 +286,30 @@ const updateSidePanel = async (chat, statusChanged) => {
 		return false
 	}
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
+	let currentChat = chat[0].value
+	if (currentChat.type === 'inbound') {
+		if (currentContact) {
+			currentContact.last_chat = currentChat
+			console.log('unread_messages_count', currentContact)
+			currentContact.unread_messages = currentContact.unread_messages + 1
+			currentContact.last_inbound_chat_created_at = currentChat.created_at
+			currentContact.latest_chat_created_at = currentChat.created_at
+		} else {
+			rows.value.data.push({
+				id: currentChat.contact_id,
+				uuid: currentChat.contact_uuid,
+				last_chat: currentChat,
+				unread_messages: 1,
+				last_inbound_chat_created_at: currentChat.created_at,
+				latest_chat_created_at: currentChat.created_at,
+				full_name: currentChat.contact_full_name,
 
-	if (currentContact) {
-		currentContact.last_chat = chat[0].value
-		console.log('unread_messages_count', currentContact)
-		currentContact.unread_messages = currentContact.unread_messages + 1
-		currentContact.last_inbound_chat_created_at = chat[0].value.created_at
-		currentContact.latest_chat_created_at = chat[0].value.created_at
+			})
+		}
 	}
-	console.log(rows.value.data, chat[0], '*---*', chat[0].value.contact_id)
-	rows.value.data.push({
-		id: chat[0].value.contact_id,
-		uuid: chat[0].value.contact_uuid,
-		last_chat: chat[0].value,
-		unread_messages: 1,
-		last_inbound_chat_created_at: chat[0].value.created_at,
-		latest_chat_created_at: chat[0].value.created_at,
-		full_name: chat[0].value.contact_full_name,
 
-	})
+	console.log(rows.value.data, chat[0], '*---*', currentChat.contact_id)
+
 
 
 	console.log('refetching chats list')
