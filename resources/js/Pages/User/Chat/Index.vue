@@ -286,78 +286,71 @@ const updateSidePanel = async (chat, statusChanged) => {
 		return false
 	}
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
-	let currentChat = chat[0].value
+
 	if (currentContact) {
-		currentContact.last_chat = currentChat
+		currentContact.last_chat = chat[0].value
+		console.log('unread_messages_count', currentContact)
 		currentContact.unread_messages = currentContact.unread_messages + 1
-		currentContact.last_inbound_chat_created_at = currentChat.created_at
-		currentContact.latest_chat_created_at = currentChat.created_at
+		currentContact.last_inbound_chat_created_at = chat[0].value.created_at
+		currentContact.latest_chat_created_at = chat[0].value.created_at
 	}
-	else {
-		rows.value.data.push({
-			id: currentChat.contact_id,
-			uuid: chat[0].value.contact_uuid,
-			last_chat: currentChat,
-			unread_messages: 1,
-			last_inbound_chat_created_at: currentChat.created_at,
-			latest_chat_created_at: currentChat.created_at,
-		})
-		rows.value.data.push({
-			id: chat[0].value.contact_id,
-			uuid: chat[0].value.contact_uuid,
-			last_chat: chat[0].value,
-			unread_messages: 1,
-			last_inbound_chat_created_at: chat[0].value.created_at,
-			latest_chat_created_at: chat[0].value.created_at,
-			full_name: chat[0].value.contact_full_name,
+	console.log(rows.value.data, chat[0], '*---*', chat[0].value.contact_id)
+	rows.value.data.push({
+		id: chat[0].value.contact_id,
+		uuid: chat[0].value.contact_uuid,
+		last_chat: chat[0].value,
+		unread_messages: 1,
+		last_inbound_chat_created_at: chat[0].value.created_at,
+		latest_chat_created_at: chat[0].value.created_at,
+		full_name: chat[0].value.contact_full_name,
 
-		})
-
-
-		console.log('refetching chats list')
-		console.log('chat', chat, '*---*', rows.value)
-		//	refetchChatsList()
-
-		//	if (isCurrentContact && !statusChanged) {
-		//	console.log('updateChatThread', isCurrentContact)
-		//	updateChatThread(chat)
-		// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
-		//	return
-		//	}
-		// updateChatThread(chat)
-		// refetchChatsList()
-
-	}
-
-
-	onMounted(() => {
-		try {
-			if (!props.organizationId) return
-
-			const { subscribe } = getOrJoinChatChannel(
-				props.organizationId,
-				props.pusherSettings.pusher_app_key,
-				props.pusherSettings.pusher_app_cluster,
-			)
-			unsubscribeChatChannel.value = subscribe((event) => {
-				updateSidePanel(event.chat, event.statusChanged)
-			})
-
-			scrollToBottom()
-		} catch (error) {
-			// تجاهل
-		}
 	})
 
-	onUnmounted(() => {
-		try {
-			if (typeof unsubscribeChatChannel.value === 'function') {
-				unsubscribeChatChannel.value()
-			}
-			unsubscribeChatChannel.value = null
-		} catch (error) {
-			// تجاهل
+
+	console.log('refetching chats list')
+	console.log('chat', chat, '*---*', rows.value)
+	//	refetchChatsList()
+
+	//	if (isCurrentContact && !statusChanged) {
+	//	console.log('updateChatThread', isCurrentContact)
+	//	updateChatThread(chat)
+	// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
+	//	return
+	//	}
+	// updateChatThread(chat)
+	// refetchChatsList()
+
+}
+
+
+onMounted(() => {
+	try {
+		if (!props.organizationId) return
+
+		const { subscribe } = getOrJoinChatChannel(
+			props.organizationId,
+			props.pusherSettings.pusher_app_key,
+			props.pusherSettings.pusher_app_cluster,
+		)
+		unsubscribeChatChannel.value = subscribe((event) => {
+			updateSidePanel(event.chat, event.statusChanged)
+		})
+
+		scrollToBottom()
+	} catch (error) {
+		// تجاهل
+	}
+})
+
+onUnmounted(() => {
+	try {
+		if (typeof unsubscribeChatChannel.value === 'function') {
+			unsubscribeChatChannel.value()
 		}
-	})
+		unsubscribeChatChannel.value = null
+	} catch (error) {
+		// تجاهل
+	}
+})
 
 </script>
