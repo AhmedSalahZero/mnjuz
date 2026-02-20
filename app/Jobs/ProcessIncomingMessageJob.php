@@ -204,6 +204,15 @@ class ProcessIncomingMessageJob implements ShouldQueue
             ->where('entity_type', 'chat')
             ->first();
 		logger('contact uuidf'.$contactUuid);
+		
+		
+		
+		
+		
+		
+		
+		
+		/// 
         return [[
             'is_new_contact' => $isNewContact,
 			'contact_uuid' => $contactUuid,
