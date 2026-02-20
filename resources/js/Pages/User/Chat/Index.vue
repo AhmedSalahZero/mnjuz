@@ -296,7 +296,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 			currentContact.unread_messages = currentContact.unread_messages + 1
 			currentContact.last_inbound_chat_created_at = currentChat.created_at
 			currentContact.latest_chat_created_at = currentChat.created_at
-		} else {
+		} else if (chat[0].value.contact_uuid) {
 			console.log('pushing new contact', currentChat)
 			rows.value.data.push({
 				id: currentChat.contact_id,
