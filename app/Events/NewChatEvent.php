@@ -192,10 +192,11 @@ class NewChatEvent implements ShouldBroadcast
         $contactUuid = null;
         if ($contactId) {
             $contact = Contact::where('id', $contactId)
-                ->first([
-                    'phone', 'first_name', 'last_name', 'email', 'organization_id',
-                    'latest_chat_created_at', 'is_blocked', 'is_favorite',
-                ]);
+			->first([
+				'phone', 'first_name', 'last_name', 'email', 'organization_id',
+				'latest_chat_created_at', 'is_blocked', 'is_favorite',
+				'uuid',
+			]);
             if ($contact) {
                 $contactPhone = $contact->phone;
                 $contactFullName = $this->truncateToBytes(

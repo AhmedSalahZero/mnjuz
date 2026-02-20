@@ -197,57 +197,57 @@ class WebhookController extends BaseController
 		return $this->handleAjaxPostRequest($request, $organization);
     }
 
-    // private function downloadMedia($mediaInfo, Organization $organization)
-    // {
-    //     $metadata = json_decode($organization->metadata);
+    private function downloadMedia($mediaInfo, Organization $organization)
+    {
+        $metadata = json_decode($organization->metadata);
 
-    //     if (empty($metadata) || empty($metadata->whatsapp->access_token)) {
-    //         return $this->forbiddenResponse();
-    //     }
+        if (empty($metadata) || empty($metadata->whatsapp->access_token)) {
+            return $this->forbiddenResponse();
+        }
 
-    //     try {
-    //         $client = new Client();
+        try {
+            $client = new Client();
 
-    //         $requestOptions = [
-    //             'headers' => [
-    //                 'Authorization' => 'Bearer ' . $metadata->whatsapp->access_token,
-    //                 'Content-Type' => 'application/json',
-    //             ],
-    //         ];
+            $requestOptions = [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $metadata->whatsapp->access_token,
+                    'Content-Type' => 'application/json',
+                ],
+            ];
 
-    //         $response = $client->request('GET', $mediaInfo['url'], $requestOptions);
+            $response = $client->request('GET', $mediaInfo['url'], $requestOptions);
 
-    //         $fileContent = $response->getBody();
-    //         $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream'; // Default fallback
-    //         $fileName = $this->generateFilename($fileContent, $mediaInfo['mime_type']);
+            $fileContent = $response->getBody();
+            $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream'; // Default fallback
+            $fileName = $this->generateFilename($fileContent, $mediaInfo['mime_type']);
 
-    //         $storage = Setting::where('key', 'storage_system')->first()->value;
+            $storage = Setting::where('key', 'storage_system')->first()->value;
 
-    //         if ($storage === 'local') {
-    //             $location = 'local';
-    //             $file = Storage::disk('local')->put('public/' . $fileName, $fileContent);
-    //             $mediaFilePath = $file;
-    //             $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . 'public/' . $fileName;
-    //         } elseif ($storage === 'aws') {
-    //             $location = 'amazon';
-    //             $filePath = 'uploads/media/received/'  . $organization->id . '/' . Str::random(40) . time();
-    //             $file = Storage::disk('s3')->put($filePath, $fileContent, [
-    //                 'ContentType' => $mimeType
-    //             ]);
-    //             $mediaUrl = Storage::disk('s3')->url($filePath);
-    //         }
+            if ($storage === 'local') {
+                $location = 'local';
+                $file = Storage::disk('local')->put('public/' . $fileName, $fileContent);
+                $mediaFilePath = $file;
+                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . 'public/' . $fileName;
+            } elseif ($storage === 'aws') {
+                $location = 'amazon';
+                $filePath = 'uploads/media/received/'  . $organization->id . '/' . Str::random(40) . time();
+                $file = Storage::disk('s3')->put($filePath, $fileContent, [
+                    'ContentType' => $mimeType
+                ]);
+                $mediaUrl = Storage::disk('s3')->url($filePath);
+            }
 
-    //         $mediaData = [
-    //             'media_url' => $mediaUrl,
-    //             'location' => $location,
-    //         ];
+            $mediaData = [
+                'media_url' => $mediaUrl,
+                'location' => $location,
+            ];
     
-    //         return $mediaData;
-    //     } catch (\Exception $e) {
-    //         Log::error("Error processing webhook: " . $e->getMessage());
-    //         return Response::json(['error' => 'Failed to download file'], 403);
-    //     }
-    // }
+            return $mediaData;
+        } catch (\Exception $e) {
+            Log::error("Error processing webhook: " . $e->getMessage());
+            return Response::json(['error' => 'Failed to download file'], 403);
+        }
+    }
 
     private function generateFilename($fileContent, $mimeType)
     {
