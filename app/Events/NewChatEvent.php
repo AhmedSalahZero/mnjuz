@@ -189,6 +189,7 @@ class NewChatEvent implements ShouldBroadcast
         $contactIsBlocked = null;
         $contactIsFavorite = null;
         $contactFormattedPhoneNumber = null;
+        $contactUuid = null;
         if ($contactId) {
             $contact = Contact::where('id', $contactId)
                 ->first([
@@ -209,6 +210,7 @@ class NewChatEvent implements ShouldBroadcast
                 $contactIsBlocked = $contact->is_blocked;
                 $contactIsFavorite = $contact->is_favorite;
                 $contactFormattedPhoneNumber = $contact->formatted_phone_number;
+                $contactUuid = $contact->uuid;
             }
         }
 		$metadata = $arr['metadata'] ?? null;
@@ -232,6 +234,7 @@ class NewChatEvent implements ShouldBroadcast
         return [
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
+			'contact_uuid' => $contactUuid,
             'contact_id' => $contactId,
             'is_new_contact' => $this->isNewContact,
             // 'contact_phone' => $contactPhone,
