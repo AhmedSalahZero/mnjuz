@@ -286,11 +286,12 @@ const updateSidePanel = async (chat, statusChanged) => {
 		return false
 	}
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
+	console.log('rows data', rows.value.data)
 	let currentChat = chat[0].value
 	if (currentChat.type === 'inbound') {
 		if (currentContact) {
 			currentContact.last_chat = currentChat
-			console.log('unread_messages_count', currentContact)
+			console.log('unread_messages_count', currentContact, currentContact)
 			currentContact.unread_messages = currentContact.unread_messages + 1
 			currentContact.last_inbound_chat_created_at = currentChat.created_at
 			currentContact.latest_chat_created_at = currentChat.created_at
