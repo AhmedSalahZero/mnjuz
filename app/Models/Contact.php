@@ -220,7 +220,10 @@ class Contact extends Model
 		/**
 		 * @var Builder $query 
 		 */
+		return $query->get();
 		$perPage = Request()->input('per_page', 20);
+		
+		// $perPage = 20000000;
 		//$page = Request()->input('page', null);
 		// if($page){
 		// 	return  $query->paginate($perPage, ['*'], $page); // for mobile app pagination

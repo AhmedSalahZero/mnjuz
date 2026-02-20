@@ -285,8 +285,31 @@ const updateSidePanel = async (chat, statusChanged) => {
 		console.log('status changed do nothing')
 		return false
 	}
+	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
+
+	// if (currentContact) {
+	// 	currentContact.last_chat = chat[0].value
+	// 	console.log('unread_messages_count', currentContact)
+	// 	currentContact.unread_messages = currentContact.unread_messages + 1
+	// 	currentContact.last_inbound_chat_created_at = chat[0].value.created_at
+	// 	currentContact.latest_chat_created_at = chat[0].value.created_at
+	// }
+	console.log(rows.value.data, chat[0], '*---*', chat[0].value.contact_id)
+	rows.value.data.push({
+		id: chat[0].value.contact_id,
+		uuid: chat[0].value.contact_uuid,
+		last_chat: chat[0].value,
+		unread_messages: 1,
+		last_inbound_chat_created_at: chat[0].value.created_at,
+		latest_chat_created_at: chat[0].value.created_at,
+		full_name: chat[0].value.contact_full_name,
+
+	})
+
+
 	console.log('refetching chats list')
-	refetchChatsList()
+	console.log('chat', chat, '*---*', rows.value)
+	//	refetchChatsList()
 
 	//	if (isCurrentContact && !statusChanged) {
 	//	console.log('updateChatThread', isCurrentContact)

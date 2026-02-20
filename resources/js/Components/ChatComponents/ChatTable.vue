@@ -211,9 +211,10 @@ const clearSearch = () => {
 		</div>
 	</div>
 	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-		<Link :href="'/chats/' + contact.uuid + '?page=' + props.rows.meta.current_page"
-			class="block border-b group-hover:pr-0" :class="contact.unread_messages > 0 ? 'bg-green-50' : ''"
-			v-for="(contact, index) in rows.data" :key="index">
+		<Link :href="'/chats/' + contact.uuid" class="block border-b group-hover:pr-0"
+			:class="contact.unread_messages > 0 ? 'bg-green-50' : ''"
+			v-for="(contact, index) in rows.data.sort((a, b) => new Date(b.latest_chat_created_at) - new Date(a.latest_chat_created_at))"
+			:key="index">
 			<div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
 				<div class="w-[15%] flex items-center gap-1">
 					<img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar" />
@@ -334,7 +335,7 @@ const clearSearch = () => {
 			</div>
 		</Link>
 	</div>
-	<div class="px-4 pb-4">
+	<!-- <div class="px-4 pb-4">
 		<Pagination class="mt-3" :pagination="rows.meta" />
-	</div>
+	</div> -->
 </template>
