@@ -288,38 +288,38 @@ const updateSidePanel = async (chat, statusChanged) => {
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
 	let currentChat = chat[0].value
 	if (currentChat.type === 'inbound') {
-		if (currentContact) {
-			currentContact.last_chat = currentChat
-			currentContact.unread_messages = currentContact.unread_messages + 1
-			currentContact.last_inbound_chat_created_at = currentChat.created_at
-			currentContact.latest_chat_created_at = currentChat.created_at
-		}
-		else {
-			rows.value.data.push({
-				id: currentChat.contact_id,
-				uuid: currentChat.contact_uuid,
-				last_chat: currentChat,
-				unread_messages: 1,
-				last_inbound_chat_created_at: currentChat.created_at,
-				latest_chat_created_at: currentChat.created_at,
-			})
 
-			console.log('refetching chats list')
-			console.log('chat', chat, '*---*', rows.value)
-			//	refetchChatsList()
-
-			//	if (isCurrentContact && !statusChanged) {
-			//	console.log('updateChatThread', isCurrentContact)
-			//	updateChatThread(chat)
-			// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
-			//	return
-			//	}
-			// updateChatThread(chat)
-			// refetchChatsList()
-
-		}
 	}
+	if (currentContact) {
+		currentContact.last_chat = currentChat
+		currentContact.unread_messages = currentContact.unread_messages + 1
+		currentContact.last_inbound_chat_created_at = currentChat.created_at
+		currentContact.latest_chat_created_at = currentChat.created_at
+	}
+	else {
+		rows.value.data.push({
+			id: currentChat.contact_id,
+			uuid: currentChat.contact_uuid,
+			last_chat: currentChat,
+			unread_messages: 1,
+			last_inbound_chat_created_at: currentChat.created_at,
+			latest_chat_created_at: currentChat.created_at,
+		})
 
+		console.log('refetching chats list')
+		console.log('chat', chat, '*---*', rows.value)
+		//	refetchChatsList()
+
+		//	if (isCurrentContact && !statusChanged) {
+		//	console.log('updateChatThread', isCurrentContact)
+		//	updateChatThread(chat)
+		// تحديث حالة رسالة في المحادثة الحالية — لا حاجة لإعادة جلب القائمة
+		//	return
+		//	}
+		// updateChatThread(chat)
+		// refetchChatsList()
+
+	}
 
 
 	onMounted(() => {
