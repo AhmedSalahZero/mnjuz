@@ -288,7 +288,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
 	console.log('rows data', rows.value.data)
 	let currentChat = chat[0].value
-	console.log('current chat', currentChat.contact_uuid)
+	console.log('current chat', chat[0].contact_uuid)
 	if (currentChat.type === 'inbound') {
 		if (currentContact) {
 			currentContact.last_chat = currentChat
@@ -300,7 +300,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 			console.log('pushing new contact', currentChat)
 			rows.value.data.push({
 				id: currentChat.contact_id,
-				uuid: currentChat.contact_uuid,
+				uuid: chat[0].contact_uuid,
 				last_chat: currentChat,
 				unread_messages: 1,
 				last_inbound_chat_created_at: currentChat.created_at,
