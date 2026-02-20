@@ -190,7 +190,6 @@ class NewChatEvent implements ShouldBroadcast
         $contactIsFavorite = null;
         $contactFormattedPhoneNumber = null;
         $contactUuid = null;
-		logger('conbtact id'.$contactId);
         if ($contactId) {
             $contact = Contact::where('id', $contactId)
 			->first([

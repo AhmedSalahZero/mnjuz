@@ -33,13 +33,14 @@ class ProcessMediaDownloadJob implements ShouldQueue
     protected $message;
     protected $organizationId;
     protected $isNewContact;
-
-    public function __construct($chatId, $message, $organizationId, $isNewContact = false)
+	protected $contactUuid;
+    public function __construct($chatId, $message, $organizationId, $isNewContact = false, $contactUuid = null)
     {
         $this->chatId = $chatId;
         $this->message = $message;
         $this->organizationId = $organizationId;
         $this->isNewContact = $isNewContact;
+		$this->contactUuid = $contactUuid;
     }
     
     public function handle()
@@ -81,7 +82,7 @@ class ProcessMediaDownloadJob implements ShouldQueue
         
         
         event(new \App\Events\NewChatEvent(
-            $this->formatChatForEvent($chat),
+            $this->formatChatForEvent($chat, $this->isNewContact, $this->contactUuid),
             $this->organizationId,
             $this->isNewContact
         ));
@@ -199,16 +200,17 @@ class ProcessMediaDownloadJob implements ShouldQueue
             return Response::json(['error' => 'Method Invalid'], 400);
         }
     }
-    private function formatChatForEvent($chat)
+	private function formatChatForEvent($chat, bool $isNewContact = false, $contactUuid = null)
     {
-        //	logger('format chat for event');
         $chatLog = ChatLog::where('entity_id', $chat->id)
             ->where('entity_type', 'chat')
             ->first();
 
         return [[
+            'is_new_contact' => $isNewContact,
+			'contact_uuid' => $contactUuid,
             'type' => 'chat',
-            'value' => $chatLog->relatedEntities ?? $chat
+            'value' => $chatLog->relatedEntities ?? $chat,
         ]];
     }
 

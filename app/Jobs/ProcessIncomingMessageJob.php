@@ -60,7 +60,8 @@ class ProcessIncomingMessageJob implements ShouldQueue
                         $chat->id,
                         $this->message,
                         $this->organizationId,
-                        $isNewContact
+                        $isNewContact,
+						$contact->uuid
                     )->onQueue('media');
                 }
 
@@ -86,7 +87,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
                 if (!$hasMedia) {
                     event(new \App\Events\NewChatEvent(
-                        $this->formatChatForEvent($chat, $isNewContact),
+                        $this->formatChatForEvent($chat, $isNewContact, $contact->uuid),
                         $this->organizationId,
                         $isNewContact
                     ));
@@ -197,7 +198,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
         ]);
     }
 
-    private function formatChatForEvent($chat, bool $isNewContact = false)
+    private function formatChatForEvent($chat, bool $isNewContact = false, $contactUuid = null)
     {
         $chatLog = ChatLog::where('entity_id', $chat->id)
             ->where('entity_type', 'chat')
@@ -205,6 +206,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
         return [[
             'is_new_contact' => $isNewContact,
+			'contact_uuid' => $contactUuid,
             'type' => 'chat',
             'value' => $chatLog->relatedEntities ?? $chat,
         ]];

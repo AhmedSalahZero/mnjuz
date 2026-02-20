@@ -173,7 +173,7 @@ class WebhookController extends BaseController
                     $message,
                     $res['value']['contacts'][0] ?? null,
                     $organization->id
-                )->onQueue('messages');
+                )->onQueue('high');
             }
         }
     } 
