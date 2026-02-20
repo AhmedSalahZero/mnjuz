@@ -305,6 +305,14 @@ const updateSidePanel = async (chat, statusChanged) => {
 			last_inbound_chat_created_at: currentChat.created_at,
 			latest_chat_created_at: currentChat.created_at,
 		})
+		rows.value.data.push({
+			id: currentChat.contact_id,
+			uuid: currentChat.contact_uuid,
+			last_chat: currentChat,
+			unread_messages: 1,
+			last_inbound_chat_created_at: currentChat.created_at,
+			latest_chat_created_at: currentChat.created_at,
+		})
 
 		console.log('refetching chats list')
 		console.log('chat', chat, '*---*', rows.value)
