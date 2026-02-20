@@ -35,6 +35,7 @@ class ProcessMessageStatusJob implements ShouldQueue
     public function handle()
     {
         try {
+			logger('4from statuses job');
             $now = DateTimeHelper::convertToOrganizationTimezone(now(), null);
 
             foreach ($this->statuses as $status) {
