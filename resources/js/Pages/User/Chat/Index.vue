@@ -287,9 +287,6 @@ const updateSidePanel = async (chat, statusChanged) => {
 	}
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
 	let currentChat = chat[0].value
-	if (currentChat.type === 'inbound') {
-
-	}
 	if (currentContact) {
 		currentContact.last_chat = currentChat
 		currentContact.unread_messages = currentContact.unread_messages + 1
@@ -299,20 +296,23 @@ const updateSidePanel = async (chat, statusChanged) => {
 	else {
 		rows.value.data.push({
 			id: currentChat.contact_id,
-			uuid: currentChat.contact_uuid,
+			uuid: chat[0].value.contact_uuid,
 			last_chat: currentChat,
 			unread_messages: 1,
 			last_inbound_chat_created_at: currentChat.created_at,
 			latest_chat_created_at: currentChat.created_at,
 		})
 		rows.value.data.push({
-			id: currentChat.contact_id,
-			uuid: currentChat.contact_uuid,
-			last_chat: currentChat,
+			id: chat[0].value.contact_id,
+			uuid: chat[0].value.contact_uuid,
+			last_chat: chat[0].value,
 			unread_messages: 1,
-			last_inbound_chat_created_at: currentChat.created_at,
-			latest_chat_created_at: currentChat.created_at,
+			last_inbound_chat_created_at: chat[0].value.created_at,
+			latest_chat_created_at: chat[0].value.created_at,
+			full_name: chat[0].value.contact_full_name,
+
 		})
+
 
 		console.log('refetching chats list')
 		console.log('chat', chat, '*---*', rows.value)
