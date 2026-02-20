@@ -288,7 +288,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
 	console.log('rows data', rows.value.data)
 	let currentChat = chat[0].value
-	console.log('current chat', chat[0].value.contact_uuid)
+	console.log('current chat', chat, chat[0].value.contact_uuid)
 	if (currentChat.type === 'inbound') {
 		if (currentContact) {
 			currentContact.last_chat = currentChat
