@@ -203,7 +203,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
         $chatLog = ChatLog::where('entity_id', $chat->id)
             ->where('entity_type', 'chat')
             ->first();
-
+		logger('contact uuidf'.$contactUuid);
         return [[
             'is_new_contact' => $isNewContact,
 			'contact_uuid' => $contactUuid,
