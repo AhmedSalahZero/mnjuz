@@ -395,10 +395,11 @@ class ChatService
     public function sendTemplateMessage(object $request, $uuid)
     {
 		$this->initializeWhatsappService();
+	
         $template = Template::where('uuid', $request->template)->first();
         $contact = Contact::where('uuid', $uuid)->first();
         $mediaId = null;
-
+	
         if (in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
             $header = $request->header;
             

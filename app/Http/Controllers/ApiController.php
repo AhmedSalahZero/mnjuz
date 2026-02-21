@@ -747,7 +747,8 @@ class ApiController extends Controller
 		
 		
 		$organizationId = $request->user()->current_organization_id;
-			$sendByQueue = true;
+		$organizationId = $organizationId ?: session()->get('current_organization');
+		$sendByQueue = true;
 		$template = Template::where('uuid', $request->template_uuid)->where('organization_id', $organizationId)->first();
 		if(!$template){
 			return response()->json([

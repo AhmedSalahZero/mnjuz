@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreProfile;
-use App\Http\Requests\StoreProfilePassword;
 use App\Http\Requests\StoreProfileAddress;
+use App\Http\Requests\StoreProfilePassword;
 use App\Http\Requests\StoreProfileTfa;
 use App\Models\Organization;
 use App\Models\User;
+use DB;
+use Hash;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Hash;
 use Redirect;
 
 class ProfileController extends BaseController
@@ -116,6 +116,7 @@ class ProfileController extends BaseController
         $metadataArray['notifications']['tone'] = $request->input('tone');
         $metadataArray['notifications']['volume'] = $request->input('volume');
         $metadataArray['timezone'] = $request->input('timezone');
+		$metadataArray['auth_template'] = $request->input('auth_template');
 
         $metadataArray['campaigns']['enable_resend'] = $request->input('enable_campaign_resend');
         $metadataArray['campaigns']['move_failed_contacts_to_group'] = $request->input('move_failed_contacts_to_group');

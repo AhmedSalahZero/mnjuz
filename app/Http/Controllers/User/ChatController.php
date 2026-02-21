@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\User;
 
 use App\Helpers\DateTimeHelper;
+use App\Http\Controllers\ApiController;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\AutoReply;
 use App\Models\Chat;
@@ -68,6 +69,27 @@ class ChatController extends BaseController
             ]
         );
     }
+	public function sendAuthTemplate(Request $request, $uuid)
+	{
+		$organizationId = session()->get('current_organization');
+		$organization = Organization::find($organizationId);
+		$templateUUID = $organization->metadata ? json_decode($organization->metadata)->auth_template : '';
+		$template = Template::where('uuid', $templateUUID)->first();
+
+		
+		if(!$template){
+			return response()->json([
+               'statusCode' => 404,
+				'success' => false,
+				'message' => __('Auth Template not found! .. Please Go To Settings -> General -> Auth Template To Edit It'),
+            ], 400);
+		}
+		$templateUUID = $template->uuid;
+		$contact = Contact::where('uuid', $uuid)->first();
+		$request->merge(['template_uuid' => $templateUUID, 'phone' => $contact->phone]);
+		$res = (new ApiController)->sendTemplateMessageByUUID($request);
+		return json_decode($res->getContent(), true);
+	}
 	
 	public function blockContact(Request $request, $contactId)
     {

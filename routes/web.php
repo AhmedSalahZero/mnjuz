@@ -148,6 +148,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
+				Route::post('/chat/{uuid}/send/auth-template', [App\Http\Controllers\User\ChatController::class, 'sendAuthTemplate']);
                 Route::post('/chat/{uuid}/block', [App\Http\Controllers\User\ChatController::class, 'blockContact']);
                 Route::post('/chat/{uuid}/unblock', [App\Http\Controllers\User\ChatController::class, 'unblockContact']);
                 Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);
@@ -201,7 +202,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::match(['get', 'post'], '/instances', [App\Http\Controllers\User\InstanceController::class, 'index']);
 
                 Route::get('/team', [App\Http\Controllers\User\TeamController::class, 'index'])->name('team');
-                Route::group(['middleware' => 'check.client.role'], function () {
+				// ['middleware' => 'check.client.role']
+                Route::group([], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);

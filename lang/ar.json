@@ -1034,5 +1034,8 @@
 "Please select an organization to continue.":"يرجى اختيار شركة للمتابعة.",
 "Template sent successfully":"تم ارسال القالب بنجاح",
 "Template not found!":"القالب غير موجود!",
-"Contact not found":"جهة الاتصال غير موجودة"
+"Contact not found":"جهة الاتصال غير موجودة",
+"Auth Template":"قالب الاتصال",
+"Default Auth Template To Be Used After 24 Hours Of Inactivity With The Contact":"القالب الافتراضي المستخدم بعد 24 ساعة من  عدم التواصل مع الجهة الاتصال",
+"Auth Template not found! .. Please Go To Settings -> General -> Auth Template To Edit It":"القالب الافتراضي غير موجود! .. يرجى الذهاب إلى إعدادات -> عام -> قالب الاتصال لتعديله"
 }

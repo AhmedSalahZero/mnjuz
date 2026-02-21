@@ -2,21 +2,21 @@
 
 namespace App\Http\Controllers\Admin;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreConfig;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\Redirect;
-use Illuminate\Validation\Rule;
-use Inertia\Inertia;
 use App\Models\Setting;
 use App\Models\UserAdmin;
 use App\Services\SettingService;
+use DB;
 use Hash;
 use Helper;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 use Session;
 use Validator;
 
@@ -47,7 +47,6 @@ class SettingController extends BaseController
                 ]
             );
         }
-
         $settings = $this->settingService->updateSettings($request);
 
         return Redirect::back()->with(

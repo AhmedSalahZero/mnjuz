@@ -11,11 +11,11 @@
 				<ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
 					:displayContactInfo="displayContactInfo" :ticket="ticket" :addon="addon"
 					@toggleView="toggleContactView" @deleteThread="deleteThread" @closeThread="closeThread" />
-				<div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
-					<ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
+				<div v-if="contact" class="flex-1 overflow-y-auto" ref="scrollContainer2">
+					<ChatThread v-if="!displayContactInfo && !loadingThread" :contactId="contact.id"
 						:initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
-					<Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full"
-						:fields="props.fields" :contact="contact" :locationSettings="props.locationSettings" />
+					<Contact v-if="displayContactInfo" class="bg-white h-full" :fields="props.fields" :contact="contact"
+						:locationSettings="props.locationSettings" />
 				</div>
 				<div v-if="props.contact?.is_blocked"
 					class="is-blocked flex justify-center items-center gap-2 px-3 py-1 h-[80px] text-center bg-red-50/80 backdrop-blur-sm border border-red-200 rounded-lg">
@@ -31,18 +31,17 @@
 					contact &&
 					!contact.is_blocked &&
 					!displayContactInfo &&
-					!formLoading &&
-					!displayTemplate
+					!formLoading
 				" class="w-full py-4">
 					<ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
-						@viewTemplate="displayTemplate = true" @newMessage="generateNewMessage" />
+						@viewTemplate="sendAuthTemplate" @newMessage="generateNewMessage" />
 				</div>
-				<div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
+				<!-- <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
 					<CampaignForm v-if="displayTemplate" class="bg-white h-full" :contact="contact.uuid"
 						:templates="templates" :contactGroups="[]" :settings="props.settings" :displayCancelBtn="false"
 						:displayTitle="true" :isCampaignFlow="false" :scheduleTemplate="false"
 						:sendText="'Send Message'" @viewTemplate="displayTemplate = false" />
-				</div>
+				</div> -->
 			</div>
 			<!--<div v-if="contact" class="md:w-[25%] min-w-0 bg-cover flex flex-col bg-white border-l">
                 <ChatContact v-if="contact" class="bg-white h-full" :contact="contact" />
@@ -63,7 +62,6 @@ import debounce from 'lodash/debounce'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
-
 const props = defineProps({
 	rows: Array,
 	rowCount: Number,
@@ -106,6 +104,8 @@ const settings = ref(config.value ? JSON.parse(config.value) : null)
 const ticketingIsEnabled = ref(settings.value?.tickets?.active ?? false)
 const chatThread = ref(props.chatThread)
 const contact = ref(props.contact)
+
+
 
 watch(
 	() => props.rows,
@@ -290,17 +290,19 @@ const updateSidePanel = async (chat, statusChanged) => {
 	let currentChat = chat[0].value
 	console.log('current chat', chat, chat[0].value.contact_uuid)
 	if (currentChat.type === 'inbound') {
+		remove24HoursOfInactivity(currentContact)
 		if (currentContact) {
+
 			currentContact.last_chat = currentChat
-			//	console.log('unread_messages_count', currentContact, currentContact)
+			currentContact.last_inbound_chat = currentChat
 			currentContact.unread_messages = currentContact.unread_messages + 1
 			currentContact.last_inbound_chat_created_at = currentChat.created_at
 			currentContact.latest_chat_created_at = currentChat.created_at
 		} else if (chat[0].value.contact_uuid) {
-			console.log('pushing new contact', currentChat)
 			rows.value.data.push({
 				id: currentChat.contact_id,
 				uuid: chat[0].value.contact_uuid,
+				last_inbound_chat: currentChat,
 				last_chat: currentChat,
 				unread_messages: 1,
 				last_inbound_chat_created_at: currentChat.created_at,

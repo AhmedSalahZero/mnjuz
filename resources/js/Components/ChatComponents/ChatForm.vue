@@ -4,6 +4,8 @@ import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
+import { toast } from 'vue3-toastify'
+import 'vue3-toastify/dist/index.css'
 
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
@@ -42,9 +44,21 @@ watchEffect(() => {
 })
 
 const emit = defineEmits(['response', 'viewTemplate', 'newMessage'])
+const isLoading = ref(false)
 
 const viewTemplate = () => {
-	emit('viewTemplate', true)
+	isLoading.value = true
+	axios.post('/chat/' + props.contact.uuid + '/send/auth-template').then((response) => {
+		isLoading.value = false
+		if (response.data.success) {
+			toast(response.data.message ?? 'Success.', { autoClose: 3000, type: 'success' })
+		} else {
+			toast(response.data.message ?? 'Something went wrong.', { autoClose: 3000, type: 'error' })
+		}
+	}).catch((error) => {
+		isLoading.value = false
+		toast(error.response.data.message ?? 'Something went wrong.', { autoClose: 3000, type: 'error' })
+	})
 }
 const appendMessageIntoBody = (form) => {
 	emit('newMessage', form)
@@ -413,7 +427,18 @@ onBeforeUnmount(() => {
 				</div>
 			</div>
 			<button @click="viewTemplate()"
-				class="rounded-md bg-primary px-3 py-1 text-sm text-white shadow-sm w-[25%]"> Send Template </button>
+				class="rounded-md bg-primary px-3 py-1 flex items-center justify-center gap-2 text-sm text-white shadow-sm w-[15%]">
+				<span>Send Template</span>
+				<svg v-if="isLoading" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+					<path fill="currentColor"
+						d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z"
+						opacity=".5" />
+					<path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z">
+						<animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite"
+							to="360 12 12" type="rotate" />
+					</path>
+				</svg>
+			</button>
 		</div>
 	</div>
 	<form v-if="

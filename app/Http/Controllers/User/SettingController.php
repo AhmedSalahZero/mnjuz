@@ -21,6 +21,7 @@ use Validator;
 
 class SettingController extends BaseController
 {
+	private ContactFieldService $contactFieldService;
     public function __construct(ContactFieldService $contactFieldService)
     {
         $this->contactFieldService = $contactFieldService;
@@ -32,12 +33,18 @@ class SettingController extends BaseController
             $data['title'] = __('Settings');
             $data['settings'] = Organization::where('id', $organizationId)->first();
             $data['timezones'] = config('formats.timezones');
+			$messageTemplates = Template::where('organization_id', $organizationId)
+            ->where('deleted_at', null)
+            ->where('status', 'APPROVED')
+            ->select(['uuid as value', 'name as label'])
+            ->get()->toArray();
+			$data['templates'] = $messageTemplates;
+		
             $data['countries'] = config('formats.countries');
             $data['sounds'] = config('sounds');
             $data['modules'] = Addon::get();
             $contactModel = new Contact;
             $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
-
             return Inertia::render('User/Settings/General', $data);
         }
     }
@@ -77,6 +84,7 @@ class SettingController extends BaseController
     }
 
     public function storeWhatsappSettings(StoreWhatsappSettings $request) {
+	
         $embeddedSignupActive = Setting::where('key', 'is_embedded_signup_active')->value('value');
         $setWebhookUrl = $embeddedSignupActive == 1 ? true : false;
 
