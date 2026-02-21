@@ -277,8 +277,9 @@ const refetchChatsList = debounce(async () => {
 
 const updateSidePanel = async (chat, statusChanged) => {
 	console.log('event chat', chat)
+	const isChatFormOpen = contact.value && contact.value.id == chat[0].value.contact_id
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
-	if (contact.value && contact.value.id == chat[0].value.contact_id) {
+	if (isChatFormOpen && chat[0].value.type === 'outbound') {
 		updateChatThread(chat)
 	}
 	if (statusChanged) {
@@ -286,11 +287,9 @@ const updateSidePanel = async (chat, statusChanged) => {
 		return false
 	}
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
-	console.log('rows data', rows.value.data)
 	let currentChat = chat[0].value
-	console.log('current chat', chat, chat[0].value.contact_uuid)
+	console.log('current chat', currentChat)
 	if (currentChat.type === 'inbound') {
-		remove24HoursOfInactivity(currentContact)
 		if (currentContact) {
 
 			currentContact.last_chat = currentChat
@@ -298,6 +297,10 @@ const updateSidePanel = async (chat, statusChanged) => {
 			currentContact.unread_messages = currentContact.unread_messages + 1
 			currentContact.last_inbound_chat_created_at = currentChat.created_at
 			currentContact.latest_chat_created_at = currentChat.created_at
+			if (isChatFormOpen) {
+				contact.value.last_inbound_chat = currentChat
+				contact.value.last_inbound_chat_created_at = currentChat.created_at
+			}
 		} else if (chat[0].value.contact_uuid) {
 			rows.value.data.push({
 				id: currentChat.contact_id,
