@@ -264,16 +264,16 @@ const updateChatThread = (chat) => {
 }
 
 // 1s: يوازن بين استجابة سريعة وتجميع أحداث متتالية (تجنب طلبات متكررة)
-const refetchChatsList = debounce(async () => {
-	try {
-		const response = await axios.get('/chats')
-		if (response?.data?.result) {
-			rows.value = response.data.result
-		}
-	} catch (error) {
-		// تجاهل أخطاء تحديث القائمة
-	}
-}, 1500)
+// const refetchChatsList = debounce(async () => {
+// 	try {
+// 		const response = await axios.get('/chats')
+// 		if (response?.data?.result) {
+// 			rows.value = response.data.result
+// 		}
+// 	} catch (error) {
+// 		// تجاهل أخطاء تحديث القائمة
+// 	}
+// }, 1500)
 
 const updateSidePanel = async (chat, statusChanged) => {
 	console.log('event chat', chat)
@@ -281,7 +281,13 @@ const updateSidePanel = async (chat, statusChanged) => {
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
 	if (isChatFormOpen) {
 		updateChatThread(chat)
+
+		currentContact.last_chat = currentChat
+		contact.value.last_inbound_chat = currentChat
+		contact.value.last_inbound_chat_created_at = currentChat.created_at
+
 	}
+
 	if (statusChanged) {
 		console.log('status changed do nothing')
 		return false
@@ -291,16 +297,12 @@ const updateSidePanel = async (chat, statusChanged) => {
 	console.log('current chat', currentChat)
 	if (currentChat.type === 'inbound') {
 		if (currentContact) {
-
 			currentContact.last_chat = currentChat
 			currentContact.last_inbound_chat = currentChat
 			currentContact.unread_messages = currentContact.unread_messages + 1
 			currentContact.last_inbound_chat_created_at = currentChat.created_at
 			currentContact.latest_chat_created_at = currentChat.created_at
-			if (isChatFormOpen) {
-				contact.value.last_inbound_chat = currentChat
-				contact.value.last_inbound_chat_created_at = currentChat.created_at
-			}
+
 		} else if (chat[0].value.contact_uuid) {
 			rows.value.data.push({
 				id: currentChat.contact_id,
