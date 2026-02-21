@@ -279,9 +279,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 	console.log('event chat', chat)
 	const isChatFormOpen = contact.value && contact.value.id == chat[0].value.contact_id
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
-	if (isChatFormOpen && chat[0].value.type === 'outbound') {
-		updateChatThread(chat)
-	}
+
 	if (statusChanged) {
 		console.log('status changed do nothing')
 		return false
@@ -314,6 +312,11 @@ const updateSidePanel = async (chat, statusChanged) => {
 
 			})
 		}
+
+		if (isChatFormOpen) {
+			updateChatThread(chat)
+		}
+
 	}
 
 	//console.log(rows.value.data, chat[0], '*---*', currentChat.contact_id)
