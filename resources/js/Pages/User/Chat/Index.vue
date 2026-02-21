@@ -296,8 +296,14 @@ const updateSidePanel = async (chat, statusChanged) => {
 		console.log('status changed do nothing')
 		return false
 	}
+	/**
+	 * ! Temp 
+	 */
+	// if (isChatFormOpen) {
+	// 	contact.value.last_inbound_chat = currentChat
+	// 	contact.value.last_inbound_chat_created_at = currentChat.created_at
+	// }
 
-	console.log('current chat', currentChat)
 	if (isInboundChat) {
 		if (currentContact) {
 			currentContact.last_chat = currentChat
