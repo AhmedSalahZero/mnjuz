@@ -73,7 +73,7 @@ class ChatController extends BaseController
 	{
 		$organizationId = session()->get('current_organization');
 		$organization = Organization::find($organizationId);
-		$templateUUID = $organization->metadata ? json_decode($organization->metadata)->auth_template : '';
+		$templateUUID = $organization->metadata && isset(json_decode($organization->metadata)->auth_template) ? json_decode($organization->metadata)->auth_template : '';
 		$template = Template::where('uuid', $templateUUID)->first();
 
 		
