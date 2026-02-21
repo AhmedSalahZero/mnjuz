@@ -280,13 +280,15 @@ const updateSidePanel = async (chat, statusChanged) => {
 	const isChatFormOpen = contact.value && contact.value.id == chat[0].value.contact_id
 	let currentContact = rows.value.data.find(row => row.id === chat[0].value.contact_id)
 	let currentChat = chat[0].value
+	const isInboundChat = currentChat.type === 'inbound'
+
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
 	if (isChatFormOpen) {
 		updateChatThread(chat)
-
 		currentContact.last_chat = currentChat
-		contact.value.last_inbound_chat = currentChat
-		contact.value.last_inbound_chat_created_at = currentChat.created_at
+		if (isInboundChat) {
+
+		}
 
 	}
 
@@ -296,13 +298,18 @@ const updateSidePanel = async (chat, statusChanged) => {
 	}
 
 	console.log('current chat', currentChat)
-	if (currentChat.type === 'inbound') {
+	if (isInboundChat) {
 		if (currentContact) {
 			currentContact.last_chat = currentChat
 			currentContact.last_inbound_chat = currentChat
 			currentContact.unread_messages = currentContact.unread_messages + 1
 			currentContact.last_inbound_chat_created_at = currentChat.created_at
 			currentContact.latest_chat_created_at = currentChat.created_at
+			if (isChatFormOpen) {
+				contact.value.last_inbound_chat = currentChat
+				contact.value.last_inbound_chat_created_at = currentChat.created_at
+			}
+
 
 		} else if (chat[0].value.contact_uuid) {
 			rows.value.data.push({
