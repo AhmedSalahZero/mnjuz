@@ -221,18 +221,9 @@ class Contact extends Model
 		 * @var Builder $query 
 		 */
 		return $query->get();
-		$perPage = Request()->input('per_page', 20);
-		
-		// $perPage = 20000000;
-		//$page = Request()->input('page', null);
-		// if($page){
-		// 	return  $query->paginate($perPage, ['*'], $page); // for mobile app pagination
-		// }
-		return $query->paginate($perPage); // for web app pagination
-        // ✅ Pagination
-		// ->paginate($perPage, ['uuid', 'name', 'metadata', 'updated_at'], 'page', $page);
-        // return $query->paginate($perPage); // زيادة العدد لتقليل الطلبات
-      //  return $query->paginate($perPage, ['*'], $page); // زيادة العدد لتقليل الطلبات
+		// $perPage = Request()->input('per_page', 20);
+		// return $query->paginate($perPage); // for web app pagination
+
     }
 
     

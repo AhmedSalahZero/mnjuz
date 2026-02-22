@@ -126,7 +126,7 @@ class ChatService
         // $rowCount = $contact->contactsWithChatsCount($this->organizationId, $searchTerm, $ticketingActive, $ticketState, $sortDirection, $role, $allowAgentsToViewAllChats);
 
         
-    
+
         $contact = new Contact;
         $contactsQuery = $contact->contactsWithChatsOptimized(
             $this->organizationId,
@@ -142,6 +142,7 @@ class ChatService
         $contacts = $contactsQuery;
         // $rowCount = $contacts->total();
         $rowCount = count($contacts);
+		
 
         // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
      //   $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
@@ -155,19 +156,24 @@ class ChatService
 
         //   $perPage = 10; // Number of items per page
         //    $totalContacts = count($contacts); // Total number of contacts
-        $messageTemplates = Template::where('organization_id', $this->organizationId)
-            ->where('deleted_at', null)
-            ->where('status', 'APPROVED')
-            ->select(['uuid', 'name', 'language'])
-            ->get();
+        // $messageTemplates = Template::where('organization_id', $this->organizationId)
+        //     ->where('deleted_at', null)
+        //     ->where('status', 'APPROVED')
+        //     ->select(['uuid', 'name', 'language'])
+        //     ->get();
    
         if ($uuid !== null) {
+			$start = microtime(true);
             $contact = Contact::with(['lastChat', 'notes', 'contactGroups','organization'])
                 ->where('uuid', $uuid)
                 ->first();
 				/**
 				 * @var Contact $contact
 				 */
+				$end = microtime(true);
+		$time = $end - $start;
+	
+		
 				$contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted());
             $ticket = ChatTicket::with('user')
                 ->where('contact_id', $contact->id)
@@ -199,7 +205,7 @@ class ChatService
               //      'state' => app()->environment(),
           //          'demoNumber' => env('DEMO_NUMBER'),
                     'settings' => $config,
-                    'templates' => $messageTemplates,
+                  //  'templates' => $messageTemplates,
                     'status' => $request->status ?? 'all',
                     'chatThread' => $initialMessages['messages'],
                     'hasMoreMessages' => $initialMessages['hasMoreMessages'],
@@ -236,7 +242,7 @@ class ChatService
                 'organizationId' => $this->organizationId,
             //    'state' => app()->environment(),
                 'settings' => $config,
-                'templates' => $messageTemplates,
+             //   'templates' => $messageTemplates,
                 'status' => $request->status ?? 'all',
              //   'agents' => $agents,
                 'addon' => $aimodule,

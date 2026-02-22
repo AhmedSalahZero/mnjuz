@@ -79,7 +79,7 @@ const props = defineProps({
 	ticket: Object,
 	chat_sort_direction: String,
 	filters: Object,
-	templates: Array,
+	// templates: Array,
 	fields: Array,
 	locationSettings: Object,
 	simpleForm: Boolean,
