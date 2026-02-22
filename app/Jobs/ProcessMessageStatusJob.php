@@ -65,11 +65,11 @@ class ProcessMessageStatusJob implements ShouldQueue
                         event(new NewChatEvent($chatArray, $this->organizationId, false, true));
                     }
 
-                    Log::info("Message status updated", [
-                        'chat_id' => $chat->id,
-                        'status' => $statusValue,
-                        'wam_id' => $chatWamId
-                    ]);
+                    // Log::info("Message status updated", [
+                    //     'chat_id' => $chat->id,
+                    //     'status' => $statusValue,
+                    //     'wam_id' => $chatWamId
+                    // ]);
                 } else {
                     Log::warning("Chat not found for status update", [
                         'wam_id' => $chatWamId,
