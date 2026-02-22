@@ -68,6 +68,8 @@ class ChatService
 
     public function getChatList($request, $uuid = null, $searchTerm = null)
     {
+		$isPartialReload = request()->hasHeader('X-Inertia-Partial-Data');
+
         //	$uuid = 'b27a5a63-05d4-4e2f-911c-4da76044328c';
         $role = auth()->user()->teams[0]->role;
 		$contact = null ;
@@ -128,31 +130,39 @@ class ChatService
         
 
         $contact = new Contact;
-        $contactsQuery = $contact->contactsWithChatsOptimized(
-            $this->organizationId,
-            $searchTerm,
-            $ticketingActive,
-            $ticketState,
-            $sortDirection,
-            $role,
-            $allowAgentsToViewAllChats,
+		$rowCount = -1;
+		$pusherSettings = [];
+		$contacts = [];
+		if(!$isPartialReload){
+			$contactsQuery = $contact->contactsWithChatsOptimized(
+				$this->organizationId,
+				$searchTerm,
+				$ticketingActive,
+				$ticketState,
+				$sortDirection,
+				$role,
+				$allowAgentsToViewAllChats,
+				
+			);
+	
+			$contacts = $contactsQuery;
+			$rowCount = count($contacts);
 			
-        );
-
-        $contacts = $contactsQuery;
+			$pusherSettings = Setting::whereIn('key', [
+				'pusher_app_id',
+				'pusher_app_key',
+				'pusher_app_secret',
+				'pusher_app_cluster',
+			])->pluck('value', 'key')->toArray();
+			
+		}
         // $rowCount = $contacts->total();
-        $rowCount = count($contacts);
 		
 
         // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
      //   $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
 
-        $pusherSettings = Setting::whereIn('key', [
-            'pusher_app_id',
-            'pusher_app_key',
-            'pusher_app_secret',
-            'pusher_app_cluster',
-        ])->pluck('value', 'key')->toArray();
+      
 
         //   $perPage = 10; // Number of items per page
         //    $totalContacts = count($contacts); // Total number of contacts
@@ -171,7 +181,7 @@ class ChatService
 				 * @var Contact $contact
 				 */
 				$end = microtime(true);
-		$time = $end - $start;
+		    	$time = $end - $start;
 	
 		
 				$contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted());
@@ -207,16 +217,17 @@ class ChatService
                     'settings' => $config,
                   //  'templates' => $messageTemplates,
                     'status' => $request->status ?? 'all',
-                    'chatThread' => $initialMessages['messages'],
-                    'hasMoreMessages' => $initialMessages['hasMoreMessages'],
+                   
                     'nextPage' => $initialMessages['nextPage'],
-                    'contact' => self::contactPayloadForChatView($contact),
+                    'contact' => Inertia::lazy(fn() => $uuid ? self::contactPayloadForChatView($contact) : null),
+                    'chatThread' => Inertia::lazy(fn() => $uuid ? $initialMessages['messages'] : []),				
                     'fields' => ContactField::where('organization_id', $this->organizationId)->where('deleted_at', null)->get(),
                     'locationSettings' => $this->getLocationSettings(),
                     'ticket' => $ticket,
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
+					'hasMoreMessages' => $initialMessages['hasMoreMessages'],
 					'user' => auth()->user()->only(['first_name', 'last_name']),
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')

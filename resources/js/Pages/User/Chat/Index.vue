@@ -34,7 +34,7 @@
 					!formLoading
 				" class="w-full py-4">
 					<ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
-						@viewTemplate="sendAuthTemplate" @newMessage="generateNewMessage" />
+						@newMessage="generateNewMessage" />
 				</div>
 				<!-- <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
 					<CampaignForm v-if="displayTemplate" class="bg-white h-full" :contact="contact.uuid"
@@ -111,6 +111,18 @@ watch(
 	() => props.rows,
 	(newRows) => {
 		rows.value = newRows
+	},
+)
+watch(
+	() => props.chatThread,
+	(newChatThread) => {
+		chatThread.value = newChatThread
+	},
+)
+watch(
+	() => props.contact,
+	(newContact) => {
+		contact.value = newContact
 	},
 )
 
@@ -228,7 +240,6 @@ const generateNewMessage = (form) => {
 			},
 		},
 	]
-
 	updateChatThread(chat)
 }
 

@@ -76,6 +76,13 @@ const getContactDisplayName = (metadata) => {
 	}
 }
 
+function openChat(uuid) {
+	router.visit('/chats/' + uuid, {
+		only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages'],
+		preserveState: true,
+		preserveScroll: true,
+	})
+}
 const formatTime = (time) => {
 	if (!time) {
 		return 'Invalid time'
@@ -211,7 +218,7 @@ const clearSearch = () => {
 		</div>
 	</div>
 	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-		<Link :href="'/chats/' + contact.uuid" class="block border-b group-hover:pr-0"
+		<div @click="openChat(contact.uuid)" class="block border-b cursor-pointer group-hover:pr-0"
 			:class="contact.unread_messages > 0 ? 'bg-green-50' : ''"
 			v-for="(contact, index) in rows.data.sort((a, b) => new Date(b.latest_chat_created_at) - new Date(a.latest_chat_created_at))"
 			:key="index">
@@ -333,7 +340,7 @@ const clearSearch = () => {
 					</div>
 				</div>
 			</div>
-		</Link>
+		</div>
 	</div>
 	<!-- <div class="px-4 pb-4">
 		<Pagination class="mt-3" :pagination="rows.meta" />
