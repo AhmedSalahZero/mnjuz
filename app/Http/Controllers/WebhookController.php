@@ -158,11 +158,11 @@ class WebhookController extends BaseController
 		}
 		
   	 if($res['field'] === 'messages'){
-		logger('2from messages');
+	//	logger('2from messages');
         $messages = $res['value']['messages'] ?? null;
         $statuses = $res['value']['statuses'] ?? null;
         if($statuses) {
-			logger('3from statuses');
+	//		logger('3from statuses');
             ProcessMessageStatusJob::dispatch(
                 $statuses,
                 $organization->id
@@ -196,7 +196,7 @@ class WebhookController extends BaseController
 	
     protected function handlePostRequest(Request $request, Organization $organization)
     {
-		logger(1);
+	//	logger(1);
 		return $this->handleAjaxPostRequest($request, $organization);
     }
 
