@@ -1035,8 +1035,8 @@
 "Template sent successfully":"تم ارسال القالب بنجاح",
 "Template not found!":"القالب غير موجود!",
 "Contact not found":"جهة الاتصال غير موجودة",
-"Auth Template":"قالب الاتصال",
-"Send Template":"ارسال القالب",
+"Auth Template":"قالب المصادقة",
+"Send Template":"ارسال قالب المصادقة",
 "Default Auth Template To Be Used After 24 Hours Of Inactivity With The Contact":"القالب الافتراضي المستخدم بعد 24 ساعة من  عدم التواصل مع الجهة الاتصال",
 "Auth Template not found! .. Please Go To Settings -> General -> Auth Template To Edit It":"القالب الافتراضي غير موجود! .. يرجى الذهاب إلى إعدادات -> عام -> قالب الاتصال لتعديله"
 }
