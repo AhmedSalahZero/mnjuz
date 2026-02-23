@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { default as axios } from 'axios'
 import ChatBubble from '@/Components/ChatComponents/ChatBubble.vue'
 
@@ -23,6 +23,24 @@ const props = defineProps({
 })
 
 const messages = ref(props.initialMessages)
+watch(
+	() => props.initialMessages,
+	(newInitialMessages) => {
+		messages.value = newInitialMessages
+	},
+)
+watch(
+	() => props.hasMoreMessages,
+	(newHasMoreMessages) => {
+		hasMore.value = newHasMoreMessages
+	},
+)
+watch(
+	() => props.initialNextPage,
+	(newInitialNextPage) => {
+		nextPage.value = newInitialNextPage
+	},
+)
 const loading = ref(false)
 const nextPage = ref(props.initialNextPage)
 const hasMore = ref(props.hasMoreMessages)

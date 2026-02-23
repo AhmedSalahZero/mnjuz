@@ -218,7 +218,7 @@ class ChatService
                   //  'templates' => $messageTemplates,
                     'status' => $request->status ?? 'all',
                    
-                    'nextPage' => $initialMessages['nextPage'],
+                    'nextPage' => Inertia::lazy(fn() => $initialMessages['nextPage']),
                     'contact' => Inertia::lazy(fn() => $uuid ? self::contactPayloadForChatView($contact) : null),
                     'chatThread' => Inertia::lazy(fn() => $uuid ? $initialMessages['messages'] : []),				
                     'fields' => ContactField::where('organization_id', $this->organizationId)->where('deleted_at', null)->get(),
@@ -227,7 +227,7 @@ class ChatService
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
-					'hasMoreMessages' => $initialMessages['hasMoreMessages'],
+					'hasMoreMessages' => Inertia::lazy(fn() => $initialMessages['hasMoreMessages']),
 					'user' => auth()->user()->only(['first_name', 'last_name']),
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')

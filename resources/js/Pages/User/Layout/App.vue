@@ -16,7 +16,7 @@
 <script setup>
 import { useRtl } from '@/Composables/useRtl'
 import { usePage } from "@inertiajs/vue3"
-import { computed, defineProps, onMounted, ref, watch } from 'vue'
+import { computed, defineProps, onMounted, ref, watch, provide } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 import { getOrJoinChatChannel } from '../../../echo'
@@ -69,7 +69,9 @@ const playSound = () => {
 		})
 	}
 }
-
+provide('updateTotalUnreadMessages', (val) => {
+	unreadMessages.value -= val
+})
 onMounted(() => {
 	setupSound()
 

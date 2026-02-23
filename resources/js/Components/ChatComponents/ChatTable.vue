@@ -4,7 +4,7 @@ import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
 import { Link, router } from '@inertiajs/vue3'
 import debounce from 'lodash/debounce'
-import { ref, watch } from 'vue'
+import { ref, watch, inject } from 'vue'
 
 const props = defineProps({
 	rows: {
@@ -75,9 +75,13 @@ const getContactDisplayName = (metadata) => {
 		return 'No contacts available'
 	}
 }
+const updateTotalUnreadMessages = inject('updateTotalUnreadMessages')
 
-function openChat(uuid) {
-	router.visit('/chats/' + uuid, {
+function openChat(contact) {
+	let currentUnreadMessages = contact.unread_messages
+	updateTotalUnreadMessages(currentUnreadMessages)
+	contact.unread_messages = 0
+	router.visit('/chats/' + contact.uuid, {
 		only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages'],
 		preserveState: true,
 		preserveScroll: true,
@@ -218,7 +222,7 @@ const clearSearch = () => {
 		</div>
 	</div>
 	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-		<div @click="openChat(contact.uuid)" class="block border-b cursor-pointer group-hover:pr-0"
+		<div @click="openChat(contact)" class="block border-b cursor-pointer group-hover:pr-0"
 			:class="contact.unread_messages > 0 ? 'bg-green-50' : ''"
 			v-for="(contact, index) in rows.data.sort((a, b) => new Date(b.latest_chat_created_at) - new Date(a.latest_chat_created_at))"
 			:key="index">

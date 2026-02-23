@@ -2,8 +2,8 @@
 	<AppLayout v-slot:default="slotProps">
 		<div class="md:flex md:flex-grow md:overflow-hidden">
 			<div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
-				<ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
-					:ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
+				<ChatTable @updateUnreadMessages="updateUnreadMessages" :rows="rows" :filters="props.filters"
+					:rowCount="props.rowCount" :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
 					:chatSortDirection="props.chat_sort_direction" />
 			</div>
 			<div class="min-w-0 bg-cover flex flex-col chat-bg"
@@ -326,8 +326,6 @@ const updateSidePanel = async (chat, statusChanged) => {
 				contact.value.last_inbound_chat = currentChat
 				contact.value.last_inbound_chat_created_at = currentChat.created_at
 			}
-
-
 		} else if (chat[0].value.contact_uuid) {
 			rows.value.data.push({
 				id: currentChat.contact_id,
