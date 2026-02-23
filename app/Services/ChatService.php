@@ -173,15 +173,15 @@ class ChatService
         //     ->get();
    
         if ($uuid !== null) {
-			$start = microtime(true);
+			// $start = microtime(true);
             $contact = Contact::with(['lastChat', 'notes', 'contactGroups','organization'])
                 ->where('uuid', $uuid)
                 ->first();
 				/**
 				 * @var Contact $contact
 				 */
-				$end = microtime(true);
-		    	$time = $end - $start;
+				// $end = microtime(true);
+		    	// $time = $end - $start;
 	
 		
 				$contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted());

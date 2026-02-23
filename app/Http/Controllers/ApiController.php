@@ -139,11 +139,23 @@ class ApiController extends Controller
     /**
      * Update an existing contact.
      */
-    public function updateContact(StoreContactRequest $request, string $uuid)
+    public function updateContact(StoreContactRequest $request, string $idOrUUID)
     {
 		$organizationId = $request->organization;
+		$uuid = $idOrUUID;
 		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
+			$contact  = Contact::find($idOrUUID); // id in this case 
+			if(!$contact){
+				return response()->json([
+					'statusCode' => 404,
+					'success' => false,
+					'data' => [],
+					'message' => __('Contact not found',[],getApiLang())
+				], 404);
+			}
+			$uuid = $contact->uuid;
+			 
 		}
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
@@ -171,7 +183,7 @@ class ApiController extends Controller
                 'message' => __('Request processed successfully',[],getApiLang())
             ], 200);
         } catch (\Exception $e) {
-		
+			
 			if( $request->is('api/v1/*')){
 				return response()->json([
 					'statusCode' => 500,
@@ -186,8 +198,23 @@ class ApiController extends Controller
             ], 500);
         }
     }
-
-
+	public function getContactDetail(Request $request, $id){
+		$contact = Contact::find($id);
+		if(!$contact){
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'data' => [],
+				'message' => __('Contact not found',[],getApiLang())
+			], 404);
+		}
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'data' => $contact,
+			'message' => __('Contact detail fetched successfully',[],getApiLang())
+		], 200);
+	}
     /**
      * Delete a contact.
      *
@@ -1253,10 +1280,10 @@ class ApiController extends Controller
 			'message' => __('Chat deleted successfully'),
 		], 200);
 	}
-	public function toggleTicketStatus(Request $request,$uuid)
+	public function toggleTicketStatus(Request $request,$id)
 	{
-		$organizationId = $request->user()->current_organization_id;
-		$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
+	// $organizationId = $request->user()->current_organization_id;
+		$contact = Contact::find($id);
 		if(!$contact){
 			return response()->json([
 				'statusCode' => 404,
