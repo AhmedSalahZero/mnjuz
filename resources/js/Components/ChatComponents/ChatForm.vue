@@ -47,18 +47,7 @@ const emit = defineEmits(['response', 'viewTemplate', 'newMessage'])
 const isLoading = ref(false)
 
 const viewTemplate = () => {
-	isLoading.value = true
-	axios.post('/chat/' + props.contact.uuid + '/send/auth-template').then((response) => {
-		isLoading.value = false
-		if (response.data.success) {
-			toast(response.data.message ?? 'Success.', { autoClose: 3000, type: 'success' })
-		} else {
-			toast(response.data.message ?? 'Something went wrong.', { autoClose: 3000, type: 'error' })
-		}
-	}).catch((error) => {
-		isLoading.value = false
-		toast(error.response.data.message ?? 'Something went wrong.', { autoClose: 3000, type: 'error' })
-	})
+	emit('viewTemplate')
 }
 const appendMessageIntoBody = (form) => {
 	emit('newMessage', form)

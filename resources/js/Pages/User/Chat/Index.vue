@@ -11,7 +11,7 @@
 				<ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
 					:displayContactInfo="displayContactInfo" :ticket="ticket" :addon="addon"
 					@toggleView="toggleContactView" @deleteThread="deleteThread" @closeThread="closeThread" />
-				<div v-if="contact" class="flex-1 overflow-y-auto" ref="scrollContainer2">
+				<div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
 					<ChatThread v-if="!displayContactInfo && !loadingThread" :contactId="contact.id"
 						:initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
 					<Contact v-if="displayContactInfo" class="bg-white h-full" :fields="props.fields" :contact="contact"
@@ -31,17 +31,18 @@
 					contact &&
 					!contact.is_blocked &&
 					!displayContactInfo &&
-					!formLoading
+					!formLoading &&
+					!displayTemplate
 				" class="w-full py-4">
 					<ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
-						@newMessage="generateNewMessage" />
+						@viewTemplate="displayTemplate = true" @newMessage="generateNewMessage" />
 				</div>
-				<!-- <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
-					<CampaignForm v-if="displayTemplate" class="bg-white h-full" :contact="contact.uuid"
+				<div v-if="displayTemplate && contact" class="flex-1 overflow-y-hidden">
+					<CampaignForm v-if="displayTemplate && contact" class="bg-white h-full" :contact="contact.uuid"
 						:templates="templates" :contactGroups="[]" :settings="props.settings" :displayCancelBtn="false"
 						:displayTitle="true" :isCampaignFlow="false" :scheduleTemplate="false"
 						:sendText="'Send Message'" @viewTemplate="displayTemplate = false" />
-				</div> -->
+				</div>
 			</div>
 			<!--<div v-if="contact" class="md:w-[25%] min-w-0 bg-cover flex flex-col bg-white border-l">
                 <ChatContact v-if="contact" class="bg-white h-full" :contact="contact" />
@@ -79,7 +80,7 @@ const props = defineProps({
 	ticket: Object,
 	chat_sort_direction: String,
 	filters: Object,
-	// templates: Array,
+	templates: Array,
 	fields: Array,
 	locationSettings: Object,
 	simpleForm: Boolean,
@@ -104,6 +105,7 @@ const settings = ref(config.value ? JSON.parse(config.value) : null)
 const ticketingIsEnabled = ref(settings.value?.tickets?.active ?? false)
 const chatThread = ref(props.chatThread)
 const contact = ref(props.contact)
+const templates = ref(props.templates ?? [])
 
 
 
@@ -125,6 +127,12 @@ watch(
 		contact.value = newContact
 	},
 )
+watch(
+	() => props.templates,
+	(newTemplates) => {
+		templates.value = newTemplates ?? []
+	},
+)
 
 function toggleContactView(value) {
 	displayContactInfo.value = value
@@ -141,6 +149,7 @@ const scrollToBottom = () => {
 }
 
 const closeThread = () => {
+	displayTemplate.value = false
 	toggleNavbarBtn.value.click()
 	contact.value = null
 }
