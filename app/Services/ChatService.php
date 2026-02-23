@@ -199,11 +199,11 @@ class ChatService
             } else {
                 $settings = json_decode($config->metadata);
                 //To ensure the unread message counter is updated
-                $unreadMessages = DB::table('chats')->where('organization_id', $this->organizationId)
-                    ->where('type', 'inbound')
-                    ->where('deleted_at', null)
-                    ->where('is_read', 0)
-                    ->count();
+                // $unreadMessages = DB::table('chats')->where('organization_id', $this->organizationId)
+                //     ->where('type', 'inbound')
+                //     ->where('deleted_at', null)
+                //     ->where('is_read', 0)
+                //     ->count();
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
@@ -226,7 +226,7 @@ class ChatService
                     'ticket' => $ticket,
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
-                    'unreadMessages' => $unreadMessages,
+               //     'unreadMessages' => $unreadMessages,
 					'hasMoreMessages' => Inertia::lazy(fn() => $initialMessages['hasMoreMessages']),
 					'user' => auth()->user()->only(['first_name', 'last_name']),
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
