@@ -132,6 +132,7 @@ class Contact extends Model
         $sortDirection = 'desc',
         $role = 'owner',
         $allowAgentsViewAllChats = true,
+        $clientSideFilter = false,
  	   ) {
         $query = $this->newQuery()
             ->select([
@@ -166,12 +167,13 @@ class Contact extends Model
     	]);
     
         // ✅ Eager load lastChat فقط؛ last_inbound_chat نعتمد على العمود last_inbound_chat_created_at
+        // عند الفلترة من جهة العميل لا نطبق فلتر is_read هنا
         $query->with(['lastChat'])
-        ->when(Request()->has('is_read'),function($q){
-			$q->whereHas('lastInboundChat',function($q){
-			$q->where('is_read',0);
-		});
-		});
+        ->when(!$clientSideFilter && Request()->has('is_read'), function ($q) {
+            $q->whereHas('lastInboundChat', function ($q) {
+                $q->where('is_read', 0);
+            });
+        });
 
         // ✅ شروط التذاكر مع JOIN محسّن
         if ($ticketingActive) {
@@ -179,18 +181,19 @@ class Contact extends Model
                 $join->on('contacts.id', '=', 'chat_tickets.contact_id');
             });
 
-            // إضافة أعمدة التذكرة
-            // $query->addSelect([
-            //     'chat_tickets.status as ticket_status',
-            //     'chat_tickets.assigned_to as ticket_assigned_to'
-            // ]);
+            // إضافة أعمدة التذكرة (للفلترة من جهة العميل)
+            $query->addSelect([
+                'chat_tickets.status as ticket_status',
+                'chat_tickets.assigned_to as ticket_assigned_to',
+            ]);
 
-            // فلترة حسب الحالة
-            if ($ticketState === 'unassigned') {
-				
-                $query->whereNull('chat_tickets.assigned_to');
-            } elseif ($ticketState !== null && $ticketState !== 'all') {
-                $query->where('chat_tickets.status', $ticketState);
+            // فلترة حسب الحالة (عند الفلترة من جهة العميل نحمّل الكل ولا نفلتر هنا)
+            if (!$clientSideFilter) {
+                if ($ticketState === 'unassigned') {
+                    $query->whereNull('chat_tickets.assigned_to');
+                } elseif ($ticketState !== null && $ticketState !== 'all') {
+                    $query->where('chat_tickets.status', $ticketState);
+                }
             }
 
             // صلاحيات الوكلاء

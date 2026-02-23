@@ -6,6 +6,12 @@ import { Link, router } from '@inertiajs/vue3'
 import debounce from 'lodash/debounce'
 import { ref, watch, inject, computed } from 'vue'
 
+function getInitialStatusFilter(statusProp) {
+	const params = new URLSearchParams(window.location.search)
+	if (params.has('is_read') && params.get('is_read') === '0') return 'unread'
+	return statusProp ?? 'all'
+}
+
 const props = defineProps({
 	rows: {
 		type: Object,
@@ -166,23 +172,51 @@ const currentSortDirection = ref(props.chatSortDirection)
 const sortChanged = (value) => {
 	currentSortDirection.value = value
 }
+
+// فلترة من جهة العميل عند تفعيل التذاكر
+const statusFilter = ref(getInitialStatusFilter(props.status))
+watch(() => props.status, (newVal) => {
+	statusFilter.value = getInitialStatusFilter(newVal)
+}, { immediate: false })
+
+const filteredRows = computed(() => {
+	const data = props.rows?.data ?? []
+	if (!props.ticketingIsEnabled) return data
+	const filter = statusFilter.value
+	if (filter === 'all') return data
+	if (filter === 'unread') return data.filter((c) => (c.unread_messages ?? 0) > 0)
+	if (filter === 'unassigned') return data.filter((c) => c.ticket_assigned_to == null)
+	if (filter === 'open') return data.filter((c) => c.ticket_status === 'open')
+	if (filter === 'closed') return data.filter((c) => c.ticket_status === 'closed')
+	return data
+})
+
 const sortedContacts = computed(() => {
-	console.log(currentSortDirection.value)
-	return props.rows.data.sort((a, b) => {
+	const list = props.ticketingIsEnabled ? filteredRows.value : (props.rows?.data ?? [])
+	return [...list].sort((a, b) => {
 		if (currentSortDirection.value == 'asc') {
 			return new Date(a.latest_chat_created_at) - new Date(b.latest_chat_created_at)
-		} else {
-			return new Date(b.latest_chat_created_at) - new Date(a.latest_chat_created_at)
 		}
+		return new Date(b.latest_chat_created_at) - new Date(a.latest_chat_created_at)
 	})
 })
+
+const displayedRowCount = computed(() => {
+	return props.ticketingIsEnabled ? filteredRows.value.length : props.rowCount
+})
+
+function onFilterChange(value) {
+	statusFilter.value = value
+	const url = value === 'all' ? '/chats' : value === 'unread' ? '/chats?is_read=0' : '/chats?status=' + value
+	window.history.replaceState(null, '', url)
+}
 </script>
 <template>
 	<div class="px-4 py-4 border-b">
 		<div class="flex items-center justify-between space-x-1 text-xl">
 			<div class="flex space-x-1">
 				<h2>{{ $t('Chats') }}</h2>
-				<span class="text-slate-500">{{ rowCount }}</span>
+				<span class="text-slate-500">{{ displayedRowCount }}</span>
 			</div>
 		</div>
 		<div class="bg-slate-50 rounded-md mt-3 flex items-center py-[2px]">
@@ -226,7 +260,7 @@ const sortedContacts = computed(() => {
 			</span>
 		</div>
 		<div v-if="ticketingIsEnabled" class="grid grid-cols-2 mt-4 items-center w-full">
-			<TicketStatusToggle :status="status" :rowCount="rowCount" />
+			<TicketStatusToggle :status="statusFilter" :rowCount="displayedRowCount" @filter-change="onFilterChange" />
 			<div class="flex ml-auto gap-x-1">
 				<!--<span class="cursor-pointer hover:bg-slate-50 p-1 rounded-full">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 5.6c0-.56 0-.84-.11-1.054a.998.998 0 0 0-.436-.437C19.24 4 18.96 4 18.4 4H5.6c-.56 0-.84 0-1.054.109a1 1 0 0 0-.437.437C4 4.76 4 5.04 4 5.6v.737c0 .245 0 .367.028.482a1 1 0 0 0 .12.29c.061.1.148.187.32.36l5.063 5.062c.173.173.26.26.321.36c.055.09.096.188.12.29c.028.114.028.235.028.474v4.756c0 .857 0 1.286.18 1.544a1 1 0 0 0 .674.416c.311.046.695-.145 1.461-.529l.8-.4c.322-.16.482-.24.599-.36a1 1 0 0 0 .231-.374c.055-.158.055-.338.055-.697v-4.348c0-.245 0-.367.028-.482a.998.998 0 0 1 .12-.29c.06-.1.147-.186.317-.356l.004-.004l5.063-5.062c.172-.173.258-.26.32-.36a.994.994 0 0 0 .12-.29C20 6.706 20 6.584 20 6.345z"/></svg>

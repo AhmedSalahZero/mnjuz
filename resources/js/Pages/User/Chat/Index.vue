@@ -336,7 +336,8 @@ const updateSidePanel = async (chat, statusChanged) => {
 				last_inbound_chat_created_at: currentChat.created_at,
 				latest_chat_created_at: currentChat.created_at,
 				full_name: currentChat.contact_full_name,
-
+				ticket_status: null,
+				ticket_assigned_to: null,
 			})
 		}
 

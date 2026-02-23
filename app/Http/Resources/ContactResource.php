@@ -34,8 +34,8 @@ class ContactResource extends JsonResource
             'is_blocked' => $this->is_blocked,
             'is_favorite' => $this->is_favorite,
 			// 'is_new_contact'=>$this->is_new_contact,
-            // 'ticket_status' => $this->ticket_status ?? null,
-            // 'ticket_assigned_to' => $this->ticket_assigned_to ?? null,
+            'ticket_status' => $this->ticket_status ?? null,
+            'ticket_assigned_to' => $this->ticket_assigned_to ?? null,
             'full_name' => $this->full_name,
             'formatted_phone_number' => $this->formatted_phone_number,
             

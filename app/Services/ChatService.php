@@ -134,17 +134,20 @@ class ChatService
 		$pusherSettings = [];
 		$contacts = [];
 		if(!$isPartialReload){
+			// عند تفعيل التذاكر نحمّل كل الجهات مع ticket_status للفلترة من جهة العميل
+			$queryTicketState = $ticketingActive ? 'all' : $ticketState;
+			$clientSideFilter = $ticketingActive;
 			$contactsQuery = $contact->contactsWithChatsOptimized(
 				$this->organizationId,
 				$searchTerm,
 				$ticketingActive,
-				$ticketState,
+				$queryTicketState,
 				$sortDirection,
 				$role,
 				$allowAgentsToViewAllChats,
-				
+				$clientSideFilter,
 			);
-	
+
 			$contacts = $contactsQuery;
 			$rowCount = count($contacts);
 			
