@@ -33,9 +33,7 @@ const organizations = computed(() => usePage().props.organizations)
 const currentPageTitle = computed(() => usePage().props.title)
 const displayCreateBtn = computed(() => usePage().props.allowCreate)
 const unreadMessages = ref(usePage().props.unreadMessages)
-// watch(() => usePage().props.unreadMessages, (val) => {
-// 	unreadMessages.value = val
-// })
+
 const audioPlayer = ref(null)
 
 watch(
