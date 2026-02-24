@@ -16,7 +16,7 @@
 <script setup>
 import { useRtl } from '@/Composables/useRtl'
 import { usePage } from "@inertiajs/vue3"
-import { computed, defineProps, onMounted, ref, watch, provide } from 'vue'
+import { computed, onMounted, ref, watch, provide } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 import { getOrJoinChatChannel } from '../../../echo'
@@ -33,6 +33,9 @@ const organizations = computed(() => usePage().props.organizations)
 const currentPageTitle = computed(() => usePage().props.title)
 const displayCreateBtn = computed(() => usePage().props.allowCreate)
 const unreadMessages = ref(usePage().props.unreadMessages)
+watch(() => usePage().props.unreadMessages, (val) => {
+	unreadMessages.value = val
+})
 const audioPlayer = ref(null)
 
 watch(
