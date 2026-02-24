@@ -121,11 +121,13 @@ watch(
 		chatThread.value = newChatThread
 	},
 )
+
 watch(
 	() => props.contact,
 	(newContact) => {
 		contact.value = newContact
 	},
+	{}
 )
 watch(
 	() => props.templates,
