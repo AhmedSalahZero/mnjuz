@@ -92,6 +92,8 @@ function openChat(contact) {
 		preserveState: true,
 		preserveScroll: true,
 	})
+
+	// router.reload({ only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash'] })
 }
 const formatTime = (time) => {
 	if (!time) {
@@ -271,7 +273,8 @@ function onFilterChange(value) {
 		</div>
 	</div>
 	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-		<a :href="'/chats/' + contact.uuid" class="block border-b cursor-pointer group-hover:pr-0 no-underline text-inherit"
+		<a :href="'/chats/' + contact.uuid"
+			class="block border-b cursor-pointer group-hover:pr-0 no-underline text-inherit"
 			:class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in sortedContacts"
 			:key="index"
 			@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); openChat(contact); }">

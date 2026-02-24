@@ -60,7 +60,7 @@ import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
 const props = defineProps({
@@ -128,6 +128,15 @@ watch(
 		contact.value = newContact
 	},
 	{}
+)
+// التمرير لنهاية المحادثة عند فتح محادثة (مثلاً من الجدول بعد اكتمال router.visit)
+watch(
+	() => [props.contact?.id, props.chatThread?.length],
+	() => {
+		if (props.contact && props.chatThread?.length) {
+			nextTick(() => setTimeout(scrollToBottom, 150))
+		}
+	},
 )
 watch(
 	() => props.templates,
