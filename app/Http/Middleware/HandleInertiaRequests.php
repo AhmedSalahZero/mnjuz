@@ -10,11 +10,11 @@ use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
 use Inertia\Middleware;
-use RobThree\Auth\TwoFactorAuth;
 use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
-use Illuminate\Support\Facades\App;
+use RobThree\Auth\TwoFactorAuth;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -138,6 +138,9 @@ class HandleInertiaRequests extends Middleware
                     : [],
             ];
         }
+        // قراءة الـ flash ثم حذفه فوراً حتى لا يبقى في الجلسة بعد الطلب (مهم عند استخدام router.visit مع only لأن الطلب التالي قد يكون جزئياً)
+        $message = session('status');
+        session()->forget('status');
 
         return array_merge(parent::share($request), [
             'csrf_token' => csrf_token(),
@@ -150,7 +153,7 @@ class HandleInertiaRequests extends Middleware
             'organization' => $organization,
             'organizations' => $organizations,
             'flash' => [
-                'status'=> session('status')
+                'status'=> $message
             ],
             'refresh_lang' => session('refresh_lang', false),
             'response_data' => fn () => $request->session()->get('response_data'),

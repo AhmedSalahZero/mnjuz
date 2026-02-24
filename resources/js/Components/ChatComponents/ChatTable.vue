@@ -88,7 +88,7 @@ function openChat(contact) {
 	updateTotalUnreadMessages(currentUnreadMessages)
 	contact.unread_messages = 0
 	router.visit('/chats/' + contact.uuid, {
-		only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages'],
+		only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash'],
 		preserveState: true,
 		preserveScroll: true,
 	})
