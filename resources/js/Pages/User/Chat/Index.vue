@@ -140,29 +140,20 @@ watch(
 			scrollResizeCleanup.value()
 			scrollResizeCleanup.value = null
 		}
-		const container = scrollContainer2.value
-		if (!container) return
 
-		const scrollToBottomInstant = () => {
-			if (container) {
-				container.scrollTop = container.scrollHeight
+		const runScrollLogic = (container) => {
+			if (!container) return
+			const scrollToBottomInstant = () => {
+				if (container) container.scrollTop = container.scrollHeight
 			}
-		}
-
-		const runInitialScroll = () => {
-			scrollToBottom()
-			// تكرار التمرير بعد تأخير قصير لالتقاط المحتوى المتأخر (v-for، إلخ)
-			setTimeout(scrollToBottom, 100)
-			setTimeout(scrollToBottom, 350)
-		}
-
-		nextTick(() => {
+			const runInitialScroll = () => {
+				container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+				setTimeout(() => { container.scrollTop = container.scrollHeight }, 100)
+				setTimeout(() => { container.scrollTop = container.scrollHeight }, 350)
+			}
 			requestAnimationFrame(() => {
-				requestAnimationFrame(() => {
-					runInitialScroll()
-				})
+				requestAnimationFrame(runInitialScroll)
 			})
-			// مراقبة تغيّر ارتفاع المحتوى (تحميل الصور/وسائط) والتمرير للنهاية خلال فترة بعد الفتح
 			const graceMs = 2500
 			let lastScrollHeight = container.scrollHeight
 			const maybeScrollToBottom = () => {
@@ -173,11 +164,7 @@ watch(
 				}
 			}
 			const contentEl = container.firstElementChild
-			const observer = contentEl
-				? new ResizeObserver(() => {
-						requestAnimationFrame(maybeScrollToBottom)
-				  })
-				: null
+			const observer = contentEl ? new ResizeObserver(() => requestAnimationFrame(maybeScrollToBottom)) : null
 			if (observer && contentEl) observer.observe(contentEl)
 			const intervalId = setInterval(maybeScrollToBottom, 200)
 			const timeoutId = setTimeout(() => {
@@ -190,6 +177,19 @@ watch(
 				clearInterval(intervalId)
 				if (observer) observer.disconnect()
 			}
+		}
+
+		// الحاوية تُصيّر فقط عند وجود contact (v-if) — نقرأ الـ ref بعد nextTick وأيضاً بعد تأخير بسيط للموبايل
+		nextTick(() => {
+			let container = scrollContainer2.value
+			if (container) {
+				runScrollLogic(container)
+				return
+			}
+			setTimeout(() => {
+				container = scrollContainer2.value
+				if (container) runScrollLogic(container)
+			}, 50)
 		})
 	},
 )
