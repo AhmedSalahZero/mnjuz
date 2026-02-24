@@ -208,6 +208,8 @@ class ApiController extends Controller
 				'message' => __('Contact not found',[],getApiLang())
 			], 404);
 		}
+		$chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
+		$contact->chat_ticket = $chatTicket ?? null;
 		return response()->json([
 			'statusCode' => 200,
 			'success' => true,
