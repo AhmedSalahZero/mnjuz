@@ -264,7 +264,12 @@ class ChatService
                 'chat_sort_direction' => $sortDirection,
 				'user' => auth()->user()->only(['first_name', 'last_name']),
 				'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
-                'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
+                'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                // لإرجاع عرض القائمة عند الطلب الجزئي (مثلاً الرجوع من محادثة) دون إعادة تحميل rows
+                'contact' => null,
+                'chatThread' => [],
+                'hasMoreMessages' => false,
+                'nextPage' => 1,
             ]);
         }
     }

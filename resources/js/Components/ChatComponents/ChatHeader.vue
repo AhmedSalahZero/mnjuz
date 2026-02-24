@@ -157,12 +157,13 @@ const submitForm3 = () => {
 		preserveState: true,
 	})
 }
+
 </script>
 <template>
 	<div class="h-20 bg-white border-b border-1 flex items-center justify-between px-4 md:px-4">
 		<div class="flex items-center gap-x-4 cursor-pointer w-3/4">
-			<Link href="/chats" class="sm:block md:hidden">
-				<svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24">
+			<Link href="/chats" :only="['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash']" preserve-state preserve-scroll class="flex md:hidden items-center justify-center min-w-[2.5rem] min-h-[2.5rem] p-1 -m-1 text-current shrink-0 touch-manipulation">
+				<svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24" class="pointer-events-none">
 					<path fill="currentColor"
 						d="M19 11H7.14l3.63-4.36a1 1 0 1 0-1.54-1.28l-5 6a1.19 1.19 0 0 0-.09.15c0 .05 0 .08-.07.13A1 1 0 0 0 4 12a1 1 0 0 0 .07.36c0 .05 0 .08.07.13a1.19 1.19 0 0 0 .09.15l5 6A1 1 0 0 0 10 19a1 1 0 0 0 .64-.23a1 1 0 0 0 .13-1.41L7.14 13H19a1 1 0 0 0 0-2" />
 				</svg>

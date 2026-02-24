@@ -94,6 +94,7 @@ const unsubscribeChatChannel = ref(null)
 const rows = ref(props.rows)
 const rowCount = ref(props.rowCount)
 const scrollContainer2 = ref(null)
+const scrollResizeCleanup = ref(null)
 const loadingThread = ref(false)
 const displayContactInfo = ref(false)
 const displayTemplate = ref(false)
@@ -129,13 +130,67 @@ watch(
 	},
 	{}
 )
-// التمرير لنهاية المحادثة عند فتح محادثة (مثلاً من الجدول بعد اكتمال router.visit)
+// التمرير لنهاية المحادثة عند فتح محادثة — ننتظر التخطيط والوسائط ثم نستخدم ResizeObserver عند تحميل الصور
 watch(
 	() => [props.contact?.id, props.chatThread?.length],
 	() => {
-		if (props.contact && props.chatThread?.length) {
-			nextTick(() => setTimeout(scrollToBottom, 150))
+		if (!props.contact || !props.chatThread?.length) return
+		// إلغاء أي مراقبة سابقة
+		if (typeof scrollResizeCleanup.value === 'function') {
+			scrollResizeCleanup.value()
+			scrollResizeCleanup.value = null
 		}
+		const container = scrollContainer2.value
+		if (!container) return
+
+		const scrollToBottomInstant = () => {
+			if (container) {
+				container.scrollTop = container.scrollHeight
+			}
+		}
+
+		const runInitialScroll = () => {
+			scrollToBottom()
+			// تكرار التمرير بعد تأخير قصير لالتقاط المحتوى المتأخر (v-for، إلخ)
+			setTimeout(scrollToBottom, 100)
+			setTimeout(scrollToBottom, 350)
+		}
+
+		nextTick(() => {
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					runInitialScroll()
+				})
+			})
+			// مراقبة تغيّر ارتفاع المحتوى (تحميل الصور/وسائط) والتمرير للنهاية خلال فترة بعد الفتح
+			const graceMs = 2500
+			let lastScrollHeight = container.scrollHeight
+			const maybeScrollToBottom = () => {
+				const h = container.scrollHeight
+				if (h > lastScrollHeight) {
+					scrollToBottomInstant()
+					lastScrollHeight = h
+				}
+			}
+			const contentEl = container.firstElementChild
+			const observer = contentEl
+				? new ResizeObserver(() => {
+						requestAnimationFrame(maybeScrollToBottom)
+				  })
+				: null
+			if (observer && contentEl) observer.observe(contentEl)
+			const intervalId = setInterval(maybeScrollToBottom, 200)
+			const timeoutId = setTimeout(() => {
+				clearInterval(intervalId)
+				if (observer) observer.disconnect()
+				scrollResizeCleanup.value = null
+			}, graceMs)
+			scrollResizeCleanup.value = () => {
+				clearTimeout(timeoutId)
+				clearInterval(intervalId)
+				if (observer) observer.disconnect()
+			}
+		})
 	},
 )
 watch(
@@ -410,6 +465,14 @@ onUnmounted(() => {
 			unsubscribeChatChannel.value()
 		}
 		unsubscribeChatChannel.value = null
+	} catch (error) {
+		// تجاهل
+	}
+	try {
+		if (typeof scrollResizeCleanup.value === 'function') {
+			scrollResizeCleanup.value()
+		}
+		scrollResizeCleanup.value = null
 	} catch (error) {
 		// تجاهل
 	}
