@@ -271,9 +271,10 @@ function onFilterChange(value) {
 		</div>
 	</div>
 	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-		<div @click="openChat(contact)" class="block border-b cursor-pointer group-hover:pr-0"
+		<a :href="'/chats/' + contact.uuid" class="block border-b cursor-pointer group-hover:pr-0 no-underline text-inherit"
 			:class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in sortedContacts"
-			:key="index">
+			:key="index"
+			@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); openChat(contact); }">
 			<div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
 				<div class="w-[15%] flex items-center gap-1">
 					<img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar" />
@@ -392,7 +393,7 @@ function onFilterChange(value) {
 					</div>
 				</div>
 			</div>
-		</div>
+		</a>
 	</div>
 	<!-- <div class="px-4 pb-4">
 		<Pagination class="mt-3" :pagination="rows.meta" />

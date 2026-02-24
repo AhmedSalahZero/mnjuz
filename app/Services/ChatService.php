@@ -133,6 +133,7 @@ class ChatService
 		$rowCount = -1;
 		$pusherSettings = [];
 		$contacts = [];
+	
 		if(!$isPartialReload){
 			// عند تفعيل التذاكر نحمّل كل الجهات مع ticket_status للفلترة من جهة العميل
 			$queryTicketState = $ticketingActive ? 'all' : $ticketState;

@@ -4,63 +4,63 @@
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Thin.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Thin.ttf") format("truetype");
     font-weight: 200;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-ExtraLight.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-ExtraLight.ttf") format("truetype");
     font-weight: 200;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Light.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Light.ttf") format("truetype");
     font-weight: 300;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Regular.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Regular.ttf") format("truetype");
     font-weight: normal;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Medium.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Medium.ttf") format("truetype");
     font-weight: 500;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-SemiBold.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-SemiBold.ttf") format("truetype");
     font-weight: 600;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Bold.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Bold.ttf") format("truetype");
     font-weight: bold;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-ExtraBold.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-ExtraBold.ttf") format("truetype");
     font-weight: 800;
     font-style: normal;
 }
 
 @font-face {
     font-family: "Outfit";
-    src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Black.ttf") format("truetype");
+    src: local('Outfit'), url("/fonts/outfit/Outfit-Black.ttf") format("truetype");
     font-weight: 900;
     font-style: normal;
 }
