@@ -71,8 +71,9 @@
 				</li>
 				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/chats') ? 'bg-slate-50 text-black' : ''">
-					<Link rel="noopener noreferrer" href="/chats"
-						class="flex items-center justify-between p-2 space-x-3 rounded-md">
+					<a href="/chats" rel="noopener noreferrer"
+						class="flex items-center justify-between p-2 space-x-3 rounded-md no-underline text-inherit"
+						@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); goToChats(); }">
 						<div class="flex items-center space-x-3">
 							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -83,7 +84,7 @@
 						</div>
 						<span v-if="parseInt(unreadMessages) > 0"
 							class="bg-[#ffe5b4] px-2 text-[11px] rounded-md">{{ unreadMessages }}</span>
-					</Link>
+					</a>
 				</li>
 				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/contact') ? 'bg-slate-50 text-black' : ''">
@@ -297,7 +298,7 @@
 </template>
 <script setup>
 import axios from "axios"
-import { Link, useForm, usePage } from "@inertiajs/vue3"
+import { Link, router, useForm, usePage } from "@inertiajs/vue3"
 import { defineProps, ref, computed, onMounted } from "vue"
 import FormInput from '@/Components/FormInput.vue'
 import Modal from '@/Components/Modal.vue'
@@ -323,6 +324,19 @@ const form = useForm({
 const getValueByKey = (key) => {
 	const found = props.config.find(item => item.key === key)
 	return found ? found.value : ''
+}
+
+const goToChats = () => {
+	const page = usePage()
+	// داخل قسم المحادثات (قائمة أو محادثة): لا نطلب rows ولا ننفّذ الاستعلام في Laravel
+	const isAlreadyInChats = page.url.startsWith('/chats')
+	router.visit('/chats', {
+		only: isAlreadyInChats
+			? ['flash']
+			: ['rows', 'rowCount', 'filters', 'status', 'chat_sort_direction', 'flash'],
+		preserveState: true,
+		preserveScroll: true,
+	})
 }
 
 const closeSidebar = () => {

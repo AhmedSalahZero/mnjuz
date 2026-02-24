@@ -68,7 +68,10 @@ class ChatService
 
     public function getChatList($request, $uuid = null, $searchTerm = null)
     {
-		$isPartialReload = request()->hasHeader('X-Inertia-Partial-Data');
+		$partialHeader = request()->header('X-Inertia-Partial-Data', '');
+		$requestedProps = $partialHeader !== '' ? array_map('trim', explode(',', $partialHeader)) : [];
+		// تخطي استعلام rows فقط عندما الطلب جزئي ولا يطلب العميل 'rows' (مثلاً عودة من محادثة إلى القائمة)
+		$skipRowsQuery = $partialHeader !== '' && !in_array('rows', $requestedProps);
 
         //	$uuid = 'b27a5a63-05d4-4e2f-911c-4da76044328c';
         $role = auth()->user()->teams[0]->role;
@@ -134,7 +137,7 @@ class ChatService
 		$pusherSettings = [];
 		$contacts = [];
 	
-		if(!$isPartialReload){
+		if(!$skipRowsQuery){
 			// عند تفعيل التذاكر نحمّل كل الجهات مع ticket_status للفلترة من جهة العميل
 			$queryTicketState = $ticketingActive ? 'all' : $ticketState;
 			$clientSideFilter = $ticketingActive;

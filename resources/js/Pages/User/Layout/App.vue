@@ -7,7 +7,7 @@
 			<Sidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
 				:unreadMessages="unreadMessages"></Sidebar>
 			<div class="md:min-h-screen flex flex-col w-full min-w-0">
-				<slot :user="user" :toggleNavBar="toggleTopBar" @testEmit="doSomething"></slot>
+				<slot :user="user" :toggleNavBar="toggleTopBar"></slot>
 			</div>
 		</div>
 		<audio ref="audioPlayer" allow="autoplay"></audio>
@@ -35,13 +35,15 @@ const displayCreateBtn = computed(() => usePage().props.allowCreate)
 const unreadMessages = ref(usePage().props.unreadMessages)
 const audioPlayer = ref(null)
 
-watch(() => [usePage().props.flash, { deep: true }], () => {
-	if (usePage().props.flash.status != null) {
-		toast(usePage().props.flash.status.message, {
-			autoClose: 3000,
-		})
-	}
-})
+watch(
+	() => usePage().props.flash,
+	() => {
+		if (usePage().props.flash?.status != null) {
+			toast(usePage().props.flash.status.message, { autoClose: 3000 })
+		}
+	},
+	{ deep: true }
+)
 
 const toggleTopBar = () => {
 	viewTopBar.value = !viewTopBar.value
