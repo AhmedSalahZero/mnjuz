@@ -6,6 +6,7 @@ use App\Events\ContactChatDeletedEvent;
 use App\Events\NewChatEvent;
 use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
+use App\Http\Resources\ContactListResource;
 use App\Http\Resources\ContactResource;
 use App\Jobs\SendMediaJob;
 use App\Models\Addon;
@@ -164,7 +165,7 @@ class ChatService
 			
 		}
 
-		$rowsForResponse = is_array($contacts) ? $contacts : ContactResource::collection($contacts);
+		$rowsForResponse = is_array($contacts) ? $contacts : ContactListResource::collection($contacts);
         // $rowCount = $contacts->total();
 		
 

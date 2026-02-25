@@ -147,6 +147,7 @@ class Contact extends Model
                 'contacts.last_inbound_chat_created_at',
                 'contacts.is_blocked',
                 'contacts.is_favorite',
+                'contacts.avatar',
             ])
 			// ->where('contacts.id', 142069)
             ->where('contacts.organization_id', $organizationId)
