@@ -4,7 +4,10 @@ import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
 import { Link, router } from '@inertiajs/vue3'
 import debounce from 'lodash/debounce'
-import { ref, watch, inject, computed } from 'vue'
+import { ref, watch, inject, computed, onMounted, onUnmounted } from 'vue'
+
+const ROW_HEIGHT_PX = 72
+const OVERSCAN = 8
 
 function getInitialStatusFilter(statusProp) {
 	const params = new URLSearchParams(window.location.search)
@@ -37,6 +40,7 @@ const props = defineProps({
 
 const isSearching = ref(false)
 const selectedContact = ref(null)
+const scrollContainer = ref(null)
 const emit = defineEmits(['view'])
 
 function viewChat(contact) {
@@ -212,6 +216,49 @@ function onFilterChange(value) {
 	const url = value === 'all' ? '/chats' : value === 'unread' ? '/chats?is_read=0' : '/chats?status=' + value
 	window.history.replaceState(null, '', url)
 }
+
+// Virtual list: نعرض فقط الصفوف المرئية لتسريع الـ render مع آلاف الـ contacts
+const scrollTop = ref(0)
+const containerHeight = ref(400)
+
+const virtualList = computed(() => {
+	const list = sortedContacts.value
+	const total = list.length
+	if (total === 0) {
+		return { totalHeight: 0, offsetY: 0, visibleItems: [] }
+	}
+	const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT_PX) - OVERSCAN)
+	const visibleCount = Math.ceil(containerHeight.value / ROW_HEIGHT_PX) + OVERSCAN * 2
+	const end = Math.min(total, start + visibleCount)
+	const visibleItems = list.slice(start, end).map((contact, i) => ({ contact, index: start + i }))
+	return {
+		totalHeight: total * ROW_HEIGHT_PX,
+		offsetY: start * ROW_HEIGHT_PX,
+		visibleItems,
+	}
+})
+
+function onScroll() {
+	const el = scrollContainer.value
+	if (el) {
+		scrollTop.value = el.scrollTop
+		if (!containerHeight.value && el.clientHeight) containerHeight.value = el.clientHeight
+	}
+}
+
+function updateContainerHeight() {
+	const el = scrollContainer.value
+	if (el) containerHeight.value = el.clientHeight
+}
+
+onMounted(() => {
+	updateContainerHeight()
+	requestAnimationFrame(updateContainerHeight)
+	window.addEventListener('resize', updateContainerHeight)
+})
+onUnmounted(() => {
+	window.removeEventListener('resize', updateContainerHeight)
+})
 </script>
 <template>
 	<div class="px-4 py-4 border-b">
@@ -272,19 +319,22 @@ function onFilterChange(value) {
 			</div>
 		</div>
 	</div>
-	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-		<a :href="'/chats/' + contact.uuid"
-			class="block border-b cursor-pointer group-hover:pr-0 no-underline text-inherit"
-			:class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in sortedContacts"
-			:key="index"
-			@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); openChat(contact); }">
-			<div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
+	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer" @scroll="onScroll">
+		<div :style="{ height: virtualList.totalHeight + 'px', position: 'relative' }">
+			<div :style="{ transform: `translateY(${virtualList.offsetY}px)` }">
+				<a v-for="item in virtualList.visibleItems" :key="item.contact.uuid"
+					:href="'/chats/' + item.contact.uuid"
+					class="block border-b cursor-pointer group-hover:pr-0 no-underline text-inherit"
+					:class="item.contact.unread_messages > 0 ? 'bg-green-50' : ''"
+					:style="{ height: ROW_HEIGHT_PX + 'px', minHeight: ROW_HEIGHT_PX + 'px' }"
+					@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); openChat(item.contact); }">
+			<div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4 h-full">
 				<div class="w-[15%] flex items-center gap-1">
-					<img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar" />
+					<img v-if="item.contact.avatar" class="rounded-full w-10 h-10" :src="item.contact.avatar" />
 					<div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">
-						{{ contact.full_name.substring(0, 1) }}
+						{{ item.contact.full_name.substring(0, 1) }}
 					</div>
-					<svg v-if="contact.is_blocked" width="20" height="20" viewBox="0 0 24 24" fill="none"
+					<svg v-if="item.contact.is_blocked" width="20" height="20" viewBox="0 0 24 24" fill="none"
 						xmlns="http://www.w3.org/2000/svg">
 						<path
 							d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
@@ -295,27 +345,27 @@ function onFilterChange(value) {
 				</div>
 				<div class="w-[85%]">
 					<div class="flex justify-between">
-						<h3 class="truncate">{{ contact.full_name }}</h3>
+						<h3 class="truncate">{{ item.contact.full_name }}</h3>
 						<span
-							class="self-center text-slate-500 text-xs">{{ formatTime(contact?.last_chat?.created_at) }}
+							class="self-center text-slate-500 text-xs">{{ formatTime(item.contact?.last_chat?.created_at) }}
 						</span>
 					</div>
-					<div v-if="contact?.last_chat?.deleted_at === null" class="flex justify-between">
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'text'"
+					<div v-if="item.contact?.last_chat?.deleted_at === null" class="flex justify-between">
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'text'"
 							class="text-slate-500 text-xs truncate self-end">
-							{{ content(contact?.last_chat?.metadata).text.body }}
+							{{ content(item.contact?.last_chat?.metadata).text.body }}
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'button'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'button'"
 							class="text-slate-500 text-xs truncate self-end">
-							{{ content(contact?.last_chat?.metadata).button.text }}
+							{{ content(item.contact?.last_chat?.metadata).button.text }}
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'interactive'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'interactive'"
 							class="text-slate-500 text-xs truncate self-end">
-							{{ content(contact?.last_chat?.metadata).interactive?.button_reply?.title ||
-								content(contact?.last_chat?.metadata).interactive?.list_reply?.title
+							{{ content(item.contact?.last_chat?.metadata).interactive?.button_reply?.title ||
+								content(item.contact?.last_chat?.metadata).interactive?.list_reply?.title
 							}}
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'image'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'image'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
@@ -325,7 +375,7 @@ function onFilterChange(value) {
 								<span class="ml-2">{{ $t('Photo') }}</span>
 							</div>
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'document'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'document'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
@@ -335,11 +385,11 @@ function onFilterChange(value) {
 									<path fill="currentColor"
 										d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
 								</svg>
-								<span class="ml-2">{{ getExtension(contact?.last_chat?.metadata?.type) }}
+								<span class="ml-2">{{ getExtension(item.contact?.last_chat?.metadata?.type) }}
 									{{ $t('File') }}</span>
 							</div>
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'video'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'video'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
@@ -349,7 +399,7 @@ function onFilterChange(value) {
 								<span class="ml-2">{{ $t('Video') }}</span>
 							</div>
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'audio'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'audio'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 512 512">
@@ -359,7 +409,7 @@ function onFilterChange(value) {
 								<span class="ml-2">{{ $t('Audio') }}</span>
 							</div>
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'sticker'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'sticker'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256">
@@ -369,7 +419,7 @@ function onFilterChange(value) {
 								<span class="ml-2">{{ $t('Sticker') }}</span>
 							</div>
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'contacts'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'contacts'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
@@ -377,11 +427,11 @@ function onFilterChange(value) {
 										d="M3 14s-1 0-1-1s1-4 6-4s6 3 6 4s-1 1-1 1H3Zm5-6a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" />
 								</svg>
 								<span class="ml-2">
-									{{ getContactDisplayName(contact?.last_chat?.metadata) }}
+									{{ getContactDisplayName(item.contact?.last_chat?.metadata) }}
 								</span>
 							</div>
 						</div>
-						<div v-if="contentType(contact?.last_chat?.metadata) === 'location'"
+						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'location'"
 							class="text-slate-500 text-xs truncate self-end">
 							<div class="flex items-center">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
@@ -391,12 +441,14 @@ function onFilterChange(value) {
 								<span class="ml-2">{{ $t('Location') }}</span>
 							</div>
 						</div>
-						<span v-if="contact.unread_messages > 0"
-							class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{ contact.unread_messages }}</span>
+						<span v-if="item.contact.unread_messages > 0"
+							class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{ item.contact.unread_messages }}</span>
 					</div>
 				</div>
 			</div>
 		</a>
+			</div>
+		</div>
 	</div>
 	<!-- <div class="px-4 pb-4">
 		<Pagination class="mt-3" :pagination="rows.meta" />
