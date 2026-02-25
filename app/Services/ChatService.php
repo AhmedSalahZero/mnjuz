@@ -184,9 +184,38 @@ class ChatService
    
         if ($uuid !== null) {
 			// $start = microtime(true);
-            $contact = Contact::with(['lastChat', 'notes', 'contactGroups','organization'])
+			// أعمدة الـ contact المستخدمة فعلياً: contactPayloadForChatView + encryptPhoneNumber + id للـ ticket و getChatMessages
+            $contact = Contact::query()
+                ->select([
+                    'id',
+                    'uuid',
+                    'first_name',
+                    'last_name',
+                    'phone',
+                    'email',
+                    'organization_id',
+                    'is_blocked',
+                    'is_favorite',
+                    'metadata',
+                    'address',
+                    'avatar',
+                    'last_inbound_chat_created_at',
+                    'deleted_at',
+                ])
+                ->with([
+                    'contactGroups:id,name',
+                    'organization:id,metadata',
+                ])
                 ->where('uuid', $uuid)
                 ->first();
+
+			if ($contact === null) {
+				if (request()->expectsJson()) {
+					return response()->json(['message' => __('Contact not found')], 404);
+				}
+				return redirect('/chats')->with('status', ['type' => 'error', 'message' => __('Contact not found')]);
+			}
+
 				/**
 				 * @var Contact $contact
 				 */
