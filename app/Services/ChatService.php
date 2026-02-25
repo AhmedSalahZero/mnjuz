@@ -163,6 +163,8 @@ class ChatService
 			])->pluck('value', 'key')->toArray();
 			
 		}
+
+		$rowsForResponse = is_array($contacts) ? $contacts : ContactResource::collection($contacts);
         // $rowCount = $contacts->total();
 		
 
@@ -199,9 +201,9 @@ class ChatService
             // Mark messages as read
          
             if (request()->expectsJson()) {
-            
+                $result = is_array($rowsForResponse) ? $rowsForResponse : $rowsForResponse->resolve();
                 return response()->json([
-                    'result' => ContactResource::collection($contacts)->response()->getData(),
+                    'result' => $result,
                 ], 200);
             } else {
                 $settings = json_decode($config->metadata);
@@ -213,7 +215,7 @@ class ChatService
                 //     ->count();
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
-                    'rows' => ContactResource::collection($contacts),
+                    'rows' => $rowsForResponse,
                     'simpleForm' => CustomHelper::isModuleEnabled('AI Assistant') && optional(optional($settings)->ai)->ai_chat_form_active ? false : true,
                     'rowCount' => $rowCount,
                     'filters' => request()->all(),
@@ -239,16 +241,16 @@ class ChatService
         }
         
         if (request()->expectsJson()) {
-			
+            $result = is_array($rowsForResponse) ? $rowsForResponse : $rowsForResponse->resolve();
             return response()->json([
-                'result' => ContactResource::collection($contacts)->response()->getData(),
+                'result' => $result,
             ], 200);
         } else {
             $settings = json_decode($config->metadata);
             
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
-                'rows' => ContactResource::collection($contacts),
+                'rows' => $rowsForResponse,
                 'simpleForm' => !CustomHelper::isModuleEnabled('AI Assistant') || empty($settings->ai->ai_chat_form_active),
                 'rowCount' => $rowCount,
                 'filters' => request()->all(),
