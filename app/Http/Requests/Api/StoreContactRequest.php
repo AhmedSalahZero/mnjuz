@@ -2,10 +2,10 @@
 
 namespace App\Http\Requests\Api;
 use App\Rules\UniquePhone;
-
 use App\Rules\ValidPhone;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Client\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StoreContactRequest extends FormRequest
@@ -28,7 +28,6 @@ class StoreContactRequest extends FormRequest
     {
         $organizationId = $this->get('organization');
         $uuid = $this->route('uuid');
-		
         return [
             'first_name' => $this->isMethod('post') ? 'required' : 'sometimes',
             'phone' => [

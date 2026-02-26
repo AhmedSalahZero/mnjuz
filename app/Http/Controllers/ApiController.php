@@ -82,6 +82,7 @@ class ApiController extends Controller
     
     public function storeContact(StoreContactRequest $request)
     {
+		
 		$organizationId = $request->organization;
 		if( $request->is('api/v1/*')){
 			$organizationId = $request->user()->current_organization_id;
@@ -210,6 +211,13 @@ class ApiController extends Controller
 		}
 		$chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
 		$contact->chat_ticket = $chatTicket ?? null;
+
+		$contact->groups = $contact->contactGroups->map(function($group){
+			return [
+				'id' => $group->id,
+				'name' => $group->name,
+			];
+		});
 		return response()->json([
 			'statusCode' => 200,
 			'success' => true,

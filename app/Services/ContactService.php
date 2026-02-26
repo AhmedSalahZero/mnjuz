@@ -77,7 +77,8 @@ class ContactService
 
         if($request->group){
             $groupUuids = array_map('trim', $request->group);
-            $groupIds = ContactGroup::whereIn('uuid', $groupUuids)->pluck('id')->toArray();
+			$columnName = $request->is('api/v1/*') ? 'id' : 'uuid';
+            $groupIds = ContactGroup::whereIn($columnName, $groupUuids)->pluck('id')->toArray();
             $contact->contactGroups()->sync($groupIds);
         }
 
