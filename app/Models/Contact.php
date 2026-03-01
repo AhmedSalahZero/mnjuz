@@ -177,14 +177,12 @@ class Contact extends Model
             });
         });
 
-        // ✅ شروط التذاكر مع JOIN على آخر تذكرة فقط (تجنب تكرار الـ contact)
+        // ✅ شروط التذاكر مع JOIN على آخر تذكرة فقط (is_latest = true لتجنب تكرار الـ contact)
         if ($ticketingActive) {
-            $latestTicketSub = DB::table('chat_tickets')
-                ->select('contact_id', DB::raw('MAX(id) as latest_id'))
-                ->groupBy('contact_id');
-
-            $query->leftJoinSub($latestTicketSub, 'latest_ticket', 'contacts.id', '=', 'latest_ticket.contact_id')
-                ->leftJoin('chat_tickets', 'latest_ticket.latest_id', '=', 'chat_tickets.id');
+            $query->leftJoin('chat_tickets', function ($join) {
+                $join->on('contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.is_latest', true);
+            });
 
             // إضافة أعمدة التذكرة (للفلترة من جهة العميل)
             $query->addSelect([

@@ -747,6 +747,7 @@ class ChatService
                     'contact_id' => $contactId,
                     'assigned_to' => null,
                     'status' => 'open',
+                    'is_latest' => true,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
