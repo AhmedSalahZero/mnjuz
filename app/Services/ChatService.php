@@ -3,13 +3,10 @@
 namespace App\Services;
 
 use App\Events\ContactChatDeletedEvent;
-use App\Events\NewChatEvent;
 use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
 use App\Http\Resources\ContactListResource;
-use App\Http\Resources\ContactResource;
 use App\Jobs\SendMediaJob;
-use App\Models\Addon;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatMedia;
@@ -557,9 +554,7 @@ class ChatService
 		
 		event(new ContactChatDeletedEvent($this->organizationId, $contact->id));
 
-        //    $chat = Chat::with('contact','media')->where('id', $contact->lastChat->id)->first();
-
-        //event(new NewChatEvent($chat, $contact->organization_id));
+       
     }
 
     private function getContentTypeFromUrl($url)

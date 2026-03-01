@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\ProcessAutoReplyJob;
 use App\Jobs\ProcessIncomingMessageJob;
 use App\Jobs\ProcessTicketAssignmentJob;
+use App\Models\Contact;
 use Illuminate\Console\Command;
 
 class TestCommand extends Command
@@ -29,12 +30,18 @@ class TestCommand extends Command
     public function handle()
     {
         // اختبار incoming message
-        ProcessIncomingMessageJob::dispatchSync(['id'=>'test'.time(),'from'=>'01025894984','timestamp'=>time(),'type'=>'text','text'=>['body'=>'test']], ['profile'=>['name'=>'Test']], 1);
+		/**
+		 * @var Contact $contact
+		 */
+		$contact = Contact::first();
+		$contact->newMessageReceived();
+		
+        // ProcessIncomingMessageJob::dispatchSync(['id'=>'test'.time(),'from'=>'01025894984','timestamp'=>time(),'type'=>'text','text'=>['body'=>'test']], ['profile'=>['name'=>'Test']], 1);
 
-        // اختبار ticket
-        ProcessTicketAssignmentJob::dispatchSync(1, 1, true);
+        // // اختبار ticket
+        // ProcessTicketAssignmentJob::dispatchSync(1, 1, true);
 
-        // اختبار autoreply
-        ProcessAutoReplyJob::dispatchSync(1, 1, false);
+        // // اختبار autoreply
+        // ProcessAutoReplyJob::dispatchSync(1, 1, false);
     }
 }

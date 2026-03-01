@@ -2,12 +2,9 @@
 
 namespace App\Jobs;
 
-use App\Events\NewChatEvent;
-use App\Helpers\WebhookHelper;
+
 use App\Models\Chat;
-use App\Models\ChatLog;
-use App\Models\ChatMedia;
-use App\Models\Contact;
+
 use App\Models\Setting;
 use App\Services\WhatsappService;
 use Illuminate\Bus\Queueable;

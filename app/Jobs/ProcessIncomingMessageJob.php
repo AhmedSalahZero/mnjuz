@@ -40,7 +40,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
     public function handle()
     {
         try {
-            // ✅ تحقق من duplicate
+     
             if ($this->isDuplicate()) {
                 return;
             }
@@ -89,8 +89,14 @@ class ProcessIncomingMessageJob implements ShouldQueue
                     event(new \App\Events\NewChatEvent(
                         $this->formatChatForEvent($chat, $isNewContact, $contact->uuid),
                         $this->organizationId,
-                        $isNewContact
+                        $isNewContact,
+						false ,
+						true
                     ));
+					/**
+					 * @var Contact $contact
+					 */
+					
 
                     WebhookHelper::triggerWebhookEvent(
                         'message.received',
@@ -203,7 +209,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
         $chatLog = ChatLog::where('entity_id', $chat->id)
             ->where('entity_type', 'chat')
             ->first();
-	//	logger('contact uuidf'.$contactUuid);
 		
 		
 		

@@ -84,7 +84,9 @@ class ProcessMediaDownloadJob implements ShouldQueue
         event(new \App\Events\NewChatEvent(
             $this->formatChatForEvent($chat, $this->isNewContact, $this->contactUuid),
             $this->organizationId,
-            $this->isNewContact
+            $this->isNewContact,
+			false,
+			true
         ));
 
         // ✅ Webhook

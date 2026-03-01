@@ -159,11 +159,11 @@ class WebhookController extends BaseController
 		}
 		
   	 if($res['field'] === 'messages'){
-	//	logger('2from messages');
+
         $messages = $res['value']['messages'] ?? null;
         $statuses = $res['value']['statuses'] ?? null;
         if($statuses) {
-	//		logger('3from statuses');
+	
             ProcessMessageStatusJob::dispatch(
                 $statuses,
                 $organization->id

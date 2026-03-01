@@ -21,6 +21,7 @@ class NewChatEvent implements ShouldBroadcast
     public $queue = 'high';
 	public $isNewContact = false;
 	public $statusChanged = false;
+	public $sendToFirestore = false;
     /**
      * Create a new event instance.
      * يُخزّن فقط النسخة المُصغّرة من الـ chat (في الـ queue والـ broadcast والـ listeners).
@@ -28,11 +29,12 @@ class NewChatEvent implements ShouldBroadcast
      * @param mixed $chat
      * @param int $organizationId
      */
-    public function __construct($chat, $organizationId, $isNewContact = false,$statusChanged = false)
+    public function __construct($chat, $organizationId, $isNewContact = false,$statusChanged = false,$sendToFirestore = false)
     {
         $this->organizationId = $organizationId;
 		$this->isNewContact = $isNewContact;
 		$this->statusChanged = $statusChanged;
+		$this->sendToFirestore = $sendToFirestore;
          $this->chat = $this->buildMinimalChatPayload($chat);
     }
 
@@ -80,8 +82,12 @@ class NewChatEvent implements ShouldBroadcast
         if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
             return $payload;
         }
-	
-        return $this->shrinkPayloadToLimit($payload);
+		$dataToBeSent = $this->shrinkPayloadToLimit($payload);
+		if($this->sendToFirestore){
+			Contact::sendNewMessageReceivedToFirestore($this->chat['contact_id'],$dataToBeSent);
+		}
+		
+        return $dataToBeSent;
     }
 
     /**

@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Models;
-
+use App\Services\Firebase\Firestore;
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Builder;
@@ -377,5 +377,9 @@ class Contact extends Model
         ]);
 		
     }
-
+	public static function sendNewMessageReceivedToFirestore(int $contactId,array $additionalDataToBeSent = []){
+		$firestore = new Firestore;
+		$firestore->setNewMessageReceived($contactId,$additionalDataToBeSent);
+	}
+	
 }
