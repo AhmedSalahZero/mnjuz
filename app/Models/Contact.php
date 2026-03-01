@@ -1,14 +1,15 @@
 <?php
 
 namespace App\Models;
-use App\Services\Firebase\Firestore;
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
+use App\Services\Firebase\Firestore;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class Contact extends Model
@@ -176,11 +177,14 @@ class Contact extends Model
             });
         });
 
-        // ✅ شروط التذاكر مع JOIN محسّن
+        // ✅ شروط التذاكر مع JOIN على آخر تذكرة فقط (تجنب تكرار الـ contact)
         if ($ticketingActive) {
-            $query->leftJoin('chat_tickets', function ($join) {
-                $join->on('contacts.id', '=', 'chat_tickets.contact_id');
-            });
+            $latestTicketSub = DB::table('chat_tickets')
+                ->select('contact_id', DB::raw('MAX(id) as latest_id'))
+                ->groupBy('contact_id');
+
+            $query->leftJoinSub($latestTicketSub, 'latest_ticket', 'contacts.id', '=', 'latest_ticket.contact_id')
+                ->leftJoin('chat_tickets', 'latest_ticket.latest_id', '=', 'chat_tickets.id');
 
             // إضافة أعمدة التذكرة (للفلترة من جهة العميل)
             $query->addSelect([
@@ -378,8 +382,13 @@ class Contact extends Model
 		
     }
 	public static function sendNewMessageReceivedToFirestore(int $contactId,array $additionalDataToBeSent = []){
-		$firestore = new Firestore;
+		try{
+			$firestore = new Firestore;
 		$firestore->setNewMessageReceived($contactId,$additionalDataToBeSent);
+		}
+		catch(\Exception $e){
+			Log::error('Error sending new message received to firestore: '.$e->getMessage());
+		}
 	}
 	
 }

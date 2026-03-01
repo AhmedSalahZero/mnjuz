@@ -152,7 +152,6 @@ class ChatService
 
 			$contacts = $contactsQuery;
 			$rowCount = count($contacts);
-			
 			$pusherSettings = Setting::whereIn('key', [
 				'pusher_app_id',
 				'pusher_app_key',
