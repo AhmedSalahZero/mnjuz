@@ -20,6 +20,7 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
+use App\Models\User;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
@@ -72,7 +73,13 @@ class ChatService
 		$skipRowsQuery = $partialHeader !== '' && !in_array('rows', $requestedProps);
 
         //	$uuid = 'b27a5a63-05d4-4e2f-911c-4da76044328c';
-        $role = auth()->user()->teams[0]->role;
+        // $role = auth()->user()->teams[0]->role;
+		$currentUser = auth()->user();
+		/**
+		 * @var User $currentUser
+		 */
+		$role = $currentUser->getRoleNameForOrganization($this->organizationId);
+		
 		$contact = null ;
 		if($uuid !== null){
 			$contact = Contact::where('uuid', $uuid)->first();
@@ -83,6 +90,9 @@ class ChatService
 			->update(['is_read' => 1]);
 		}
         $contact = new Contact;
+		/**
+		 * @var Organization $config
+		 */
         $config = Organization::find($this->organizationId);
         $ticketState = $request->status == null ? 'all' : $request->status;
 		$sortDirection = 'desc';
@@ -91,44 +101,17 @@ class ChatService
 		}else{
 			$sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
 		}
-        $allowAgentsToViewAllChats = true;
+ 
         $ticketingActive = false;
 	
         $aimodule = CustomHelper::isModuleEnabled('AI Assistant',$this->organizationId);
         //Check if tickets module has been enabled
-        
-        if ($config->metadata != null) {
-            $settings = json_decode($config->metadata);
-            if (isset($settings->tickets) && $settings->tickets->active === true) {
-                $ticketingActive = true;
-		
-                $this->ensureChatTicketsExist();
-                //Check for chats that don't have corresponding chat ticket rows
-                // $contacts = $contact->contactsWithChats($this->organizationId, NULL);
-            
-                // foreach($contacts as $contact){
-                //     ChatTicket::firstOrCreate(
-                //         ['contact_id' => $contact->id],
-                //         [
-                //             'assigned_to' => null,
-                //             'status' => 'open',
-                //             'updated_at' => now(),
-                //         ]
-                //     );
-                // }
-        
-                //Check if agents can view all chats
-                $allowAgentsToViewAllChats = $settings->tickets->allow_agents_to_view_all_chats;
-            }
-        }
-        /**
-         * @var Contact $contact
-         */
-        // Retrieve the list of contacts with chats
-        // $contacts = $contact->contactsWithChats($this->organizationId, $searchTerm, $ticketingActive, $ticketState, $sortDirection, $role, $allowAgentsToViewAllChats);
-        // $rowCount = $contact->contactsWithChatsCount($this->organizationId, $searchTerm, $ticketingActive, $ticketState, $sortDirection, $role, $allowAgentsToViewAllChats);
-
-        
+		$allowAgentsToViewAllChats =true;
+		if($config->getTicketingActive()){
+			$ticketingActive = true;
+			$this->ensureChatTicketsExist();
+			$allowAgentsToViewAllChats = $config->getAllowAgentsToViewAllChats();
+		}
 
         $contact = new Contact;
 		$rowCount = -1;

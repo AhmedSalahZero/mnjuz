@@ -209,9 +209,7 @@ class NewChatEvent implements ShouldBroadcast
                     trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
                     120
                 ) ?: null;
-                // $contactFirstName = $contact->first_name;
-                // $contactLastName = $contact->last_name;
-            //    $contactEmail = $contact->email;
+                
                 $contactOrganizationId = $contact->organization_id;
                 $contactLatestChatCreatedAt = $contact->latest_chat_created_at;
                 $contactIsBlocked = $contact->is_blocked;

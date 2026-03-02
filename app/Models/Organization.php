@@ -51,4 +51,26 @@ class Organization extends Model {
 	{
 		return $this->hasMany(Contact::class, 'organization_id', 'id')->orderBy('latest_chat_created_at', 'desc');
 	}
+	public function getTicketingActive():bool
+	{
+		$ticketingActive = false;
+		if ($this->metadata != null) {
+			$settings = json_decode($this->metadata);
+			if (isset($settings->tickets) && $settings->tickets->active === true) {
+				$ticketingActive = true;
+			}
+		}
+		return $ticketingActive;
+	}
+	public function getAllowAgentsToViewAllChats():bool
+	{
+		$allowAgentsToViewAllChats = true;
+		$settings = json_decode($this->metadata);
+		$ticketingActive = $this->getTicketingActive();
+		if($ticketingActive){
+			$allowAgentsToViewAllChats =  $settings->tickets->allow_agents_to_view_all_chats;
+		}
+		return $allowAgentsToViewAllChats;
+		
+	}
 }

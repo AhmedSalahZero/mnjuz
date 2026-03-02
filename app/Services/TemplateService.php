@@ -2,16 +2,13 @@
 
 namespace App\Services;
 
-use App\Events\NewChatEvent;
 use App\Http\Resources\TemplateResource;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
+
 use Inertia\Inertia;
-use DB;
 use Validator;
 
 class TemplateService

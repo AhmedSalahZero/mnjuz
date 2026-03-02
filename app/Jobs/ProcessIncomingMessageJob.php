@@ -52,7 +52,17 @@ class ProcessIncomingMessageJob implements ShouldQueue
             $chat = $this->createChat($contact);
             if ($chat) {
                 $contact->update(['last_inbound_chat_created_at' => DateTimeHelper::convertToOrganizationTimezone(now(), null)]);
-
+				
+				 // ✅ ChatLog
+				 $this->createChatLog($contact->id, $chat->id);
+				 
+				  // ✅ Ticket في job منفصل
+				  ProcessTicketAssignmentJob::dispatchSync(
+                    $contact->id,
+                    $this->organizationId,
+                    true // isNewChat
+                );
+				
                 // ✅ Media في job منفصل (لا ينتظر)
                 $hasMedia = $this->hasMedia();
                 if ($hasMedia) {
@@ -65,15 +75,9 @@ class ProcessIncomingMessageJob implements ShouldQueue
                     )->onQueue('media');
                 }
 
-                // ✅ ChatLog
-                $this->createChatLog($contact->id, $chat->id);
+               
 
-                // ✅ Ticket في job منفصل
-                ProcessTicketAssignmentJob::dispatch(
-                    $contact->id,
-                    $this->organizationId,
-                    true // isNewChat
-                )->onQueue('tickets');
+              
 
                 // ✅ AutoReply في job منفصل (مع التحقق من حد الرسائل)
                 $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit');

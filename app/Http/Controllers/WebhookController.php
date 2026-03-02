@@ -2,34 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\NewChatEvent;
-use App\Helpers\ChatMetadataHelper;
-use App\Helpers\DateTimeHelper;
-use App\Helpers\WebhookHelper;
 use App\Http\Controllers\Controller as BaseController;
 use App\Jobs\ProcessAccountUpdateJob;
 use App\Jobs\ProcessIncomingMessageJob;
 use App\Jobs\ProcessMessageStatusJob;
 use App\Jobs\ProcessTemplateStatusJob;
-use App\Models\AutoReply;
-use App\Models\Chat;
-use App\Models\ChatLog;
-use App\Models\ChatMedia;
-use App\Models\ChatStatusLog;
-use App\Models\Contact;
+
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
 use App\Resolvers\PaymentPlatformResolver;
-use App\Services\AutoReplyService;
-use App\Services\ChatService;
-use App\Services\PhoneService;
-use App\Services\StripeService;
+
 use App\Services\SubscriptionService;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ConnectException;
-use GuzzleHttp\Exception\GuzzleException;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
