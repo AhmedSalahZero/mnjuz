@@ -446,6 +446,7 @@ onMounted(() => {
 
 		const { subscribe } = getOrJoinChatChannel(
 			props.organizationId,
+			props.user.id,
 			props.pusherSettings.pusher_app_key,
 			props.pusherSettings.pusher_app_cluster,
 		)

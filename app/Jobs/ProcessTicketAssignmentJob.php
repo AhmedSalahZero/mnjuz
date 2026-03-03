@@ -37,7 +37,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue
         $this->isNewChat = $isNewChat;
     }
 
-    public function handle()
+    public function handle():?int
     {
         try {
             // ✅ Cache للإعدادات
@@ -45,20 +45,23 @@ class ProcessTicketAssignmentJob implements ShouldQueue
 
             // ✅ التحقق من تفعيل نظام التذاكر
             if(!isset($settings->tickets) || !$settings->tickets->active) {
-                return;
+                return null ;
             }
 
             // ✅ البحث عن التذكرة الموجودة
             $ticket = ChatTicket::where('contact_id', $this->contactId)->first();
 
             // ✅ إنشاء تذكرة جديدة أو إعادة فتح
-            DB::transaction(function() use ($ticket, $settings) {
+            return DB::transaction(function() use ($ticket, $settings) {
                 if(!$ticket && $this->isNewChat) {
-                    $this->createTicket($settings);
+					$ticket = $this->createTicket($settings);
+                    return $ticket->assigned_to ;
                 } 
                 else if($ticket && $ticket->status === 'closed') {
-                    $this->reopenTicket($ticket, $settings);
+                    $ticket = $this->reopenTicket($ticket, $settings);
+                    return $ticket->assigned_to ;
                 }
+				return null;
             });
 
         } catch (\Exception $e) {

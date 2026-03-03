@@ -80,6 +80,7 @@ onMounted(() => {
 
 	const { subscribe } = getOrJoinChatChannel(
 		organization.value.id,
+		user.value.id,
 		getValueByKey('pusher_app_key'),
 		getValueByKey('pusher_app_cluster')
 	)

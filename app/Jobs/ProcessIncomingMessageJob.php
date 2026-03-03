@@ -41,9 +41,9 @@ class ProcessIncomingMessageJob implements ShouldQueue
     {
         try {
      
-            if ($this->isDuplicate()) {
-                return;
-            }
+            // if ($this->isDuplicate()) {
+            //     return;
+            // }
 
             // ✅ الحصول على/إنشاء contact
             [$contact, $isNewContact] = $this->getOrCreateContact();
@@ -57,7 +57,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
 				 $this->createChatLog($contact->id, $chat->id);
 				 
 				  // ✅ Ticket في job منفصل
-				  ProcessTicketAssignmentJob::dispatchSync(
+				  $assignedTo = ProcessTicketAssignmentJob::dispatchSync(
                     $contact->id,
                     $this->organizationId,
                     true // isNewChat
@@ -120,25 +120,25 @@ class ProcessIncomingMessageJob implements ShouldQueue
         }
     }
 
-    private function isDuplicate()
-    {
-        $wamId = $this->message['id'];
+    // private function isDuplicate()
+    // {
+    //     $wamId = $this->message['id'];
         
-        // ✅ تحقق سريع من cache أولاً
-        if (Cache::has("msg_processed_{$wamId}")) {
-            return true;
-        }
-        $exists = Chat::where('wam_id', $wamId)
-            ->where('organization_id', $this->organizationId)
-            ->exists();
+    //     // ✅ تحقق سريع من cache أولاً
+    //     if (Cache::has("msg_processed_{$wamId}")) {
+    //         return true;
+    //     }
+    //     $exists = Chat::where('wam_id', $wamId)
+    //         ->where('organization_id', $this->organizationId)
+    //         ->exists();
 
-        if ($exists) {
-            Cache::put("msg_processed_{$wamId}", true, 3600);
-            return true;
-        }
+    //     if ($exists) {
+    //         Cache::put("msg_processed_{$wamId}", true, 3600);
+    //         return true;
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
 
     private function getOrCreateContact(): array
     {

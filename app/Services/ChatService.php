@@ -242,7 +242,7 @@ class ChatService
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'hasMoreMessages' => $initialMessages['hasMoreMessages'],
-					'user' => auth()->user()->only(['first_name', 'last_name']),
+					'user' => auth()->user()->only(['id', 'first_name', 'last_name']),
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
                 ]);
@@ -273,7 +273,7 @@ class ChatService
                 'addon' => $aimodule,
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
-				'user' => auth()->user()->only(['first_name', 'last_name']),
+				'user' => auth()->user()->only(['id', 'first_name', 'last_name']),
 				'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
                 // لإرجاع عرض القائمة عند الطلب الجزئي (مثلاً الرجوع من محادثة) دون إعادة تحميل rows

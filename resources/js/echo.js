@@ -28,13 +28,13 @@ export function getEchoInstance(pusherKey, pusherCluster) {
 /**
  * اشتراك مشترك في قناة المحادثات: طلب auth واحد، ومعالجات متعددة.
  * @param {number} organizationId
+ * @param {number} userId
  * @param {string} pusherKey
  * @param {string} pusherCluster
  * @returns {{ subscribe: (handler: (event: any) => void) => () => void }}
  */
-export function getOrJoinChatChannel(organizationId, pusherKey, pusherCluster) {
-    const name = `chats.ch${organizationId}`;
-
+export function getOrJoinChatChannel(organizationId, userId, pusherKey, pusherCluster) {
+    const name = `chats.ch${organizationId}.${userId}`;
     if (sharedChannelEntries.has(name)) {
         const entry = sharedChannelEntries.get(name);
         return {

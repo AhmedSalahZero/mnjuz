@@ -2,7 +2,11 @@
 
 namespace App\Events;
 
+use App\Models\ChatTicket;
 use App\Models\Contact;
+use App\Models\Organization;
+use App\Models\Team;
+use App\Models\User;
 use Exception;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
@@ -19,9 +23,9 @@ class NewChatEvent implements ShouldBroadcast
     public $chat;
     public $organizationId;
     public $queue = 'high';
-	public $isNewContact = false;
-	public $statusChanged = false;
-	public $sendToFirestore = false;
+    public $isNewContact = false;
+    public $statusChanged = false;
+    public $sendToFirestore = false;
     /**
      * Create a new event instance.
      * يُخزّن فقط النسخة المُصغّرة من الـ chat (في الـ queue والـ broadcast والـ listeners).
@@ -29,13 +33,13 @@ class NewChatEvent implements ShouldBroadcast
      * @param mixed $chat
      * @param int $organizationId
      */
-    public function __construct($chat, $organizationId, $isNewContact = false,$statusChanged = false,$sendToFirestore = false)
+    public function __construct($chat, $organizationId, $isNewContact = false, $statusChanged = false, $sendToFirestore = false)
     {
         $this->organizationId = $organizationId;
-		$this->isNewContact = $isNewContact;
-		$this->statusChanged = $statusChanged;
-		$this->sendToFirestore = $sendToFirestore;
-         $this->chat = $this->buildMinimalChatPayload($chat);
+        $this->isNewContact = $isNewContact;
+        $this->statusChanged = $statusChanged;
+        $this->sendToFirestore = $sendToFirestore;
+        $this->chat = $this->buildMinimalChatPayload($chat);
     }
 
     /**
@@ -43,25 +47,70 @@ class NewChatEvent implements ShouldBroadcast
      *
      * @return \Illuminate\Broadcasting\Channel
      */
+    
     public function broadcastOn()
     {
         try {
-	
-            // Check if Pusher settings are available
-            if (config('broadcasting.connections.pusher.key') && config('broadcasting.connections.pusher.secret')) {
-                $channel = 'chats.ch' . $this->organizationId;
-                return new PresenceChannel($channel);
+            $organization = Organization::findOrFail($this->organizationId);
+            $allowAgentsViewAllChats = $organization->getAllowAgentsToViewAllChats();
+            $ticketingActive = $organization->getTicketingActive();
+
+            // كل أعضاء المنظمة مع أدوارهم
+            $teams = Team::where('organization_id', $this->organizationId)
+                ->get(['user_id', 'role']);
+
+            $userIds = [];
+
+            // 1) لو التذاكر غير مفعّلة أو الوكلاء مسموح لهم يشوفوا الكل → أرسل للكل
+            if (!$ticketingActive || $allowAgentsViewAllChats) {
+                $userIds = $teams->pluck('user_id')->unique()->values()->all();
             } else {
-                // Log an error if Pusher settings are not configured
-                Log::error('Pusher settings are not configured.');
-                return;
+                // 2) التذاكر مفعّلة + الوكلاء لا يشوفون كل المحادثات
+
+                // أصحاب الأدوار غير agent (owners, admins, ...) يرون الكل دائماً
+                $nonAgentUserIds = $teams->where('role', '!=', 'agent')
+                    ->pluck('user_id')
+                    ->all();
+
+                $userIds = $nonAgentUserIds;
+
+                // الحصول على contact_id من الـ payload
+                $contactId = $this->chat[0]['value']['contact_id'] ?? null;
+
+                if ($contactId) {
+                    $chatTicket = ChatTicket::where('contact_id', $contactId)
+                        ->where('is_latest', true)
+                        ->first();
+
+                    if ($chatTicket && $chatTicket->assigned_to) {
+                        // هل المعيَّن له agent في هذه المنظمة؟
+                        $assignedTeam = $teams->firstWhere('user_id', $chatTicket->assigned_to);
+
+                        if ($assignedTeam && $assignedTeam->role === 'agent') {
+                            // هذا الوكيل وحده يرى الـ contact في Contact.php → يحق له استلام الـ event
+                            $userIds[] = $chatTicket->assigned_to;
+                        }
+                        // لو المعيَّن له owner أو admin: هو أصلاً داخل nonAgentUserIds فلا تحتاج لإضافة خاصة
+                    }
+                    // لو لا يوجد ticket أو assigned_to = null:
+                    // لا نضيف أي agent → نفس Contact.php: لا agent يرى هذه المحادثة
+                }
+
+                $userIds = array_values(array_unique($userIds));
             }
+
+            $channels = [];
+            foreach ($userIds as $userId) {
+                $channels[] = new PresenceChannel('chats.ch' . $this->organizationId . '.' . $userId);
+            }
+
+            return $channels;
         } catch (Exception $e) {
-            // Log the exception and prevent the event from broadcasting
             Log::error('Failed to broadcast event: ' . $e->getMessage());
             return;
         }
     }
+
 
     /** حد حجم رسالة Pusher (بايت) */
     private const PUSHER_MAX_PAYLOAD_BYTES = 10240;
@@ -75,18 +124,22 @@ class NewChatEvent implements ShouldBroadcast
     public function broadcastWith()
     {
         $payload = ['chat' => $this->chat];
-		if($this->statusChanged){
-			$payload['statusChanged'] = $this->statusChanged;
-		}
+        if ($this->statusChanged) {
+            $payload['statusChanged'] = $this->statusChanged;
+        }
         $encoded = json_encode($payload);
         if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
             return $payload;
         }
-		$dataToBeSent = $this->shrinkPayloadToLimit($payload);
-		if($this->sendToFirestore){
-			Contact::sendNewMessageReceivedToFirestore($this->chat['contact_id'],$dataToBeSent);
-		}
-		
+        $dataToBeSent = $this->shrinkPayloadToLimit($payload);
+        if ($this->sendToFirestore) {
+            $contactId = data_get($this->chat, '0.value.contact_id')
+    ?? data_get($this->chat, 'value.contact_id');
+            if ($contactId) {
+                Contact::sendNewMessageReceivedToFirestore($contactId, $dataToBeSent);
+            }
+        }
+        
         return $dataToBeSent;
     }
 
@@ -162,11 +215,11 @@ class NewChatEvent implements ShouldBroadcast
 
     public function minimalChatValue($value): array
     {
-		// return (array) $value;
+        // return (array) $value;
         $arr = $value instanceof \Illuminate\Database\Eloquent\Model
             ? $value->toArray()
             : (array) $value;
-		
+        
         $user = null;
         if (!empty($arr['user']) && is_array($arr['user'])) {
             $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
@@ -189,7 +242,7 @@ class NewChatEvent implements ShouldBroadcast
         $contactFullName = null;
         // $contactFirstName = null;
         // $contactLastName = null;
-     //   $contactEmail = null;
+        //   $contactEmail = null;
         $contactOrganizationId = null;
         $contactLatestChatCreatedAt = null;
         $contactIsBlocked = null;
@@ -198,11 +251,11 @@ class NewChatEvent implements ShouldBroadcast
         $contactUuid = null;
         if ($contactId) {
             $contact = Contact::where('id', $contactId)
-			->first([
-				'phone', 'first_name', 'last_name', 'email', 'organization_id',
-				'latest_chat_created_at', 'is_blocked', 'is_favorite',
-				'uuid',
-			]);
+            ->first([
+                'phone', 'first_name', 'last_name', 'email', 'organization_id',
+                'latest_chat_created_at', 'is_blocked', 'is_favorite',
+                'uuid',
+            ]);
             if ($contact) {
                 $contactPhone = $contact->phone;
                 $contactFullName = $this->truncateToBytes(
@@ -218,34 +271,34 @@ class NewChatEvent implements ShouldBroadcast
                 $contactUuid = $contact->uuid;
             }
         }
-		$metadata = $arr['metadata'] ?? null;
+        $metadata = $arr['metadata'] ?? null;
         // $metadataRaw = $arr['metadata'] ?? null;
         // $metadata = is_string($metadataRaw)
         //     ? $this->truncateToBytes($metadataRaw, self::MAX_METADATA_BYTES)
         //     : $this->truncateToBytes(json_encode($metadataRaw), self::MAX_METADATA_BYTES);
 
-		// if($metadata){
-		// 	$metadata = json_decode($metadata, true);
-		// }
-		$metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
-		$type = $metadata['type'] ?? null;
-		
-		if($metadata && isset($metadata['type']) && $type && empty($metadata[$type])  ){
-			$metadata[$type] = null;
-		}
-		if(is_array($metadata)){
-			$metadata = json_encode($metadata);
-		}
+        // if($metadata){
+        // 	$metadata = json_decode($metadata, true);
+        // }
+        $metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+        $type = $metadata['type'] ?? null;
+        
+        if ($metadata && isset($metadata['type']) && $type && empty($metadata[$type])) {
+            $metadata[$type] = null;
+        }
+        if (is_array($metadata)) {
+            $metadata = json_encode($metadata);
+        }
         return [
             'id' => $arr['id'] ?? null,
             'uuid' => $arr['uuid'] ?? null,
-			'contact_uuid' => $contactUuid,
+            'contact_uuid' => $contactUuid,
             'contact_id' => $contactId,
             'is_new_contact' => $this->isNewContact,
             // 'contact_phone' => $contactPhone,
-			'phone' => $contactPhone,
-			'formatted_phone_number' => $contactFormattedPhoneNumber,
-			'organization_id' => $contactOrganizationId,
+            'phone' => $contactPhone,
+            'formatted_phone_number' => $contactFormattedPhoneNumber,
+            'organization_id' => $contactOrganizationId,
             'latest_chat_created_at' => $contactLatestChatCreatedAt,
             'is_blocked' => $contactIsBlocked,
             'is_favorite' => $contactIsFavorite,
@@ -253,7 +306,7 @@ class NewChatEvent implements ShouldBroadcast
             // 'ticket_assigned_to' => $arr['ticket_assigned_to'] ?? null,
             // 'full_name' => $contactFullName ?: null,
            
-			// 'email' => $contactEmail,
+            // 'email' => $contactEmail,
             'contact_full_name' => $contactFullName ?: null,
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
@@ -292,7 +345,7 @@ class NewChatEvent implements ShouldBroadcast
             return [];
         }
         $rawLogs = array_slice($rawLogs, -self::MAX_LOGS_ENTRIES, self::MAX_LOGS_ENTRIES);
-		
+        
         $out = [];
         foreach ($rawLogs as $log) {
             $logArr = is_array($log) ? $log : (array) $log;
