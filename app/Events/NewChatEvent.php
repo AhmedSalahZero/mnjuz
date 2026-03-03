@@ -133,19 +133,19 @@ class NewChatEvent implements ShouldBroadcast
             return $payload;
         }
         $dataToBeSent = $this->shrinkPayloadToLimit($payload);
-		logger('before sendToFirestore');
-        if ($this->sendToFirestore) {
-			logger('sendToFirestore');
-            $contactId = data_get($this->chat, '0.value.contact_id')
-    ?? data_get($this->chat, 'value.contact_id');
-	logger('contactId: '.$contactId);
-            if ($contactId) {
-				logger('sending to firestore');
-                Contact::sendNewMessageReceivedToFirestore($contactId, $dataToBeSent);
-            }else{
-				logger('contactId not found');
-			}
-        }
+	// 	logger('before sendToFirestore');
+    //     if ($this->sendToFirestore) {
+	// 		logger('sendToFirestore');
+    //         $contactId = data_get($this->chat, '0.value.contact_id')
+    // ?? data_get($this->chat, 'value.contact_id');
+	// logger('contactId: '.$contactId);
+    //         if ($contactId) {
+	// 			logger('sending to firestore');
+    //             Contact::sendNewMessageReceivedToFirestore($contactId, $dataToBeSent);
+    //         }else{
+	// 			logger('contactId not found');
+	// 		}
+    //     }
         
         return $dataToBeSent;
     }
