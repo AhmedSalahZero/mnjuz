@@ -54,6 +54,10 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
                     // Dispatch jobs in batches
                     if (!empty($jobs)) {
+                        Log::info('ProcessCampaignMessagesJob: dispatching batch', [
+                            'logsInChunk' => count($logs),
+                            'jobsDispatched' => count($jobs),
+                        ]);
                         Bus::batch($jobs)
                             ->allowFailures()
                             ->onQueue('campaign-messages')

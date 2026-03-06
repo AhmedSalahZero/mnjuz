@@ -131,7 +131,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::group(['middleware' => ['check.organization']], function () {
             //User Panel Routes
             Route::match(['get', 'post'], '/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('dashboard');
-			// ['middleware' => 'check.client.role']
+		
             Route::group(['middleware' => 'check.client.role'], function () {
                 Route::delete('dismiss-notification/{type}', [App\Http\Controllers\User\DashboardController::class, 'dismissNotification'])->name('dashboard.team.notification.dismiss');
                 Route::match(['get', 'post'], '/billing', [App\Http\Controllers\User\BillingController::class, 'index'])->name('user.billing.index');
@@ -202,7 +202,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::match(['get', 'post'], '/instances', [App\Http\Controllers\User\InstanceController::class, 'index']);
 
                 Route::get('/team', [App\Http\Controllers\User\TeamController::class, 'index'])->name('team');
-				// ['middleware' => 'check.client.role']
+				
                 Route::group(['middleware' => 'check.client.role'], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
