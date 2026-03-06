@@ -400,7 +400,7 @@ class SettingController extends BaseController
         $metadataArray['whatsapp']['phone_number_id'] = $phoneNumberResponse->data->id;
         $metadataArray['whatsapp']['display_phone_number'] = $phoneNumberResponse->data->display_phone_number;
         $metadataArray['whatsapp']['verified_name'] = $phoneNumberResponse->data->verified_name;
-        $metadataArray['whatsapp']['quality_rating'] = $phoneNumberResponse->data->quality_rating;
+        $metadataArray['whatsapp']['quality_rating'] = isset($phoneNumberResponse->data->quality_rating) ? $phoneNumberResponse->data->quality_rating : NULL;
         $metadataArray['whatsapp']['name_status'] = $phoneNumberResponse->data->name_status;
         $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberResponse->data->messaging_limit_tier ?? NULL;
         $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = NULL;
