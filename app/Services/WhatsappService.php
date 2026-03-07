@@ -322,10 +322,9 @@ class WhatsappService
         $requestData['type'] = 'template';
         $requestData['template'] = $templateContent;
 
-        //\Log::info('WhatsApp API Request: ' . json_encode($requestData));
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
+		logger('responseObject: ' . json_encode($responseObject));
         if($responseObject->success === true){
             if($campaignId != NULL){
                 $campaign = Campaign::where('id', $campaignId)->first();
