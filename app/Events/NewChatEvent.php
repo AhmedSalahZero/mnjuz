@@ -123,7 +123,7 @@ class NewChatEvent implements ShouldBroadcast
      */
     public function broadcastWith()
     {
-		logger('broadcastWith');
+	//	logger('broadcastWith');
         $payload = ['chat' => $this->chat];
         if ($this->statusChanged) {
             $payload['statusChanged'] = $this->statusChanged;
