@@ -68,11 +68,11 @@ class ProcessAutoReplyJob implements ShouldQueue
             $autoReplyService = new AutoReplyService();
             $autoReplyService->checkAutoReply($chat, $this->isNewContact);
 
-            Log::info("AutoReply processed successfully", [
-                'organization_id' => $this->organizationId,
-                'chat_id' => $this->chatId,
-                'contact_id' => $chat->contact_id
-            ]);
+            // Log::info("AutoReply processed successfully", [
+            //     'organization_id' => $this->organizationId,
+            //     'chat_id' => $this->chatId,
+            //     'contact_id' => $chat->contact_id
+            // ]);
 
         } catch (\Exception $e) {
             Log::error('ProcessAutoReplyJob failed', [

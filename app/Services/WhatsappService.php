@@ -371,11 +371,15 @@ class WhatsappService
 		return $responseObject;
 		
 		};
-	
+		logger('sendByQueue: ' . $sendByQueue);
 		if($sendByQueue){
+			logger('sendByQueue: true');
 			dispatch($service)->onQueue('high');
 		}else{
-			return $service();
+			logger('sendByQueue: false');
+			$result = $service() ; 
+			logger('result: ' . json_encode($result));
+			return $result;
 		}
         
     }

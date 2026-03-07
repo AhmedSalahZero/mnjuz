@@ -44,12 +44,12 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     ->whereIn('status', ['pending', 'failed'])
                     ->lockForUpdate()
                     ->first();
-                       
+                     
                 if ($lockedLog) {
                     $campaign_user_id = Campaign::find($this->campaignLog->campaign_id)?->created_by;
                     $lockedLog->status = 'ongoing';
                     $lockedLog->save();
-            
+					logger('lockedLog:ff ');
                     $this->organizationId = $this->campaignLog->campaign->organization_id;
                     $this->initializeWhatsappService();
             
