@@ -347,7 +347,7 @@ class WhatsappService
 
 
             $responseObject->data->chat = $chat;
-
+			logger('inserting template chatlog');
             $chatlogId = ChatLog::insertGetId([
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
