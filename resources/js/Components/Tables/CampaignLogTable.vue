@@ -63,7 +63,19 @@ const getStatus = (metadata) => {
 }
 
 const getErrorDetails = (metadata) => {
-	return JSON.parse(metadata)
+	try {
+		return typeof metadata === 'string' ? JSON.parse(metadata) : metadata
+	} catch {
+		return { data: { error: { message: metadata || 'Unknown error' } } }
+	}
+}
+
+const getErrorMessage = (details) => {
+	if (!details) return '—'
+	const d = getErrorDetails(details)
+	const err = d?.data?.error || d?.error
+	if (!err) return d?.message || '—'
+	return err.error_user_msg || err.message || err.error_user_title || '—'
 }
 </script>
 <template>
@@ -185,12 +197,12 @@ const getErrorDetails = (metadata) => {
 					-->
 				</div>
 				<div v-else-if="messageStatus === 'failed'">
-					<div class="text-sm mb-3 bg-red-800 p-2 rounded text-white">Error:
-						{{ getErrorDetails(logs).data.error.message }}</div>
-					<div v-if="getErrorDetails(logs).data?.error?.error_data?.details" class="text-sm">
-						{{ getErrorDetails(logs).data?.error?.error_data?.details }}
+					<div class="text-sm mb-3 bg-red-800 p-2 rounded text-white">
+						{{ $t('Error') }}: {{ getErrorMessage(logs) }}
 					</div>
-					<div v-else>{{ getErrorDetails(logs).data.error.message }}</div>
+					<div v-if="getErrorDetails(logs).data?.error?.error_data?.details" class="text-sm text-red-700">
+						{{ getErrorDetails(logs).data.error.error_data.details }}
+					</div>
 				</div>
 			</div>
 		</div>

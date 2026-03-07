@@ -78,7 +78,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
     private function markCampaignAsCompleted($campaignId)
     {
-		$time = microtime(true);
+		
         $campaign = Campaign::with('organization')->find($campaignId);
         $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
         $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? [];

@@ -90,9 +90,9 @@ class CreateCampaignLogsJob implements ShouldQueue
 
         // Filter out contacts that already have logs
         $newContacts = $contactIds->diff($existingLogs);
-		$organization = $campaign->organization;
+	
         // Prepare new campaign logs
-        $campaignLogs = $newContacts->map(function ($contactId) use ($campaign,$organization) {
+        $campaignLogs = $newContacts->map(function ($contactId) use ($campaign) {
             return [
                 'campaign_id' => $campaign->id,
                 'contact_id' => $contactId,

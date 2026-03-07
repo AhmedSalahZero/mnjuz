@@ -43,6 +43,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('model:prune', [
             '--model' => [CampaignLog::class],
         ])->daily();
+		
+		logger('inside schedule');
 
         // Monitor queue size
         //$schedule->command('monitor:queue-size')->everyFiveMinutes();

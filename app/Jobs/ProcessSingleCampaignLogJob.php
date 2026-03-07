@@ -60,7 +60,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                         $campaign_user_id, 
                         $this->campaignLog->campaign_id
                     );
-
+					logger('responseObject: ' . json_encode($responseObject));
                     $this->updateLogStatus($lockedLog, $responseObject);
                 }
             });
