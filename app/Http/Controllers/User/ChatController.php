@@ -73,20 +73,26 @@ class ChatController extends BaseController
 	{
 		$organizationId = session()->get('current_organization');
 		$organization = Organization::find($organizationId);
-		$templateUUID = $organization->metadata && isset(json_decode($organization->metadata)->auth_template) ? json_decode($organization->metadata)->auth_template : null;
+		$metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
+		$templateUUID = $metadata['auth_template'] ?? null;
 		$template = Template::where('uuid', $templateUUID)->first();
 
-		
 		if(!$template){
 			return response()->json([
-               'statusCode' => 404,
+				'statusCode' => 404,
 				'success' => false,
 				'message' => __('Auth Template not found! .. Please Go To Settings -> General -> Auth Template To Edit It'),
-            ], 400);
+			], 400);
 		}
-		$templateUUID = $template->uuid;
 		$contact = Contact::where('uuid', $uuid)->first();
-		$request->merge(['template_uuid' => $templateUUID, 'phone' => $contact->phone]);
+		$request->merge(['template_uuid' => $template->uuid, 'phone' => $contact->phone]);
+
+		// Pass saved auth template variables so the API can build template components (body/header/buttons params).
+		$authParams = $metadata['auth_template_parameters'] ?? null;
+		if ($authParams && isset($authParams['template']) && $authParams['template'] === $template->uuid) {
+			$request->merge(['template_parameters' => $authParams]);
+		}
+
 		$res = (new ApiController)->sendTemplateMessageByUUID($request);
 		return json_decode($res->getContent(), true);
 	}

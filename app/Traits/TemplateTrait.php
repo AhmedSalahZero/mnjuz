@@ -27,7 +27,7 @@ trait TemplateTrait{
             $template['components'][] = $headerComponent;
         }
         
-        if ($metadata->body && property_exists($metadata->body, 'parameters')) {
+        if ($metadata->body && property_exists($metadata->body, 'parameters') && !empty($metadata->body->parameters)) {
             $bodyComponent = $this->buildBodyComponent($metadata, $contact);
             $template['components'][] = $bodyComponent;
         }

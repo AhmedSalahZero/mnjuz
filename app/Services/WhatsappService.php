@@ -322,7 +322,6 @@ class WhatsappService
         $requestData['type'] = 'template';
         $requestData['template'] = $templateContent;
 
-
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 		logger('responseObject: ' . json_encode($responseObject));
         if($responseObject->success === true){

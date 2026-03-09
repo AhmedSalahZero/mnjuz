@@ -794,14 +794,14 @@ class ApiController extends Controller
 				'message' => __('Template not found!'),
 			], 404);
 		}
-		$templateContent = json_decode($template->metadata,true);
-		$templateContent  = [
+
+		$templateContent = [
 			'name' => $template->name,
 			'language' => [
 				'code' => $template->language,
 			],
-		//	'components' => $templateContent['components'],
 		];
+
 		$request->merge(['template' => $templateContent]);
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
@@ -843,6 +843,14 @@ class ApiController extends Controller
             $contact->created_by = 0;
             $contact->save();
         }
+
+		// If we have saved template parameters (e.g. auth template from settings), build full template with components for WhatsApp.
+		$templateParameters = $request->input('template_parameters');
+		if ($templateParameters && isset($templateParameters['template']) && $templateParameters['template'] === $template->uuid) {
+			$metadata = json_decode(json_encode($templateParameters));
+			$templateContent = $this->buildTemplate($template->name, $template->language, $metadata, $contact);
+			$request->merge(['template' => $templateContent]);
+		}
 
         // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);

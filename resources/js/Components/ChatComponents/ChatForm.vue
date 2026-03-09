@@ -6,6 +6,7 @@ import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
+import { trans } from 'laravel-vue-i18n'
 
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
@@ -45,9 +46,32 @@ watchEffect(() => {
 
 const emit = defineEmits(['response', 'viewTemplate', 'newMessage'])
 const isLoading = ref(false)
+const sendingAuthTemplate = ref(false)
 
 const viewTemplate = () => {
 	emit('viewTemplate')
+}
+
+const sendAuthTemplate = async () => {
+	if (!props.contact?.uuid || sendingAuthTemplate.value) return
+	sendingAuthTemplate.value = true
+	try {
+		const { data } = await axios.post(`/chat/${props.contact.uuid}/send/auth-template`, {})
+		if (data?.success) {
+			toast.success(trans('Auth template sent successfully'))
+		} else {
+			toast.error(data?.message || trans('Something went wrong'))
+		}
+	} catch (err) {
+		const msg = err.response?.data?.message
+		if (err.response?.status === 400 && msg) {
+			toast.error(trans('Please select Auth Template in Settings → General Settings first'))
+		} else {
+			toast.error(msg || trans('Failed to send auth template'))
+		}
+	} finally {
+		sendingAuthTemplate.value = false
+	}
 }
 const appendMessageIntoBody = (form) => {
 	emit('newMessage', form)
@@ -415,10 +439,10 @@ onBeforeUnmount(() => {
 					</div>
 				</div>
 			</div>
-			<button @click="viewTemplate()"
-				class="rounded-md bg-primary px-3 py-1 flex items-center justify-center gap-2 text-sm text-white shadow-sm w-[15%]">
+			<button @click="sendAuthTemplate()" :disabled="sendingAuthTemplate"
+				class="rounded-md bg-primary px-3 py-1 flex items-center justify-center gap-2 text-sm text-white shadow-sm w-[15%] disabled:opacity-70">
 				<span>{{ $t('Send Template') }}</span>
-				<svg v-if="isLoading" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+				<svg v-if="sendingAuthTemplate" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 					<path fill="currentColor"
 						d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z"
 						opacity=".5" />
