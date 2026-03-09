@@ -1204,6 +1204,7 @@ class ApiController extends Controller
 			$data = [] ;
 			if( count($result) ){
 				$data['contact_id']=$contact->id;
+				$data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
 				foreach($result as $item){
 					foreach($item as $item2){
 						$data['messages'][] =$item2;
