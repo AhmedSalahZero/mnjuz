@@ -352,7 +352,8 @@ watch(
 				</div>
 				<h3 class="text-center text-lg font-medium mb-4">{{ $t('Connect your whatsapp account') }}</h3>
 				<h4 class="text-center mb-4">
-					{{ $t('You need to connect your WhatsApp account first before you can send out campaigns.') }}</h4>
+					{{ $t('You need to connect your WhatsApp account first before you can send out campaigns.') }}
+				</h4>
 				<div class="flex justify-center">
 					<Link href="/settings/whatsapp"
 						class="rounded-md px-3 py-2 text-sm hover:shadow-md text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary"
@@ -374,9 +375,8 @@ watch(
 				<FormInput v-if="isCampaignFlow" v-model="form.name" :name="$t('Campaign name')" :type="'text'"
 					:error="form.errors.name" :required="true" :class="'sm:col-span-6'" />
 				<FormSelect v-if="showTemplateSelector" v-model="form.template" @update:modelValue="loadTemplate"
-					:options="templateOptions"
-					:required="true" :error="form.errors.template" :name="$t('Template')" :class="'sm:col-span-3'"
-					:placeholder="$t('Select template')" />
+					:options="templateOptions" :required="true" :error="form.errors.template" :name="$t('Template')"
+					:class="'sm:col-span-3'" :placeholder="$t('Select template')" />
 				<FormSelect v-if="isCampaignFlow" v-model="form.contacts" :options="contactGroupOptions"
 					:name="$t('Send to')" :required="true" :class="'sm:col-span-3'" :placeholder="$t('Select contacts')"
 					:error="form.errors.contacts" />
@@ -445,14 +445,17 @@ watch(
 								</div>
 								<p v-if="form.header.parameters[index].type === 'IMAGE'" class="text-left text-xs mt-2">
 									{{ $t('Max file upload size is') }} <b>5MB</b> <br>
-									{{ $t('Supported file extensions') }}: .png, jpg</p>
+									{{ $t('Supported file extensions') }}: .png, jpg
+								</p>
 								<p v-if="form.header.parameters[index].type === 'DOCUMENT'"
 									class="text-left text-xs mt-2">{{ $t('Max file upload size is') }} <b>100MB</b> <br>
 									{{ $t('Supported file extensions') }}: .pdf, .txt, .ppt, .doc, .xls, .docx, .pptx,
-									.xlsx</p>
+									.xlsx
+								</p>
 								<p v-if="form.header.parameters[index].type === 'VIDEO'" class="text-left text-xs mt-2">
 									{{ $t('Max file upload size is') }} <b>16MB</b> <br>
-									{{ $t('Supported file extensions') }}: .mp4</p>
+									{{ $t('Supported file extensions') }}: .mp4
+								</p>
 							</div>
 							<div v-if="form.errors['header.parameters.0.value']"
 								class="form-error text-[#b91c1c] text-xs">{{ form.errors['header.parameters.0.value'] }}
@@ -513,7 +516,7 @@ watch(
 							</svg>
 						</span>
 					</h2>
-					<div v-for="(item, index) in form.buttons" :key="index">
+					<div class="min-h-[300px]" v-for="(item, index) in form.buttons" :key="index">
 						<div v-if="item.parameters.length > 0" class="mt-4 bg-slate-50 p-3">
 							<div class="w-[100%] mb-1">
 								<span>{{ $t('Label') }}: {{ item.text }}</span>
@@ -525,8 +528,9 @@ watch(
 								</div>
 								<div class="w-full">
 									<FormInput v-if="value.type === 'static'" v-model="value.value" :name="$t('Value')"
-										:required="true" :error="form.errors['buttons.' + index + '.parameters.0.value']"
-										:type="'text'" :class="'sm:col-span-6'" />
+										:required="true"
+										:error="form.errors['buttons.' + index + '.parameters.0.value']" :type="'text'"
+										:class="'sm:col-span-6'" />
 									<FormSelect v-if="value.type === 'dynamic'" v-model="value.value"
 										:name="$t('Value')" :required="true"
 										:error="form.errors['buttons.' + index + '.parameters.0.value']"

@@ -417,7 +417,7 @@ onBeforeUnmount(() => {
 			</div>
 			<button @click="viewTemplate()"
 				class="rounded-md bg-primary px-3 py-1 flex items-center justify-center gap-2 text-sm text-white shadow-sm w-[15%]">
-				<span>Send Template</span>
+				<span>{{ $t('Send Template') }}</span>
 				<svg v-if="isLoading" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 					<path fill="currentColor"
 						d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z"
