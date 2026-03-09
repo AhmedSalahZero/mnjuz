@@ -3,7 +3,7 @@ import axios from "axios"
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Link, useForm } from "@inertiajs/vue3"
 import 'vue3-toastify/dist/index.css'
 import { trans } from 'laravel-vue-i18n'
@@ -31,7 +31,27 @@ const props = defineProps({
 	sendText: {
 		type: String,
 		default: 'Save'
-	}
+	},
+	// When false, the internal submit button and submit logic are disabled.
+	submitEnabled: {
+		type: Boolean,
+		default: true
+	},
+	// Optional external selected template UUID (e.g. from settings page).
+	initialTemplate: {
+		type: String,
+		default: null
+	},
+	// Hide the internal template selector when it's controlled externally.
+	showTemplateSelector: {
+		type: Boolean,
+		default: true
+	},
+	// Optional pre-filled parameters (header/body/buttons) for a given template.
+	initialParameters: {
+		type: Object,
+		default: null,
+	},
 })
 const isLoading = ref(false)
 const contactGroupOptions = ref([
@@ -135,6 +155,27 @@ const loadTemplate = async () => {
 				form.buttons = []
 			}
 
+			// If we have saved parameters for this exact template, override defaults
+			if (props.initialParameters && props.initialParameters.template === form.template) {
+				if (props.initialParameters.header?.parameters) {
+					form.header.parameters = JSON.parse(JSON.stringify(props.initialParameters.header.parameters))
+				}
+				if (props.initialParameters.body?.parameters) {
+					form.body.parameters = JSON.parse(JSON.stringify(props.initialParameters.body.parameters))
+				}
+				if (Array.isArray(props.initialParameters.buttons)) {
+					form.buttons = JSON.parse(JSON.stringify(props.initialParameters.buttons))
+				}
+			}
+
+			// Emit the current parameters so parents (e.g. settings page) can persist them
+			emit('update:parameters', {
+				template: form.template,
+				header: { parameters: form.header.parameters },
+				body: { parameters: form.body.parameters },
+				buttons: form.buttons,
+			})
+
 		}
 	} catch (error) {
 		//console.error('Error fetching data:', error);
@@ -200,10 +241,29 @@ const extractComponent = (data, type, customProperty) => {
 }
 
 const transformOptions = (options) => {
-	return options.map((option) => ({
-		value: option.uuid,
-		label: option.language ? option.name + ' [' + option.language + ']' : option.name,
-	}))
+	return options.map((option) => {
+		// Full template object as used in chat (uuid, name, language)
+		if (option.uuid) {
+			return {
+				value: option.uuid,
+				label: option.language ? option.name + ' [' + option.language + ']' : option.name,
+			}
+		}
+
+		// Generic value/label pair as used in settings page
+		if (option.value !== undefined && option.label !== undefined) {
+			return {
+				value: option.value,
+				label: option.label,
+			}
+		}
+
+		// Fallback to something sensible
+		return {
+			value: option.value ?? option.uuid ?? option.name,
+			label: option.label ?? option.name ?? '',
+		}
+	})
 }
 
 const submitForm = () => {
@@ -218,16 +278,67 @@ const submitForm = () => {
 	})
 }
 
-const emit = defineEmits(['viewTemplate'])
+const emit = defineEmits(['viewTemplate', 'update:parameters'])
 
 const viewTemplate = () => {
 	emit('viewTemplate', false)
 }
 
+const handleSubmit = () => {
+	if (!props.submitEnabled) {
+		return
+	}
+	submitForm()
+}
+
 onMounted(() => {
 	templateOptions.value = transformOptions(props.templates)
 	contactGroupOptions.value = [...contactGroupOptions.value, ...transformOptions(props.contactGroups)]
+
+	// If an external initial template is provided (e.g. auth template in settings),
+	// keep the internal form.template in sync and load its structure.
+	if (props.initialTemplate) {
+		form.template = props.initialTemplate
+		loadTemplate()
+	}
 })
+
+watch(
+	() => props.initialTemplate,
+	(newValue, oldValue) => {
+		if (newValue === oldValue) return
+
+		// Update the selected template when controlled from outside
+		form.template = newValue
+
+		if (newValue) {
+			loadTemplate()
+		} else {
+			// Clear template-related fields when no template is selected
+			form.header.format = null
+			form.header.text = null
+			form.header.parameters = []
+			form.body.text = null
+			form.body.parameters = []
+			form.footer.text = null
+			form.buttons = []
+		}
+	},
+)
+
+// Whenever parameters or template change, notify parent with the latest snapshot.
+watch(
+	() => ({
+		template: form.template,
+		header: { parameters: form.header.parameters },
+		body: { parameters: form.body.parameters },
+		buttons: form.buttons,
+	}),
+	(value) => {
+		emit('update:parameters', value)
+	},
+	{ deep: true },
+)
 </script>
 <template>
 	<div :class="'md:flex md:flex-grow-1'">
@@ -251,7 +362,7 @@ onMounted(() => {
 				</div>
 			</div>
 		</div>
-		<form v-else @submit.prevent="submitForm()" class="overflow-y-auto md:w-[50%]"
+		<form v-else @submit.prevent="handleSubmit" class="overflow-y-auto md:w-[50%]"
 			:class="isCampaignFlow ? 'p-4 md:p-8 h-[90vh]' : ' h-full'">
 			<div v-if="displayTitle"
 				class="m-1 rounded px-3 pt-3 pb-3 bg-slate-100 flex items-center justify-between mb-4">
@@ -262,7 +373,8 @@ onMounted(() => {
 			<div class="grid gap-x-6 gap-y-4 mb-8" :class="isCampaignFlow ? 'sm:grid-cols-6' : 'p-3 md:p-3'">
 				<FormInput v-if="isCampaignFlow" v-model="form.name" :name="$t('Campaign name')" :type="'text'"
 					:error="form.errors.name" :required="true" :class="'sm:col-span-6'" />
-				<FormSelect v-model="form.template" @update:modelValue="loadTemplate" :options="templateOptions"
+				<FormSelect v-if="showTemplateSelector" v-model="form.template" @update:modelValue="loadTemplate"
+					:options="templateOptions"
 					:required="true" :error="form.errors.template" :name="$t('Template')" :class="'sm:col-span-3'"
 					:placeholder="$t('Select template')" />
 				<FormSelect v-if="isCampaignFlow" v-model="form.contacts" :options="contactGroupOptions"
@@ -424,7 +536,7 @@ onMounted(() => {
 						</div>
 					</div>
 				</div>
-				<div class="flex items-center justify-end space-x-3 mt-3">
+				<div v-if="submitEnabled" class="flex items-center justify-end space-x-3 mt-3">
 					<div v-if="displayCancelBtn">
 						<Link href="/campaigns"
 							class="block rounded-md px-3 py-2 text-sm text-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-slate-200">

@@ -92,6 +92,29 @@
 									:class="'col-span-2'" />
 							</div>
 						</div>
+						<div v-if="form2.auth_template" class="px-4 pb-4">
+							<div class="mt-2 border-t pt-4">
+								<h3 class="text-[15px] font-medium mb-3">
+									{{ $t('Auth template preview & variables') }}
+								</h3>
+								<CampaignForm
+									class="bg-white"
+									:templates="props.templates"
+									:contactGroups="[]"
+									:settings="props.settings"
+									:contact="null"
+									:displayTitle="false"
+									:displayCancelBtn="false"
+									:isCampaignFlow="false"
+									:sendText="$t('Save')"
+									:submitEnabled="false"
+									:initialTemplate="form2.auth_template"
+									:initialParameters="settings?.auth_template_parameters ?? null"
+									:showTemplateSelector="false"
+									@update:parameters="value => form2.auth_template_parameters = value"
+								/>
+							</div>
+						</div>
 					</div>
 					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm pb-4 mb-4">
 						<div class="px-4 pt-2 pb-4">
@@ -299,6 +322,7 @@ import SettingLayout from "./Layout.vue"
 import { ref } from 'vue'
 import EmbeddedSignupBtn from '@/Components/EmbeddedSignupBtn.vue'
 import FormModal from '@/Components/FormModal.vue'
+import CampaignForm from '@/Components/CampaignForm.vue'
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
@@ -354,7 +378,8 @@ const getAddressDetail = (value, key) => {
 }
 
 const form2 = useForm({
-	auth_template: props.settings && props.settings.metadata ? JSON.parse(props.settings.metadata).auth_template : '',
+	auth_template: settings.value && settings.value.auth_template ? settings.value.auth_template : '',
+	auth_template_parameters: settings.value && settings.value.auth_template_parameters ? settings.value.auth_template_parameters : null,
 	organization_name: props.settings?.name,
 	address: getAddressDetail(props.settings?.address, 'street'),
 	city: getAddressDetail(props.settings?.address, 'city'),

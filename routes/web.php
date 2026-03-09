@@ -202,8 +202,9 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::match(['get', 'post'], '/instances', [App\Http\Controllers\User\InstanceController::class, 'index']);
 
                 Route::get('/team', [App\Http\Controllers\User\TeamController::class, 'index'])->name('team');
-				
-                Route::group(['middleware' => 'check.client.role'], function () {
+				// ['middleware' => 'check.client.role']
+				// dd 'remove middleware check.client.role';
+                Route::group([], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);

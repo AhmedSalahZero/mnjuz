@@ -117,6 +117,7 @@ class ProfileController extends BaseController
         $metadataArray['notifications']['volume'] = $request->input('volume');
         $metadataArray['timezone'] = $request->input('timezone');
 		$metadataArray['auth_template'] = $request->input('auth_template');
+		$metadataArray['auth_template_parameters'] = $request->input('auth_template_parameters');
 
         $metadataArray['campaigns']['enable_resend'] = $request->input('enable_campaign_resend');
         $metadataArray['campaigns']['move_failed_contacts_to_group'] = $request->input('move_failed_contacts_to_group');
