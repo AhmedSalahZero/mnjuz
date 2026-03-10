@@ -42,7 +42,9 @@
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ rows: Object, filters: Object });
     const isOpenFormModal = ref(false);

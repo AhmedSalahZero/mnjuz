@@ -7,7 +7,9 @@
     import DropdownItem from '@/Components/DropdownItem.vue';
     import FormTextArea from '@/Components/FormTextArea.vue';
     import Modal from '@/Components/Modal.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
     
     const props = defineProps(['contact', 'templates', 'contactGroups', 'settings']);
     const contact = ref(props.contact);

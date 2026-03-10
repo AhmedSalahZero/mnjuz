@@ -6,7 +6,9 @@
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
     import FormTextArea from '@/Components/FormTextArea.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps(['contactGroups', 'contact', 'fields', 'locationSettings']);
     const fileUrl = props.contact?.avatar ? ref(props.contact?.avatar) : ref(null);

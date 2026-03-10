@@ -328,7 +328,9 @@ import FormSelect from '@/Components/FormSelect.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
 import FormToggleSwitch from '@/Components/FormToggleSwitch.vue'
 import Modal from '@/Components/Modal.vue'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 import { router, useForm } from "@inertiajs/vue3"
 
 const props = defineProps(['contactGroups', 'settings', 'timezones', 'modules', 'organization', 'countries', 'sounds', 'templates'])

@@ -142,7 +142,9 @@
     import BillingTable from '@/Components/Tables/BillingTable.vue';
     import Modal from '@/Components/Modal.vue';
     import UserTable from '@/Components/Tables/UserTable.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ 
         showAddBtn: {

@@ -3,9 +3,10 @@ import Dropdown from '@/Components/Dropdown.vue'
 import DropdownItem from '@/Components/DropdownItem.vue'
 import DropdownItemGroup from '@/Components/DropdownItemGroup.vue'
 import { Link, router, useForm } from '@inertiajs/vue3'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
 import { ref, watchEffect } from 'vue'
 
+const trans = useTrans()
 const props = defineProps(['contact', 'fields', 'locationSettings'])
 const contact = ref(props.contact)
 const metadata =

@@ -3,7 +3,9 @@
     import { ref, watchEffect } from 'vue';
     import { router, useForm } from '@inertiajs/vue3';
     import FormModal from '@/Components/FormModal.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
     
     const props = defineProps(['group']);
     const group = ref(props.group);

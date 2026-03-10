@@ -36,7 +36,9 @@
     import LangTable from '@/Components/Tables/LangTable.vue';
     import FormModal from '@/Components/FormModalModified.vue';
     import FormSelect from '@/Components/FormSelect.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps(['rows', 'config', 'default_language']);
     const isOpenFormModal = ref(false);

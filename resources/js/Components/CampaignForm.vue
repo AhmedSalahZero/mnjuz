@@ -6,7 +6,9 @@ import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
 import { ref, computed, onMounted, watch } from 'vue'
 import { Link, useForm } from "@inertiajs/vue3"
 import 'vue3-toastify/dist/index.css'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 
 const props = defineProps({
 	templates: Object,

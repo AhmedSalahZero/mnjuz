@@ -32,7 +32,9 @@
     import { ref } from 'vue';
     import { useForm } from "@inertiajs/vue3";
     import FormModal from '@/Components/FormModalModified.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ rows: Object, filters: Object });
     const isOpenFormModal = ref(false);

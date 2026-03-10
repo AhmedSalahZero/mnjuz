@@ -200,7 +200,9 @@
     import AppLayout from "./Layout/App.vue";
     import { Link, router } from "@inertiajs/vue3";
     import { ref, onMounted } from 'vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
     import EmbeddedSignupBtn from '@/Components/EmbeddedSignupBtn.vue';
 
     const props = defineProps({ 

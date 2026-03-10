@@ -6,8 +6,9 @@ import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
 
+const trans = useTrans()
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
 const processingForm = ref(null)

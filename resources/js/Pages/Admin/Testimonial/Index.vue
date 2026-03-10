@@ -35,7 +35,9 @@
     import { ref } from 'vue';
     import TestimonialTable from '@/Components/Tables/TestimonialTable.vue';
     import FormModal from '@/Components/FormModalModified.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ title: String, rows: Object, filters: Object });
     const isOpenFormModal = ref(false);

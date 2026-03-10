@@ -150,7 +150,9 @@ import SettingLayout from "./Layout.vue"
 import axios from "axios"
 import { ref, watch } from 'vue'
 import { useForm } from "@inertiajs/vue3"
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 import draggable from 'vuedraggable'
 import FormModal from '@/Components/FormModalModified.vue'
 import Modal from '@/Components/Modal.vue'

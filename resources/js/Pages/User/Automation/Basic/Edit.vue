@@ -277,7 +277,9 @@ import AppLayout from './../../Layout/App.vue'
 import axios from 'axios'
 import { Link, router, useForm } from "@inertiajs/vue3"
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import FormSelectCombo from '@/Components/FormSelectCombo.vue'

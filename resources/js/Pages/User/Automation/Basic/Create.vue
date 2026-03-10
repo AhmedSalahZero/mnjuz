@@ -260,7 +260,7 @@
 import AppLayout from '../../Layout/App.vue'
 import { Link, useForm } from "@inertiajs/vue3"
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
@@ -268,6 +268,7 @@ import Modal from '@/Components/Modal.vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 
+const trans = useTrans()
 const props = defineProps(['placeholders'])
 
 const isModalOpen = ref(false)

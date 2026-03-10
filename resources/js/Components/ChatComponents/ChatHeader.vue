@@ -7,7 +7,9 @@ import FormSelectCombo from '@/Components/FormSelectCombo.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
 import Modal from '@/Components/Modal.vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
-import { trans } from 'laravel-vue-i18n'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 import { computed, ref, watchEffect } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'

@@ -34,7 +34,9 @@
     import { ref } from 'vue';
     import CouponTable from '@/Components/Tables/CouponTable.vue';
     import FormModal from '@/Components/FormModalModified.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ rows: Object });
     const isOpenFormModal = ref(false);

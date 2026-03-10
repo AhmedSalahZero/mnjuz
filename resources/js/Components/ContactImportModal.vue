@@ -2,7 +2,9 @@
     import { computed, ref, watch } from 'vue';
     import { Link, router, usePage } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps(['type', 'modelValue']);
     const emit = defineEmits(['update:modelValue']);

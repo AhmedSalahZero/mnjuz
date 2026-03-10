@@ -43,7 +43,9 @@
     import SettingLayout from "./Layout.vue";
     import { ref, watch } from 'vue';
     import { useForm } from "@inertiajs/vue3";
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
     import draggable from "vuedraggable";
 
     const props = defineProps(['rows', 'filters', 'settings', 'modules']);

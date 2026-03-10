@@ -47,7 +47,9 @@
     import { Link } from "@inertiajs/vue3";
     import { ref } from 'vue';
     import FormModal from '@/Components/FormModal.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps(['aimodule', 'fbmodule']);
 </script>

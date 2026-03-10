@@ -3,7 +3,9 @@
     import { Link, router, useForm, usePage } from "@inertiajs/vue3";
     import FormInput from '@/Components/FormInput.vue';
     import Modal from '@/Components/Modal.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps(['type', 'modelValue']);
     const emit = defineEmits(['update:modelValue']);

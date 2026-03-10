@@ -48,7 +48,9 @@
     import TaxTable from '@/Components/Tables/TaxTable.vue';
     import FormModal from '@/Components/FormModalModified.vue';
     import FormSelect from '@/Components/FormSelect.vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ rows: Object, config: Object });
     const isOpenFormModal = ref(false);

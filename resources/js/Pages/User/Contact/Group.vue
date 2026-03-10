@@ -63,7 +63,9 @@
     import DropdownItem from '@/Components/DropdownItem.vue';
     import FormModal from '@/Components/FormModal.vue';
     import { router } from '@inertiajs/vue3';
-    import { trans } from 'laravel-vue-i18n';
+    import { useTrans } from '@/Composables/useTrans';
+
+const trans = useTrans();
 
     const props = defineProps({ rows: Object, filters: Object, rowCount: Number, group: Object });
     const isOpenModal = ref(false);
