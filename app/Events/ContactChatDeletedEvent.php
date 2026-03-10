@@ -25,33 +25,14 @@ class ContactChatDeletedEvent implements ShouldBroadcast
 		$this->contactId = $contactId;
     }
 
-    /**
-     * Get the channels the event should broadcast on.
-     *
-     * @return \Illuminate\Broadcasting\Channel
-     */
+   
     public function broadcastOn()
     {
-        try {
                 $channel = 'contact.chat.deleted.' . $this->organizationId;
-                return new PresenceChannel($channel);
-           
-        } catch (Exception $e) {
-            // Log the exception and prevent the event from broadcasting
-            Log::error('Failed to broadcast event: ' . $e->getMessage());
-            return;
-        }
+                return new Channel($channel);
     }
 
-    /** حد حجم رسالة Pusher (بايت) */
-    private const PUSHER_MAX_PAYLOAD_BYTES = 10240;
-
-    /**
-     * Get the data to broadcast. الـ chat مُصغّر مسبقاً في الـ constructor.
-     * إذا تجاوز الحجم حد Pusher نُقلّص حقولاً اختيارية حتى نبقى تحت الحد.
-     *
-     * @return array
-     */
+    
     public function broadcastWith()
     {
 		return [

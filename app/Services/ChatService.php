@@ -535,8 +535,6 @@ class ChatService
         ]);
 		
 		event(new ContactChatDeletedEvent($this->organizationId, $contact->id));
-
-       
     }
 
     private function getContentTypeFromUrl($url)

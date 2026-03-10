@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\Api\StoreContactRequest;
-use App\Http\Requests\StoreContact;
 use App\Http\Resources\AutoReplyResource;
 use App\Http\Resources\ContactGroupResource;
 use App\Http\Resources\ContactResource;
@@ -12,7 +11,6 @@ use App\Http\Resources\TemplateResource;
 use App\Models\AutoReply;
 use App\Models\Chat;
 use App\Models\ChatLog;
-use App\Models\ChatMedia;
 use App\Models\ChatNote;
 use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
@@ -20,9 +18,6 @@ use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
-use App\Rules\CannedReplyLimit;
-use App\Rules\ContactLimit;
-use App\Rules\UniquePhone;
 use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\MediaService;
@@ -63,10 +58,10 @@ class ApiController extends Controller
 
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         $contacts = Contact::where('organization_id', $organizationId)
             ->where('deleted_at', null)
             ->paginate($perPage, ['*'], 'page', $page);
@@ -82,57 +77,57 @@ class ApiController extends Controller
     
     public function storeContact(StoreContactRequest $request)
     {
-		
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-                'message' => __('Please renew or subscribe to a plan to continue!',[],getApiLang()),
+                'message' => __('Please renew or subscribe to a plan to continue!', [], getApiLang()),
             ], 403);
         }
 
         if (!SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'contacts_limit')) {
             return response()->json([
                 'statusCode' => 403,
-                'message' => __('You have reached your limit of contacts. Please upgrade your account to add more!',[],getApiLang()),
+                'message' => __('You have reached your limit of contacts. Please upgrade your account to add more!', [], getApiLang()),
             ], 403);
         }
 
         try {
             $contactService = new ContactService($organizationId);
             $contact = $contactService->store($request, null); // null for create
-			if( $request->is('api/v1/*')){
-				return response()->json([
-					'statusCode' => 200,
-					'success' => true,
-					'data' => [
-						'uuid' => $contact->uuid,
-					],
-					'message' => __('Request processed successfully',[],getApiLang())
-				], 200);
-			}
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 200,
+                    'success' => true,
+                    'data' => [
+                        'uuid' => $contact->uuid,
+                    ],
+                    'message' => __('Request processed successfully', [], getApiLang())
+                ], 200);
+            }
             return response()->json([
                 'statusCode' => 200,
-				'success' => true,
+                'success' => true,
                 'id' => $contact->uuid,
-                'message' => __('Request processed successfully',[],getApiLang())
+                'message' => __('Request processed successfully', [], getApiLang())
             ], 200);
         } catch (\Exception $e) {
-			if( $request->is('api/v1/*')){
-				return response()->json([
-					'statusCode' => 500,
-					'success' => false,
-					'data' => [],
-					'message' => __('Request unable to be processed',[],getApiLang())
-				], 500);
-			}
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 500,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Request unable to be processed', [], getApiLang())
+                ], 500);
+            }
             return response()->json([
                 'statusCode' => 500,
-				'success' => false,
-                'message' => __('Request unable to be processed',[],getApiLang())
+                'success' => false,
+                'message' => __('Request unable to be processed', [], getApiLang())
             ], 500);
         }
     }
@@ -142,89 +137,90 @@ class ApiController extends Controller
      */
     public function updateContact(StoreContactRequest $request, string $idOrUUID)
     {
-		$organizationId = $request->organization;
-		$uuid = $idOrUUID;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-			$contact  = Contact::find($idOrUUID); // id in this case 
-			if(!$contact){
-				return response()->json([
-					'statusCode' => 404,
-					'success' => false,
-					'data' => [],
-					'message' => __('Contact not found',[],getApiLang())
-				], 404);
-			}
-			$uuid = $contact->uuid;
-			 
-		}
+        $organizationId = $request->organization;
+        $uuid = $idOrUUID;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+            $contact  = Contact::find($idOrUUID); // id in this case
+            if (!$contact) {
+                return response()->json([
+                    'statusCode' => 404,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Contact not found', [], getApiLang())
+                ], 404);
+            }
+            $uuid = $contact->uuid;
+             
+        }
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-                'message' => __('Please renew or subscribe to a plan to continue!',[],getApiLang()),
+                'message' => __('Please renew or subscribe to a plan to continue!', [], getApiLang()),
             ], 403);
         }
 
         try {
             $contactService = new ContactService($organizationId);
             $contact = $contactService->store($request, $uuid); // uuid for update
-			if( $request->is('api/v1/*')){
-				return response()->json([
-					'statusCode' => 200,
-					'success' => true,
-					'data' => [
-						'uuid' => $contact->uuid,
-					],
-					'message' => __('Request processed successfully',[],getApiLang())
-				], 200);
-			}
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 200,
+                    'success' => true,
+                    'data' => [
+                        'uuid' => $contact->uuid,
+                    ],
+                    'message' => __('Request processed successfully', [], getApiLang())
+                ], 200);
+            }
             return response()->json([
                 'statusCode' => 200,
                 'id' => $contact->uuid,
-                'message' => __('Request processed successfully',[],getApiLang())
+                'message' => __('Request processed successfully', [], getApiLang())
             ], 200);
         } catch (\Exception $e) {
-			
-			if( $request->is('api/v1/*')){
-				return response()->json([
-					'statusCode' => 500,
-					'success' => false,
-					'data' => [],
-					'message' => __('Request unable to be processed',[],getApiLang())
-				], 500);
-			}
+            
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 500,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Request unable to be processed', [], getApiLang())
+                ], 500);
+            }
             return response()->json([
                 'statusCode' => 500,
-                'message' => __('Request unable to be processed',[],getApiLang())
+                'message' => __('Request unable to be processed', [], getApiLang())
             ], 500);
         }
     }
-	public function getContactDetail(Request $request, $id){
-		$contact = Contact::find($id);
-		if(!$contact){
-			return response()->json([
-				'statusCode' => 404,
-				'success' => false,
-				'data' => [],
-				'message' => __('Contact not found',[],getApiLang())
-			], 404);
-		}
-		$chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
-		$contact->chat_ticket = $chatTicket ?? null;
+    public function getContactDetail(Request $request, $id)
+    {
+        $contact = Contact::find($id);
+        if (!$contact) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'data' => [],
+                'message' => __('Contact not found', [], getApiLang())
+            ], 404);
+        }
+        $chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
+        $contact->chat_ticket = $chatTicket ?? null;
 
-		$contact->groups = $contact->contactGroups->map(function($group){
-			return [
-				'id' => $group->id,
-				'name' => $group->name,
-			];
-		});
-		return response()->json([
-			'statusCode' => 200,
-			'success' => true,
-			'data' => $contact,
-			'message' => __('Contact detail fetched successfully',[],getApiLang())
-		], 200);
-	}
+        $contact->groups = $contact->contactGroups->map(function ($group) {
+            return [
+                'id' => $group->id,
+                'name' => $group->name,
+            ];
+        });
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'data' => $contact,
+            'message' => __('Contact detail fetched successfully', [], getApiLang())
+        ], 200);
+    }
     /**
      * Delete a contact.
      *
@@ -233,38 +229,38 @@ class ApiController extends Controller
      */
     public function destroyContact(Request $request, $uuid)
     {
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         try {
             $contactService = new ContactService($organizationId);
             $contactService->delete([$uuid]);
-			if( $request->is('api/v1/*')){
-				return response()->json([
-					'statusCode' => 200,
-					'success' => true,
-					'data' => [],
-					'message' => __('Request processed successfully',[],getApiLang())
-				], 200);
-			}
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 200,
+                    'success' => true,
+                    'data' => [],
+                    'message' => __('Request processed successfully', [], getApiLang())
+                ], 200);
+            }
             return response()->json([
                 'statusCode' => 200,
                 'id' => $uuid,
-                'message' => __('Request processed successfully',[],getApiLang())
+                'message' => __('Request processed successfully', [], getApiLang())
             ], 200);
         } catch (\Exception $e) {
-			if( $request->is('api/v1/*')){
-				return response()->json([
-					'statusCode' => 500,
-					'success' => false,
-					'data' => [],
-					'message' => __('Request unable to be processed',[],getApiLang())
-				], 500);
-			}
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 500,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Request unable to be processed', [], getApiLang())
+                ], 500);
+            }
             return response()->json([
                 'statusCode' => 500,
-                'message' => __('Request unable to be processed',[],getApiLang())
+                'message' => __('Request unable to be processed', [], getApiLang())
             ], 500);
         }
     }
@@ -283,10 +279,10 @@ class ApiController extends Controller
 
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         $contactGroups = ContactGroup::where('organization_id', $organizationId)
             ->where('deleted_at', null)
             ->paginate($perPage, ['*'], 'page', $page);
@@ -298,9 +294,9 @@ class ApiController extends Controller
     public function storeContactGroup(Request $request, $uuid = null)
     {
         $organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         if ($request->isMethod('post')) {
             $rules = [
                 'name' => [
@@ -356,19 +352,19 @@ class ApiController extends Controller
 
             return response()->json([
                 'statusCode' => 200,
-				'success' => true,
-				'data' => [
-					'uuid' => $contactGroup->uuid,
-				],
+                'success' => true,
+                'data' => [
+                    'uuid' => $contactGroup->uuid,
+                ],
                 'id' => $contactGroup->uuid,
                 'message' => __('Request processed successfully')
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-				
+                
                 'statusCode' => 500,
-				'success' => false,
-				'data' => [],
+                'success' => false,
+                'data' => [],
                 'message' => __('Request unable to be processed')
             ], 500);
         }
@@ -382,10 +378,10 @@ class ApiController extends Controller
      */
     public function destroyContactGroup(Request $request, $uuid)
     {
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         try {
             $contactGroup = ContactGroup::where('organization_id', $organizationId)->where('uuid', $uuid)->firstOrFail();
             $contactGroup->deleted_at = date('Y-m-d H:i:s');
@@ -408,17 +404,17 @@ class ApiController extends Controller
 
             return response()->json([
                 'statusCode' => 200,
-				'success' => true,
-				'data' => [
-					'uuid' => $uuid,
-				],
+                'success' => true,
+                'data' => [
+                    'uuid' => $uuid,
+                ],
                 'id' => $uuid,
                 'message' => __('Request processed successfully')
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
-				'success' => false,
-				'data' => [],
+                'success' => false,
+                'data' => [],
                 'statusCode' => 500,
                 'message' => __('Request unable to be processed')
             ], 500);
@@ -585,11 +581,11 @@ class ApiController extends Controller
      */
     public function sendMessage(Request $request)
     {
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-			$request->merge(['tempMessageId' => -1]); // to use queue to send message in background
-		}
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+            $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
+        }
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -604,7 +600,7 @@ class ApiController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'statusCode' => 400,
-				'success' => false,
+                'success' => false,
                 'message' => __('The provided data is invalid.'),
                 'errors' => $validator->errors()
             ], 400);
@@ -613,7 +609,7 @@ class ApiController extends Controller
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
             ], 403);
         }
@@ -622,7 +618,7 @@ class ApiController extends Controller
         if (!$this->isWhatsAppConnected($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please setup your whatsapp account!'),
             ], 403);
         }
@@ -659,22 +655,23 @@ class ApiController extends Controller
             $header['type'] = 'text';
             $header['text'] = clean($request->header);
         }
-		
+        
         $message = $this->whatsappService->sendMessage($contact->uuid, $request->message, 0, $type, $request->buttons, $header, $request->footer);
         
         return response()->json([
             'statusCode' => 200,
-			'success' => true,
+            'success' => true,
             'message' => $message === null ? __('Message queued for sending.') : null,
             'data' => $message
         ], 200);
     }
-	public function sendMsg(Request $request){
-		if($request->get('type') == 'text'){
-			return $this->sendMessage($request);
-		}
-		return $this->sendFileMessage($request);
-	}
+    public function sendMsg(Request $request)
+    {
+        if ($request->get('type') == 'text') {
+            return $this->sendMessage($request);
+        }
+        return $this->sendFileMessage($request);
+    }
     public function sendTemplateMessage(Request $request)
     {
         $rules = [
@@ -687,35 +684,35 @@ class ApiController extends Controller
             'template.language' => 'required',
         ];
 
-		
+        
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json([
                 'statusCode' => 400,
-				'success' => false,
+                'success' => false,
                 'message' => __('The provided data is invalid.'),
                 'errors' => $validator->errors()
             ], 400);
         }
-		
-		$organizationId = $request->organization;
-		$sendByQueue = false;
-		
+        
+        $organizationId = $request->organization;
+        $sendByQueue = false;
+        
 
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
             ], 403);
         }
-		
+        
         //Check if the whatsapp connection exists
         if (!$this->isWhatsAppConnected($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please setup your whatsapp account!'),
             ], 403);
         }
@@ -750,16 +747,16 @@ class ApiController extends Controller
 
         return response()->json([
             'statusCode' => 200,
-			'success' => true,
-			'message' => __('Template sent successfully'),
+            'success' => true,
+            'message' => __('Template sent successfully'),
             'data' => $responseObject
         ], 200);
     }
-	/**
-	 * * دي هستخدمها مه عالموبايل بحيث ابعت التمبلت بمعرفه الاي دي الخاص به علي العكس اللي معمولة قبل كدا
-	 * * وكمان هنا هستخدم ال Queue للارسال
-	 */
-	public function sendTemplateMessageByUUID(Request $request)
+    /**
+     * * دي هستخدمها مه عالموبايل بحيث ابعت التمبلت بمعرفه الاي دي الخاص به علي العكس اللي معمولة قبل كدا
+     * * وكمان هنا هستخدم ال Queue للارسال
+     */
+    public function sendTemplateMessageByUUID(Request $request)
     {
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
@@ -770,52 +767,52 @@ class ApiController extends Controller
             'template_uuid' => 'required|exists:templates,uuid',
         ];
 
-		
+        
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json([
                 'statusCode' => 400,
-				'success' => false,
+                'success' => false,
                 'message' => __('The provided data is invalid.'),
                 'errors' => $validator->errors()
             ], 400);
         }
-		
-		
-		$organizationId = $request->user()->current_organization_id;
-		$organizationId = $organizationId ?: session()->get('current_organization');
-		$sendByQueue = true;
-		$template = Template::where('uuid', $request->template_uuid)->where('organization_id', $organizationId)->first();
-		if(!$template){
-			return response()->json([
-				'statusCode' => 404,
-				'success' => false,
-				'message' => __('Template not found!'),
-			], 404);
-		}
+        
+        
+        $organizationId = $request->user()->current_organization_id;
+        $organizationId = $organizationId ?: session()->get('current_organization');
+        $sendByQueue = true;
+        $template = Template::where('uuid', $request->template_uuid)->where('organization_id', $organizationId)->first();
+        if (!$template) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Template not found!'),
+            ], 404);
+        }
 
-		$templateContent = [
-			'name' => $template->name,
-			'language' => [
-				'code' => $template->language,
-			],
-		];
+        $templateContent = [
+            'name' => $template->name,
+            'language' => [
+                'code' => $template->language,
+            ],
+        ];
 
-		$request->merge(['template' => $templateContent]);
+        $request->merge(['template' => $templateContent]);
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
             ], 403);
         }
-		
+        
         //Check if the whatsapp connection exists
         if (!$this->isWhatsAppConnected($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please setup your whatsapp account!'),
             ], 403);
         }
@@ -844,13 +841,13 @@ class ApiController extends Controller
             $contact->save();
         }
 
-		// If we have saved template parameters (e.g. auth template from settings), build full template with components for WhatsApp.
-		$templateParameters = $request->input('template_parameters');
-		if ($templateParameters && isset($templateParameters['template']) && $templateParameters['template'] === $template->uuid) {
-			$metadata = json_decode(json_encode($templateParameters));
-			$templateContent = $this->buildTemplate($template->name, $template->language, $metadata, $contact);
-			$request->merge(['template' => $templateContent]);
-		}
+        // If we have saved template parameters (e.g. auth template from settings), build full template with components for WhatsApp.
+        $templateParameters = $request->input('template_parameters');
+        if ($templateParameters && isset($templateParameters['template']) && $templateParameters['template'] === $template->uuid) {
+            $metadata = json_decode(json_encode($templateParameters));
+            $templateContent = $this->buildTemplate($template->name, $template->language, $metadata, $contact);
+            $request->merge(['template' => $templateContent]);
+        }
 
         // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);
@@ -858,19 +855,85 @@ class ApiController extends Controller
 
         return response()->json([
             'statusCode' => 200,
-			'success' => true,
-			'message' => __('Template sent successfully'),
+            'success' => true,
+            'message' => __('Template sent successfully'),
             'data' => $responseObject
         ], 200);
     }
-	
+
+    /**
+     * Send the auth template (configured in Settings → General → Auth Template) to a contact.
+     * Used by the mobile app. Requires phone in body. If auth template is not set, returns error
+     * asking the user to go to Settings → General Settings to select the auth template.
+     */
+    public function sendAuthTemplate(Request $request)
+    {
+        $rules = [
+            'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
+                if (!PhoneService::isValid($value)) {
+                    $fail(__('The phone number is not valid.'));
+                }
+            }],
+        ];
+
+        $validator = Validator::make($request->all(), $rules);
+        if ($validator->fails()) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The provided data is invalid.'),
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        $organizationId = $request->user()->current_organization_id ?? session()->get('current_organization');
+        $organization = Organization::find($organizationId);
+        if (!$organization) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Organization not found.'),
+            ], 404);
+        }
+
+        $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
+        $templateUUID = $metadata['auth_template'] ?? null;
+        $template = $templateUUID ? Template::where('uuid', $templateUUID)->where('organization_id', $organizationId)->first() : null;
+
+        if (!$template) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('Auth template is not set. Please go to Settings → General Settings to select the auth template.'),
+            ], 400);
+        }
+
+        $phone = $request->phone;
+        if (substr($phone, 0, 1) !== '+') {
+            $phone = '+' . $phone;
+        }
+        $phone = (new PhoneNumber($phone))->formatE164();
+
+        $request->merge([
+            'template_uuid' => $template->uuid,
+            'phone' => $phone,
+        ]);
+
+        $authParams = $metadata['auth_template_parameters'] ?? null;
+        if ($authParams && isset($authParams['template']) && $authParams['template'] === $template->uuid) {
+            $request->merge(['template_parameters' => $authParams]);
+        }
+
+        return $this->sendTemplateMessageByUUID($request);
+    }
+    
     public function sendMediaMessage(Request $request)
     {
         $organizationId = $request->organization;
-		
-		// if( $request->is('api/v1/*')){
-		// 	$organizationId = $request->user()->current_organization_id;
-		// }
+        
+        // if( $request->is('api/v1/*')){
+        // 	$organizationId = $request->user()->current_organization_id;
+        // }
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -888,7 +951,7 @@ class ApiController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'statusCode' => 400,
-				'success' => false,
+                'success' => false,
                 'message' => __('The provided data is invalid.'),
                 'errors' => $validator->errors()
             ], 400);
@@ -897,7 +960,7 @@ class ApiController extends Controller
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
             ], 403);
         }
@@ -906,7 +969,7 @@ class ApiController extends Controller
         if (!$this->isWhatsAppConnected($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please setup your whatsapp account!'),
             ], 403);
         }
@@ -921,7 +984,7 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('organization_id', $organizationId )->where('phone', $phone)->first();
+        $contact = Contact::where('organization_id', $organizationId)->where('phone', $phone)->first();
 
         if (!$contact) {
             $contact = new Contact();
@@ -942,26 +1005,26 @@ class ApiController extends Controller
         
         return response()->json([
             'statusCode' => 200,
-			'success' => true,
+            'success' => true,
             'data' => $message
         ], 200);
     }
 
-	/**
-	 * * دي هنستخدم فيها الكيو للرفع وهنا بنرفع الملف نفسه مش بالرابط زي الميسود اللي فوق
-	 */
-	public function sendFileMessage(Request $request)
+    /**
+     * * دي هنستخدم فيها الكيو للرفع وهنا بنرفع الملف نفسه مش بالرابط زي الميسود اللي فوق
+     */
+    public function sendFileMessage(Request $request)
     {
-		$organizationId = $request->user()->current_organization_id;
-		$request->merge(['tempMessageId' => -1]); // to use queue to send message in background
+        $organizationId = $request->user()->current_organization_id;
+        $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
                     $fail('The phone number is not valid.');
                 }
             }],
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,ppt,pptx|max:2048',
-			'caption' => 'nullable',
+			'file' => 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp,svg,ico,heic,heif,mp4,avi,mov,wmv,flv,mkv,webm,3gp,mpeg,mpg,mp3,wav,ogg,aac,m4a,flac,wma,amr,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,rtf,odt,ods,odp|max:4096',
+            'caption' => 'nullable',
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -969,7 +1032,7 @@ class ApiController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'statusCode' => 400,
-				'success' => false,
+                'success' => false,
                 'message' => __('The provided data is invalid.'),
                 'errors' => $validator->errors()
             ], 400);
@@ -977,7 +1040,7 @@ class ApiController extends Controller
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please renew or subscribe to a plan to continue!'),
             ], 403);
         }
@@ -986,7 +1049,7 @@ class ApiController extends Controller
         if (!$this->isWhatsAppConnected($organizationId)) {
             return response()->json([
                 'statusCode' => 403,
-				'success' => false,
+                'success' => false,
                 'message' => __('Please setup your whatsapp account!'),
             ], 403);
         }
@@ -1001,7 +1064,7 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('organization_id', $organizationId )->where('phone', $phone)->first();
+        $contact = Contact::where('organization_id', $organizationId)->where('phone', $phone)->first();
         if (!$contact) {
             $contact = new Contact();
             $contact->organization_id = $organizationId;
@@ -1012,49 +1075,49 @@ class ApiController extends Controller
             $contact->created_by = 0;
             $contact->save();
         }
-		$file = $request->file('file');
-		$request->merge([
-			'uuid' => $contact->uuid,
-			'file' => $file,
-			'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
-			'caption' => $request->caption,
-			'messageUUID' => $request->get('msg_uuid'),
-		]);
-		
-		// +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
+        $file = $request->file('file');
+        $request->merge([
+            'uuid' => $contact->uuid,
+            'file' => $file,
+            'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
+            'caption' => $request->caption,
+            'messageUUID' => $request->get('msg_uuid'),
+        ]);
+        
+        // +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
 
-	
-	
-		$chatService = new ChatService($organizationId);
-		 $chatService->sendMessage($request);
+    
+    
+        $chatService = new ChatService($organizationId);
+        $chatService->sendMessage($request);
         return response()->json([
             'statusCode' => 200,
-			'success' => true,
-			'message' => __('Message sent successfully'),
+            'success' => true,
+            'message' => __('Message sent successfully'),
          //   'data' => $message
         ], 200);
     }
-	private static function getFileTypeFromExtension($extension)
-{
-    $extension = strtolower($extension);
+    private static function getFileTypeFromExtension($extension)
+    {
+        $extension = strtolower($extension);
     
-    $fileTypes = [
-        'image' => ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'heic', 'heif'],
-        'video' => ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', '3gp', 'mpeg', 'mpg'],
-        'audio' => ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr', 'opus'],
-        'document' => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'odt', 'ods', 'odp'],
-        'gif' => ['gif']
-    ];
+        $fileTypes = [
+            'image' => ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'heic', 'heif'],
+            'video' => ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', '3gp', 'mpeg', 'mpg'],
+            'audio' => ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr', 'opus'],
+            'document' => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'odt', 'ods', 'odp'],
+            'gif' => ['gif']
+        ];
     
-    foreach ($fileTypes as $type => $extensions) {
-        if (in_array($extension, $extensions)) {
-            return $type;
+        foreach ($fileTypes as $type => $extensions) {
+            if (in_array($extension, $extensions)) {
+                return $type;
+            }
         }
+        throw new \Exception('Invalid file extension: ' . $extension);
+        // // Default fallback
+        // return 'DOCUMENT';
     }
-    throw new \Exception('Invalid file extension: ' . $extension);
-    // // Default fallback
-    // return 'DOCUMENT';
-}
     /**
      * Store a campaign.
      *
@@ -1106,28 +1169,28 @@ class ApiController extends Controller
 
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         $templates = Template::where('organization_id', $organizationId)
             ->where('deleted_at', null)
             ->paginate($perPage, ['uuid', 'name', 'metadata', 'updated_at'], 'page', $page);
-		return response()->json([
-			'statusCode' => 200,
-			'success' => true,
-			'message' => __('Templates fetched successfully'),
-			'data' => TemplateResource::collection($templates)
-		], 200);
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Templates fetched successfully'),
+            'data' => TemplateResource::collection($templates)
+        ], 200);
     }
 
-	
-	/**
-	 * * دي اخر الكونتاكتس اللي بعتت رسايل
-	 * * بحيث اول ما بتدخل علي صفحه الشات دي اول ناس بتظهرلك 
-	 * 
-	 */
-	public function listChatContacts(Request $request)
+    
+    /**
+     * * دي اخر الكونتاكتس اللي بعتت رسايل
+     * * بحيث اول ما بتدخل علي صفحه الشات دي اول ناس بتظهرلك
+     *
+     */
+    public function listChatContacts(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
@@ -1140,105 +1203,106 @@ class ApiController extends Controller
 
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
-		$organizationId = $request->organization;
-		if($request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
-       return  (new ChatService($organizationId))->getChatList($request);
-		// return response()->json([
-		// 	'statusCode' => 200,
-		// 	'success' => true,
-		// 	'message' => __('Templates fetched successfully'),
-		// 	'data' => TemplateResource::collection($templates)
-		// ], 200);
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
+        return  (new ChatService($organizationId))->getChatList($request);
+        // return response()->json([
+        // 	'statusCode' => 200,
+        // 	'success' => true,
+        // 	'message' => __('Templates fetched successfully'),
+        // 	'data' => TemplateResource::collection($templates)
+        // ], 200);
     }
-		/**
-		 * *
-		 * * هنا بنجيب الرسايل الخاصة بجهه اتصال معينه
-	 */
-	// public function listChatContactsForContact(Request $request,$contactUuid)
+    /**
+     * *
+     * * هنا بنجيب الرسايل الخاصة بجهه اتصال معينه
+     */
+    // public function listChatContactsForContact(Request $request,$contactUuid)
     // {
-	// 	$organizationId = $request->organization;
-	// 	if( $request->is('api/v1/*')){
-	// 		$organizationId = $request->user()->current_organization_id;
-	// 	}
+    // 	$organizationId = $request->organization;
+    // 	if( $request->is('api/v1/*')){
+    // 		$organizationId = $request->user()->current_organization_id;
+    // 	}
     //     $validator = Validator::make($request->all(), [
     //         'page' => 'integer|min:1',
     //         'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
     //     ]);
-	// 	$uuid = $contactUuid;
-	// 	$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
-	// 	if(!$contact){
-	// 		return response()->json([
-	// 			'statusCode' => 404,
-	// 			'success' => false,
-	// 			'message' => __('Contact not found'),
-	// 		], 404);
-	// 	}
+    // 	$uuid = $contactUuid;
+    // 	$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
+    // 	if(!$contact){
+    // 		return response()->json([
+    // 			'statusCode' => 404,
+    // 			'success' => false,
+    // 			'message' => __('Contact not found'),
+    // 		], 404);
+    // 	}
     //     if ($validator->fails()) {
     //         return response()->json(['error' => $validator->errors()], 400);
     //     }
 
     //     $page = $request->input('page', 1);
     //     $perPage = $request->input('per_page', 10);
-		
+        
     //    return  (new ChatService($organizationId))->getChatMessages( $contact->id,$page,$perPage);
-		
+        
     // }
-	public function listChatMessagesFromUuidToEnd(Request $request)
-	{
-		$organizationId = $request->organization;
-		if( $request->is('api/v1/*')){
-			$organizationId = $request->user()->current_organization_id;
-		}
+    public function listChatMessagesFromUuidToEnd(Request $request)
+    {
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
         $validator = Validator::make($request->all(), [
-			'created_at' => 'sometimes|max:255',
-			'message_types' => 'sometimes|array|in:chat,ticket,notes',
+            'created_at' => 'sometimes|max:255',
+            'message_types' => 'sometimes|array|in:chat,ticket,notes',
 
         ]);
-		if ($validator->fails()) {
+        if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
-		$entityTypes = $request->input('message_types', []);
-		
-		$createdAt = $request->input('created_at', null);
-		// $page = $request->input('page', 1);
-		// $perPage = $request->input('per_page', 10);
-		$organization = Organization::where('id', $organizationId)->first();
-		$contacts = $organization->contacts;
-		$results = [];
-		foreach($contacts as $contact){
-			$result = $this->getChatMessages($contact->id,$createdAt,$entityTypes);
-			$data = [] ;
-			if( count($result) ){
-				$data['contact_id']=$contact->id;
-				$data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
-				foreach($result as $item){
-					foreach($item as $item2){
-						$data['messages'][] =$item2;
-					}
-				}
-				$results[] = $data;
-			}
-		}
-		
-		return response()->json([
-			'statusCode' => 200,
-			'success' => true,
-			'message' => __('Chat messages fetched successfully'),
-			'data' => $results
-		], 200);
-	}
-	protected function getChatMessages($contactId,$createdAt,$entityTypes){
-		$query = ChatLog::where('contact_id', $contactId)
+        $entityTypes = $request->input('message_types', []);
+        
+        $createdAt = $request->input('created_at', null);
+        // $page = $request->input('page', 1);
+        // $perPage = $request->input('per_page', 10);
+        $organization = Organization::where('id', $organizationId)->first();
+        $contacts = $organization->contacts;
+        $results = [];
+        foreach ($contacts as $contact) {
+            $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
+            $data = [] ;
+            if (count($result)) {
+                $data['contact_id']=$contact->id;
+                $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
+                foreach ($result as $item) {
+                    foreach ($item as $item2) {
+                        $data['messages'][] =$item2;
+                    }
+                }
+                $results[] = $data;
+            }
+        }
+        
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Chat messages fetched successfully'),
+            'data' => $results
+        ], 200);
+    }
+    protected function getChatMessages($contactId, $createdAt, $entityTypes)
+    {
+        $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
-			->when($createdAt, function ($q) use ($createdAt) {
-				$q->where('created_at', '>=', $createdAt);
-			})
-			->when(count($entityTypes), function ($q) use ($entityTypes) {
-				$q->whereIn('entity_type', $entityTypes);
-			});
+            ->when($createdAt, function ($q) use ($createdAt) {
+                $q->where('created_at', '>=', $createdAt);
+            })
+            ->when(count($entityTypes), function ($q) use ($entityTypes) {
+                $q->whereIn('entity_type', $entityTypes);
+            });
 
         $chatLogs = $query->get() ;
         $chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
@@ -1260,15 +1324,15 @@ class ApiController extends Controller
             $value = null;
             if ($chatLog->entity_type === 'chat') {
                 $value = $chatsMap->get($chatLog->entity_id);
-				// temp condition to skip buttons and context for mobile testing now
-				if(env('APP_ENV') == 'development'){
-					if(isset($value['metadata']) && (isset(json_decode($value['metadata'],true)['buttons']) || isset(json_decode($value['metadata'],true)['context']))
-				){
-					continue;	
-				}
-				}
-				
-				$value = minimalChatValue($value);
+                // temp condition to skip buttons and context for mobile testing now
+                if (env('APP_ENV') == 'development') {
+                    if (isset($value['metadata']) && (isset(json_decode($value['metadata'], true)['buttons']) || isset(json_decode($value['metadata'], true)['context']))
+                    ) {
+                        continue;
+                    }
+                }
+                
+                $value = minimalChatValue($value);
             } elseif ($chatLog->entity_type === 'ticket') {
                 $value = $ticketLogsMap->get($chatLog->entity_id);
             } elseif ($chatLog->entity_type === 'notes') {
@@ -1276,50 +1340,50 @@ class ApiController extends Controller
             }
             $chats[] = [['type' => $chatLog->entity_type, 'value' => $value]];
         }
-		return array_reverse($chats) ;
-	}
-	public function deleteChatForContact(Request $request,$uuid)
-	{
-		$organizationId = $request->user()->current_organization_id;
-		$contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
-		if(!$contact){
-			return response()->json([
-				'statusCode' => 404,
-				'success' => false,
-				'message' => __('Contact not found'),
-			], 404);
-		}
-		
-		$chatService = new ChatService($organizationId);
-		$chatService->clearContactChat($uuid);
-		
-		return response()->json([
-			'statusCode' => 200,
-			'success' => true,
-			'message' => __('Chat deleted successfully'),
-		], 200);
-	}
-	public function toggleTicketStatus(Request $request,$id)
-	{
-	// $organizationId = $request->user()->current_organization_id;
-		$contact = Contact::find($id);
-		if(!$contact){
-			return response()->json([
-				'statusCode' => 404,
-				'success' => false,
-				'message' => __('Contact not found'),
-			], 404);
-		}
-		
-		$contact->toggleTicketStatus($request->status);
-		
-		return response()->json([
-			'statusCode' => 200,
-			'success' => true,
-			'message' => __('Status updated successfully!'),
-		], 200);
-	}
-	
+        return array_reverse($chats) ;
+    }
+    public function deleteChatForContact(Request $request, $uuid)
+    {
+        $organizationId = $request->user()->current_organization_id;
+        $contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
+        if (!$contact) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Contact not found'),
+            ], 404);
+        }
+        
+        $chatService = new ChatService($organizationId);
+        $chatService->clearContactChat($uuid);
+        
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Chat deleted successfully'),
+        ], 200);
+    }
+    public function toggleTicketStatus(Request $request, $id)
+    {
+        // $organizationId = $request->user()->current_organization_id;
+        $contact = Contact::find($id);
+        if (!$contact) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Contact not found'),
+            ], 404);
+        }
+        
+        $contact->toggleTicketStatus($request->status);
+        
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Status updated successfully!'),
+        ], 200);
+    }
+    
     /**
      * Verify if the API key is active.
      *
