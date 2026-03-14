@@ -1076,14 +1076,14 @@ class ApiController extends Controller
             $contact->save();
         }
         $file = $request->file('file');
-		
-		dd([
+		logger('sendFileMessage');
+		logger(json_encode([
             'uuid' => $contact->uuid,
             'file' => $file,
             'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
             'caption' => $request->caption,
             'messageUUID' => $request->get('msg_uuid'),
-        ]);
+        ]));
         $request->merge([
             'uuid' => $contact->uuid,
             'file' => $file,
