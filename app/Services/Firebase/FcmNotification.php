@@ -43,8 +43,16 @@ class FcmNotification
                     ],
                 ],
             ];
-			if(count($additionalData)){
-				$payload['message']['data'] = $additionalData;
+			if (count($additionalData) > 0) {
+				// FCM v1 يتطلب أن تكون كل قيم data نصوصاً (لا مصفوفات ولا كائنات)
+				$payload['message']['data'] = [];
+				foreach ($additionalData as $key => $value) {
+					$k = (string) $key;
+					if ($k === '') {
+						continue;
+					}
+					$payload['message']['data'][$k] = is_scalar($value) ? (string) $value : json_encode($value);
+				}
 			}
 
             $response = Http::withHeaders([
