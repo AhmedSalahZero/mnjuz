@@ -132,14 +132,14 @@ class NewChatEvent implements ShouldBroadcast
 						// $secondaryType = 'new_message';
 						// $modelId = $this->chat[0]['value']['contact_id'];
 						// $mainType = 'notification';
-						logger(json_encode([
-							'contactFullName' => $contactName,
-							'phone'=>$contactPhone,
-							'userId'=>$userId,
-							'chatId'=>$contactId,
-							'organizationId'=>$this->organizationId,
-							'createdAt'=>now()->format('Y-m-d H:i:s'),
-						]));
+						// logger(json_encode([
+						// 	'contactFullName' => $contactName,
+						// 	'phone'=>$contactPhone,
+						// 	'userId'=>$userId,
+						// 	'chatId'=>$contactId,
+						// 	'organizationId'=>$this->organizationId,
+						// 	'createdAt'=>now()->format('Y-m-d H:i:s'),
+						// ]));
 						$user->sendAppNotification($titleEn, $titleAr, $messageEn, $messageAr, [
 							'contactFullName' => (string)$contactName,
 							'phone'=>(string)$contactPhone,
