@@ -115,7 +115,7 @@ class NewChatEvent implements ShouldBroadcast
             $channels = [];
             foreach ($userIds as $userId) {
                 $channels[] = new PresenceChannel('chats.ch' . $this->organizationId . '.' . $userId);
-				logger('sendToFirestore: ' . $this->sendToFirestore);
+				
 				if($this->sendToFirestore){
 					/**
 					 * @var User $user

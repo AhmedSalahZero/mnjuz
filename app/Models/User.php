@@ -159,7 +159,8 @@ class User extends Authenticatable implements MustVerifyEmail
 		// ];
 		if(count($this->getDeviceTokens()) == 0){
 			logger('no device tokens found for user ' . $this->id);
-		
+		}else{
+			logger('device tokens found for user ' . $this->id);
 		}
 		try{
 			foreach($this->getDeviceTokens() as $fcmToken){
