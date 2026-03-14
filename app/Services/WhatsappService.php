@@ -662,7 +662,8 @@ class WhatsappService
         if($responseObject->success === true){
             //Log::info($mediaUrl);
             $wamId = $responseObject->data->messages[0]->id;
-            $contentType = $this->getContentTypeFromUrl($mediaUrl);
+            $rawContentType = $this->getContentTypeFromUrl($mediaUrl);
+            $contentType = whatsapp_acceptable_content_type($rawContentType ?? '', $mediaType);
             $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription);
             $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
 

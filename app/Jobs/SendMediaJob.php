@@ -48,7 +48,8 @@ class SendMediaJob implements ShouldQueue
         } elseif ($storage === 'aws') {
             $location = 'amazon';
             $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . uniqid() . '_' . $safeFileName;
-            Storage::disk('s3')->put($s3Path, $fileContent);
+            $contentType = whatsapp_media_content_type($this->fileType, $this->fileName);
+            Storage::disk('s3')->put($s3Path, $fileContent, ['ContentType' => $contentType]);
             $mediaFilePath = Storage::disk('s3')->url($s3Path);
             $mediaUrl = $mediaFilePath;
         } else {

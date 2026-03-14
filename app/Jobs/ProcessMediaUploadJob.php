@@ -80,8 +80,10 @@ class ProcessMediaUploadJob implements ShouldQueue
                     $fileContent = Storage::disk('local')->get($this->filePath);
                     $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . sanitize_filename_for_storage($this->fileName);
 
+                    $rawMime = mime_content_type(storage_path('app/' . $this->filePath));
+                    $contentType = whatsapp_acceptable_content_type($rawMime ?: '', $this->mediaType);
                     $uploaded = Storage::disk('s3')->put($s3Path, $fileContent, [
-                        'ContentType' => mime_content_type(storage_path('app/' . $this->filePath))
+                        'ContentType' => $contentType,
                     ]);
 
                     if ($uploaded) {

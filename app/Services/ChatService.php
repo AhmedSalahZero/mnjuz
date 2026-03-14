@@ -418,8 +418,10 @@ class ChatService
 				$mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
 			} elseif ($storage === 'aws') {
 				$location = 'amazon';
-				$uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
-				$mediaFilePath = Storage::disk('s3')->url($uploadedFile);
+				$s3Path = 'uploads/media/sent/' . $organizationId . '/' . uniqid() . '_' . sanitize_filename_for_storage($fileName);
+				$contentType = whatsapp_media_content_type($fileType, $fileName);
+				Storage::disk('s3')->put($s3Path, file_get_contents($file->getRealPath()), ['ContentType' => $contentType]);
+				$mediaFilePath = Storage::disk('s3')->url($s3Path);
 				$mediaUrl = $mediaFilePath;
 			}
 
