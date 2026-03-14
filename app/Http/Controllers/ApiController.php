@@ -1077,6 +1077,13 @@ class ApiController extends Controller
         }
         $file = $request->file('file');
 		
+		dd([
+            'uuid' => $contact->uuid,
+            'file' => $file,
+            'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
+            'caption' => $request->caption,
+            'messageUUID' => $request->get('msg_uuid'),
+        ]);
         $request->merge([
             'uuid' => $contact->uuid,
             'file' => $file,
