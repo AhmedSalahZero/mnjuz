@@ -73,6 +73,9 @@ class NewChatEvent implements ShouldBroadcast
                 ->get(['user_id', 'role']);
 
             $userIds = [];
+            $value = $this->chat[0]['value'] ?? $this->chat['value'] ?? [];
+            $contactId = $value['contact_id'] ?? null;
+            $contactName = $value['contact_full_name'] ?? '';
 
             // 1) لو التذاكر غير مفعّلة أو الوكلاء مسموح لهم يشوفوا الكل → أرسل للكل
             if (!$ticketingActive || $allowAgentsViewAllChats) {
@@ -86,10 +89,6 @@ class NewChatEvent implements ShouldBroadcast
                     ->all();
 
                 $userIds = $nonAgentUserIds;
-
-                // الحصول على contact_id من الـ payload
-                $contactId = $this->chat[0]['value']['contact_id'] ?? null;
-                $contactName = $this->chat[0]['value']['contact_full_name'] ?? null;
 
                 if ($contactId) {
                     $chatTicket = ChatTicket::where('contact_id', $contactId)
@@ -122,7 +121,6 @@ class NewChatEvent implements ShouldBroadcast
 					 */
 					$user = User::find($userId);
 					if($user){
-						$contactName = 'd';
 						$titleEn = __('New message received');
 						$titleAr = __('تم استقبال رسالة جديدة');
 						$messageEn = __('You have a new message from :name', ['name' =>$contactName]);
