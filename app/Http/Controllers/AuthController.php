@@ -151,13 +151,19 @@ class AuthController extends BaseController
         } else {
             Auth::guard($guard)->login($user, $remember);
         }
+		/**
+		 * @var User $user
+		 */
 
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
             // Set locale based on user's language for proper translation
             // $userLanguage = $user->language ?? 'en';
             // App::setLocale($userLanguage);
-            
+			if($request->has('device_token')){
+				$user->syncDeviceTokens($request->get('device_token'),$request->get('device_name'),$request->get('device_type'));
+			}
+			
             // Revoke all existing tokens (optional - for security)
             // $user->tokens()->delete();
             

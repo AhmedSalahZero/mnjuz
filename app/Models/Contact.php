@@ -3,6 +3,7 @@
 namespace App\Models;
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
+use App\Services\Firebase\FcmNotification;
 use App\Services\Firebase\Firestore;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,6 +18,7 @@ class Contact extends Model
     use HasFactory;
     use HasUuid;
     use SoftDeletes;
+	
 
     protected $guarded = [];
     protected $appends = ['full_name', 'formatted_phone_number'];
@@ -379,14 +381,7 @@ class Contact extends Model
         ]);
 		
     }
-	public static function sendNewMessageReceivedToFirestore(int $contactId,array $additionalDataToBeSent = []){
-		try{
-			$firestore = new Firestore;
-		$firestore->setNewMessageReceived($contactId,$additionalDataToBeSent);
-		}
-		catch(\Exception $e){
-			Log::error('Error sending new message received to firestore: '.$e->getMessage());
-		}
-	}
+	
+	
 	
 }

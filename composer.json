@@ -10,6 +10,7 @@
         "bacon/bacon-qr-code": "^3.0",
         "dacoto/laravel-env-set": "^1.0",
         "dedoc/scramble": "^0.8.6",
+        "google/apiclient": "^2.19",
         "google/cloud-firestore": "^1.47",
         "google/recaptcha": "^1.3",
         "guzzlehttp/guzzle": "^7.8",

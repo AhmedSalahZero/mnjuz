@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Mail\CustomEmailVerification;
+use App\Services\Firebase\FcmNotification;
+use App\Traits\Models\HasDeviceTokens;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -14,7 +16,7 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
     use SoftDeletes;
-
+	use HasDeviceTokens;
     /**
      * The attributes that are mass assignable.
      *
@@ -124,5 +126,47 @@ class User extends Authenticatable implements MustVerifyEmail
 	{
 		return $this->teams()->where('organization_id', $organizationId)->first()->role;
 	}
+	// public static function sendNewMessageReceivedToFirestore(int $contactId,array $additionalDataToBeSent = []){
+	// 	try{
+	// 		$firestore = new Firestore;
+	// 	$firestore->setNewMessageReceived($contactId,$additionalDataToBeSent);
+	// 	}
+	// 	catch(\Exception $e){
+	// 		Log::error('Error sending new message received to firestore: '.$e->getMessage());
+	// 	}
+	// }
+	
+	
+	 /**
+     * * هي الاشعارات اللي بتتبعت للعميل في الموبايل ابلكيشن
+     */
+    public function sendAppNotification(string $titleEn, string $titleAr, string $messageEn, string $messageAr, array $additionalData  )
+    {
+		
+        // $this->notify(new DriverNotification($titleEn, $titleAr, $messageEn, $messageAr, formatForView(now()), $secondaryType,$modelId,$mainType));
+		$firebaseService = new FcmNotification;
+		$title = [
+			'en'=>$titleEn,
+			'ar'=>$titleAr
+		][getApiLang()];
+		$message = [
+			'en'=>$messageEn,
+			'ar'=>$messageAr
+		][getApiLang()];
+		// $additionalData = [
+		// 	'main_type'=>$mainType,
+		// 	'secondary_type'=>$secondaryType ,
+		// ];
+		try{
+			foreach($this->getDeviceTokens() as $fcmToken){
+				$firebaseService->send($title,$message,$fcmToken,$additionalData);
+			}
+		}
+		catch(\Exception $e){
+			logger('Can Not Send Firebase Message To User ' . $e->getMessage() );
+		}
+		
+    }
+	
 }
 	

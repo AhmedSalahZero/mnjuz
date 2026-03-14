@@ -1076,6 +1076,7 @@ class ApiController extends Controller
             $contact->save();
         }
         $file = $request->file('file');
+		
         $request->merge([
             'uuid' => $contact->uuid,
             'file' => $file,
@@ -1272,8 +1273,9 @@ class ApiController extends Controller
         $results = [];
         foreach ($contacts as $contact) {
             $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
+		
             $data = [] ;
-            if (count($result)) {
+            if ($result) {
                 $data['contact_id']=$contact->id;
                 $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
                 foreach ($result as $item) {
@@ -1284,7 +1286,7 @@ class ApiController extends Controller
                 $results[] = $data;
             }
         }
-        
+	
         return response()->json([
             'statusCode' => 200,
             'success' => true,

@@ -26,6 +26,7 @@ class NewChatEvent implements ShouldBroadcast
     public $isNewContact = false;
     public $statusChanged = false;
     public $sendToFirestore = false;
+	public array $additionalData = [];
     /**
      * Create a new event instance.
      * يُخزّن فقط النسخة المُصغّرة من الـ chat (في الـ queue والـ broadcast والـ listeners).
@@ -40,6 +41,18 @@ class NewChatEvent implements ShouldBroadcast
         $this->statusChanged = $statusChanged;
         $this->sendToFirestore = $sendToFirestore;
         $this->chat = $this->buildMinimalChatPayload($chat);
+		$payload = ['chat' => $this->chat];
+        if ($this->statusChanged) {
+            $payload['statusChanged'] = $this->statusChanged;
+        }
+        $encoded = json_encode($payload);
+        if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
+            $this->additionalData = $payload;
+        }else{
+			$dataToBeSent = $this->shrinkPayloadToLimit($payload);
+			$this->additionalData = $dataToBeSent;
+		}
+		
     }
 
     /**
@@ -76,6 +89,7 @@ class NewChatEvent implements ShouldBroadcast
 
                 // الحصول على contact_id من الـ payload
                 $contactId = $this->chat[0]['value']['contact_id'] ?? null;
+                $contactName = $this->chat[0]['value']['contact_full_name'] ?? null;
 
                 if ($contactId) {
                     $chatTicket = ChatTicket::where('contact_id', $contactId)
@@ -102,6 +116,22 @@ class NewChatEvent implements ShouldBroadcast
             $channels = [];
             foreach ($userIds as $userId) {
                 $channels[] = new PresenceChannel('chats.ch' . $this->organizationId . '.' . $userId);
+				if($this->sendToFirestore){
+					/**
+					 * @var User $user
+					 */
+					$user = User::find($userId);
+					if($user){
+						$titleEn = __('New message received');
+						$titleAr = __('تم استقبال رسالة جديدة');
+						$messageEn = __('You have a new message from :name', ['name' =>$contactName]);
+						$messageAr = __('لديك رسالة جديدة من :name', ['name' => $contactName]);
+						// $secondaryType = 'new_message';
+						// $modelId = $this->chat[0]['value']['contact_id'];
+						// $mainType = 'notification';
+						$user->sendAppNotification($titleEn, $titleAr, $messageEn, $messageAr, $this->additionalData);
+					}
+				}
             }
 
             return $channels;
@@ -121,33 +151,10 @@ class NewChatEvent implements ShouldBroadcast
      *
      * @return array
      */
+	
     public function broadcastWith()
     {
-	//	logger('broadcastWith');
-        $payload = ['chat' => $this->chat];
-        if ($this->statusChanged) {
-            $payload['statusChanged'] = $this->statusChanged;
-        }
-        $encoded = json_encode($payload);
-        if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
-            return $payload;
-        }
-        $dataToBeSent = $this->shrinkPayloadToLimit($payload);
-	// 	logger('before sendToFirestore');
-    //     if ($this->sendToFirestore) {
-	// 		logger('sendToFirestore');
-    //         $contactId = data_get($this->chat, '0.value.contact_id')
-    // ?? data_get($this->chat, 'value.contact_id');
-	// logger('contactId: '.$contactId);
-    //         if ($contactId) {
-	// 			logger('sending to firestore');
-    //             Contact::sendNewMessageReceivedToFirestore($contactId, $dataToBeSent);
-    //         }else{
-	// 			logger('contactId not found');
-	// 		}
-    //     }
-        
-        return $dataToBeSent;
+       return $this->additionalData;
     }
 
     /**
