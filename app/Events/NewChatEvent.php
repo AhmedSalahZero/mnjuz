@@ -122,6 +122,7 @@ class NewChatEvent implements ShouldBroadcast
 					 */
 					$user = User::find($userId);
 					if($user){
+						$contactName = 'd';
 						$titleEn = __('New message received');
 						$titleAr = __('تم استقبال رسالة جديدة');
 						$messageEn = __('You have a new message from :name', ['name' =>$contactName]);
