@@ -45,26 +45,17 @@ class ProcessMediaDownloadJob implements ShouldQueue
     
     public function handle()
     {
-       // logger('start media download job for chat '.$this->chatId);
         $chat = Chat::find($this->chatId);
-      //  logger('chat lookup done for chat id '.$this->chatId);
         if (!$chat) {
             return;
         }
-       // logger('chat found '.$chat->id);
         $organization = Organization::find($this->organizationId);
         $type = $this->message['type'];
         $mediaId = $this->message[$type]['id'];
 		try{
-		//	logger('get media info for media id '.$mediaId);
         $media = $this->getMedia($mediaId, $organization);
         
-        // ✅ تنزيل ورفع
-      //  logger('download and store media for media id '.$mediaId);
         $downloadedFile = $this->downloadMedia($media, $organization);
-
-     //   logger('downloaded media for media id '.$mediaId.' to '.$downloadedFile['media_url']);
-        // ✅ حفظ في DB
         $chatMedia = ChatMedia::create([
             'name' => $type === 'document' && isset($this->message[$type]['filename'])
                 ? $this->message[$type]['filename']
@@ -75,9 +66,6 @@ class ProcessMediaDownloadJob implements ShouldQueue
             'location' => $downloadedFile['location'],
             'created_at' =>  now(),
         ]);
-      //  logger('saved media record for media id '.$mediaId.' with chat media id '.$chatMedia->id);
-        // ✅ ربط بالـ chat
-     //   logger('update chat '.$chat->id.' with media id '.$chatMedia->id);
         $chat->update(['media_id' => $chatMedia->id]);
         
         
@@ -97,15 +85,12 @@ class ProcessMediaDownloadJob implements ShouldQueue
         );
 		}
 		catch (\Exception $e){
-		//	logger('error in media download job: '.$e->getMessage());
 			return;
 		}
                     
     }
     private function downloadMedia($mediaInfo, Organization $organization)
     {
-      //  logger('start download media for org '.$organization->id);
-        //	$tt = microtime(true);
         $metadata = json_decode($organization->metadata);
 
         if (empty($metadata) || empty($metadata->whatsapp->access_token)) {
@@ -122,7 +107,6 @@ class ProcessMediaDownloadJob implements ShouldQueue
             ];
 
             $response = $client->request('GET', $mediaInfo['url'], $requestOptions);
-         //   logger('response received for media download for org '.$organization->id);
             $fileContent = $response->getBody();
             $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream'; // Default fallback
             $fileName = $this->generateFilename($fileContent, $mediaInfo['mime_type']);
@@ -134,7 +118,6 @@ class ProcessMediaDownloadJob implements ShouldQueue
                 $file = Storage::disk('local')->put('public/' . $fileName, $fileContent);
                 $mediaFilePath = $file;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . 'public/' . $fileName;
-         //       logger('from local-'.$organization->id.'--'.microtime(true)-$t);
             } elseif ($storage === 'aws') {
                 $t = microtime(true);
                 $location = 'amazon';
@@ -143,7 +126,6 @@ class ProcessMediaDownloadJob implements ShouldQueue
                     'ContentType' => $mimeType
                 ]);
                 $mediaUrl = Storage::disk('s3')->url($filePath);
-   //             logger('from aws-'.$organization->id.'--'.microtime(true)-$t);
 
             }
 
@@ -152,7 +134,6 @@ class ProcessMediaDownloadJob implements ShouldQueue
                 'location' => $location,
             ];
     
-            //		logger('all download for org -'.$organization->id.'--'.microtime(true)-$tt);
             return $mediaData;
         } catch (\Exception $e) {
             Log::error("Error processing webhook: " . $e->getMessage());

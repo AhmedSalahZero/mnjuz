@@ -323,7 +323,7 @@ class WhatsappService
         $requestData['template'] = $templateContent;
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-		logger('responseObject: ' . json_encode($responseObject));
+		// logger('responseObject: ' . json_encode($responseObject));
         if($responseObject->success === true){
             if($campaignId != NULL){
                 $campaign = Campaign::where('id', $campaignId)->first();
@@ -345,7 +345,6 @@ class WhatsappService
 
 
             $responseObject->data->chat = $chat;
-			logger('inserting template chatlog');
             $chatlogId = ChatLog::insertGetId([
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
@@ -369,14 +368,10 @@ class WhatsappService
 		return $responseObject;
 		
 		};
-		logger('sendByQueue: ' . $sendByQueue);
 		if($sendByQueue){
-			logger('sendByQueue: true');
 			dispatch($service)->onQueue('high');
 		}else{
-			logger('sendByQueue: false');
 			$result = $service() ; 
-			logger('result: ' . json_encode($result));
 			return $result;
 		}
         

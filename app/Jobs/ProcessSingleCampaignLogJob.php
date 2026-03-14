@@ -49,7 +49,6 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     $campaign_user_id = Campaign::find($this->campaignLog->campaign_id)?->created_by;
                     $lockedLog->status = 'ongoing';
                     $lockedLog->save();
-					logger('lockedLog:ff ');
                     $this->organizationId = $this->campaignLog->campaign->organization_id;
                     $this->initializeWhatsappService();
             
@@ -60,7 +59,6 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                         $campaign_user_id, 
                         $this->campaignLog->campaign_id
                     );
-					logger('responseObject: ' . json_encode($responseObject));
                     $this->updateLogStatus($lockedLog, $responseObject);
                 }
             });

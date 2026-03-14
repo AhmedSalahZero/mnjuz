@@ -44,7 +44,7 @@ class Kernel extends ConsoleKernel
             '--model' => [CampaignLog::class],
         ])->daily();
 		
-		logger('inside schedule');
+		// logger('inside schedule');
 
         // Monitor queue size
         //$schedule->command('monitor:queue-size')->everyFiveMinutes();

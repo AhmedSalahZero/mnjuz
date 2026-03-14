@@ -55,6 +55,7 @@ class FcmNotification
 		
 		
 			if($response->ok()){
+				logger('sent to firebase ');
 				return [
 					'status'=>true 
 				];

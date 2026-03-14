@@ -51,7 +51,6 @@ class ActionExecutionService
      */
     public function executeAction($actionType, $config, $contact, $userMessage = '', $flowData = null, $contactId = null)
     {
-	//	 logger('inside execute action');
         try {
             switch ($actionType) {
                 case 'add_to_group':
@@ -300,11 +299,6 @@ class ActionExecutionService
             ]);
             return false;
         }
-     //   logger('trigger new job here');
-        // ✅ تحديث current_step للـ node الصحيح
-    
-        
-        // ✅ جدولة الـ Job
         ProcessDelayedFlowJob::dispatch(
 			$flowData->id,
             $contactId, 
@@ -332,7 +326,6 @@ class ActionExecutionService
 //         $duration = $config['duration'] ?? 5; // in minutes
 //         // If we have flow data, schedule a delayed job to continue the flow
 //         if ($flowData && $contactId) {
-// 			logger('inside sleep if with duration'.$duration);
 //             // Create a delayed job that will continue the flow after the delay
 //             \Modules\FlowBuilder\Jobs\ProcessDelayedFlowJob::dispatch($contactId, $flowData->flow_id, $flowData->current_step, $this->organizationId)
 //                 ->delay(now()->addMinutes($duration));
@@ -343,7 +336,6 @@ class ActionExecutionService
         
 //         // Fallback: simple sleep for testing (not recommended for production)
 //         // Log::info("Delay action executed for {$duration} minutes (fallback mode)");
-// 		logger('before sleep method');
 //    //     sleep($duration * 60);
         
 //         return true;
