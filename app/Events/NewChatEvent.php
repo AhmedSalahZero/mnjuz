@@ -141,6 +141,7 @@ class NewChatEvent implements ShouldBroadcast
 						// 	'createdAt'=>now()->format('Y-m-d H:i:s'),
 						// ]));
 						$user->sendAppNotification($titleEn, $titleAr, $messageEn, $messageAr, [
+							// 'lastInboundChatCreatedAt'=>(string)$lastInboundChatCreatedAt,
 							'contactFullName' => (string)$contactName,
 							'phone'=>(string)$contactPhone,
 							'userId'=>(string)$userId,

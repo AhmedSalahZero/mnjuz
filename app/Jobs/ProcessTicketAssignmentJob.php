@@ -126,11 +126,11 @@ class ProcessTicketAssignmentJob implements ShouldQueue
             'created_at' =>  now()
         ]);
 
-        Log::info('Ticket created successfully', [
-            'ticket_id' => $ticket->id,
-            'contact_id' => $this->contactId,
-            'assigned_to' => $assignedTo
-        ]);
+        // Log::info('Ticket created successfully', [
+        //     'ticket_id' => $ticket->id,
+        //     'contact_id' => $this->contactId,
+        //     'assigned_to' => $assignedTo
+        // ]);
 
         return $ticket;
     }
@@ -196,10 +196,10 @@ class ProcessTicketAssignmentJob implements ShouldQueue
                     ->first();
 
                 if($agent) {
-                    Log::info('Least busy agent found', [
-                        'agent_id' => $agent->user_id,
-                        'tickets_count' => $agent->tickets_count
-                    ]);
+                    // Log::info('Least busy agent found', [
+                    //     'agent_id' => $agent->user_id,
+                    //     'tickets_count' => $agent->tickets_count
+                    // ]);
                 }
 
                 return $agent->user_id ?? null;
