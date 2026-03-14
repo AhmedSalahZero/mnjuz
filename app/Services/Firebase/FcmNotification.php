@@ -10,7 +10,7 @@ class FcmNotification
 	public function __construct()
 	{
 		 $client = new Client();
-        $client->setAuthConfig(resource_path('firebase/wazz-chat-firebase-adminsdk-fbsvc-05c475f1b0.json'));
+        $client->setAuthConfig(resource_path('firebase/wazz-chat-firebase-adminsdk-fbsvc-bd4e1c725b.json'));
         $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
         $client->fetchAccessTokenWithAssertion();
         $this->access_token = $client->getAccessToken()['access_token'];

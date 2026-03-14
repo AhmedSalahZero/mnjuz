@@ -11,7 +11,7 @@ class Firestore
     public function __construct()
     {
         $factory = (new Factory)
-        ->withServiceAccount(resource_path('firebase/wazz-chat-firebase-adminsdk-fbsvc-05c475f1b0.json'))
+        ->withServiceAccount(resource_path('firebase/wazz-chat-firebase-adminsdk-fbsvc-bd4e1c725b.json'))
         ->withDatabaseUri('https://wazz-chat-default-rtdb.firebaseio.com');
         $firestore = $factory->createFirestore();
         $this->firestore = $firestore;
