@@ -157,6 +157,10 @@ class User extends Authenticatable implements MustVerifyEmail
 		// 	'main_type'=>$mainType,
 		// 	'secondary_type'=>$secondaryType ,
 		// ];
+		if(count($this->getDeviceTokens()) == 0){
+			logger('no device tokens found for user ' . $this->id);
+		
+		}
 		try{
 			foreach($this->getDeviceTokens() as $fcmToken){
 				$firebaseService->send($title,$message,$fcmToken,$additionalData);
