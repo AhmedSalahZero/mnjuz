@@ -3,14 +3,11 @@
 namespace App\Models;
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
-use App\Services\Firebase\FcmNotification;
-use App\Services\Firebase\Firestore;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class Contact extends Model

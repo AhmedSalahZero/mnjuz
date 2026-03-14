@@ -43,17 +43,9 @@ class FcmNotification
                     ],
                 ],
             ];
-			if (count($additionalData) > 0) {
-				// FCM v1 يتطلب أن تكون كل قيم data نصوصاً (لا مصفوفات ولا كائنات)
-				$payload['message']['data'] = [];
-				foreach ($additionalData as $key => $value) {
-					$k = (string) $key;
-					if ($k === '') {
-						continue;
-					}
-					$payload['message']['data'][$k] = is_scalar($value) ? (string) $value : json_encode($value);
-				}
-			}
+			
+				$payload['message']['data'] = $additionalData;
+			
 
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->access_token,
@@ -63,8 +55,6 @@ class FcmNotification
 		
 		
 			if($response->ok()){
-				logger('sent to firebase ');
-				logger($response->body());
 				return [
 					'status'=>true 
 				];

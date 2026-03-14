@@ -76,7 +76,7 @@ class NewChatEvent implements ShouldBroadcast
             $value = $this->chat[0]['value'] ?? $this->chat['value'] ?? [];
             $contactId = $value['contact_id'] ?? null;
             $contactName = $value['contact_full_name'] ?? '';
-
+            $contactPhone = $value['phone'] ?? '';
             // 1) لو التذاكر غير مفعّلة أو الوكلاء مسموح لهم يشوفوا الكل → أرسل للكل
             if (!$ticketingActive || $allowAgentsViewAllChats) {
                 $userIds = $teams->pluck('user_id')->unique()->values()->all();
@@ -132,7 +132,23 @@ class NewChatEvent implements ShouldBroadcast
 						// $secondaryType = 'new_message';
 						// $modelId = $this->chat[0]['value']['contact_id'];
 						// $mainType = 'notification';
-						$user->sendAppNotification($titleEn, $titleAr, $messageEn, $messageAr, $this->additionalData);
+						logger(json_encode([
+							'contactFullName' => $contactName,
+							'phone'=>$contactPhone,
+							'userId'=>$userId,
+							'chatId'=>$contactId,
+							'organizationId'=>$this->organizationId,
+							'createdAt'=>now()->format('Y-m-d H:i:s'),
+						]));
+						$user->sendAppNotification($titleEn, $titleAr, $messageEn, $messageAr, [
+							'contactFullName' => $contactName,
+							'phone'=>$contactPhone,
+							'userId'=>$userId,
+							'chatId'=>$contactId,
+							'organizationId'=>$this->organizationId,
+							'createdAt'=>now()->format('Y-m-d H:i:s'),
+							
+						]);
 					}
 				}
             }
@@ -325,6 +341,7 @@ class NewChatEvent implements ShouldBroadcast
            
             // 'email' => $contactEmail,
             'contact_full_name' => $contactFullName ?: null,
+          
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
             'metadata' => $metadata,
