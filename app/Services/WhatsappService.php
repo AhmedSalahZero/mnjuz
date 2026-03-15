@@ -61,7 +61,7 @@ class WhatsappService
     {
 		$tempMessageId = Request()->get('tempMessageId');
 		$messageUUID = Request()->get('msg_uuid');
-
+		$messageContent = $messageContent ?: '';
 		if ($tempMessageId !== null && $tempMessageId !== '') {
 			\App\Jobs\SendTextMessageJob::dispatch(
 				$this->organizationId,
