@@ -49,12 +49,22 @@ function viewChat(contact) {
 }
 
 const contentType = (metadata) => {
-	const chatData = JSON.parse(metadata)
-	return chatData.type
+	try {
+		if (metadata == null || typeof metadata !== 'string') return null
+		const chatData = JSON.parse(metadata)
+		return chatData?.type ?? null
+	} catch {
+		return null
+	}
 }
 
 const content = (metadata) => {
-	return JSON.parse(metadata)
+	try {
+		if (metadata == null || typeof metadata !== 'string') return {}
+		return JSON.parse(metadata) || {}
+	} catch {
+		return {}
+	}
 }
 
 const getExtension = (fileFormat) => {
@@ -73,16 +83,19 @@ const getExtension = (fileFormat) => {
 }
 
 const getContactDisplayName = (metadata) => {
-	const contacts = JSON.parse(metadata).contacts
-	if (contacts.length === 1) {
-		const contact = contacts[0]
-		return contact.name.formatted_name || `${contact.name.first_name} ${contact.name.last_name}`
-	} else if (contacts.length > 1) {
-		const firstName = contacts[0].name.first_name
-		const otherContactsCount = contacts.length - 1
-		return `${firstName} and ${otherContactsCount} other contacts`
-	} else {
-		return 'No contacts available'
+	try {
+		const data = content(metadata)
+		const contacts = data?.contacts
+		if (!Array.isArray(contacts) || contacts.length === 0) return '—'
+		if (contacts.length === 1) {
+			const contact = contacts[0]
+			const name = contact?.name
+			return name?.formatted_name || (name ? `${name.first_name || ''} ${name.last_name || ''}`.trim() : '—') || '—'
+		}
+		const firstName = contacts[0]?.name?.first_name || ''
+		return `${firstName} and ${contacts.length - 1} other contacts`
+	} catch {
+		return '—'
 	}
 }
 const updateTotalUnreadMessages = inject('updateTotalUnreadMessages')
@@ -353,11 +366,11 @@ onUnmounted(() => {
 					<div v-if="item.contact?.last_chat?.deleted_at === null" class="flex justify-between">
 						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'text'"
 							class="text-slate-500 text-xs truncate self-end">
-							{{ content(item.contact?.last_chat?.metadata).text.body }}
+							{{ content(item.contact?.last_chat?.metadata).text?.body ?? '' }}
 						</div>
 						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'button'"
 							class="text-slate-500 text-xs truncate self-end">
-							{{ content(item.contact?.last_chat?.metadata).button.text }}
+							{{ content(item.contact?.last_chat?.metadata).button?.text ?? '' }}
 						</div>
 						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'interactive'"
 							class="text-slate-500 text-xs truncate self-end">
@@ -440,6 +453,10 @@ onUnmounted(() => {
 								</svg>
 								<span class="ml-2">{{ $t('Location') }}</span>
 							</div>
+						</div>
+						<div v-if="!['text','button','interactive','image','document','video','audio','sticker','contacts','location'].includes(contentType(item.contact?.last_chat?.metadata))"
+							class="text-slate-500 text-xs truncate self-end">
+							<span>{{ $t('Message') }}</span>
 						</div>
 						<span v-if="item.contact.unread_messages > 0"
 							class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{ item.contact.unread_messages }}</span>
