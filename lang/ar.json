@@ -1045,5 +1045,13 @@
 "Please select Auth Template in Settings → General Settings first":"يرجى اختيار قالب المصادقة أولاً من الإعدادات ← الإعدادات العامة",
 "Failed to send auth template":"فشل إرسال قالب المصادقة",
 "Something went wrong":"حدث خطأ ما",
-"Auth template is not set. Please go to Settings → General Settings to select the auth template.":"قالب المصادقة غير مضبوط. يرجى الذهاب إلى الإعدادات ← الإعدادات العامة لاختيار قالب المصادقة."
+"Auth template is not set. Please go to Settings → General Settings to select the auth template.":"قالب المصادقة غير مضبوط. يرجى الذهاب إلى الإعدادات ← الإعدادات العامة لاختيار قالب المصادقة.",
+
+"Contact Categories":"فئات جهات الاتصال",
+"Add category":"إضافة فئة",
+"Add Category":"إضافة فئة",
+"Contact category added successfully":"تمت إضافة الفئة بنجاح",
+"Contact category updated successfully":"تم تحديث الفئة بنجاح",
+"Category(ies) deleted successfully":"تم حذف الفئة/الفئات بنجاح",
+"Contact Categories are not available in your plan.":"فئات جهات الاتصال غير متاحة ضمن خطتك الحالية."
 }
