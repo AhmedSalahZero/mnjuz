@@ -6,6 +6,7 @@ use App\Helpers\DateTimeHelper;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\Contact;
+use App\Models\ContactCategory;
 use App\Models\ContactContactGroup;
 use App\Models\ContactGroup;
 use App\Models\Setting;
@@ -76,10 +77,20 @@ class ContactService
         $contact->save();
 
         if($request->group){
-            $groupUuids = array_map('trim', $request->group);
+            $groupUuids = array_map('trim', (array) $request->group);
 			$columnName = $request->is('api/v1/*') ? 'id' : 'uuid';
             $groupIds = ContactGroup::whereIn($columnName, $groupUuids)->pluck('id')->toArray();
             $contact->contactGroups()->sync($groupIds);
+        }
+
+        if ($request->has('categories')) {
+            $categoryUuids = array_map('trim', (array) $request->categories);
+            $columnName = $request->is('api/v1/*') ? 'id' : 'uuid';
+            $categoryIds = ContactCategory::where('organization_id', $this->organizationId)
+                ->whereIn($columnName, $categoryUuids)
+                ->pluck('id')
+                ->toArray();
+            $contact->contactCategories()->sync($categoryIds);
         }
 
         // Prepare a clean contact object for webhook

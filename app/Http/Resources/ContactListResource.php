@@ -35,6 +35,9 @@ class ContactListResource extends JsonResource
                     'created_at' => $chat->created_at,
                 ];
             }),
+            'contact_categories' => $this->whenLoaded('contactCategories', function () {
+                return $this->contactCategories->map(fn ($c) => ['id' => $c->id, 'uuid' => $c->uuid, 'name' => $c->name])->values()->all();
+            }, []),
         ];
     }
 

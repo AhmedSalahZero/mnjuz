@@ -13,7 +13,7 @@
 
 const trans = useTrans();
 
-    const props = defineProps(['rows', 'filters', 'type']);
+    const props = defineProps(['rows', 'filters', 'type', 'contactCategoriesEnabled']);
 
     const params = ref({
         id: props.filters?.id,
@@ -56,16 +56,21 @@ const trans = useTrans();
             Object.entries(params.value).filter(([_, value]) => value !== null)
         );
 
-        router.visit(props.type === 'contact' ? '/contacts' : '/contact-groups', {
+        const baseUrl = props.type === 'contact' ? '/contacts' : (props.type === 'category' ? '/contact-categories' : '/contact-groups');
+        router.visit(baseUrl, {
             method: 'get',
             data: filteredParams,
         })
     }
 
+    const checkedCategories = ref([]);
+
     // Save checked items to local storage
     function saveCheckedItems() {
         if(props.type === 'contact'){
             localStorage.setItem('checkedContacts', JSON.stringify(checkedContacts.value));
+        } else if (props.type === 'category') {
+            localStorage.setItem('checkedCategories', JSON.stringify(checkedCategories.value));
         } else {
             localStorage.setItem('checkedGroups', JSON.stringify(checkedGroups.value));
         }
@@ -76,6 +81,9 @@ const trans = useTrans();
         if(props.type === 'contact'){
             const savedItems = localStorage.getItem('checkedContacts');
             checkedContacts.value = savedItems ? JSON.parse(savedItems) : [];
+        } else if (props.type === 'category') {
+            const savedItems = localStorage.getItem('checkedCategories');
+            checkedCategories.value = savedItems ? JSON.parse(savedItems) : [];
         } else {
             const savedItems = localStorage.getItem('checkedGroups');
             checkedGroups.value = savedItems ? JSON.parse(savedItems) : [];
@@ -86,22 +94,17 @@ const trans = useTrans();
     function updateCheckedItems(uuid, isChecked) {
         if(props.type === 'contact'){
             const index = checkedContacts.value.indexOf(uuid);
-
-            if (isChecked && index === -1) {
-                checkedContacts.value.push(uuid);
-            } else if (!isChecked && index !== -1) {
-                checkedContacts.value.splice(index, 1);
-            }
+            if (isChecked && index === -1) checkedContacts.value.push(uuid);
+            else if (!isChecked && index !== -1) checkedContacts.value.splice(index, 1);
+        } else if (props.type === 'category') {
+            const index = checkedCategories.value.indexOf(uuid);
+            if (isChecked && index === -1) checkedCategories.value.push(uuid);
+            else if (!isChecked && index !== -1) checkedCategories.value.splice(index, 1);
         } else {
             const index = checkedGroups.value.indexOf(uuid);
-
-            if (isChecked && index === -1) {
-                checkedGroups.value.push(uuid);
-            } else if (!isChecked && index !== -1) {
-                checkedGroups.value.splice(index, 1);
-            }
+            if (isChecked && index === -1) checkedGroups.value.push(uuid);
+            else if (!isChecked && index !== -1) checkedGroups.value.splice(index, 1);
         }
-
         saveCheckedItems();
     }
 
@@ -126,8 +129,9 @@ const trans = useTrans();
 
     // Function to apply checked state from local storage
     function applyCheckedState() {
+        const checked = props.type === 'contact' ? checkedContacts.value : (props.type === 'category' ? checkedCategories.value : checkedGroups.value);
         props.rows.data.forEach(row => {
-            row.isChecked = props.type === 'contact' ? checkedContacts.value.includes(row.uuid) : checkedGroups.value.includes(row.uuid);
+            row.isChecked = checked.includes(row.uuid);
         });
         updateBulkCheckboxState();
         updateSelectedCount();
@@ -140,23 +144,23 @@ const trans = useTrans();
 
     // Function to update selected count based on checked items array
     function updateSelectedCount() {
-        selectedCount.value = props.type === 'contact' ? checkedContacts.value.length : checkedGroups.value.length;
+        selectedCount.value = props.type === 'contact' ? checkedContacts.value.length : (props.type === 'category' ? checkedCategories.value.length : checkedGroups.value.length);
     }
 
     function deleteItems(value){
-        const itemsToDelete = props.type === 'contact' ? checkedContacts.value : checkedGroups.value;
+        const baseUrl = props.type === 'contact' ? '/contacts' : (props.type === 'category' ? '/contact-categories' : '/contact-groups');
+        const storageKey = props.type === 'contact' ? 'checkedContacts' : (props.type === 'category' ? 'checkedCategories' : 'checkedGroups');
+        const itemsToDelete = props.type === 'contact' ? checkedContacts.value : (props.type === 'category' ? checkedCategories.value : checkedGroups.value);
 
-        router.visit(props.type === 'contact' ? '/contacts' : '/contact-groups', {
+        router.visit(baseUrl, {
             method: 'delete',
             data: { 'uuids': value === 'all' ? [] : itemsToDelete },
             preserveState: true,
             onSuccess: () => {
-                localStorage.removeItem(props.type === 'contact' ? 'checkedContacts' : 'checkedGroups');
-                if(props.type === 'contact'){
-                    checkedContacts.value = [];
-                } else {
-                    checkedGroups.value = [];
-                }
+                localStorage.removeItem(storageKey);
+                if (props.type === 'contact') checkedContacts.value = [];
+                else if (props.type === 'category') checkedCategories.value = [];
+                else checkedGroups.value = [];
             }
         })
     }
@@ -233,8 +237,9 @@ const trans = useTrans();
     </div>
     <div class="h-[5vh]">
         <div class="flex justify-between text-sm border-b">
-            <Link href="/contacts" class="pt-3 w-1/2 text-center pb-1 hover:bg-slate-50" :class="{ 'bg-gray-50 border-b-2 border-slate-700': $page.url.startsWith('/contacts') }">{{ $t('All contacts') }}</Link>
-            <Link href="/contact-groups" class="pt-3 w-1/2 text-center pb-1 hover:bg-slate-50" :class="{ 'bg-gray-50 border-b-2 border-slate-700': $page.url.startsWith('/contact-groups') }">{{ $t('Groups') }}</Link>
+            <Link href="/contacts" class="pt-3 flex-1 text-center pb-1 hover:bg-slate-50" :class="{ 'bg-gray-50 border-b-2 border-slate-700': $page.url.startsWith('/contacts') && !$page.url.startsWith('/contact-groups') && !$page.url.startsWith('/contact-categories') }">{{ $t('All contacts') }}</Link>
+            <Link href="/contact-groups" class="pt-3 flex-1 text-center pb-1 hover:bg-slate-50" :class="{ 'bg-gray-50 border-b-2 border-slate-700': $page.url.startsWith('/contact-groups') }">{{ $t('Groups') }}</Link>
+            <Link v-if="props.contactCategoriesEnabled" href="/contact-categories" class="pt-3 flex-1 text-center pb-1 hover:bg-slate-50" :class="{ 'bg-gray-50 border-b-2 border-slate-700': $page.url.startsWith('/contact-categories') }">{{ $t('Contact Categories') }}</Link>
         </div>
     </div>
     <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
@@ -260,7 +265,7 @@ const trans = useTrans();
                 <svg v-if="contact.is_favorite" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#FFD700" d="M9.153 5.408C10.42 3.136 11.053 2 12 2c.947 0 1.58 1.136 2.847 3.408l.328.588c.36.646.54.969.82 1.182c.28.213.63.292 1.33.45l.636.144c2.46.557 3.689.835 3.982 1.776c.292.94-.546 1.921-2.223 3.882l-.434.507c-.476.557-.715.836-.822 1.18c-.107.345-.071.717.001 1.46l.066.677c.253 2.617.38 3.925-.386 4.506c-.766.582-1.918.051-4.22-1.009l-.597-.274c-.654-.302-.981-.452-1.328-.452c-.347 0-.674.15-1.328.452l-.596.274c-2.303 1.06-3.455 1.59-4.22 1.01c-.767-.582-.64-1.89-.387-4.507l.066-.676c.072-.744.108-1.116 0-1.46c-.106-.345-.345-.624-.821-1.18l-.434-.508c-1.677-1.96-2.515-2.941-2.223-3.882c.293-.941 1.523-1.22 3.983-1.776l.636-.144c.699-.158 1.048-.237 1.329-.45c.28-.213.46-.536.82-1.182z"/></svg>
             </div>
         </div>
-        <div v-else-if="type === 'group'" @click="getRow(row.uuid)" class="flex space-x-2 hover:bg-gray-50 cursor-pointer px-4 py-3 border-b" :class="row.isChecked ? 'bg-gray-50' : ''" v-for="(row, key) in rows.data" :key="key">
+        <div v-else-if="type === 'group' || type === 'category'" @click="getRow(row.uuid)" class="flex space-x-2 hover:bg-gray-50 cursor-pointer px-4 py-3 border-b" :class="row.isChecked ? 'bg-gray-50' : ''" v-for="(row, key) in rows.data" :key="key">
             <div>
                 <label @click.stop="toggleCheckbox(row.uuid)" for="myCheckbox" class="cursor-pointer">
                     <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center mt-1" :class="{ 'bg-secondary': row.isChecked }">

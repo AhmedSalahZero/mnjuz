@@ -82,6 +82,12 @@ class Contact extends Model
             ->withTimestamps();
     }
 
+    public function contactCategories()
+    {
+        return $this->belongsToMany(ContactCategory::class, 'contact_category_contact', 'contact_id', 'contact_category_id')
+            ->withTimestamps();
+    }
+
     public function notes()
     {
         return $this->hasMany(ChatNote::class, 'contact_id')->orderBy('created_at', 'desc');
@@ -133,6 +139,7 @@ class Contact extends Model
         $role = 'owner',
         $allowAgentsViewAllChats = true,
         $clientSideFilter = false,
+        $eagerLoadCategories = false,
  	   ) {
         $query = $this->newQuery()
             ->select([
@@ -169,7 +176,11 @@ class Contact extends Model
     
         // ✅ Eager load lastChat فقط؛ last_inbound_chat نعتمد على العمود last_inbound_chat_created_at
         // عند الفلترة من جهة العميل لا نطبق فلتر is_read هنا
-        $query->with(['lastChat'])
+        $with = ['lastChat'];
+        if ($eagerLoadCategories) {
+            $with[] = 'contactCategories:id,name,uuid';
+        }
+        $query->with($with)
         ->when(!$clientSideFilter && Request()->has('is_read'), function ($q) {
             $q->whereHas('lastInboundChat', function ($q) {
                 $q->where('is_read', 0);

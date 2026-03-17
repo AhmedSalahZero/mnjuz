@@ -37,6 +37,7 @@
           :rows="props.rows"
           :filters="props.filters"
           :type="'contact'"
+          :contactCategoriesEnabled="props.contactCategoriesEnabled"
           @callback="handleContact" />
       </div>
       <div class="md:w-[70%] bg-cover md:h-[100vh] md:overflow-y-hidden">
@@ -52,6 +53,8 @@
           <ContactForm
             v-else
             :contactGroups="props.contactGroups"
+            :contactCategories="props.contactCategories"
+            :contactCategoriesEnabled="props.contactCategoriesEnabled"
             :contact="props.contact"
             :fields="props.fields"
             :locationSettings="locationSettings" />
@@ -60,6 +63,8 @@
           <div v-if="$page.url === '/contacts/add'">
             <ContactForm
               :contactGroups="props.contactGroups"
+              :contactCategories="props.contactCategories"
+              :contactCategoriesEnabled="props.contactCategoriesEnabled"
               :contact="props.contact"
               :fields="props.fields"
               :locationSettings="locationSettings" />
@@ -113,6 +118,8 @@ const props = defineProps({
   filters: Object,
   rowCount: Number,
   contactGroups: Object,
+  contactCategories: Object,
+  contactCategoriesEnabled: Boolean,
   contact: Object,
   editContact: Boolean,
   fields: Object,

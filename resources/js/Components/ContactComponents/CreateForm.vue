@@ -10,7 +10,7 @@
 
 const trans = useTrans();
 
-    const props = defineProps(['contactGroups', 'contact', 'fields', 'locationSettings']);
+    const props = defineProps(['contactGroups', 'contactCategories', 'contactCategoriesEnabled', 'contact', 'fields', 'locationSettings']);
     const fileUrl = props.contact?.avatar ? ref(props.contact?.avatar) : ref(null);
     const results = ref();
     const inputFields = props.fields;
@@ -31,6 +31,7 @@ const trans = useTrans();
         phone: props.contact?.phone ?? null,
         email: props.contact?.email ?? null,
         group: props.contact?.contact_groups ? props.contact.contact_groups.map(group => group.uuid || group) : [],
+        categories: (props.contact?.contact_categories || props.contact?.contactCategories || []).map(c => c.uuid || c.id) || [],
         file: null,
         street: props.contact?.address ? getAddressDetail(props.contact?.address, 'street') : null,
         city: props.contact?.address ? getAddressDetail(props.contact?.address, 'city') : null,
@@ -41,7 +42,14 @@ const trans = useTrans();
     });
 
     const contactGroupOptions = () => {
-        return props.contactGroups.map((option) => ({
+        return (props.contactGroups || []).map((option) => ({
+            value: option.uuid,
+            label: option.name,
+        }));
+    };
+
+    const contactCategoryOptions = () => {
+        return (props.contactCategories || []).map((option) => ({
             value: option.uuid,
             label: option.name,
         }));
@@ -111,6 +119,7 @@ const trans = useTrans();
                 <FormPhoneInput v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormSelect v-model="form.group" :name="$t('Group')" :error="form.errors.group" :options="contactGroupOptions()" :type="'text'" :class="'sm:col-span-6'" :multiple="true"/>
+                <FormSelect v-if="contactCategoriesEnabled && (contactCategories || []).length" v-model="form.categories" :name="$t('Contact Categories')" :error="form.errors.categories" :options="contactCategoryOptions()" :type="'text'" :class="'sm:col-span-6'" :multiple="true"/>
             </div>
             <div v-if="locationSettings === 'before' && props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mt-4 pb-6 border-b">

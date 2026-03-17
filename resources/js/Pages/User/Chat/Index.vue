@@ -4,7 +4,9 @@
 			<div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
 				<ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
 					:ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
-					:chatSortDirection="props.chat_sort_direction" />
+					:chatSortDirection="props.chat_sort_direction"
+					:contactCategoriesEnabled="props.contactCategoriesEnabled"
+					@category-filter-change="onCategoryFilterChange" />
 			</div>
 			<div class="min-w-0 bg-cover flex flex-col chat-bg"
 				:class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
@@ -86,6 +88,7 @@ const props = defineProps({
 	simpleForm: Boolean,
 	user: Array,
 	timezone: String,
+	contactCategoriesEnabled: Boolean,
 })
 
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
@@ -93,6 +96,7 @@ const unsubscribeChatChannel = ref(null)
 
 const rows = ref(props.rows)
 const rowCount = ref(props.rowCount)
+const isCategoryFilterActive = ref(false)
 const scrollContainer2 = ref(null)
 const scrollResizeCleanup = ref(null)
 const loadingThread = ref(false)
@@ -113,7 +117,9 @@ const templates = ref(props.templates ?? [])
 watch(
 	() => props.rows,
 	(newRows) => {
-		rows.value = newRows
+		if (!isCategoryFilterActive.value) {
+			rows.value = newRows
+		}
 	},
 )
 watch(
@@ -199,6 +205,13 @@ watch(
 		templates.value = newTemplates ?? []
 	},
 )
+
+function onCategoryFilterChange(active) {
+	isCategoryFilterActive.value = active
+	if (!active) {
+		rows.value = props.rows
+	}
+}
 
 function toggleContactView(value) {
 	displayContactInfo.value = value

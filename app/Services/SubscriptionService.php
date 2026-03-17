@@ -476,4 +476,24 @@ class SubscriptionService
 
         return false;
     }
+
+    /**
+     * Check if a plan feature flag is enabled for the organization (e.g. contact_categories_enabled).
+     */
+    public static function isSubscriptionFeatureEnabled(string $organizationId, string $featureKey): bool
+    {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        if (!$subscription || !$subscription->plan) {
+            return false;
+        }
+        if ($subscription->valid_until < now()) {
+            return false;
+        }
+        $metadata = json_decode($subscription->plan->metadata, true);
+        if (!is_array($metadata) || !array_key_exists($featureKey, $metadata)) {
+            return false;
+        }
+        $value = $metadata[$featureKey];
+        return $value === true || $value === 1 || $value === '1' || $value === 'enabled';
+    }
 }

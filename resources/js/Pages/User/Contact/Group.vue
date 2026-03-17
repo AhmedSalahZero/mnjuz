@@ -15,7 +15,7 @@
                         </div>
                     </div>
                 </div>
-                <ContactTable :rows="props.rows" :filters="props.filters" :type="'group'" @callback="handleGroup"/>
+                <ContactTable :rows="props.rows" :filters="props.filters" :type="'group'" :contactCategoriesEnabled="props.contactCategoriesEnabled" @callback="handleGroup"/>
             </div>
             <div class="md:w-[70%] bg-cover md:h-[100vh] flex justify-center overflow-y-scroll ">
                 <div v-if="group">
@@ -67,7 +67,7 @@
 
 const trans = useTrans();
 
-    const props = defineProps({ rows: Object, filters: Object, rowCount: Number, group: Object });
+    const props = defineProps({ rows: Object, filters: Object, rowCount: Number, group: Object, contactCategoriesEnabled: Boolean });
     const isOpenModal = ref(false);
     const currentUrl = window.location.href;
     const isOpenFormModal = ref(false);

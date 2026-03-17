@@ -122,6 +122,7 @@ class ChatService
 			// عند تفعيل التذاكر نحمّل كل الجهات مع ticket_status للفلترة من جهة العميل
 			$queryTicketState = $ticketingActive ? 'all' : $ticketState;
 			$clientSideFilter = $ticketingActive;
+			$contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
 			$contactsQuery = $contact->contactsWithChatsOptimized(
 				$this->organizationId,
 				$searchTerm,
@@ -131,6 +132,7 @@ class ChatService
 				$role,
 				$allowAgentsToViewAllChats,
 				$clientSideFilter,
+				$contactCategoriesEnabled,
 			);
 
 			$contacts = $contactsQuery;
@@ -164,6 +166,11 @@ class ChatService
         if ($uuid !== null) {
 			// $start = microtime(true);
 			// أعمدة الـ contact المستخدمة فعلياً: contactPayloadForChatView + encryptPhoneNumber + id للـ ticket و getChatMessages
+            $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
+            $contactWith = ['contactGroups:id,name', 'organization:id,metadata'];
+            if ($contactCategoriesEnabled) {
+                $contactWith[] = 'contactCategories:id,name,uuid';
+            }
             $contact = Contact::query()
                 ->select([
                     'id',
@@ -181,10 +188,7 @@ class ChatService
                     'last_inbound_chat_created_at',
                     'deleted_at',
                 ])
-                ->with([
-                    'contactGroups:id,name',
-                    'organization:id,metadata',
-                ])
+                ->with($contactWith)
                 ->where('uuid', $uuid)
                 ->first();
 
@@ -244,7 +248,8 @@ class ChatService
                     'hasMoreMessages' => $initialMessages['hasMoreMessages'],
 					'user' => auth()->user()->only(['id', 'first_name', 'last_name']),
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
-                    'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
+                    'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                    'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
                 ]);
             }
         }
@@ -281,6 +286,7 @@ class ChatService
                 'chatThread' => [],
                 'hasMoreMessages' => false,
                 'nextPage' => 1,
+                'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
             ]);
         }
     }
@@ -929,6 +935,9 @@ class ChatService
                     : null,
                 'contact_groups' => $contact->relationLoaded('contactGroups')
                     ? $contact->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all()
+                    : [],
+                'contact_categories' => $contact->relationLoaded('contactCategories')
+                    ? $contact->contactCategories->map(fn ($c) => ['id' => $c->id, 'uuid' => $c->uuid, 'name' => $c->name])->values()->all()
                     : [],
             ]
         );

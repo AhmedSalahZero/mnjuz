@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller as BaseController;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Http\Requests\StoreContactGroup;
+use App\Services\SubscriptionService;
 use App\Http\Resources\ContactGroupResource;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -39,12 +40,15 @@ class ContactGroupController extends BaseController
             $rowCount = $contactGroupModel->countAll($organizationId);
             $group = $contactGroupModel->getRow($uuid, $organizationId);
 
+            $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'contact_categories_enabled');
+
             return Inertia::render('User/Contact/Group', [
                 'title' => __('Groups'),
                 'rows' => ContactGroupResource::collection($rows),
                 'rowCount' => $rowCount,
                 'group' => $group,
-                'filters' => request()->all()
+                'filters' => request()->all(),
+                'contactCategoriesEnabled' => $contactCategoriesEnabled,
             ]);
         }
     }

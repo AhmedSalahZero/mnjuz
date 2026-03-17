@@ -36,16 +36,35 @@ const props = defineProps({
 	chatSortDirection: {
 		type: String,
 	},
+	contactCategoriesEnabled: {
+		type: Boolean,
+		default: false,
+	},
 })
 
 const isSearching = ref(false)
 const selectedContact = ref(null)
 const scrollContainer = ref(null)
-const emit = defineEmits(['view'])
+const categoryFilterUuid = ref(null)
+const emit = defineEmits(['view', 'category-filter-change'])
 
 function viewChat(contact) {
 	selectedContact.value = contact
 	emit('view', contact)
+}
+
+function setCategoryFilter(event, uuid) {
+	if (event) {
+		event.preventDefault()
+		event.stopPropagation()
+	}
+	categoryFilterUuid.value = uuid
+	emit('category-filter-change', true)
+}
+
+function clearCategoryFilter() {
+	categoryFilterUuid.value = null
+	emit('category-filter-change', false)
 }
 
 const contentType = (metadata) => {
@@ -199,7 +218,13 @@ watch(() => props.status, (newVal) => {
 }, { immediate: false })
 
 const filteredRows = computed(() => {
-	const data = props.rows?.data ?? []
+	let data = props.rows?.data ?? []
+	if (props.contactCategoriesEnabled && categoryFilterUuid.value) {
+		data = data.filter((c) => {
+			const cats = c.contact_categories ?? []
+			return cats.some((cat) => (cat.uuid || cat.id) === categoryFilterUuid.value)
+		})
+	}
 	if (!props.ticketingIsEnabled) return data
 	const filter = statusFilter.value
 	if (filter === 'all') return data
@@ -211,7 +236,7 @@ const filteredRows = computed(() => {
 })
 
 const sortedContacts = computed(() => {
-	const list = props.ticketingIsEnabled ? filteredRows.value : (props.rows?.data ?? [])
+	const list = (props.ticketingIsEnabled || categoryFilterUuid.value) ? filteredRows.value : (props.rows?.data ?? [])
 	return [...list].sort((a, b) => {
 		if (currentSortDirection.value == 'asc') {
 			return new Date(a.latest_chat_created_at) - new Date(b.latest_chat_created_at)
@@ -221,6 +246,7 @@ const sortedContacts = computed(() => {
 })
 
 const displayedRowCount = computed(() => {
+	if (props.contactCategoriesEnabled && categoryFilterUuid.value) return filteredRows.value.length
 	return props.ticketingIsEnabled ? filteredRows.value.length : props.rowCount
 })
 
@@ -276,9 +302,14 @@ onUnmounted(() => {
 <template>
 	<div class="px-4 py-4 border-b">
 		<div class="flex items-center justify-between space-x-1 text-xl">
-			<div class="flex space-x-1">
+			<div class="flex space-x-1 items-center flex-wrap gap-2">
 				<h2>{{ $t('Chats') }}</h2>
 				<span class="text-slate-500">{{ displayedRowCount }}</span>
+				<button v-if="contactCategoriesEnabled && categoryFilterUuid" type="button"
+					class="text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700"
+					@click="clearCategoryFilter">
+					{{ $t('Reset filter') }}
+				</button>
 			</div>
 		</div>
 		<div class="bg-slate-50 rounded-md mt-3 flex items-center py-[2px]">
@@ -356,11 +387,24 @@ onUnmounted(() => {
 							stroke-linejoin="round" />
 					</svg>
 				</div>
-				<div class="w-[85%]">
-					<div class="flex justify-between">
-						<h3 class="truncate">{{ item.contact.full_name }}</h3>
+				<div class="w-[85%] min-w-0">
+					<div class="flex justify-between items-center gap-2 flex-nowrap">
+						<div class="min-w-0 flex-1 flex items-center gap-2 flex-nowrap">
+							<h3 class="truncate shrink-0">{{ item.contact.full_name }}</h3>
+							<div v-if="contactCategoriesEnabled && (item.contact.contact_categories?.length > 0)" class="flex flex-wrap gap-1 shrink-0 items-center">
+								<span v-for="cat in (item.contact.contact_categories || [])" :key="cat.uuid || cat.id"
+									class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 cursor-pointer hover:bg-green-200 border border-green-200"
+									role="button"
+									tabindex="0"
+									@click.stop.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
+									@keydown.enter.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
+									@keydown.space.prevent="setCategoryFilter($event, cat.uuid || cat.id)">
+									{{ cat.name }}
+								</span>
+							</div>
+						</div>
 						<span
-							class="self-center text-slate-500 text-xs">{{ formatTime(item.contact?.last_chat?.created_at) }}
+							class="self-center text-slate-500 text-xs shrink-0">{{ formatTime(item.contact?.last_chat?.created_at) }}
 						</span>
 					</div>
 					<div v-if="item.contact?.last_chat?.deleted_at === null" class="flex justify-between">

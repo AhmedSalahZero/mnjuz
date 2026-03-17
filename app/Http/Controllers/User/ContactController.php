@@ -8,9 +8,11 @@ use App\Http\Requests\StoreContact;
 use App\Http\Resources\ContactResource;
 use App\Imports\ContactsImport;
 use App\Models\Contact;
+use App\Models\ContactCategory;
 use App\Models\ContactField;
 use App\Models\ContactGroup;
 use App\Models\Organization;
+use App\Services\SubscriptionService;
 use App\Models\User;
 use App\Services\ContactFieldService;
 use App\Services\ContactService;
@@ -51,7 +53,15 @@ class ContactController extends BaseController
             $contacts = $contactModel->getAllContacts($organizationId, $searchTerm);
             $rowCount = $contactModel->countContacts($organizationId);
             $contactGroups = $contactModel->getAllContactGroups($organizationId);
-            $contact = Contact::with('contactGroups')->where('uuid', $uuid)->where('deleted_at', null)->first();
+            $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'contact_categories_enabled');
+            $contactCategories = $contactCategoriesEnabled
+                ? ContactCategory::where('organization_id', $organizationId)->orderBy('name')->get(['id', 'uuid', 'name'])
+                : [];
+            $with = ['contactGroups'];
+            if ($contactCategoriesEnabled) {
+                $with[] = 'contactCategories';
+            }
+            $contact = Contact::with($with)->where('uuid', $uuid)->where('deleted_at', null)->first();
             $contactFields = ContactField::where('organization_id', $organizationId)->where('deleted_at', null)->get();
 			/**
 			 * @var Contact $contact
@@ -68,12 +78,11 @@ class ContactController extends BaseController
                 'contact' => $contact,
                 'fields' => $contactFields,
                 'contactGroups' => $contactGroups,
+                'contactCategories' => $contactCategories,
+                'contactCategoriesEnabled' => $contactCategoriesEnabled,
                 'filters' => request()->all(),
                 'locationSettings' => $this->getLocationSettings(),
                 'editContact' => $editContact,
-			
-				
-				
             ]);
         }
     }
