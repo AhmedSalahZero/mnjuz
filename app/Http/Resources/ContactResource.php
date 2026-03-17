@@ -66,6 +66,13 @@ class ContactResource extends JsonResource
                 : $this->whenLoaded('lastInboundChat', fn () => $this->lastInboundChat ? ['created_at' => $this->lastInboundChat->created_at] : null),
        
             'unread_messages' => $this->unread_messages_count ?? 0,
+
+            'groups' => $this->whenLoaded('contactGroups', function () {
+                return $this->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all();
+            }),
+            'categories' => $this->whenLoaded('contactCategories', function () {
+                return $this->contactCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all();
+            }),
         ];
 		
       

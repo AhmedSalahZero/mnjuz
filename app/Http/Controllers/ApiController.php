@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\Api\StoreContactRequest;
 use App\Http\Resources\AutoReplyResource;
+use App\Http\Resources\ContactCategoryResource;
 use App\Http\Resources\ContactGroupResource;
 use App\Http\Resources\ContactResource;
 use App\Http\Resources\TemplateResource;
@@ -15,6 +16,7 @@ use App\Models\ChatNote;
 use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
 use App\Models\Contact;
+use App\Models\ContactCategory;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
@@ -64,6 +66,7 @@ class ApiController extends Controller
         }
         $contacts = Contact::where('organization_id', $organizationId)
             ->where('deleted_at', null)
+            ->with(['contactGroups', 'contactCategories:id,name,uuid'])
             ->paginate($perPage, ['*'], 'page', $page);
         return ContactResource::collection($contacts);
     }
@@ -208,10 +211,17 @@ class ApiController extends Controller
         $chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
         $contact->chat_ticket = $chatTicket ?? null;
 
+        $contact->load(['contactGroups', 'contactCategories:id,name,uuid']);
         $contact->groups = $contact->contactGroups->map(function ($group) {
             return [
                 'id' => $group->id,
                 'name' => $group->name,
+            ];
+        });
+        $contact->categories = $contact->contactCategories->map(function ($cat) {
+            return [
+                'id' => $cat->id,
+                'name' => $cat->name,
             ];
         });
         return response()->json([
@@ -409,6 +419,138 @@ class ApiController extends Controller
                     'uuid' => $uuid,
                 ],
                 'id' => $uuid,
+                'message' => __('Request processed successfully')
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'data' => [],
+                'statusCode' => 500,
+                'message' => __('Request unable to be processed')
+            ], 500);
+        }
+    }
+
+    public function listContactCategories(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'page' => 'integer|min:1',
+            'per_page' => 'integer|min:1|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 400);
+        }
+
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 10);
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
+        $contactCategories = ContactCategory::where('organization_id', $organizationId)
+            ->orderBy('name')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        return ContactCategoryResource::collection($contactCategories);
+    }
+
+    public function storeContactCategory(Request $request, $uuid = null)
+    {
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'contact_categories_enabled')) {
+            return response()->json([
+                'statusCode' => 403,
+                'message' => __('Contact Categories are not available in your plan.'),
+            ], 403);
+        }
+        if ($request->isMethod('post')) {
+            $rules = [
+                'name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('contact_categories', 'name')->where(function ($query) use ($organizationId) {
+                        return $query->where('organization_id', $organizationId);
+                    }),
+                ],
+            ];
+        } else {
+            $rules = [
+                'name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('contact_categories', 'name')->where(function ($query) use ($organizationId, $uuid) {
+                        return $query->where('organization_id', $organizationId)
+                            ->whereNotIn('uuid', [$uuid]);
+                    }),
+                ],
+            ];
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'statusCode' => 400,
+                'message' => __('The given data was invalid.'),
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        if (!SubscriptionService::isSubscriptionActive($organizationId)) {
+            return response()->json([
+                'statusCode' => 403,
+                'message' => __('Please renew or subscribe to a plan to continue!'),
+            ], 403);
+        }
+
+        try {
+            $contactCategory = $request->isMethod('post') ? new ContactCategory() : ContactCategory::where('uuid', $uuid)->where('organization_id', $organizationId)->firstOrFail();
+            $contactCategory->organization_id = $organizationId;
+            $contactCategory->name = $request->name;
+            $contactCategory->save();
+
+            return response()->json([
+                'statusCode' => 200,
+                'success' => true,
+                'data' => [
+                    'uuid' => $contactCategory->uuid,
+                ],
+                'id' => $contactCategory->uuid,
+                'message' => __('Request processed successfully')
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'statusCode' => 500,
+                'success' => false,
+                'data' => [],
+                'message' => __('Request unable to be processed')
+            ], 500);
+        }
+    }
+
+    public function destroyContactCategory(Request $request, $uuid)
+    {
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
+        try {
+            $contactCategory = ContactCategory::where('organization_id', $organizationId)->where('uuid', $uuid)->firstOrFail();
+            $contactCategory->contacts()->detach();
+            $contactCategory->delete();
+
+            return response()->json([
+                'statusCode' => 200,
+                'success' => true,
+                'data' => [
+                    'uuid' => $uuid,
+                ],
                 'message' => __('Request processed successfully')
             ], 200);
         } catch (\Exception $e) {
@@ -1276,7 +1418,7 @@ class ApiController extends Controller
         // $page = $request->input('page', 1);
         // $perPage = $request->input('per_page', 10);
         $organization = Organization::where('id', $organizationId)->first();
-        $contacts = $organization->contacts;
+        $contacts = $organization->contacts()->with('contactCategories:id,name,uuid')->get();
         $results = [];
         foreach ($contacts as $contact) {
             $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
@@ -1285,6 +1427,9 @@ class ApiController extends Controller
             if ($result) {
                 $data['contact_id']=$contact->id;
                 $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
+                $data['contact_categories'] = $contact->relationLoaded('contactCategories')
+                    ? $contact->contactCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all()
+                    : [];
                 foreach ($result as $item) {
                     foreach ($item as $item2) {
                         $data['messages'][] =$item2;

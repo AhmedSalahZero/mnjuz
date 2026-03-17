@@ -50,6 +50,11 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::put('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContactGroup']);
     Route::delete('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContactGroup']);
 
+    Route::get('/contact-categories', [App\Http\Controllers\ApiController::class, 'listContactCategories']);
+    Route::post('/contact-categories', [App\Http\Controllers\ApiController::class, 'storeContactCategory']);
+    Route::put('/contact-categories/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContactCategory']);
+    Route::delete('/contact-categories/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContactCategory']);
+
     Route::get('/canned-replies', [App\Http\Controllers\ApiController::class, 'listCannedReplies']);
     Route::post('/canned-replies', [App\Http\Controllers\ApiController::class, 'storeCannedReply']);
     Route::put('/canned-replies/{uuid}', [App\Http\Controllers\ApiController::class, 'storeCannedReply']);
@@ -88,6 +93,11 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
     Route::post('/contact-groups', [App\Http\Controllers\ApiController::class, 'storeContactGroup']);
     Route::put('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContactGroup']);
     Route::delete('/contact-groups/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContactGroup']);
+
+	Route::get('/contact-categories', [App\Http\Controllers\ApiController::class, 'listContactCategories']);
+	Route::post('/contact-categories', [App\Http\Controllers\ApiController::class, 'storeContactCategory']);
+	Route::put('/contact-categories/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContactCategory']);
+	Route::delete('/contact-categories/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyContactCategory']);
 	
 	// Route::get('contacts/{uuid}/add-to-group', [App\Http\Controllers\ApiController::class, 'addToGroup']);
 	// Route::get('contacts/{uuid}/remove-from-group', [App\Http\Controllers\ApiController::class, 'removeFromGroup']);
