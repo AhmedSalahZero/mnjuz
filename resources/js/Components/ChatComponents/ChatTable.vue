@@ -372,142 +372,151 @@ onUnmounted(() => {
 					:class="item.contact.unread_messages > 0 ? 'bg-green-50' : ''"
 					:style="{ height: ROW_HEIGHT_PX + 'px', minHeight: ROW_HEIGHT_PX + 'px' }"
 					@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); openChat(item.contact); }">
-			<div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4 h-full">
-				<div class="w-[15%] flex items-center gap-1">
-					<img v-if="item.contact.avatar" class="rounded-full w-10 h-10" :src="item.contact.avatar" />
-					<div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">
-						{{ item.contact.full_name.substring(0, 1) }}
-					</div>
-					<svg v-if="item.contact.is_blocked" width="20" height="20" viewBox="0 0 24 24" fill="none"
-						xmlns="http://www.w3.org/2000/svg">
-						<path
-							d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
-							stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-						<path d="M4.92993 4.92999L19.07 19.07" stroke="#DC2626" stroke-width="2" stroke-linecap="round"
-							stroke-linejoin="round" />
-					</svg>
-				</div>
-				<div class="w-[85%] min-w-0">
-					<div class="flex justify-between items-center gap-2 flex-nowrap">
-						<div class="min-w-0 flex-1 flex items-center gap-2 flex-nowrap">
-							<h3 class="truncate shrink-0">{{ item.contact.full_name }}</h3>
-							<div v-if="contactCategoriesEnabled && (item.contact.contact_categories?.length > 0)" class="flex flex-wrap gap-1 shrink-0 items-center">
-								<span v-for="cat in (item.contact.contact_categories || [])" :key="cat.uuid || cat.id"
-									class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 cursor-pointer hover:bg-green-200 border border-green-200"
-									role="button"
-									tabindex="0"
-									@click.stop.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
-									@keydown.enter.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
-									@keydown.space.prevent="setCategoryFilter($event, cat.uuid || cat.id)">
-									{{ cat.name }}
+					<div class="flex space-x-2 hover:bg-gray-50 overflow-auto cursor-pointer py-3 px-4 h-full">
+						<div class="w-[15%] flex items-center gap-1">
+							<img v-if="item.contact.avatar" class="rounded-full w-10 h-10" :src="item.contact.avatar" />
+							<div v-else
+								class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">
+								{{ item.contact.full_name.substring(0, 1) }}
+							</div>
+							<svg v-if="item.contact.is_blocked" width="20" height="20" viewBox="0 0 24 24" fill="none"
+								xmlns="http://www.w3.org/2000/svg">
+								<path
+									d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+									stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+								<path d="M4.92993 4.92999L19.07 19.07" stroke="#DC2626" stroke-width="2"
+									stroke-linecap="round" stroke-linejoin="round" />
+							</svg>
+						</div>
+						<div class="w-[85%] min-w-0">
+							<div class="flex justify-between items-start gap-2 flex-wrap">
+								<div class="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
+									<h3 class="truncate">{{ item.contact.full_name }}</h3>
+									<div v-if="contactCategoriesEnabled && (item.contact.contact_categories?.length > 0)"
+										class="flex flex-wrap gap-1 items-center">
+										<span v-for="cat in (item.contact.contact_categories || [])"
+											:key="cat.uuid || cat.id"
+											class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 cursor-pointer hover:bg-green-200 border border-green-200"
+											role="button" tabindex="0"
+											@click.stop.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
+											@keydown.enter.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
+											@keydown.space.prevent="setCategoryFilter($event, cat.uuid || cat.id)">
+											{{ cat.name }}
+										</span>
+									</div>
+								</div>
+								<span
+									class="self-start text-slate-500 text-xs">{{ formatTime(item.contact?.last_chat?.created_at) }}
 								</span>
 							</div>
+							<div v-if="item.contact?.last_chat?.deleted_at === null" class="flex justify-between">
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'text'"
+									class="text-slate-500 text-xs truncate self-end">
+									{{ content(item.contact?.last_chat?.metadata).text?.body ?? '' }}
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'button'"
+									class="text-slate-500 text-xs truncate self-end">
+									{{ content(item.contact?.last_chat?.metadata).button?.text ?? '' }}
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'interactive'"
+									class="text-slate-500 text-xs truncate self-end">
+									{{ content(item.contact?.last_chat?.metadata).interactive?.button_reply?.title ||
+										content(item.contact?.last_chat?.metadata).interactive?.list_reply?.title
+									}}
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'image'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 24 24">
+											<path fill="currentColor"
+												d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.9 13.98l2.1 2.53l3.1-3.99c.2-.26.6-.26.8.01l3.51 4.68a.5.5 0 0 1-.4.8H6.02c-.42 0-.65-.48-.39-.81L8.12 14c.19-.26.57-.27.78-.02z" />
+										</svg>
+										<span class="ml-2">{{ $t('Photo') }}</span>
+									</div>
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'document'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 24 24">
+											<path fill="currentColor" fill-rule="evenodd"
+												d="M14.25 2.5a.25.25 0 0 0-.25-.25H7A2.75 2.75 0 0 0 4.25 5v14A2.75 2.75 0 0 0 7 21.75h10A2.75 2.75 0 0 0 19.75 19V9.147a.25.25 0 0 0-.25-.25H15a.75.75 0 0 1-.75-.75V2.5Zm.75 9.75a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1 0-1.5h6Zm0 4a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1 0-1.5h6Z"
+												clip-rule="evenodd" />
+											<path fill="currentColor"
+												d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
+										</svg>
+										<span class="ml-2">{{ getExtension(item.contact?.last_chat?.metadata?.type) }}
+											{{ $t('File') }}</span>
+									</div>
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'video'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 16 16">
+											<path fill="currentColor"
+												d="M3.5 2.5A2.5 2.5 0 0 0 1 5v6a2.5 2.5 0 0 0 2.5 2.5h5A2.5 2.5 0 0 0 11 11V5a2.5 2.5 0 0 0-2.5-2.5h-5Zm10.684 1.61L12 5.893v4.215l2.184 1.78a.5.5 0 0 0 .816-.389v-7a.5.5 0 0 0-.816-.387Z" />
+										</svg>
+										<span class="ml-2">{{ $t('Video') }}</span>
+									</div>
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'audio'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 512 512">
+											<path fill="currentColor"
+												d="M256 80C149.9 80 62.4 159.4 49.6 262c9.4-3.8 19.6-6 30.4-6c26.5 0 48 21.5 48 48v128c0 26.5-21.5 48-48 48c-44.2 0-80-35.8-80-80V288C0 146.6 114.6 32 256 32s256 114.6 256 256v112c0 44.2-35.8 80-80 80c-26.5 0-48-21.5-48-48V304c0-26.5 21.5-48 48-48c10.8 0 21 2.1 30.4 6C449.6 159.4 362.1 80 256 80z" />
+										</svg>
+										<span class="ml-2">{{ $t('Audio') }}</span>
+									</div>
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'sticker'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 256 256">
+											<path fill="currentColor"
+												d="M168 32H88a56.06 56.06 0 0 0-56 56v80a56.06 56.06 0 0 0 56 56h48a8.07 8.07 0 0 0 2.53-.41c26.23-8.75 76.31-58.83 85.06-85.06A8.07 8.07 0 0 0 224 136V88a56.06 56.06 0 0 0-56-56Zm-32 175.42V176a40 40 0 0 1 40-40h31.42c-9.26 21.55-49.87 62.16-71.42 71.42Z" />
+										</svg>
+										<span class="ml-2">{{ $t('Sticker') }}</span>
+									</div>
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'contacts'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 16 16">
+											<path fill="currentColor"
+												d="M3 14s-1 0-1-1s1-4 6-4s6 3 6 4s-1 1-1 1H3Zm5-6a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" />
+										</svg>
+										<span class="ml-2">
+											{{ getContactDisplayName(item.contact?.last_chat?.metadata) }}
+										</span>
+									</div>
+								</div>
+								<div v-if="contentType(item.contact?.last_chat?.metadata) === 'location'"
+									class="text-slate-500 text-xs truncate self-end">
+									<div class="flex items-center">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+											viewBox="0 0 16 16">
+											<path fill="currentColor"
+												d="M9.156 14.544C10.899 13.01 14 9.876 14 7A6 6 0 0 0 2 7c0 2.876 3.1 6.01 4.844 7.544a1.736 1.736 0 0 0 2.312 0ZM6 7a2 2 0 1 1 4 0a2 2 0 0 1-4 0Z" />
+										</svg>
+										<span class="ml-2">{{ $t('Location') }}</span>
+									</div>
+								</div>
+								<div v-if="!['text', 'button', 'interactive', 'image', 'document', 'video', 'audio', 'sticker', 'contacts', 'location'].includes(contentType(item.contact?.last_chat?.metadata))"
+									class="text-slate-500 text-xs truncate self-end">
+									<span>{{ $t('Message') }}</span>
+								</div>
+								<span v-if="item.contact.unread_messages > 0"
+									class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{ item.contact.unread_messages }}</span>
+							</div>
 						</div>
-						<span
-							class="self-center text-slate-500 text-xs shrink-0">{{ formatTime(item.contact?.last_chat?.created_at) }}
-						</span>
 					</div>
-					<div v-if="item.contact?.last_chat?.deleted_at === null" class="flex justify-between">
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'text'"
-							class="text-slate-500 text-xs truncate self-end">
-							{{ content(item.contact?.last_chat?.metadata).text?.body ?? '' }}
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'button'"
-							class="text-slate-500 text-xs truncate self-end">
-							{{ content(item.contact?.last_chat?.metadata).button?.text ?? '' }}
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'interactive'"
-							class="text-slate-500 text-xs truncate self-end">
-							{{ content(item.contact?.last_chat?.metadata).interactive?.button_reply?.title ||
-								content(item.contact?.last_chat?.metadata).interactive?.list_reply?.title
-							}}
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'image'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-									<path fill="currentColor"
-										d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.9 13.98l2.1 2.53l3.1-3.99c.2-.26.6-.26.8.01l3.51 4.68a.5.5 0 0 1-.4.8H6.02c-.42 0-.65-.48-.39-.81L8.12 14c.19-.26.57-.27.78-.02z" />
-								</svg>
-								<span class="ml-2">{{ $t('Photo') }}</span>
-							</div>
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'document'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-									<path fill="currentColor" fill-rule="evenodd"
-										d="M14.25 2.5a.25.25 0 0 0-.25-.25H7A2.75 2.75 0 0 0 4.25 5v14A2.75 2.75 0 0 0 7 21.75h10A2.75 2.75 0 0 0 19.75 19V9.147a.25.25 0 0 0-.25-.25H15a.75.75 0 0 1-.75-.75V2.5Zm.75 9.75a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1 0-1.5h6Zm0 4a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1 0-1.5h6Z"
-										clip-rule="evenodd" />
-									<path fill="currentColor"
-										d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
-								</svg>
-								<span class="ml-2">{{ getExtension(item.contact?.last_chat?.metadata?.type) }}
-									{{ $t('File') }}</span>
-							</div>
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'video'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-									<path fill="currentColor"
-										d="M3.5 2.5A2.5 2.5 0 0 0 1 5v6a2.5 2.5 0 0 0 2.5 2.5h5A2.5 2.5 0 0 0 11 11V5a2.5 2.5 0 0 0-2.5-2.5h-5Zm10.684 1.61L12 5.893v4.215l2.184 1.78a.5.5 0 0 0 .816-.389v-7a.5.5 0 0 0-.816-.387Z" />
-								</svg>
-								<span class="ml-2">{{ $t('Video') }}</span>
-							</div>
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'audio'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 512 512">
-									<path fill="currentColor"
-										d="M256 80C149.9 80 62.4 159.4 49.6 262c9.4-3.8 19.6-6 30.4-6c26.5 0 48 21.5 48 48v128c0 26.5-21.5 48-48 48c-44.2 0-80-35.8-80-80V288C0 146.6 114.6 32 256 32s256 114.6 256 256v112c0 44.2-35.8 80-80 80c-26.5 0-48-21.5-48-48V304c0-26.5 21.5-48 48-48c10.8 0 21 2.1 30.4 6C449.6 159.4 362.1 80 256 80z" />
-								</svg>
-								<span class="ml-2">{{ $t('Audio') }}</span>
-							</div>
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'sticker'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256">
-									<path fill="currentColor"
-										d="M168 32H88a56.06 56.06 0 0 0-56 56v80a56.06 56.06 0 0 0 56 56h48a8.07 8.07 0 0 0 2.53-.41c26.23-8.75 76.31-58.83 85.06-85.06A8.07 8.07 0 0 0 224 136V88a56.06 56.06 0 0 0-56-56Zm-32 175.42V176a40 40 0 0 1 40-40h31.42c-9.26 21.55-49.87 62.16-71.42 71.42Z" />
-								</svg>
-								<span class="ml-2">{{ $t('Sticker') }}</span>
-							</div>
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'contacts'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-									<path fill="currentColor"
-										d="M3 14s-1 0-1-1s1-4 6-4s6 3 6 4s-1 1-1 1H3Zm5-6a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" />
-								</svg>
-								<span class="ml-2">
-									{{ getContactDisplayName(item.contact?.last_chat?.metadata) }}
-								</span>
-							</div>
-						</div>
-						<div v-if="contentType(item.contact?.last_chat?.metadata) === 'location'"
-							class="text-slate-500 text-xs truncate self-end">
-							<div class="flex items-center">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
-									<path fill="currentColor"
-										d="M9.156 14.544C10.899 13.01 14 9.876 14 7A6 6 0 0 0 2 7c0 2.876 3.1 6.01 4.844 7.544a1.736 1.736 0 0 0 2.312 0ZM6 7a2 2 0 1 1 4 0a2 2 0 0 1-4 0Z" />
-								</svg>
-								<span class="ml-2">{{ $t('Location') }}</span>
-							</div>
-						</div>
-						<div v-if="!['text','button','interactive','image','document','video','audio','sticker','contacts','location'].includes(contentType(item.contact?.last_chat?.metadata))"
-							class="text-slate-500 text-xs truncate self-end">
-							<span>{{ $t('Message') }}</span>
-						</div>
-						<span v-if="item.contact.unread_messages > 0"
-							class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{ item.contact.unread_messages }}</span>
-					</div>
-				</div>
-			</div>
-		</a>
+				</a>
 			</div>
 		</div>
 	</div>
