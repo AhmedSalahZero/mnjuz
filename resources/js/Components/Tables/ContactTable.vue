@@ -333,7 +333,9 @@ watchEffect(() => {
 			</div>
 			<div class="w-[15%]">
 				<div
-					class="rounded-full bg-secondary/10 text-secondary flex justify-center items-center h-12 w-12 capitalize">
+					:style="type === 'category' ? { backgroundColor: row.background_color ?? '#22c55e', color: row.text_color ?? '#ffffff' } : undefined"
+					:class="type === 'category' ? '' : 'bg-secondary/10 text-secondary'"
+					class="rounded-full flex justify-center items-center h-12 w-12 capitalize">
 					{{ row.name.substring(0, 1) }}
 				</div>
 			</div>

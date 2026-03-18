@@ -72,6 +72,8 @@ const currentUrl = window.location.href
 const formUrl = ref(currentUrl)
 const form = ref({
 	name: '',
+	background_color: '#22c55e',
+	text_color: '#ffffff',
 })
 
 const initialFormInputs = [
@@ -82,6 +84,20 @@ const initialFormInputs = [
 		type: 'text',
 		className: 'sm:col-span-6',
 	},
+	{
+		inputType: 'FormInput',
+		name: 'background_color',
+		label: trans('Background color'),
+		type: 'color',
+		className: 'sm:col-span-3',
+	},
+	{
+		inputType: 'FormInput',
+		name: 'text_color',
+		label: trans('Text color'),
+		type: 'color',
+		className: 'sm:col-span-3',
+	},
 ]
 
 const formInputs = initialFormInputs
@@ -89,6 +105,8 @@ const formInputs = initialFormInputs
 const openModal = () => {
 	isOpenFormModal.value = true
 	form.value.name = ''
+	form.value.background_color = '#22c55e'
+	form.value.text_color = '#ffffff'
 }
 
 const handleCategory = (value) => {
@@ -101,5 +119,7 @@ const handleCategory = (value) => {
 const handleCallback = (res) => {
 	category.value = res.data
 	form.value.name = res.data.name
+	form.value.background_color = res.data.background_color ?? '#22c55e'
+	form.value.text_color = res.data.text_color ?? '#ffffff'
 }
 </script>

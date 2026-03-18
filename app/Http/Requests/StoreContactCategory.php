@@ -26,6 +26,18 @@ class StoreContactCategory extends FormRequest
                     return $query->where('organization_id', $organizationId);
                 })->ignore($uuid ? \App\Models\ContactCategory::where('uuid', $uuid)->value('id') : null),
             ],
+            'background_color' => [
+                'nullable',
+                'string',
+                'max:20',
+                'regex:/^#([0-9a-fA-F]{6})$/',
+            ],
+            'text_color' => [
+                'nullable',
+                'string',
+                'max:20',
+                'regex:/^#([0-9a-fA-F]{6})$/',
+            ],
         ];
     }
 }

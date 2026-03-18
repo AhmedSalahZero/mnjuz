@@ -178,7 +178,7 @@ class Contact extends Model
         // عند الفلترة من جهة العميل لا نطبق فلتر is_read هنا
         $with = ['lastChat'];
         if ($eagerLoadCategories) {
-            $with[] = 'contactCategories:id,name,uuid';
+            $with[] = 'contactCategories:id,name,uuid,background_color,text_color';
         }
         $query->with($with)
         ->when(!$clientSideFilter && Request()->has('is_read'), function ($q) {

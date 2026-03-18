@@ -36,7 +36,13 @@ class ContactListResource extends JsonResource
                 ];
             }),
             'contact_categories' => $this->whenLoaded('contactCategories', function () {
-                return $this->contactCategories->map(fn ($c) => ['id' => $c->id, 'uuid' => $c->uuid, 'name' => $c->name])->values()->all();
+                return $this->contactCategories->map(fn ($c) => [
+                    'id' => $c->id,
+                    'uuid' => $c->uuid,
+                    'name' => $c->name,
+                    'background_color' => $c->background_color ?? '#22c55e',
+                    'text_color' => $c->text_color ?? '#ffffff',
+                ])->values()->all();
             }, []),
         ];
     }

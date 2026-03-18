@@ -169,7 +169,7 @@ class ChatService
             $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
             $contactWith = ['contactGroups:id,name', 'organization:id,metadata'];
             if ($contactCategoriesEnabled) {
-                $contactWith[] = 'contactCategories:id,name,uuid';
+                $contactWith[] = 'contactCategories:id,name,uuid,background_color,text_color';
             }
             $contact = Contact::query()
                 ->select([
@@ -937,7 +937,13 @@ class ChatService
                     ? $contact->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all()
                     : [],
                 'contact_categories' => $contact->relationLoaded('contactCategories')
-                    ? $contact->contactCategories->map(fn ($c) => ['id' => $c->id, 'uuid' => $c->uuid, 'name' => $c->name])->values()->all()
+                    ? $contact->contactCategories->map(fn ($c) => [
+                        'id' => $c->id,
+                        'uuid' => $c->uuid,
+                        'name' => $c->name,
+                        'background_color' => $c->background_color ?? '#22c55e',
+                        'text_color' => $c->text_color ?? '#ffffff',
+                    ])->values()->all()
                     : [],
             ]
         );

@@ -63,6 +63,8 @@ class ContactCategoryController extends BaseController
         $category = new ContactCategory();
         $category->organization_id = $this->getCurrentOrganizationId();
         $category->name = $request->name;
+        $category->background_color = $request->background_color ?? '#22c55e';
+        $category->text_color = $request->text_color ?? '#ffffff';
         $category->save();
 
         return response()->json([
@@ -89,6 +91,8 @@ class ContactCategoryController extends BaseController
             ->where('organization_id', $this->getCurrentOrganizationId())
             ->firstOrFail();
         $category->name = $request->name;
+        $category->background_color = $request->background_color ?? '#22c55e';
+        $category->text_color = $request->text_color ?? '#ffffff';
         $category->save();
 
         return response()->json([

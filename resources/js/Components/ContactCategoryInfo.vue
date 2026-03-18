@@ -16,6 +16,8 @@ watchEffect(() => {
 const isOpenFormModal = ref(false);
 const form = ref({
     name: category.value?.name ?? '',
+    background_color: category.value?.background_color ?? '#22c55e',
+    text_color: category.value?.text_color ?? '#ffffff',
 });
 
 const formInputs = [
@@ -25,6 +27,20 @@ const formInputs = [
         label: trans('name'),
         type: 'text',
         className: 'sm:col-span-6',
+    },
+    {
+        inputType: 'FormInput',
+        name: 'background_color',
+        label: trans('Background color'),
+        type: 'color',
+        className: 'sm:col-span-3',
+    },
+    {
+        inputType: 'FormInput',
+        name: 'text_color',
+        label: trans('Text color'),
+        type: 'color',
+        className: 'sm:col-span-3',
     },
 ];
 
@@ -39,6 +55,8 @@ const deleteRow = async () => {
 const openModal = () => {
     isOpenFormModal.value = true;
     form.value.name = category.value?.name ?? '';
+    form.value.background_color = category.value?.background_color ?? '#22c55e';
+    form.value.text_color = category.value?.text_color ?? '#ffffff';
 };
 </script>
 <template>
@@ -47,7 +65,10 @@ const openModal = () => {
             <div class="flex justify-center space-x-8 items-center pb-6 pr-20 border-gray-300 border-b">
                 <div>
                     <div class="rounded-full p-1 bg-white">
-                        <div class="rounded-full text-3xl flex justify-center items-center h-24 w-24 capitalize">{{ category?.name?.substring(0, 1) }}</div>
+                        <div
+                            :style="{ backgroundColor: category?.background_color ?? '#22c55e', color: category?.text_color ?? '#ffffff' }"
+                            class="rounded-full text-3xl flex justify-center items-center h-24 w-24 capitalize"
+                        >{{ category?.name?.substring(0, 1) }}</div>
                     </div>
                 </div>
                 <div>

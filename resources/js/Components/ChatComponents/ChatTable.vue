@@ -396,11 +396,16 @@ onUnmounted(() => {
 										class="flex flex-wrap gap-1 items-center">
 										<span v-for="cat in (item.contact.contact_categories || [])"
 											:key="cat.uuid || cat.id"
-											class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 cursor-pointer hover:bg-green-200 border border-green-200"
+											class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium cursor-pointer hover:opacity-90 border"
 											role="button" tabindex="0"
 											@click.stop.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
 											@keydown.enter.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
-											@keydown.space.prevent="setCategoryFilter($event, cat.uuid || cat.id)">
+											@keydown.space.prevent="setCategoryFilter($event, cat.uuid || cat.id)"
+											:style="{
+												backgroundColor: cat.background_color ?? '#22c55e',
+												color: cat.text_color ?? '#ffffff',
+												borderColor: cat.background_color ?? '#22c55e'
+											}">
 											{{ cat.name }}
 										</span>
 									</div>

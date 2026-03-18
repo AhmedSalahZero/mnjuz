@@ -71,7 +71,12 @@ class ContactResource extends JsonResource
                 return $this->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all();
             }),
             'categories' => $this->whenLoaded('contactCategories', function () {
-                return $this->contactCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all();
+                return $this->contactCategories->map(fn ($c) => [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'background_color' => $c->background_color ?? '#22c55e',
+                    'text_color' => $c->text_color ?? '#ffffff',
+                ])->values()->all();
             }),
         ];
 		

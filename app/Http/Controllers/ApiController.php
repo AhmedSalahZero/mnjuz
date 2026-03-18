@@ -66,7 +66,7 @@ class ApiController extends Controller
         }
         $contacts = Contact::where('organization_id', $organizationId)
             ->where('deleted_at', null)
-            ->with(['contactGroups', 'contactCategories:id,name,uuid'])
+            ->with(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color'])
             ->paginate($perPage, ['*'], 'page', $page);
         return ContactResource::collection($contacts);
     }
@@ -211,7 +211,7 @@ class ApiController extends Controller
         $chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
         $contact->chat_ticket = $chatTicket ?? null;
 
-        $contact->load(['contactGroups', 'contactCategories:id,name,uuid']);
+        $contact->load(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color']);
         $contact->groups = $contact->contactGroups->map(function ($group) {
             return [
                 'id' => $group->id,
@@ -222,6 +222,8 @@ class ApiController extends Controller
             return [
                 'id' => $cat->id,
                 'name' => $cat->name,
+                'background_color' => $cat->background_color ?? '#22c55e',
+                'text_color' => $cat->text_color ?? '#ffffff',
             ];
         });
         return response()->json([
@@ -477,6 +479,18 @@ class ApiController extends Controller
                         return $query->where('organization_id', $organizationId);
                     }),
                 ],
+                'background_color' => [
+                    'nullable',
+                    'string',
+                    'max:20',
+                    'regex:/^#([0-9a-fA-F]{6})$/',
+                ],
+                'text_color' => [
+                    'nullable',
+                    'string',
+                    'max:20',
+                    'regex:/^#([0-9a-fA-F]{6})$/',
+                ],
             ];
         } else {
             $rules = [
@@ -488,6 +502,18 @@ class ApiController extends Controller
                         return $query->where('organization_id', $organizationId)
                             ->whereNotIn('uuid', [$uuid]);
                     }),
+                ],
+                'background_color' => [
+                    'nullable',
+                    'string',
+                    'max:20',
+                    'regex:/^#([0-9a-fA-F]{6})$/',
+                ],
+                'text_color' => [
+                    'nullable',
+                    'string',
+                    'max:20',
+                    'regex:/^#([0-9a-fA-F]{6})$/',
                 ],
             ];
         }
@@ -513,6 +539,8 @@ class ApiController extends Controller
             $contactCategory = $request->isMethod('post') ? new ContactCategory() : ContactCategory::where('uuid', $uuid)->where('organization_id', $organizationId)->firstOrFail();
             $contactCategory->organization_id = $organizationId;
             $contactCategory->name = $request->name;
+            $contactCategory->background_color = $request->background_color ?? '#22c55e';
+            $contactCategory->text_color = $request->text_color ?? '#ffffff';
             $contactCategory->save();
 
             return response()->json([
@@ -520,6 +548,8 @@ class ApiController extends Controller
                 'success' => true,
                 'data' => [
                     'uuid' => $contactCategory->uuid,
+                    'background_color' => $contactCategory->background_color,
+                    'text_color' => $contactCategory->text_color,
                 ],
                 'id' => $contactCategory->uuid,
                 'message' => __('Request processed successfully')
@@ -1418,7 +1448,7 @@ class ApiController extends Controller
         // $page = $request->input('page', 1);
         // $perPage = $request->input('per_page', 10);
         $organization = Organization::where('id', $organizationId)->first();
-        $contacts = $organization->contacts()->with('contactCategories:id,name,uuid')->get();
+        $contacts = $organization->contacts()->with('contactCategories:id,name,uuid,background_color,text_color')->get();
         $results = [];
         foreach ($contacts as $contact) {
             $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
@@ -1428,7 +1458,12 @@ class ApiController extends Controller
                 $data['contact_id']=$contact->id;
                 $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
                 $data['contact_categories'] = $contact->relationLoaded('contactCategories')
-                    ? $contact->contactCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all()
+                    ? $contact->contactCategories->map(fn ($c) => [
+                        'id' => $c->id,
+                        'name' => $c->name,
+                        'background_color' => $c->background_color ?? '#22c55e',
+                        'text_color' => $c->text_color ?? '#ffffff',
+                    ])->values()->all()
                     : [];
                 foreach ($result as $item) {
                     foreach ($item as $item2) {
