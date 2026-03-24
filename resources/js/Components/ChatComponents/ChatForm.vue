@@ -1,7 +1,7 @@
 <script setup>
 import axios from 'axios'
 import MicRecorder from 'mic-recorder-to-mp3-fixed'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
@@ -43,7 +43,19 @@ const emojiPickerRef = ref(null)
 
 watchEffect(() => {
 	form.value.uuid = props.contact.uuid
+	form2.value.uuid = props.contact.uuid
 })
+
+watch(
+	() => props.contact?.uuid,
+	(newUuid, oldUuid) => {
+		// Prevent cross-contact audio sends when switching chats while a recording/preview exists.
+		if (newUuid && oldUuid && newUuid !== oldUuid) {
+			deleteRecording()
+			form2.value.uuid = newUuid
+		}
+	},
+)
 
 const emit = defineEmits(['response', 'viewTemplate', 'newMessage'])
 const isLoading = ref(false)
@@ -126,6 +138,7 @@ const sendMessage = async () => {
 const sendAudioMessage = async () => {
 	const tempMessageId = crypto.randomUUID()
 	form2.value.tempMessageId = tempMessageId
+	form2.value.uuid = props.contact.uuid
 
 	const formData = new FormData()
 	formData.append('type', form2.value.type)
