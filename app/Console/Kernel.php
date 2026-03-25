@@ -40,9 +40,9 @@ class Kernel extends ConsoleKernel
         $schedule->command('queue:prune-batches --hours=48 --unfinished=72')
             ->daily();
         
-        $schedule->command('model:prune', [
-            '--model' => [CampaignLog::class],
-        ])->daily();
+        // $schedule->command('model:prune', [
+        //     '--model' => [CampaignLog::class],
+        // ])->daily();
 		
 		// logger('inside schedule');
 

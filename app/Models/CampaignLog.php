@@ -17,10 +17,10 @@ class CampaignLog extends Model {
     /**
      * Get the prunable model query (records older than 3 days).
      */
-    public function prunable(): Builder
-    {
-        return static::query()->where('created_at', '<=', now()->subDays(14));
-    }
+    // public function prunable(): Builder
+    // {
+    //     return static::query()->where('created_at', '<=', now()->subDays(14));
+    // }
     public $timestamps = true;
 
     public function getCreatedAtAttribute($value)

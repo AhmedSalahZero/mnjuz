@@ -21,7 +21,7 @@ $providers = [
         App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
-	ScrambleServiceProvider::class
+	// ScrambleServiceProvider::class
 ];
 
 // Conditionally add EmbeddedSignupServiceProvider if it exists

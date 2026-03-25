@@ -1035,7 +1035,7 @@ class WhatsappService
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
             } else {
-                $responseObject->message = $responseObject->data->error->message;
+                $responseObject->message = $responseObject->data ? $responseObject->data->error->message : $e->getMessage();
             }
         } catch (Exception $e) {
             $responseObject->success = false;
@@ -1266,7 +1266,7 @@ class WhatsappService
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
             } else {
-                $responseObject->message = $responseObject->data->error->message;
+                $responseObject->message = $responseObject->data ? $responseObject->data->error->message : $e->getMessage();
             }
         } catch (Exception $e) {
             $responseObject->success = false;
@@ -1341,7 +1341,7 @@ class WhatsappService
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
             } else {
-                $responseObject->message = $responseObject->data->error->message;
+                $responseObject->message = $responseObject->data ? $responseObject->data->error->message : $e->getMessage();
             }
         } catch (Exception $e) {
             $responseObject->success = false;
@@ -1723,7 +1723,7 @@ class WhatsappService
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
             } else {
-                $responseObject->message = $responseObject->data->error->message;
+                $responseObject->message = $responseObject->data ? $responseObject->data->error->message : $e->getMessage();
             }
         } catch (Exception $e) {
             $responseObject->success = false;
@@ -1769,7 +1769,7 @@ class WhatsappService
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
             } else {
-                $responseObject->message = $responseObject->data->error->message;
+                $responseObject->message = $responseObject->data ? $responseObject->data->error->message : $e->getMessage();
             }
         } catch (Exception $e) {
             $response = $e->getResponse();
@@ -1820,7 +1820,7 @@ class WhatsappService
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
             } else {
-                $responseObject->message = $responseObject->data->error->message;
+                $responseObject->message = $responseObject->data ? $responseObject->data->error->message : $e->getMessage();
             }
         } catch (Exception $e) {
             $responseObject->success = false;
