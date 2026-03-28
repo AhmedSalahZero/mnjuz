@@ -24,11 +24,19 @@ class ContactService
 
     public function store(object $request, $uuid = null){
         $contact = $uuid === null ? new Contact() : Contact::where('uuid', $uuid)->firstOrFail();
-        $contact->first_name = $request->first_name;
-        $contact->last_name = $request->last_name;
-        $contact->email = $request->email;
-
-        $contact->phone = PhoneService::getE164Format($request->phone);
+		if($request->has('first_name')){
+			$contact->first_name = $request->first_name;
+			
+		}
+		if($request->has('last_name')){
+			$contact->last_name = $request->last_name;
+		}	
+		if($request->has('email')){
+			$contact->email = $request->email;
+		}
+		if($request->has('phone')){
+			$contact->phone = PhoneService::getE164Format($request->phone);
+		}
 
         if($request->hasFile('file')){
             $storage = Setting::where('key', 'storage_system')->first()->value;
@@ -59,7 +67,7 @@ class ContactService
             $contact->created_by = auth()->user() ? auth()->user()->id : 0;
             $contact->created_at =now();
         }
-
+		
         $address = json_encode([
             'street' => $request->street,
             'city' => $request->city,
@@ -67,14 +75,17 @@ class ContactService
             'zip' => $request->zip,
             'country' => $request->country,
         ]);
-        
-        $contact->address = $address;
-        $contact->metadata = json_encode($request->metadata);
-        $contact->updated_at =now();
+        if($request->street || $request->city || $request->state || $request->zip || $request->country){
+			$contact->address = $address;
+		}
+		if($request->metadata){
+			$contact->metadata = json_encode($request->metadata);
+		}
 		if($request->has('is_blocked')){
 			$contact->is_blocked = $request->boolean('is_blocked');
 		}
-        $contact->save();
+		$contact->updated_at =now();
+		$contact->save();
 
         if($request->group){
             $groupUuids = array_map('trim', (array) $request->group);
