@@ -8,6 +8,7 @@ use App\Jobs\ProcessTicketAssignmentJob;
 use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class TestCommand extends Command
 {
@@ -30,6 +31,39 @@ class TestCommand extends Command
      */
     public function handle()
     {
+		$contactId = 159377;
+		$unreadMessagesCount = 0;
+		if ($contactId) {
+            $contact = Contact::where('id', $contactId)
+            ->first([
+                'phone', 'first_name', 'last_name', 'email', 'organization_id',
+                'latest_chat_created_at', 'is_blocked', 'is_favorite',
+                'uuid',
+            ]);
+            if ($contact) {
+               
+                
+                $contactOrganizationId = $contact->organization_id;
+                $contactLatestChatCreatedAt = $contact->latest_chat_created_at;
+                $contactIsBlocked = $contact->is_blocked;
+                $contactIsFavorite = $contact->is_favorite;
+                $contactFormattedPhoneNumber = $contact->formatted_phone_number;
+                $contactUuid = $contact->uuid;
+				
+				$unreadQuery = DB::table('chats')
+					->where('contact_id', $contactId)
+					->where('type', 'inbound')
+					->where('is_read', 0)
+					->whereNull('deleted_at');
+					$unreadQuery->where('organization_id', $contactOrganizationId);
+				
+				$unreadMessagesCount = (int) $unreadQuery->count();
+				
+            }
+	
+				
+			
+        }
         // اختبار incoming message
 		/**
 		 * @var Contact $contact

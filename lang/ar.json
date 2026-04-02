@@ -1063,5 +1063,18 @@
 "Category(ies) deleted successfully":"تم حذف الفئة/الفئات بنجاح",
 "Contact Categories are not available in your plan.":"فئات جهات الاتصال غير متاحة ضمن خطتك الحالية.",
 "Background color":"لون الخلفية ",
-"Text color":"لون الخط "
+"Text color":"لون الخط ",
+"This account is already linked to another device. Please remove it first from settings.":"هذا الحساب مرتبط بالفعل بجهاز آخر. يرجى إزالته أولاً من الإعدادات.",
+"Linked Devices":"الأجهزة المرتبطة",
+"Remove Device":"إزالة الجهاز",
+"Manage your linked login device and browser session":"إدارة جهاز تسجيل الدخول والمتصفح المرتبطين بحسابك",
+"No linked device found":"لا يوجد جهاز مرتبط حالياً",
+"Unknown device":"جهاز غير معروف",
+"Unknown browser":"متصفح غير معروف",
+"Unknown platform":"نظام غير معروف",
+"Device Type":"نوع الجهاز",
+"Last active":"آخر نشاط",
+"Are you sure you want to remove this device? You will be logged out immediately.":"هل أنت متأكد من إزالة هذا الجهاز؟ سيتم تسجيل خروجك فوراً.",
+"Device removed successfully":"تمت إزالة الجهاز بنجاح",
+"No linked device is registered yet.":"لا يوجد جهاز مرتبط مسجل حتى الآن."
 }

@@ -21,6 +21,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Services\UserDeviceService;
 use App\Services\AuthService;
 use App\Services\PasswordResetService;
 use App\Services\SocialLoginService;
@@ -40,11 +41,13 @@ class AuthController extends BaseController
 {
     protected $userService;
     protected $role;
+    protected UserDeviceService $userDeviceService;
 
     public function __construct($role = 'user')
     {
         $this->userService = new UserService($role);
         $this->role = $role;
+        $this->userDeviceService = new UserDeviceService();
     }
 
     public function showLoginForm(){
@@ -143,6 +146,13 @@ class AuthController extends BaseController
 
     private function doLogin(Request $request, $user, $remember)
     {
+        if ($user->role === 'user') {
+            $deviceCheckResponse = $this->validateDeviceAndRegister($request, $user);
+            if ($deviceCheckResponse) {
+                return $deviceCheckResponse;
+            }
+        }
+
 	
         $guard = $user->role == 'user' ? 'user' : 'admin';
 		
@@ -268,6 +278,11 @@ class AuthController extends BaseController
             $user = User::where('facebook_id', $facebookUser->id)->where('status', '=', '1')->where('deleted_at', null)->first();
 
             if ($user) {
+                $deviceCheckResponse = $this->validateDeviceAndRegister($request, $user);
+                if ($deviceCheckResponse) {
+                    return $deviceCheckResponse;
+                }
+
                 if($user->role == 'user'){
                     //Check if user belongs to organization, otherwise set one up
                     $team = Team::where('user_id', $user->id)->first();
@@ -285,7 +300,7 @@ class AuthController extends BaseController
 
                 return redirect($user->role == 'admin' ? 'admin/dashboard' : '/dashboard');
             } else {
-                DB::transaction(function () use ($facebookUser) {
+                DB::transaction(function () use ($facebookUser, $request) {
                     // Check if the email exists and handle accordingly
                     $user = User::where('email', $facebookUser->email)->first();
 
@@ -333,6 +348,11 @@ class AuthController extends BaseController
                         session()->put('current_organization', $organization->id);
                     }
                     
+                    // Register first social-login device (new account)
+                    if (!$user->device) {
+                        $this->userDeviceService->registerOrTouch($user, $this->userDeviceService->extractDeviceData($request));
+                    }
+
                     // Log the user in
                     Auth::guard('user')->login($user, true);
                 });
@@ -363,6 +383,11 @@ class AuthController extends BaseController
             $user = User::where('email', $gUser->email)->where('status', '=', '1')->where('deleted_at', null)->first();
 
             if ($user) {
+                $deviceCheckResponse = $this->validateDeviceAndRegister($request, $user);
+                if ($deviceCheckResponse) {
+                    return $deviceCheckResponse;
+                }
+
                 $guard = $user->role == 'admin' ? 'admin' : 'user';
                 Auth::guard($guard)->login($user);
 
@@ -415,6 +440,10 @@ class AuthController extends BaseController
 
                 if (isset($config->value) && $config->value == '1') {
                     $user->sendEmailVerificationNotification();
+                }
+
+                if (!$user->device) {
+                    $this->userDeviceService->registerOrTouch($user, $this->userDeviceService->extractDeviceData($request));
                 }
 
                 Auth::guard('user')->login($user, true);
@@ -630,4 +659,31 @@ class AuthController extends BaseController
 			'message' => __('Organization set successfully')
 		], 200);
 	}
+
+    private function validateDeviceAndRegister(Request $request, User $user)
+    {
+        $deviceData = $this->userDeviceService->extractDeviceData($request);
+        $existingDevice = $user->device;
+
+        if (!$existingDevice) {
+            $this->userDeviceService->registerOrTouch($user, $deviceData);
+            return null;
+        }
+
+        if (!$this->userDeviceService->matches($existingDevice, $deviceData)) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('This account is already linked to another device. Please remove it first from settings.'),
+                ], 403);
+            }
+
+            return redirect()->back()->withErrors([
+                'email' => __('This account is already linked to another device. Please remove it first from settings.', [], $user->language ?? 'en'),
+            ])->withInput();
+        }
+
+        $this->userDeviceService->registerOrTouch($user, $deviceData);
+        return null;
+    }
 }

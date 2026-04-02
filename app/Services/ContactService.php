@@ -86,14 +86,13 @@ class ContactService
 		}
 		$contact->updated_at =now();
 		$contact->save();
-
-        if($request->group){
+		
+        if($request->has('group')){
             $groupUuids = array_map('trim', (array) $request->group);
 			$columnName = $request->is('api/v1/*') ? 'id' : 'uuid';
             $groupIds = ContactGroup::whereIn($columnName, $groupUuids)->pluck('id')->toArray();
             $contact->contactGroups()->sync($groupIds);
         }
-
         if ($request->has('categories')) {
             $categoryUuids = array_map('trim', (array) $request->categories);
             $columnName = $request->is('api/v1/*') ? 'id' : 'uuid';

@@ -6,6 +6,7 @@ use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -389,7 +390,10 @@ class Contact extends Model
         ]);
 		
     }
-	
+	public function ticket():HasOne
+	{
+		return $this->hasOne(ChatTicket::class, 'contact_id', 'id');
+	}
 	
 	
 }

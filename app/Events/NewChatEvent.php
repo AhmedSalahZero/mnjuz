@@ -14,6 +14,7 @@ use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class NewChatEvent implements ShouldBroadcast
@@ -283,6 +284,7 @@ class NewChatEvent implements ShouldBroadcast
         $contactIsFavorite = null;
         $contactFormattedPhoneNumber = null;
         $contactUuid = null;
+		$unreadMessagesCount = 0;
         if ($contactId) {
             $contact = Contact::where('id', $contactId)
             ->first([
@@ -303,8 +305,24 @@ class NewChatEvent implements ShouldBroadcast
                 $contactIsFavorite = $contact->is_favorite;
                 $contactFormattedPhoneNumber = $contact->formatted_phone_number;
                 $contactUuid = $contact->uuid;
+				
+				$unreadQuery = DB::table('chats')
+					->where('contact_id', $contactId)
+					->where('type', 'inbound')
+					->where('is_read', 0)
+					->whereNull('deleted_at');
+					$unreadQuery->where('organization_id', $contactOrganizationId);
+				
+				$unreadMessagesCount = (int) $unreadQuery->count();
+				
             }
+	
+				
+			
         }
+
+       
+
         $metadata = $arr['metadata'] ?? null;
         // $metadataRaw = $arr['metadata'] ?? null;
         // $metadata = is_string($metadataRaw)
@@ -342,7 +360,7 @@ class NewChatEvent implements ShouldBroadcast
            
             // 'email' => $contactEmail,
             'contact_full_name' => $contactFullName ?: null,
-          
+            'unread_messages_count' => $unreadMessagesCount,
             'created_at' => $arr['created_at'] ?? null,
             'deleted_at' => $arr['deleted_at'] ?? null,
             'metadata' => $metadata,

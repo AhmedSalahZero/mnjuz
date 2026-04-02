@@ -117,6 +117,12 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 });
 
 });
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/user/device', [App\Http\Controllers\UserDeviceController::class, 'show']);
+    Route::delete('/user/device', [App\Http\Controllers\UserDeviceController::class, 'destroy']);
+});
+
 Route::post('/broadcasting/auth', function (Request $request) {
     return Broadcast::auth($request);
 })->middleware('auth:sanctum'); // أو auth:api

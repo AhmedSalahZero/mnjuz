@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Mail\CustomEmailVerification;
+use App\Models\UserDevice;
 use App\Services\Firebase\FcmNotification;
 use App\Traits\Models\HasDeviceTokens;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -126,6 +127,11 @@ class User extends Authenticatable implements MustVerifyEmail
 	{
 		return $this->teams()->where('organization_id', $organizationId)->first()->role;
 	}
+
+    public function device()
+    {
+        return $this->hasOne(UserDevice::class);
+    }
 	// public static function sendNewMessageReceivedToFirestore(int $contactId,array $additionalDataToBeSent = []){
 	// 	try{
 	// 		$firestore = new Firestore;

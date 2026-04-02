@@ -235,6 +235,14 @@ class SettingController extends BaseController
         }
     }
 
+    public function devices(Request $request)
+    {
+        return Inertia::render('User/Settings/Devices', [
+            'title' => __('Settings'),
+            'modules' => Addon::get(),
+        ]);
+    }
+
     public function whatsappBusinessProfileUpdate(StoreWhatsappProfile $request){
         if ($response = $this->abortIfDemo()) {
             return $response;

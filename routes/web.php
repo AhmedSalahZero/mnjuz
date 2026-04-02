@@ -223,6 +223,9 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
                     Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
+                    Route::get('/settings/devices', [App\Http\Controllers\User\SettingController::class, 'devices']);
+                    Route::get('/settings/device', [App\Http\Controllers\UserDeviceController::class, 'show']);
+                    Route::delete('/settings/device', [App\Http\Controllers\UserDeviceController::class, 'destroy']);
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
                     Route::post('/contact-fields/update-positions', [App\Http\Controllers\User\ContactFieldController::class, 'updatePositions']);
 

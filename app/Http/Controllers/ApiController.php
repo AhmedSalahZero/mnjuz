@@ -352,7 +352,9 @@ class ApiController extends Controller
         try {
             $contactGroup = $request->isMethod('post') ? new ContactGroup() : ContactGroup::where('uuid', $uuid)->firstOrFail();
             $contactGroup->organization_id = $organizationId;
-            $contactGroup->name = $request->name;
+			if($request->has('name')){
+				$contactGroup->name = $request->name;
+			}
             $contactGroup->created_by = 0;
             $contactGroup->save();
 
@@ -538,9 +540,16 @@ class ApiController extends Controller
         try {
             $contactCategory = $request->isMethod('post') ? new ContactCategory() : ContactCategory::where('uuid', $uuid)->where('organization_id', $organizationId)->firstOrFail();
             $contactCategory->organization_id = $organizationId;
-            $contactCategory->name = $request->name;
-            $contactCategory->background_color = $request->background_color ?? '#22c55e';
-            $contactCategory->text_color = $request->text_color ?? '#ffffff';
+            if($request->has('name')){
+				$contactCategory->name = $request->name;
+			}
+			if($request->has('background_color')){
+				$contactCategory->background_color = $request->background_color ?? '#22c55e';
+			}
+			if($request->has('text_color')){
+				$contactCategory->text_color = $request->text_color ?? '#ffffff';
+			}
+  
             $contactCategory->save();
 
             return response()->json([
@@ -1448,15 +1457,33 @@ class ApiController extends Controller
         // $page = $request->input('page', 1);
         // $perPage = $request->input('per_page', 10);
         $organization = Organization::where('id', $organizationId)->first();
-        $contacts = $organization->contacts()->with('contactCategories:id,name,uuid,background_color,text_color')->get();
+        $orgId = (int) $organizationId;
+        $contacts = $organization->contacts()
+            ->with('contactCategories:id,name,uuid,background_color,text_color', 'ticket:id,status,assigned_to,contact_id')
+            ->addSelect(
+                'contacts.*',
+                DB::raw(
+                    '(SELECT COUNT(*) FROM chats
+                  WHERE chats.contact_id = contacts.id
+                  AND chats.type = \'inbound\'
+                  AND chats.is_read = 0
+                  AND chats.organization_id = '.$orgId.'
+                  AND chats.deleted_at IS NULL) as unread_messages_count'
+                )
+            )
+            ->get();
         $results = [];
         foreach ($contacts as $contact) {
             $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
-		
             $data = [] ;
+			$ticket=$contact->ticket;
             if ($result) {
                 $data['contact_id']=$contact->id;
                 $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
+				$data['is_blocked']=$contact->is_blocked;
+				$data['ticket_status']=$ticket ? $ticket->status : null;
+				$data['ticket_assigned_to']=$ticket ? $ticket->assigned_to : null;
+				$data['unread_messages_count']  = $contact->unread_messages_count;
                 $data['contact_categories'] = $contact->relationLoaded('contactCategories')
                     ? $contact->contactCategories->map(fn ($c) => [
                         'id' => $c->id,

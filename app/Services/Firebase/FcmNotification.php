@@ -60,7 +60,10 @@ class FcmNotification
 				];
 			}
 			logger('fail to send to firebase ');
-			logger($response->body());
+			logger('fcm token: '.$fcmToken);
+			logger('access token: '.$this->access_token);
+			logger('error: '.$response->body());
+		
 			return [
 				'status'=>false ,
 				'message'=>$response->body()
