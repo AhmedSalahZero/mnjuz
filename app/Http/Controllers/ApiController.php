@@ -20,6 +20,7 @@ use App\Models\ContactCategory;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
+use App\Models\User;
 use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\MediaService;
@@ -1717,4 +1718,65 @@ class ApiController extends Controller
             'expires_in_seconds' => null,
         ], 200);
     }
+	public function assignContactToUserThroughTicket(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'contact_id' => 'required|integer|min:1',
+			'user_id' => 'required|integer|min:1',
+		]);
+		if ($validator->fails()) {
+			return response()->json(['error' => $validator->errors()], 400);
+		}
+		$contact = Contact::where('id', $request->contact_id)->first();
+		
+		if (!$contact) {
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'message' => __('Contact not found'),
+			], 404);
+		}
+		$user = User::find($request->user_id);
+		if (!$user) {
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'message' => __('User not found'),
+			], 404);
+		}
+		$contact->assignToUserThroughTicket($user);
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'message' => __('Contact assigned to user successfully'),
+		], 200);
+	}
+	public function markAsRead(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'contact_id' => 'required|integer|min:1',
+		]);
+		if ($validator->fails()) {
+			return response()->json(['error' => $validator->errors()], 400);
+		}
+		$contact = Contact::find($request->contact_id);
+		if (!$contact) {
+			return response()->json([
+				'statusCode' => 404,
+				'success' => false,
+				'message' => __('Contact not found'),
+			], 404);
+		}
+		DB::table('chats')->where('contact_id', $contact->id)
+			->where('type', 'inbound')
+			->whereNull('deleted_at')
+			->where('is_read', 0)
+			->update(['is_read' => 1]);
+			
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'message' => __('Chat count reset successfully'),
+		], 200);
+	}
 }

@@ -111,9 +111,11 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	// Route::get('/list-chat-contacts', [App\Http\Controllers\ApiController::class, 'listChatContacts']); // removed because it is not used in the mobile app
 	// Route::get('/list-messages-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'listChatContactsForContact']);
 	Route::get('/list-messages-from-uuid-to-end', [App\Http\Controllers\ApiController::class, 'listChatMessagesFromUuidToEnd']);
-	Route::post('/toggle-ticket-status/{id}', [App\Http\Controllers\ApiController::class, 'toggleTicketStatus']);
 	Route::delete('/delete-chat-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'deleteChatForContact']);
 	// Route::get('/media/signed-url', [App\Http\Controllers\ApiController::class, 'getSignedMediaUrl']);
+	Route::post('/toggle-ticket-status/{id}', [App\Http\Controllers\ApiController::class, 'toggleTicketStatus']);
+	Route::post('assign-ticket',[App\Http\Controllers\ApiController::class, 'assignContactToUserThroughTicket']);
+	Route::post('mark-as-read',[App\Http\Controllers\ApiController::class, 'markAsRead']);
 });
 
 });

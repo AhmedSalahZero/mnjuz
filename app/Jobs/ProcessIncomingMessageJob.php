@@ -86,7 +86,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
                         $chat->id,
                         $this->organizationId,
                         $isNewContact
-                    )->onQueue('autoreplies')->delay(now()->addSeconds(5));
+                    )->onQueue('autoreplies');
                 }
 
                 if (!$hasMedia) {

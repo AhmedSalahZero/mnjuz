@@ -395,5 +395,23 @@ class Contact extends Model
 		return $this->hasOne(ChatTicket::class, 'contact_id', 'id');
 	}
 	
-	
+	public function assignToUserThroughTicket(User $user):void
+	{
+		ChatTicket::where('contact_id', $this->id)->update([
+			'assigned_to' => $user->id
+		]);
+		$ticketId = ChatTicketLog::insertGetId([
+			'contact_id' => $this->id,
+			'description' => 'Conversation was assigned to ' . $user->first_name . ' ' . $user->last_name,
+			'created_at' =>  now()
+		]);
+
+		ChatLog::insert([
+			'contact_id' => $this->id,
+			'entity_type' => 'ticket',
+			'entity_id' => $ticketId,
+			'created_at' =>  now()
+		]);
+		
+	}
 }

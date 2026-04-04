@@ -39,27 +39,15 @@ class ChatTicketController extends BaseController
 
     public function assign(Request $request, $uuid)
     { 
+		/**
+		 * @var Contact $contact
+		 */
         $contact = Contact::where('uuid', $uuid)->first();
         $team = Team::where('organization_id', session()->get('current_organization'))->where('user_id', $request->id)->first();
         $user = User::where('id', $request->id)->first();
         
         if($team && $user){
-            ChatTicket::where('contact_id', $contact->id)->update([
-                'assigned_to' => $request->id
-            ]);
-
-            $ticketId = ChatTicketLog::insertGetId([
-                'contact_id' => $contact->id,
-                'description' => 'Conversation was assigned to ' . $user->first_name . ' ' . $user->last_name,
-                'created_at' =>  now()
-            ]);
-
-            ChatLog::insert([
-                'contact_id' => $contact->id,
-                'entity_type' => 'ticket',
-                'entity_id' => $ticketId,
-                'created_at' =>  now()
-            ]);
+            $contact->assignToUserThroughTicket($user);
 
             return Redirect::back()->with(
                 'status', [

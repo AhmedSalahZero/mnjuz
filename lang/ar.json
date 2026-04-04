@@ -1076,5 +1076,6 @@
 "Last active":"آخر نشاط",
 "Are you sure you want to remove this device? You will be logged out immediately.":"هل أنت متأكد من إزالة هذا الجهاز؟ سيتم تسجيل خروجك فوراً.",
 "Device removed successfully":"تمت إزالة الجهاز بنجاح",
-"No linked device is registered yet.":"لا يوجد جهاز مرتبط مسجل حتى الآن."
+"No linked device is registered yet.":"لا يوجد جهاز مرتبط مسجل حتى الآن.",
+"Contact assigned to user successfully":"تم تعين جهة الاتصال بالمستخدم بنجاح"
 }
