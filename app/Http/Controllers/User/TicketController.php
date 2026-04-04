@@ -35,10 +35,8 @@ class TicketController extends BaseController
                         ->latest()->paginate(10)
                 ),
             ]);
-        } else if($uuid === 'create'){
-            return Inertia::render('User/Support/Create', [
-                'title' => __('Create ticket'),
-            ]);
+        } else if ($uuid === 'create') {
+            return Redirect::to('/support');
         } else {
             $ticket = Ticket::with(['commentsWithUser', 'category'])->where('uuid', $uuid)->first();
             return Inertia::render('User/Support/View', [
