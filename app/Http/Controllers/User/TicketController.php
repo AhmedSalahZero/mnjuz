@@ -10,7 +10,6 @@ use App\Http\Requests\StoreTicketComment;
 use App\Http\Requests\StoreTicketStatus;
 use App\Http\Requests\StoreTicketPriority;
 use App\Models\Ticket;
-use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Services\TicketService;
 use Illuminate\Http\Request;
@@ -37,9 +36,9 @@ class TicketController extends BaseController
                 ),
             ]);
         } else if($uuid === 'create'){
-            $data['categories'] = TicketCategory::get();
-            $data['title'] = __('Create ticket');
-            return Inertia::render('User/Support/Create', $data);
+            return Inertia::render('User/Support/Create', [
+                'title' => __('Create ticket'),
+            ]);
         } else {
             $ticket = Ticket::with(['commentsWithUser', 'category'])->where('uuid', $uuid)->first();
             return Inertia::render('User/Support/View', [
