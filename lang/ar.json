@@ -1077,5 +1077,7 @@
 "Are you sure you want to remove this device? You will be logged out immediately.":"هل أنت متأكد من إزالة هذا الجهاز؟ سيتم تسجيل خروجك فوراً.",
 "Device removed successfully":"تمت إزالة الجهاز بنجاح",
 "No linked device is registered yet.":"لا يوجد جهاز مرتبط مسجل حتى الآن.",
-"Contact assigned to user successfully":"تم تعين جهة الاتصال بالمستخدم بنجاح"
+"Contact assigned to user successfully":"تم تعين جهة الاتصال بالمستخدم بنجاح",
+"Support ticket form URL":"رابط نموذج تذكرة الدعم",
+"Full URL of the embedded support form (iframe). Leave empty to use the default.":"الرابط الكامل لنموذج الدعم المضمّن (iframe). اتركه فارغاً لاستخدام الرابط الافتراضي."
 }

@@ -14,6 +14,14 @@ class StoreProfileAddress extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $url = $this->input('support_ticket_form_url');
+        if ($url === '' || $url === null) {
+            $this->merge(['support_ticket_form_url' => null]);
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -33,6 +41,7 @@ class StoreProfileAddress extends FormRequest
             'resend_intervals' => 'nullable|array',
             'resend_intervals.*' => 'integer|min:1|max:24',
             'failed_campaign_group' => 'required_if:move_failed_contacts_to_group,true|nullable|exists:contact_groups,uuid',
+            'support_ticket_form_url' => 'nullable|url|max:2048',
         ];
 
         return $rules;

@@ -124,6 +124,11 @@ class ProfileController extends BaseController
         $metadataArray['campaigns']['resend_intervals'] = $request->input('resend_intervals');
         $metadataArray['campaigns']['failed_campaign_group'] = $request->input('failed_campaign_group');
 
+        if (! isset($metadataArray['support'])) {
+            $metadataArray['support'] = [];
+        }
+        $metadataArray['support']['ticket_form_url'] = $request->input('support_ticket_form_url');
+
         $addressArray['street'] = $request->input('address');
         $addressArray['city'] = $request->input('city');
         $addressArray['state'] = $request->input('state');

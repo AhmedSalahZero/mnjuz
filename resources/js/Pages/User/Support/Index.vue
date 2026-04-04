@@ -17,10 +17,10 @@
 			</div>
 			<div class="bg-white md:border py-5 md:px-5 rounded-[0.5rem] flex justify-center mb-8">
 				<iframe class="w-full max-w-[600px] border-0" width="600" height="850"
-					src="https://business.waz.com.sa/forms/ticket?col=col-md-8+col-md-offset-2" title="Create ticket"
+					:src="props.ticketFormUrl" title="Create ticket"
 					allowfullscreen />
 			</div>
-			<!-- <TicketTable :rows="props.rows"/> -->
+			<TicketTable :rows="props.rows"/>
 		</div>
 	</AppLayout>
 </template>
@@ -28,5 +28,11 @@
 import AppLayout from "./../Layout/App.vue"
 import TicketTable from '@/Components/Tables/TicketTable.vue'
 
-const props = defineProps({ rows: Object })
+const props = defineProps({
+	rows: Object,
+	ticketFormUrl: {
+		type: String,
+		default: 'https://business.waz.com.sa/forms/ticket?col=col-md-8+col-md-offset-2',
+	},
+})
 </script>

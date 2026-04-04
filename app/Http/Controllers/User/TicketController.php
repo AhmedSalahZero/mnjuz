@@ -9,6 +9,7 @@ use App\Http\Requests\StoreTicket;
 use App\Http\Requests\StoreTicketComment;
 use App\Http\Requests\StoreTicketStatus;
 use App\Http\Requests\StoreTicketPriority;
+use App\Models\Organization;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Services\TicketService;
@@ -27,9 +28,23 @@ class TicketController extends BaseController
 
     public function index(Request $request, $uuid = null){
         if($uuid === null){
+            $ticketFormUrl = 'https://business.waz.com.sa/forms/ticket?col=col-md-8+col-md-offset-2';
+            $organizationId = session('current_organization');
+            if ($organizationId) {
+                $org = Organization::where('id', $organizationId)->first();
+                if ($org && $org->metadata) {
+                    $meta = json_decode($org->metadata, true) ?: [];
+                    $custom = $meta['support']['ticket_form_url'] ?? null;
+                    if (is_string($custom) && $custom !== '') {
+                        $ticketFormUrl = $custom;
+                    }
+                }
+            }
+
             return Inertia::render('User/Support/Index', [
                 'title' => __('Support'),
                 'allowCreate' => true,
+                'ticketFormUrl' => $ticketFormUrl,
                 'rows' => TicketResource::collection(
                     Ticket::where('user_id', auth()->user()->id)
                         ->latest()->paginate(10)

@@ -65,6 +65,27 @@
 						</div>
 					</div>
 					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
+						<div class="flex space-x-10 border-b w-full px-4 py-6">
+							<div class="w-[40%]">
+								<span class="text-slate-600">{{ $t('Support ticket form URL') }}</span>
+								<div class="text-xs text-slate-700 flex items-center mt-1">
+									<svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15"
+										viewBox="0 0 24 24">
+										<path fill="none" stroke="currentColor" stroke-linecap="round"
+											stroke-linejoin="round" stroke-width="2"
+											d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
+									</svg>
+									<span>{{ $t('Full URL of the embedded support form (iframe). Leave empty to use the default.') }}</span>
+								</div>
+							</div>
+							<div class="w-[60%]">
+								<FormInput v-model="form2.support_ticket_form_url" :error="form2.errors.support_ticket_form_url"
+									:name="''" type="url" :class="'col-span-4'"
+									:placeholder="'https://business.waz.com.sa/forms/ticket'" />
+							</div>
+						</div>
+					</div>
+					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
 						<div class="flex items-center px-4 pt-2 pb-4">
 							<div class="w-[60%]">
 								<h2 class="text-[17px]">{{ $t('Timezone') }}</h2>
@@ -396,6 +417,7 @@ const form2 = useForm({
 	move_failed_contacts_to_group: settings.value && settings.value?.campaigns?.move_failed_contacts_to_group ? settings.value?.campaigns?.move_failed_contacts_to_group : false,
 	resend_intervals: settings?.value?.campaigns?.resend_intervals ?? [1, 3, 6],
 	failed_campaign_group: settings.value && settings.value?.campaigns?.failed_campaign_group ? settings.value.campaigns?.failed_campaign_group : null,
+	support_ticket_form_url: settings.value?.support?.ticket_form_url ?? '',
 })
 
 const capitalizeString = (string) => {

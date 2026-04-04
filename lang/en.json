@@ -290,6 +290,8 @@
     "Support tickets": "Support Tickets",
     "Have an issue? Create a ticket and one of our reps will be in touch": "Have an issue? Create a ticket and one of our reps will be in touch",
     "Have an issue? Describe it in detail below": "Have an issue? Describe it in detail below",
+    "Support ticket form URL": "Support ticket form URL",
+    "Full URL of the embedded support form (iframe). Leave empty to use the default.": "Full URL of the embedded support form (iframe). Leave empty to use the default.",
     "Subject": "Subject",
     "Category": "Category",
     "Create ticket": "Create Ticket",
