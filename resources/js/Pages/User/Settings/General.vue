@@ -64,7 +64,7 @@
 							</div>
 						</div>
 					</div>
-					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
+					<!-- <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
 						<div class="flex space-x-10 border-b w-full px-4 py-6">
 							<div class="w-[40%]">
 								<span class="text-slate-600">{{ $t('Support ticket form URL') }}</span>
@@ -84,7 +84,7 @@
 									:placeholder="'https://business.waz.com.sa/forms/ticket'" />
 							</div>
 						</div>
-					</div>
+					</div> -->
 					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
 						<div class="flex items-center px-4 pt-2 pb-4">
 							<div class="w-[60%]">
@@ -118,22 +118,13 @@
 								<h3 class="text-[15px] font-medium mb-3">
 									{{ $t('Auth template preview & variables') }}
 								</h3>
-								<CampaignForm
-									class="bg-white"
-									:templates="props.templates"
-									:contactGroups="[]"
-									:settings="props.settings"
-									:contact="null"
-									:displayTitle="false"
-									:displayCancelBtn="false"
-									:isCampaignFlow="false"
-									:sendText="$t('Save')"
-									:submitEnabled="false"
-									:initialTemplate="form2.auth_template"
+								<CampaignForm class="bg-white" :templates="props.templates" :contactGroups="[]"
+									:settings="props.settings" :contact="null" :displayTitle="false"
+									:displayCancelBtn="false" :isCampaignFlow="false" :sendText="$t('Save')"
+									:submitEnabled="false" :initialTemplate="form2.auth_template"
 									:initialParameters="settings?.auth_template_parameters ?? null"
 									:showTemplateSelector="false"
-									@update:parameters="value => form2.auth_template_parameters = value"
-								/>
+									@update:parameters="value => form2.auth_template_parameters = value" />
 							</div>
 						</div>
 					</div>
