@@ -1078,6 +1078,7 @@
 "Device removed successfully":"تمت إزالة الجهاز بنجاح",
 "No linked device is registered yet.":"لا يوجد جهاز مرتبط مسجل حتى الآن.",
 "Contact assigned to user successfully":"تم تعين جهة الاتصال بالمستخدم بنجاح",
+"Default support ticket form URL (iframe) for all organizations":"رابط نموذج تذكرة الدعم الافتراضي (iframe) لجميع المنظمات",
 "Support ticket form URL":"رابط نموذج تذكرة الدعم",
 "Full URL of the embedded support form (iframe). Leave empty to use the default.":"الرابط الكامل لنموذج الدعم المضمّن (iframe). اتركه فارغاً لاستخدام الرابط الافتراضي."
 }

@@ -14,6 +14,13 @@ class StoreConfig extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('support_ticket_form_url') && $this->input('support_ticket_form_url') === '') {
+            $this->merge(['support_ticket_form_url' => null]);
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -34,6 +41,8 @@ class StoreConfig extends FormRequest
                 $rules['recaptcha_site_key'] = 'required';
                 $rules['recaptcha_secret_key'] = 'required';
             }
+
+            $rules['support_ticket_form_url'] = 'nullable|url|max:2048';
         }
 
         if ($this->type == 'timezone') {

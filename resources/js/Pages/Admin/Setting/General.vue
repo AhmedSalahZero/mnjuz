@@ -59,6 +59,15 @@
                     </div>
 
                     <div class="pt-5">
+                        <h2 class="text-base text-gray-900">{{ $t('Support') }}</h2>
+                        <p class="text-sm leading-6 mb-5">{{ $t('Default support ticket form URL (iframe) for all organizations') }}</p>
+
+                        <div class="grid gap-6 grid-cols-2 pb-10 border-b md:w-2/3">
+                            <FormInput v-model="form.support_ticket_form_url" :name="$t('Support ticket form URL')" :type="'url'" :error="form.errors.support_ticket_form_url" :class="'col-span-2'" :placeholder="'https://business.waz.com.sa/forms/ticket'"/>
+                        </div>
+                    </div>
+
+                    <div class="pt-5">
                         <h2 class="text-base text-gray-900">{{ $t('Site logo and favicon') }}</h2>
                         <p class="text-sm leading-6 mb-5">{{ $t('Add your logo and favicon') }}</p>
 
@@ -140,7 +149,8 @@
             instagram: socials?.instagram,
             slack: socials?.slack,
             linkedin: socials?.linkedin
-        }
+        },
+        support_ticket_form_url: getValueByKey('support_ticket_form_url') || '',
     })
 
     const submitForm = async () => {

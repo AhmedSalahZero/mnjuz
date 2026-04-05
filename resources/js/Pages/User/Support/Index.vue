@@ -16,11 +16,10 @@
 				</div>
 			</div>
 			<div class="bg-white md:border py-5 md:px-5 rounded-[0.5rem] flex justify-center mb-8">
-				<iframe class="w-full max-w-[600px] border-0" width="600" height="850"
-					:src="props.ticketFormUrl" title="Create ticket"
-					allowfullscreen />
+				<iframe class="w-full max-w-[600px] border-0" width="600" height="850" :src="props.ticketFormUrl"
+					title="Create ticket" allowfullscreen />
 			</div>
-			<TicketTable :rows="props.rows"/>
+			<!-- <TicketTable :rows="props.rows"/> -->
 		</div>
 	</AppLayout>
 </template>
