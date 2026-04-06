@@ -79,6 +79,7 @@ class FlowExecutionService
                     if ($result === 'delayed') {
                         return false; // Return false but don't delete flow data
                     }
+					logger('--from return result'.$result);
                     
                     return $result;
                 }
