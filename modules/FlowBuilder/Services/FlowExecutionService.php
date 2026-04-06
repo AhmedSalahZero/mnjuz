@@ -545,7 +545,7 @@ class FlowExecutionService
         if (!empty($nextNodes)) {
 			// Use the first next node found
             $nextStep = $nextNodes[0];
-		//	logger('will update to the next step number no '.$nextStep);
+			logger('will update to the next step number no '.$nextStep);
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
         } else {
             Log::warning("DELETION POINT 6: No next step found for current_step {$flowData->current_step}, ending flow");
