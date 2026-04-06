@@ -270,9 +270,9 @@ class FlowExecutionService
 
             // Check if this is an action node
             $nodeType = \Arr::get($metadataArray, "type", null);
-		//	logger('node type '.$nodeType);
+			logger('node type '.$nodeType);
             if ($nodeType === 'action') {
-		//		  logger('inside loop - action inside looping '.$iteration);
+				  logger('inside loop - action inside looping '.$iteration);
                 $result = $this->processActionNode($metadataArray, $contact, $message, $flowData, $contactId);
                 
                 if ($result === false) {
