@@ -50,6 +50,7 @@ class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUniqueUntilProcessin
     public function handle()
     {
         try {
+			logger('--from process delayed flow job'.$this->flowDataId.'contactId'.$this->contactId.'flowId'.$this->flowId.'currentStep'.$this->currentStep);
 				$flowData = FlowUserData::find($this->flowDataId);
 			    $flowData->current_step = $this->currentStep;
         		$flowData->save();
