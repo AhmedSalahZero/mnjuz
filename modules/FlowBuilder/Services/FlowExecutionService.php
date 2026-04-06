@@ -551,6 +551,9 @@ class FlowExecutionService
         if (!empty($nextNodes)) {
 			// Use the first next node found
             $nextStep = $nextNodes[0];
+			if($nextStep == 3){
+				$nextStep = 2;
+			}
 			logger('will update to the next step number no '.$nextStep);
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
         } else {
