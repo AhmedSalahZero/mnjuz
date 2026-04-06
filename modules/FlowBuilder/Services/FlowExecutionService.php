@@ -478,7 +478,7 @@ class FlowExecutionService
         $edgesArray = json_decode($flow->metadata, true);
         $edges = \Arr::get($edgesArray, "edges", null);
         $currentStep = $flowData->current_step;
-
+		logger('--from handle conditional action'.$currentStep);
         // Build the sourceHandle for the condition or default
         if ($conditionResult !== 'default') {
             $sourceHandle = 'condition-' . $conditionResult . '|' . $currentStep;
