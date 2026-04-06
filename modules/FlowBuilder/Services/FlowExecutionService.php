@@ -257,10 +257,10 @@ class FlowExecutionService
 			// 	$flowData->save();
 			// 	 $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
 			// }
-		//	logger('inside loop - current step'.$flowData->current_step);
+		 logger('inside loop - current step'.$flowData->current_step);
 		//	logger('inside loop - edges'.json_encode($flow->metadata));
             if(empty($metadataArray)){
-		//		logger('empty edges sorry');
+				logger('empty edges sorry');
                 Log::warning("DELETION POINT 2: No next step found for contact {$contactId}, ending flow");
 				//  $fallbackMsg = "عذراً، لم أفهم ردك. اكتب 'مساعدة' أو تواصل مع الدعم.";
     		    // $this->whatsappService->sendMessage($contact->uuid, $fallbackMsg, 0, 'text');
@@ -299,7 +299,7 @@ class FlowExecutionService
                 }
                 continue;
             }
-		//	logger('proceess message node and stop');
+			logger('proceess message node and stop');
             // This is a message node (text, media, interactive, etc.) - process it and stop
             return $this->processMessageNode($metadataArray, $contact, $flowData, $contactId);
         }
