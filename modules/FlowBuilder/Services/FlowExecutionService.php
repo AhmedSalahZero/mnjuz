@@ -396,6 +396,7 @@ class FlowExecutionService
                     'chat_id' => $response->data->chat->id
                 ]);
             }
+			logger('--from message node success so proceed to next step');
             
             return true;
         } else {
