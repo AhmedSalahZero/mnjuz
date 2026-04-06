@@ -370,8 +370,8 @@ class FlowExecutionService
                 break;
     
             case 'interactive buttons':
-				logger('--from interactive buttons not founn');
-            case 'interactive list':
+				case 'interactive list':
+					logger('--from interactive buttons send message');
                 $response = $this->whatsappService->sendMessage(
                     $contact->uuid,
                     $message,
