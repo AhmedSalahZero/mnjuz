@@ -223,6 +223,7 @@ class FlowExecutionService
         $flow = Flow::find($flowData->flow_id);
 
         if (!$flow || empty($flow->metadata)) {
+			logger('--from flow not found or empty metadata');
             return;
         }
 
