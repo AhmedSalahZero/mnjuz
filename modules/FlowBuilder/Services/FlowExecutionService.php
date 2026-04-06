@@ -65,9 +65,9 @@ class FlowExecutionService
                     FlowUserData::where('contact_id', $chat->contact_id)->delete();
                     $flowData = null;
                 } else {
-		//		logger('--from else flow');
                     // Flow exists, proceed to process flow
                     $flowId = $flowData->flow_id;
+                    Log::info("FLOW_DEBUG executeFlow: existing flow={$flowId}, step={$flowData->current_step}, msg='" . strtolower(trim($message)) . "'");
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
           //          logger('--from result'.$result);
                     // If validation failed, don't delete flow data
@@ -230,7 +230,7 @@ class FlowExecutionService
     }
 
     public function processFlow($chat, $isNewContact, $flowData, $contactId, $message){
-		//logger('start process flow method');
+        Log::info("FLOW_DEBUG processFlow: contact={$contactId}, current_step={$flowData->current_step}, message='{$message}'");
         $flow = Flow::find($flowData->flow_id);
 
         if (!$flow || empty($flow->metadata)) {
@@ -258,6 +258,7 @@ class FlowExecutionService
               //      logger('inside looping'.$iteration);
             // Get the current node metadata
             $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
+            Log::info("FLOW_DEBUG findEdgesBySource: step={$flowData->current_step}, found=" . (!empty($metadataArray) ? 'yes (node=' . ($metadataArray['id'] ?? '?') . ', type=' . ($metadataArray['type'] ?? '?') . ')' : 'EMPTY'));
 
             if (empty($metadataArray)) {
                 $edgesFromCurrentStep = 0;
@@ -309,6 +310,7 @@ class FlowExecutionService
             }
 			// logger('proceess message node and stop');
             // This is a message node (text, media, interactive, etc.) - process it and stop
+            Log::info("FLOW_DEBUG processMessageNode: nodeId=" . ($metadataArray['id'] ?? '?') . ", nodeType=" . ($metadataArray['type'] ?? '?'));
             return $this->processMessageNode($metadataArray, $contact, $flowData, $contactId);
         }
         
@@ -333,13 +335,15 @@ class FlowExecutionService
         $buttonType = null;
         $buttonLabel = null;
 
+        Log::info("FLOW_DEBUG processMessageNode: type={$type}, body=" . substr($message, 0, 50));
+
         if($type == 'text'){
             $buttonType = 'text';
         } elseif ($type === 'interactive buttons') {
-			// logger('--from interactive buttons');
             $buttonType = ($fieldsArray['buttonType'] ?? '') === 'buttons'
                 ? 'interactive buttons'
                 : 'interactive call to action url';
+            Log::info("FLOW_DEBUG interactive buttons: buttonType={$buttonType}, rawBtnType=" . ($fieldsArray['buttonType'] ?? 'null'));
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
     
         } elseif ($type === 'interactive list') {
@@ -389,6 +393,7 @@ class FlowExecutionService
         }
 
         $processedNodeId = $metadataArray['id'] ?? null;
+        Log::info("FLOW_DEBUG sendMessage response: success=" . (isset($response->success) ? ($response->success ? 'true' : 'false') : 'null') . ", processedNodeId={$processedNodeId}");
 
         if($response){
             $this->proceedToNextStep($flowData, $contactId, $processedNodeId);
@@ -650,18 +655,18 @@ class FlowExecutionService
             if ($type == 'interactive buttons') {
                 $buttons = $firstEdge['sourceNode']['data']['metadata']['fields']['buttons'] ?? [];
 
-                // Define button mapping
                 $buttonMapping = ['button1' => 'a', 'button2' => 'b', 'button3' => 'c'];
                 $handle = null;
 
-                // Check for a match with the message in the buttons array
                 foreach ($buttons as $buttonKey => $buttonValue) {
-                    if (strtolower(trim($buttonValue)) === $message) {
+                    $normalizedBtn = strtolower(trim($buttonValue));
+                    Log::info("FLOW_DEBUG btnMatch: key={$buttonKey}, btnVal='{$normalizedBtn}', msg='{$message}', match=" . ($normalizedBtn === $message ? 'YES' : 'no'));
+                    if ($normalizedBtn === $message) {
                         $handle = $buttonMapping[$buttonKey] ?? null;
                     }
                 }
 
-                
+                Log::info("FLOW_DEBUG handle resolved: " . ($handle ?? 'NULL'));
                 if($handle != null){
                     // Search for the edge with this handle and return its targetNode
                     foreach ($matchingEdges as $edge) {
