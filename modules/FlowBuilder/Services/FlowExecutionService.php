@@ -229,6 +229,7 @@ class FlowExecutionService
 
         $contact = Contact::find($contactId);
         if (!$contact) {
+			logger('--from contact not found');
             return false;
         }
 			//	logger('processing process flow method');
@@ -246,7 +247,7 @@ class FlowExecutionService
             // Get the current node metadata
             $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
 			if(empty($metadataArray)){
-			//	logger('empty data ');
+		 	logger('empty data ');
 				FlowUserData::where('contact_id', $contactId)->delete();
 			//	logger($flowData->current_step);
 			//	logger($message);
