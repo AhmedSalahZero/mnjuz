@@ -53,23 +53,23 @@ class FlowExecutionService
             // Find the current step for the user in the flow
             $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
             $flowId = null;
-	//		logger('--inside execute flow');
+			logger('--inside execute flow');
             if($flowData && $flowData->exists){
                 // Check if the flow still exists in the database
                 $flow = Flow::find($flowData->flow_id);
                 
                 if(!$flow){
-	//					logger('--flow deleted');
+					logger('--flow deleted');
                     // Flow has been deleted, remove FlowUserData and proceed as if it doesn't exist
                     Log::warning("DELETION POINT 1: Flow not found, deleting FlowUserData for contact {$chat->contact_id}");
                     FlowUserData::where('contact_id', $chat->contact_id)->delete();
                     $flowData = null;
                 } else {
-		//			logger('--from else flow');
+				logger('--from else flow');
                     // Flow exists, proceed to process flow
                     $flowId = $flowData->flow_id;
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
-                    
+                    logger('--from result'.$result);
                     // If validation failed, don't delete flow data
                     if ($result === 'validation_failed') {
                         return false; // Return false but don't delete flow data
@@ -86,19 +86,19 @@ class FlowExecutionService
 
             // If flowData doesn't exist or was deleted, proceed with flow determination logic
             if(!$flowData){
-					//	logger('--frow new flow');
+						logger('--frow new flow');
                 // Determine the flow based on trigger type
                 $flowQuery = Flow::where('organization_id', $chat->organization_id)->where('status', 'active');
                 $flow = null;
 
                 //Check if any flow trigger has been hit
                 if($isNewContact){
-			//			logger('--frow is new contact');
+					logger('--frow is new contact');
                     $flow = $flowQuery->where('trigger', 'new_contact')->first();
                 } else {
                     $msg = strtolower(trim($message)); // Normalize the message
                     $words = explode(' ', $msg); // Split message into individual words
-// logger('--from else new');
+ logger('--from else new');
                     $conditions = [];
                     $bindings = [];
 
@@ -129,32 +129,32 @@ class FlowExecutionService
 
                 // If a flow ID was found, create a new FlowUserData record
                 if ($flowId) {
-					// logger('--from flow data');
+					logger('--from flow data');
                     $flowData = new FlowUserData();
                     $flowData->fill([
                         'contact_id' => $chat->contact_id,
                         'flow_id' => $flowId,
                         'current_step' => 1
                     ])->save();
-                    	// logger('--from pprocess flow data');
+                    	logger('--from pprocess flow data');
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
                     
                     // If validation failed, don't delete flow data
                     if ($result === 'validation_failed') {
-						// logger('--from validation failed');
+						 logger('--from validation failed');
                         return false; // Return false but don't delete flow data
                     }
                     
                     // If flow is delayed, don't delete flow data
                     if ($result === 'delayed') {
-						   	// logger('--from delayed results');
+						   logger('--from delayed results');
                         return false; // Return false but don't delete flow data
                     }
                     
                     return $result;
                 }
             }
-		//	logger('not founnnd return false');
+		logger('not founnnd return false');
             return false;
         }
     }

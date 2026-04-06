@@ -117,7 +117,7 @@ class AutoReplyService
     private function replySequence($organizationId, $chat, $isNewContact)
     {
 	
-	//	logger('inside replay sequence');
+		logger('inside replay sequence');
         $organizationConfig = Organization::where('id', $organizationId)->first();
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $activeFlow = false;
@@ -245,22 +245,22 @@ class AutoReplyService
 
     private function handleAutomatedFlows($organizationId, $chat, $isNewContact)
     {
-	//	logger('--inside automatted flow');
+		logger('--inside automatted flow');
         $text = '';
         $metadata = json_decode($chat->metadata, true);
 
         if($metadata['type'] == 'text'){
-		//	logger('--from automate text');
+			logger('--from automate text');
             $text = $metadata['text']['body'];
         } else if(json_decode($chat->metadata)->type == 'button'){
-			// logger('--from automate button');
+			logger('--from automate button');
             $text = $metadata['button']['payload'];
         } else if(json_decode($chat->metadata)->type == 'interactive'){
-			// logger('--from interactive button reply');
+			 logger('--from interactive button reply');
             if($metadata['interactive']['type'] == 'button_reply'){
                 $text = $metadata['interactive']['button_reply']['title'];
             } else if($metadata['interactive']['type'] == 'list_reply'){
-		//		logger('--from interactive button list replay');
+				logger('--from interactive button list replay');
                 $text = $metadata['interactive']['list_reply']['title'];
             }
         }
@@ -276,7 +276,7 @@ class AutoReplyService
 
     private function getTriggerValues($trigger)
     {
-	//	logger('get trigger values');
+		logger('get trigger values');
         return is_string($trigger) && strpos($trigger, ',') !== false
             ? explode(',', $trigger)
             : (array) $trigger;
@@ -314,7 +314,7 @@ class AutoReplyService
                         return true;
                     }
                 }
-					//	logger('not found !');
+						logger('not found !');
                 return false;
             } else {
                 // For non-Arabic text, use case-insensitive regex approach
@@ -334,7 +334,7 @@ class AutoReplyService
 
     protected function sendReply(Chat $chat, AutoReply $autoreply)
     {
-	//	logger('send replay');
+		logger('send replay');
         $contact = Contact::where('id', $chat->contact_id)->first();
         $organization_id = $chat->organization_id;
         $metadata = json_decode($autoreply->metadata);
@@ -367,7 +367,7 @@ class AutoReplyService
     }
 
     private function replacePlaceholders($organizationId, $contactUuid, $message){
-	//	logger('replace placeholders');
+		logger('replace placeholders');
         $organization = Organization::where('id', $organizationId)->first();
         $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
         $address = $contact->address ? json_decode($contact->address, true) : [];
