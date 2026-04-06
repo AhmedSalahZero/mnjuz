@@ -596,8 +596,12 @@ class FlowExecutionService
                 }
             }
         } elseif ($type === 'interactive call to action url') {
+            $displayText = $fieldsArray['ctaUrlButton']['displayText'] ?? '';
+            if (mb_strlen($displayText) > 20) {
+                $displayText = mb_substr($displayText, 0, 20);
+            }
             $buttonArray = [
-                'display_text' => $fieldsArray['ctaUrlButton']['displayText'] ?? '',
+                'display_text' => $displayText,
                 'url' => $fieldsArray['ctaUrlButton']['url'] ?? '',
             ];
         } elseif ($type === 'interactive list') {
