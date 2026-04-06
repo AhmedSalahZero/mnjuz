@@ -245,6 +245,7 @@ class FlowExecutionService
             $iteration++;
               //      logger('inside looping'.$iteration);
             // Get the current node metadata
+			logger('--from metadataArray'.$flowData->current_step.'message'.$message);
             $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
 			if(empty($metadataArray)){
 		 	logger('empty data ');
