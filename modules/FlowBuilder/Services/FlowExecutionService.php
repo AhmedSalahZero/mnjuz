@@ -276,6 +276,7 @@ class FlowExecutionService
                 $result = $this->processActionNode($metadataArray, $contact, $message, $flowData, $contactId);
                 
                 if ($result === false) {
+					logger('inside loop - action failed so return false');
                     // Action failed, stop the flow
                     return false;
                 }
@@ -286,7 +287,7 @@ class FlowExecutionService
                 }
                 
                 if ($result === 'delayed') {
-			//		logger('inside loop - delayed so return ');
+					logger('inside loop - delayed so return ');
                     // Flow is paused due to delay action, don't proceed to next step
                     return 'delayed'; // Return special value to indicate the flow is paused
                 }
