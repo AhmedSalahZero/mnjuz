@@ -333,12 +333,14 @@ class FlowExecutionService
         if($type == 'text'){
             $buttonType = 'text';
         } elseif ($type === 'interactive buttons') {
+			logger('--from interactive buttons');
             $buttonType = ($fieldsArray['buttonType'] ?? '') === 'buttons'
                 ? 'interactive buttons'
                 : 'interactive call to action url';
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
     
         } elseif ($type === 'interactive list') {
+			logger('--from interactive list');
             $buttonType = 'interactive list';
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
             $buttonLabel = $fieldsArray['buttonLabel'] ?? '';
@@ -368,6 +370,7 @@ class FlowExecutionService
                 break;
     
             case 'interactive buttons':
+				logger('--from interactive buttons not founn');
             case 'interactive list':
                 $response = $this->whatsappService->sendMessage(
                     $contact->uuid,
@@ -384,6 +387,7 @@ class FlowExecutionService
 
         if($response){
             // Update to the next step
+			logger('--from message node success so proceed to next step');
             $this->proceedToNextStep($flowData, $contactId);
             
             if(isset($response->data->chat->id)){
@@ -395,6 +399,7 @@ class FlowExecutionService
             
             return true;
         } else {
+			logger('--from message node failed so return true');
             // Even if message sending fails, we should still proceed to next step to avoid getting stuck
             $this->proceedToNextStep($flowData, $contactId);
             return true;
@@ -406,7 +411,7 @@ class FlowExecutionService
      */
     private function processActionNode($metadataArray, $contact, $message, $flowData, $contactId)
     {
-			//		  logger('inside action node');
+				  logger('inside action node');
         $actionType = \Arr::get($metadataArray, "data.actionType", null);
         $config = \Arr::get($metadataArray, "data.config", []);
         $isActive = \Arr::get($metadataArray, "data.is_active", true);
@@ -428,13 +433,13 @@ class FlowExecutionService
         $result = $actionService->executeAction($actionType, $config, $contact, $message, $flowData, $contactId);
 
 		if ($result === 'delayed') {
-   		//	 logger('Delay action executed - flow paused');
+   			 logger('Delay action executed - flow paused');
   		  return 'delayed';
 			}
 
         // Handle conditional actions specially
         if ($actionType === 'conditional') {
-		//			 logger('inside conditional');
+					 logger('inside conditional');
             // Set current_step to this conditional node's ID before processing
             $conditionalNodeId = $metadataArray['id'] ?? null;
             if ($conditionalNodeId && $flowData->current_step != $conditionalNodeId) {
