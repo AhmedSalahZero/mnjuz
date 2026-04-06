@@ -98,7 +98,7 @@ class FlowExecutionService
                 } else {
                     $msg = strtolower(trim($message)); // Normalize the message
                     $words = explode(' ', $msg); // Split message into individual words
- logger('--from else new');
+ 					logger('--from else new');
                     $conditions = [];
                     $bindings = [];
 
@@ -118,6 +118,11 @@ class FlowExecutionService
                         '( `trigger` = ? AND organization_id = ?) AND (' . implode(' OR ', $conditions) . ')',
                         array_merge(['keywords', $chat->organization_id], $bindings)
                     )->first();
+					if($flow){
+						logger('--from flow'.$flow->id);
+					} else {
+						logger('--from flow not found');
+					}
 
                     //Log::info(json_encode($flow));
                 }
