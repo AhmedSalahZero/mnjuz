@@ -115,10 +115,9 @@ class FlowExecutionService
                         $bindings[] = $word;
                     }
 // logger('--from final query');
-                    // Final query
                     $flow = \DB::table('flows')->whereRaw(
-                        '( `trigger` = ? AND organization_id = ?) AND (' . implode(' OR ', $conditions) . ')',
-                        array_merge(['keywords', $chat->organization_id], $bindings)
+                        '( `trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
+                        array_merge(['keywords', $chat->organization_id, 'active'], $bindings)
                     )->first();
 					if($flow){
 						logger('--from flow'.$flow->id);
@@ -168,10 +167,22 @@ class FlowExecutionService
 
     public function hasActiveFlow($chat){
         $activeFlow = FlowUserData::where('contact_id', $chat->contact_id)->first();
-		$oneOrZero = $activeFlow? 1 : 0 ; 
-		$id = $activeFlow ? $activeFlow->id : 0 ;
-	//	logger('--has active flow ?'.$oneOrZero.'active id'.$id);
-        return $activeFlow ? true : false;
+
+        if (!$activeFlow) {
+            return false;
+        }
+
+        $flow = Flow::where('id', $activeFlow->flow_id)
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$flow) {
+            FlowUserData::where('contact_id', $chat->contact_id)->delete();
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -223,8 +234,9 @@ class FlowExecutionService
         $flow = Flow::find($flowData->flow_id);
 
         if (!$flow || empty($flow->metadata)) {
-			logger('--from flow not found or empty metadata');
-            return;
+            Log::warning("processFlow: flow not found or empty metadata", ['flow_id' => $flowData->flow_id]);
+            FlowUserData::where('contact_id', $contactId)->delete();
+            return false;
         }
 
         $contact = Contact::find($contactId);
@@ -245,30 +257,21 @@ class FlowExecutionService
             $iteration++;
               //      logger('inside looping'.$iteration);
             // Get the current node metadata
-			logger('--from metadataArray'.$flowData->current_step.'message'.$message);
             $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
-			if(empty($metadataArray)){
-		 	logger('empty data ');
-				FlowUserData::where('contact_id', $contactId)->delete();
-			//	logger($flowData->current_step);
-			//	logger($message);
-				 return false;
-			}
-			// if(empty($metadataArray) && $tryAnotherTime){
-			// 	logger('empty and try another time');
-			// 	$tryAnotherTime = false ;
-			// 	$flowData->current_step = 1 ;
-			// 	$flowData->save();
-			// 	 $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
-			// }
-		 logger('inside loop - current step'.$flowData->current_step);
-		//	logger('inside loop - edges'.json_encode($flow->metadata));
-            if(empty($metadataArray)){
-				logger('empty edges sorry');
-                Log::warning("DELETION POINT 2: No next step found for contact {$contactId}, ending flow");
-				//  $fallbackMsg = "عذراً، لم أفهم ردك. اكتب 'مساعدة' أو تواصل مع الدعم.";
-    		    // $this->whatsappService->sendMessage($contact->uuid, $fallbackMsg, 0, 'text');
-				FlowUserData::where('contact_id', $contactId)->delete();
+
+            if (empty($metadataArray)) {
+                $edgesFromCurrentStep = 0;
+                foreach ($edges as $edge) {
+                    if (isset($edge['source']) && (string)$edge['source'] === (string)$flowData->current_step) {
+                        $edgesFromCurrentStep++;
+                    }
+                }
+
+                if ($edgesFromCurrentStep > 1) {
+                    return false;
+                }
+
+                FlowUserData::where('contact_id', $contactId)->delete();
                 return false;
             }
 
@@ -549,12 +552,7 @@ class FlowExecutionService
         }
         
         if (!empty($nextNodes)) {
-			// Use the first next node found
             $nextStep = $nextNodes[0];
-			if($nextStep == 3){
-				$nextStep = 2;
-			}
-			logger('will update to the next step number no '.$nextStep);
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
         } else {
             Log::warning("DELETION POINT 6: No next step found for current_step {$flowData->current_step}, ending flow");

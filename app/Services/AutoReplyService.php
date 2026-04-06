@@ -116,8 +116,6 @@ class AutoReplyService
 
     private function replySequence($organizationId, $chat, $isNewContact)
     {
-	
-		logger('inside replay sequence');
         $organizationConfig = Organization::where('id', $organizationId)->first();
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $activeFlow = false;
@@ -175,24 +173,40 @@ class AutoReplyService
         return $response;
     }
 
+    private function extractTextFromChat($chat): string
+    {
+        $metadata = json_decode($chat->metadata, true);
+        if (!is_array($metadata) || empty($metadata['type'])) {
+            return '';
+        }
+
+        $type = $metadata['type'];
+
+        if ($type === 'text') {
+            return $metadata['text']['body'] ?? '';
+        }
+
+        if ($type === 'button') {
+            return $metadata['button']['payload'] ?? '';
+        }
+
+        if ($type === 'interactive') {
+            $interactiveType = $metadata['interactive']['type'] ?? '';
+            if ($interactiveType === 'button_reply') {
+                return $metadata['interactive']['button_reply']['title'] ?? '';
+            }
+            if ($interactiveType === 'list_reply') {
+                return $metadata['interactive']['list_reply']['title'] ?? '';
+            }
+        }
+
+        return '';
+    }
+
     private function handleBasicReplies($chat)
     {
         $organizationId = $chat->organization_id;
-        $text = '';
-        $metadata = json_decode($chat->metadata, true);
-
-        if($metadata['type'] == 'text'){
-            $text = $metadata['text']['body'];
-        } else if(json_decode($chat->metadata)->type == 'button'){
-            $text = $metadata['button']['payload'];
-        } else if(json_decode($chat->metadata)->type == 'interactive'){
-            if($metadata['interactive']['type'] == 'button_reply'){
-                $text = $metadata['interactive']['button_reply']['title'];
-            } else if($metadata['interactive']['type'] == 'list_reply'){
-                $text = $metadata['interactive']['list_reply']['title'];
-            }
-        }
-        
+        $text = $this->extractTextFromChat($chat);
         $receivedMessage = " " . $text;
 
         //Check basic reply flow
@@ -216,21 +230,7 @@ class AutoReplyService
 
     private function handleAIReplyAssistant($chat)
     {
-        $text = '';
-        $metadata = json_decode($chat->metadata, true);
-
-        if($metadata['type'] == 'text'){
-            $text = $metadata['text']['body'];
-        } else if(json_decode($chat->metadata)->type == 'button'){
-            $text = $metadata['button']['payload'];
-        } else if(json_decode($chat->metadata)->type == 'interactive'){
-            if($metadata['interactive']['type'] == 'button_reply'){
-                $text = $metadata['interactive']['button_reply']['title'];
-            } else if($metadata['interactive']['type'] == 'list_reply'){
-                $text = $metadata['interactive']['list_reply']['title'];
-            }
-        }
-        
+        $text = $this->extractTextFromChat($chat);
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/IntelliReply/Services/AIResponseService.php'))) {
@@ -245,26 +245,7 @@ class AutoReplyService
 
     private function handleAutomatedFlows($organizationId, $chat, $isNewContact)
     {
-		logger('--inside automatted flow');
-        $text = '';
-        $metadata = json_decode($chat->metadata, true);
-
-        if($metadata['type'] == 'text'){
-			logger('--from automate text');
-            $text = $metadata['text']['body'];
-        } else if(json_decode($chat->metadata)->type == 'button'){
-			logger('--from automate button');
-            $text = $metadata['button']['payload'];
-        } else if(json_decode($chat->metadata)->type == 'interactive'){
-			 logger('--from interactive button reply');
-            if($metadata['interactive']['type'] == 'button_reply'){
-                $text = $metadata['interactive']['button_reply']['title'];
-            } else if($metadata['interactive']['type'] == 'list_reply'){
-				logger('--from interactive button list replay');
-                $text = $metadata['interactive']['list_reply']['title'];
-            }
-        }
-
+        $text = $this->extractTextFromChat($chat);
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/FlowBuilder/Services/FlowExecutionService.php'))) {

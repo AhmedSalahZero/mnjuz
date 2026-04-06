@@ -50,14 +50,29 @@ class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUniqueUntilProcessin
     public function handle()
     {
         try {
-			logger('--from process delayed flow job'.$this->flowDataId.'contactId'.$this->contactId.'flowId'.$this->flowId.'currentStep'.$this->currentStep);
-				$flowData = FlowUserData::find($this->flowDataId);
-			    $flowData->current_step = $this->currentStep;
-        		$flowData->save();
+            $flowData = FlowUserData::find($this->flowDataId);
+
+            if (!$flowData) {
+                Log::info("Delayed flow skipped - FlowUserData no longer exists", [
+                    'flow_data_id' => $this->flowDataId,
+                    'contact_id' => $this->contactId,
+                    'flow_id' => $this->flowId,
+                ]);
+                return;
+            }
+
+            $flowData->current_step = $this->currentStep;
+            $flowData->save();
+
             $flowExecutionService = new FlowExecutionService($this->organizationId);
             $flowExecutionService->continueDelayedFlow($this->contactId, $this->flowId, $this->currentStep);
         } catch (\Exception $e) {
-            Log::error("Error processing delayed flow: " . $e->getMessage());
+            Log::error("Error processing delayed flow: " . $e->getMessage(), [
+                'flow_data_id' => $this->flowDataId,
+                'contact_id' => $this->contactId,
+                'flow_id' => $this->flowId,
+                'trace' => $e->getTraceAsString(),
+            ]);
         }
     }
 }

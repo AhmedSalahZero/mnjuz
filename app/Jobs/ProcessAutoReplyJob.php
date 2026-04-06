@@ -18,7 +18,7 @@ class ProcessAutoReplyJob implements ShouldQueue
    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 60;
-    public $tries = 1;
+    public $tries = 3;
     public $backoff = [5, 15];
 
     protected $chatId;
