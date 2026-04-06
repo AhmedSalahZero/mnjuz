@@ -257,7 +257,7 @@ class AutoReplyService
 
     private function getTriggerValues($trigger)
     {
-		logger('get trigger values');
+		// logger('get trigger values');
         return is_string($trigger) && strpos($trigger, ',') !== false
             ? explode(',', $trigger)
             : (array) $trigger;
@@ -295,7 +295,7 @@ class AutoReplyService
                         return true;
                     }
                 }
-						logger('not found !');
+			//			logger('not found !');
                 return false;
             } else {
                 // For non-Arabic text, use case-insensitive regex approach
@@ -315,7 +315,7 @@ class AutoReplyService
 
     protected function sendReply(Chat $chat, AutoReply $autoreply)
     {
-		logger('send replay');
+	//	logger('send replay');
         $contact = Contact::where('id', $chat->contact_id)->first();
         $organization_id = $chat->organization_id;
         $metadata = json_decode($autoreply->metadata);
@@ -348,7 +348,7 @@ class AutoReplyService
     }
 
     private function replacePlaceholders($organizationId, $contactUuid, $message){
-		logger('replace placeholders');
+		// logger('replace placeholders');
         $organization = Organization::where('id', $organizationId)->first();
         $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
         $address = $contact->address ? json_decode($contact->address, true) : [];

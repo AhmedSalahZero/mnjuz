@@ -14,7 +14,7 @@ class FlowUserData extends Model
 
     public function incrementStep()
     {
-		logger('--from incrementStep'.$this->current_step);
+		// logger('--from incrementStep'.$this->current_step);
         $this->current_step += 1;
         $this->save();
     }

@@ -53,23 +53,23 @@ class FlowExecutionService
             // Find the current step for the user in the flow
             $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
             $flowId = null;
-			logger('--inside execute flow');
+		//	logger('--inside execute flow');
             if($flowData && $flowData->exists){
                 // Check if the flow still exists in the database
                 $flow = Flow::find($flowData->flow_id);
                 
                 if(!$flow){
-					logger('--flow deleted');
+		//			logger('--flow deleted');
                     // Flow has been deleted, remove FlowUserData and proceed as if it doesn't exist
                     Log::warning("DELETION POINT 1: Flow not found, deleting FlowUserData for contact {$chat->contact_id}");
                     FlowUserData::where('contact_id', $chat->contact_id)->delete();
                     $flowData = null;
                 } else {
-				logger('--from else flow');
+		//		logger('--from else flow');
                     // Flow exists, proceed to process flow
                     $flowId = $flowData->flow_id;
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
-                    logger('--from result'.$result);
+          //          logger('--from result'.$result);
                     // If validation failed, don't delete flow data
                     if ($result === 'validation_failed') {
                         return false; // Return false but don't delete flow data
@@ -79,7 +79,7 @@ class FlowExecutionService
                     if ($result === 'delayed') {
                         return false; // Return false but don't delete flow data
                     }
-					logger('--from return result'.$result);
+			//		logger('--from return result'.$result);
                     
                     return $result;
                 }
@@ -87,19 +87,19 @@ class FlowExecutionService
 
             // If flowData doesn't exist or was deleted, proceed with flow determination logic
             if(!$flowData){
-						logger('--frow new flow');
+			//			logger('--frow new flow');
                 // Determine the flow based on trigger type
                 $flowQuery = Flow::where('organization_id', $chat->organization_id)->where('status', 'active');
                 $flow = null;
 
                 //Check if any flow trigger has been hit
                 if($isNewContact){
-					logger('--frow is new contact');
+			//		logger('--frow is new contact');
                     $flow = $flowQuery->where('trigger', 'new_contact')->first();
                 } else {
                     $msg = strtolower(trim($message)); // Normalize the message
                     $words = explode(' ', $msg); // Split message into individual words
- 					logger('--from else new');
+ 			//		logger('--from else new');
                     $conditions = [];
                     $bindings = [];
 
@@ -109,7 +109,7 @@ class FlowExecutionService
 						
                     // Add individual word checks
                     foreach ($words as $word) {
-						logger('--from word'.$word);
+			//			logger('--from word'.$word);
                         $word = strtolower(trim($word));
                         $conditions[] = "FIND_IN_SET(?, keywords)";
                         $bindings[] = $word;
@@ -119,11 +119,11 @@ class FlowExecutionService
                         '( `trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
                         array_merge(['keywords', $chat->organization_id, 'active'], $bindings)
                     )->first();
-					if($flow){
-						logger('--from flow'.$flow->id);
-					} else {
-						logger('--from flow not found');
-					}
+					// if($flow){
+					// 	logger('--from flow'.$flow->id);
+					// } else {
+					// 	logger('--from flow not found');
+					// }
 
                     //Log::info(json_encode($flow));
                 }
@@ -135,32 +135,32 @@ class FlowExecutionService
 
                 // If a flow ID was found, create a new FlowUserData record
                 if ($flowId) {
-					logger('--from flow data');
+					// logger('--from flow data');
                     $flowData = new FlowUserData();
                     $flowData->fill([
                         'contact_id' => $chat->contact_id,
                         'flow_id' => $flowId,
                         'current_step' => 1
                     ])->save();
-                    	logger('--from pprocess flow data');
+                    	// logger('--from pprocess flow data');
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
                     
                     // If validation failed, don't delete flow data
                     if ($result === 'validation_failed') {
-						 logger('--from validation failed');
+						//  logger('--from validation failed');
                         return false; // Return false but don't delete flow data
                     }
                     
                     // If flow is delayed, don't delete flow data
                     if ($result === 'delayed') {
-						   logger('--from delayed results');
+						//    logger('--from delayed results');
                         return false; // Return false but don't delete flow data
                     }
                     
                     return $result;
                 }
             }
-		logger('not founnnd return false');
+		// logger('not founnnd return false');
             return false;
         }
     }
@@ -241,7 +241,7 @@ class FlowExecutionService
 
         $contact = Contact::find($contactId);
         if (!$contact) {
-			logger('--from contact not found');
+			// logger('--from contact not found');
             return false;
         }
 			//	logger('processing process flow method');
@@ -277,13 +277,13 @@ class FlowExecutionService
 
             // Check if this is an action node
             $nodeType = \Arr::get($metadataArray, "type", null);
-			logger('node type '.$nodeType);
+			// logger('node type '.$nodeType);
             if ($nodeType === 'action') {
 				  logger('inside loop - action inside looping '.$iteration);
                 $result = $this->processActionNode($metadataArray, $contact, $message, $flowData, $contactId);
                 
                 if ($result === false) {
-					logger('inside loop - action failed so return false');
+					// logger('inside loop - action failed so return false');
                     // Action failed, stop the flow
                     return false;
                 }
@@ -294,7 +294,7 @@ class FlowExecutionService
                 }
                 
                 if ($result === 'delayed') {
-					logger('inside loop - delayed so return ');
+					// logger('inside loop - delayed so return ');
                     // Flow is paused due to delay action, don't proceed to next step
                     return 'delayed'; // Return special value to indicate the flow is paused
                 }
@@ -307,7 +307,7 @@ class FlowExecutionService
                 }
                 continue;
             }
-			logger('proceess message node and stop');
+			// logger('proceess message node and stop');
             // This is a message node (text, media, interactive, etc.) - process it and stop
             return $this->processMessageNode($metadataArray, $contact, $flowData, $contactId);
         }
@@ -336,14 +336,14 @@ class FlowExecutionService
         if($type == 'text'){
             $buttonType = 'text';
         } elseif ($type === 'interactive buttons') {
-			logger('--from interactive buttons');
+			// logger('--from interactive buttons');
             $buttonType = ($fieldsArray['buttonType'] ?? '') === 'buttons'
                 ? 'interactive buttons'
                 : 'interactive call to action url';
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
     
         } elseif ($type === 'interactive list') {
-			logger('--from interactive list');
+			// logger('--from interactive list');
             $buttonType = 'interactive list';
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
             $buttonLabel = $fieldsArray['buttonLabel'] ?? '';
@@ -374,7 +374,7 @@ class FlowExecutionService
     
             case 'interactive buttons':
 				case 'interactive list':
-					logger('--from interactive buttons send message');
+					// logger('--from interactive buttons send message');
                 $response = $this->whatsappService->sendMessage(
                     $contact->uuid,
                     $message,
@@ -412,7 +412,7 @@ class FlowExecutionService
      */
     private function processActionNode($metadataArray, $contact, $message, $flowData, $contactId)
     {
-				  logger('inside action node');
+				//   logger('inside action node');
         $actionType = \Arr::get($metadataArray, "data.actionType", null);
         $config = \Arr::get($metadataArray, "data.config", []);
         $isActive = \Arr::get($metadataArray, "data.is_active", true);
@@ -432,13 +432,13 @@ class FlowExecutionService
         $result = $actionService->executeAction($actionType, $config, $contact, $message, $flowData, $contactId);
 
 		if ($result === 'delayed') {
-   			 logger('Delay action executed - flow paused');
+   			//  logger('Delay action executed - flow paused');
   		  return 'delayed';
 			}
 
         // Handle conditional actions specially
         if ($actionType === 'conditional') {
-					 logger('inside conditional');
+					//  logger('inside conditional');
             // Set current_step to this conditional node's ID before processing
             $conditionalNodeId = $metadataArray['id'] ?? null;
             if ($conditionalNodeId && $flowData->current_step != $conditionalNodeId) {
@@ -480,7 +480,7 @@ class FlowExecutionService
         $edgesArray = json_decode($flow->metadata, true);
         $edges = \Arr::get($edgesArray, "edges", null);
         $currentStep = $flowData->current_step;
-		logger('--from handle conditional action'.$currentStep);
+		// logger('--from handle conditional action'.$currentStep);
         // Build the sourceHandle for the condition or default
         if ($conditionResult !== 'default') {
             $sourceHandle = 'condition-' . $conditionResult . '|' . $currentStep;
