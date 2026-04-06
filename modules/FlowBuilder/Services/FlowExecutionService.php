@@ -105,9 +105,10 @@ class FlowExecutionService
                     // Condition to match the full message (as a sentence or phrase)
                     $conditions[] = "FIND_IN_SET(?, keywords)";
                     $bindings[] = $msg; // Add the full message (spaces stripped, like in DB)
-
+						
                     // Add individual word checks
                     foreach ($words as $word) {
+						logger('--from word'.$word);
                         $word = strtolower(trim($word));
                         $conditions[] = "FIND_IN_SET(?, keywords)";
                         $bindings[] = $word;
