@@ -388,24 +388,21 @@ class FlowExecutionService
                 break;
         }
 
+        $processedNodeId = $metadataArray['id'] ?? null;
+
         if($response){
-            // Update to the next step
-			logger('--from message node success so proceed to next step');
-            $this->proceedToNextStep($flowData, $contactId);
-            
+            $this->proceedToNextStep($flowData, $contactId, $processedNodeId);
+
             if(isset($response->data->chat->id)){
                 FlowLog::create([
                     'flow_id' => $flowData->flow_id,
                     'chat_id' => $response->data->chat->id
                 ]);
             }
-			logger('--from message node success so proceed to next step');
-            
+
             return true;
         } else {
-			logger('--from message node failed so return true');
-            // Even if message sending fails, we should still proceed to next step to avoid getting stuck
-            $this->proceedToNextStep($flowData, $contactId);
+            $this->proceedToNextStep($flowData, $contactId, $processedNodeId);
             return true;
         }
     }
@@ -421,9 +418,7 @@ class FlowExecutionService
         $isActive = \Arr::get($metadataArray, "data.is_active", true);
 
         if (!$actionType || !$isActive) {
-	//		 logger('inside proceedToNextStep');
-            // If action is not active or has no type, just proceed to next step
-            $this->proceedToNextStep($flowData, $contactId);
+            $this->proceedToNextStep($flowData, $contactId, $metadataArray['id'] ?? null);
             return true;
         }
 
@@ -468,9 +463,7 @@ class FlowExecutionService
             FlowUserData::where('contact_id', $contactId)->delete();
             return false;
         }
-	//	logger('from execution got to next step');
-        // For other actions, proceed to next step
-        $this->proceedToNextStep($flowData, $contactId);
+        $this->proceedToNextStep($flowData, $contactId, $metadataArray['id'] ?? null);
         return true;
     }
 
@@ -526,12 +519,17 @@ class FlowExecutionService
     }
 
     /**
-     * Proceed to the next step in the flow
+     * Proceed to the next step in the flow.
+     * $processedNodeId: the ID of the node that was just processed/sent.
+     * Sets current_step to that node so findEdgesBySource can find the correct next node.
      */
-    private function proceedToNextStep($flowData, $contactId)
+    private function proceedToNextStep($flowData, $contactId, $processedNodeId = null)
     {
-	//	logger('iam inside process next step now');
-        // Find the next node by looking at the edges
+        if ($processedNodeId !== null) {
+            FlowUserData::where('contact_id', $contactId)->update(['current_step' => $processedNodeId]);
+            return;
+        }
+
         $flow = Flow::find($flowData->flow_id);
         if (!$flow || empty($flow->metadata)) {
             Log::warning("DELETION POINT 8: Flow not found or empty metadata for flow {$flowData->flow_id}");
@@ -540,8 +538,7 @@ class FlowExecutionService
 
         $edgesArray = json_decode($flow->metadata, true);
         $edges = \Arr::get($edgesArray, "edges", null);
-        
-        // Find edges that start from the current step
+
         $nextNodes = [];
         foreach ($edges as $edge) {
             if (isset($edge['source']) && (string) $edge['source'] === (string) $flowData->current_step) {
@@ -550,7 +547,7 @@ class FlowExecutionService
                 }
             }
         }
-        
+
         if (!empty($nextNodes)) {
             $nextStep = $nextNodes[0];
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
