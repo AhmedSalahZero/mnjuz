@@ -54,6 +54,7 @@ class ApiController extends Controller
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
             'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+            'search' => 'sometimes|string|max:255',
         ]);
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
@@ -65,9 +66,23 @@ class ApiController extends Controller
         if ($request->is('api/v1/*')) {
             $organizationId = $request->user()->current_organization_id;
         }
+        $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
+
         $contacts = Contact::where('organization_id', $organizationId)
             ->where('deleted_at', null)
             ->with(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color'])
+            ->when($searchTerm !== null && $searchTerm !== '', function ($q) use ($searchTerm) {
+                $q->where(function ($sub) use ($searchTerm) {
+                    $sub->where('contacts.first_name', 'like', "%{$searchTerm}%")
+                        ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
+                        ->orWhere('contacts.phone', 'like', "%{$searchTerm}%")
+                        ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
+                        ->orWhereRaw(
+                            "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
+                            ["%{$searchTerm}%"]
+                        );
+                });
+            })
             ->paginate($perPage, ['*'], 'page', $page);
         return ContactResource::collection($contacts);
     }
@@ -1447,7 +1462,7 @@ class ApiController extends Controller
         $validator = Validator::make($request->all(), [
             'created_at' => 'sometimes|max:255',
             'message_types' => 'sometimes|array|in:chat,ticket,notes',
-
+            'search' => 'sometimes|string|max:255',
         ]);
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
@@ -1459,6 +1474,8 @@ class ApiController extends Controller
         // $perPage = $request->input('per_page', 10);
         $organization = Organization::where('id', $organizationId)->first();
         $orgId = (int) $organizationId;
+        // $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
+
         $contacts = $organization->contacts()
             ->with('contactCategories:id,name,uuid,background_color,text_color', 'ticket:id,status,assigned_to,contact_id')
             ->addSelect(
@@ -1472,6 +1489,18 @@ class ApiController extends Controller
                   AND chats.deleted_at IS NULL) as unread_messages_count'
                 )
             )
+            // ->when($searchTerm !== null && $searchTerm !== '', function ($q) use ($searchTerm) {
+            //     $q->where(function ($sub) use ($searchTerm) {
+            //         $sub->where('contacts.first_name', 'like', "%{$searchTerm}%")
+            //             ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
+            //             ->orWhere('contacts.phone', 'like', "%{$searchTerm}%")
+            //             ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
+            //             ->orWhereRaw(
+            //                 "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
+            //                 ["%{$searchTerm}%"]
+            //             );
+            //     });
+            // })
             ->get();
         $results = [];
         foreach ($contacts as $contact) {
