@@ -1388,8 +1388,37 @@ class ApiController extends Controller
             'data' => TemplateResource::collection($templates)
         ], 200);
     }
+	
+    public function listTeamMembers(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'page' => 'integer|min:1',
+            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+        ]);
+		if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 400);
+        }
 
-    
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 10);
+        $organizationId = $request->organization;
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_organization_id;
+        }
+		$rows = DB::table('users')
+		->join('teams', 'users.id', '=', 'teams.user_id')
+		->where('teams.organization_id', '=', $organizationId)
+		->whereNull('teams.deleted_at')
+		->select('users.*')
+		->get();
+		return response()->json([
+			'statusCode' => 200,
+			'success' => true,
+			'message' => __('Team members fetched successfully'),
+			'data' => $rows
+		]);
+		
+    }
     /**
      * * دي اخر الكونتاكتس اللي بعتت رسايل
      * * بحيث اول ما بتدخل علي صفحه الشات دي اول ناس بتظهرلك

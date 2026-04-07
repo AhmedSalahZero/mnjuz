@@ -34,7 +34,7 @@ class TeamController extends BaseController
                 ->whereNull('teams.deleted_at')
                 ->select('users.*')
                 ->get();
-
+				
             return response()->json([
                 'rows' => $rows
             ]);

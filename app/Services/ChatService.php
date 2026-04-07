@@ -153,7 +153,6 @@ class ChatService
         // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
      //   $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
 
-      
 
         //   $perPage = 10; // Number of items per page
         //    $totalContacts = count($contacts); // Total number of contacts

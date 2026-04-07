@@ -116,6 +116,10 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::post('/toggle-ticket-status/{id}', [App\Http\Controllers\ApiController::class, 'toggleTicketStatus']);
 	Route::post('assign-ticket',[App\Http\Controllers\ApiController::class, 'assignContactToUserThroughTicket']);
 	Route::post('mark-as-read',[App\Http\Controllers\ApiController::class, 'markAsRead']);
+	
+	Route::get('/list-teams', [App\Http\Controllers\ApiController::class, 'listTeamMembers']);
+
+	
 });
 
 });
