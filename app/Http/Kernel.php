@@ -81,6 +81,8 @@ class Kernel extends HttpKernel
         'redirectIfAuthenticated' => \App\Http\Middleware\RedirectIfAuthenticated::class,
 		'ExcludeRouteFromDocs' => ExcludeFromDocsMiddleware::class,
 		'has.mobile.app' => \App\Http\Middleware\CheckMobileApp::class,
+        'admin.developer' => \App\Http\Middleware\EnsureAdminDeveloperAccess::class,
+        'org.agent.restrict' => \App\Http\Middleware\RestrictOrganizationAgent::class,
 	
     ];
 }

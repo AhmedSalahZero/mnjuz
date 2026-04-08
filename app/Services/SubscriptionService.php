@@ -77,7 +77,10 @@ class SubscriptionService
                 if($billingDetails['amountDue'] == 0){
                     self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
 
-                    $team = Team::where('organization_id', $organizationId)->where('role', 'owner')->first();
+                    $team = Team::where('organization_id', $organizationId)
+                        ->whereIn('role', ['owner', 'manager'])
+                        ->orderByRaw("FIELD(role, 'owner', 'manager')")
+                        ->first();
                     $user = User::where('id', $team->user_id)->first();
                     $plan = SubscriptionPlan::where('id', $planId)->first();
 
@@ -100,7 +103,10 @@ class SubscriptionService
             if($billingDetails['amountDue'] == 0){
                 self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
 
-                $team = Team::where('organization_id', $organizationId)->where('role', 'owner')->first();
+                $team = Team::where('organization_id', $organizationId)
+                    ->whereIn('role', ['owner', 'manager'])
+                    ->orderByRaw("FIELD(role, 'owner', 'manager')")
+                    ->first();
                 $user = User::where('id', $team->user_id)->first();
                 $plan = SubscriptionPlan::where('id', $planId)->first();
 

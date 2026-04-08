@@ -2,13 +2,10 @@
 
 namespace App\Http\Middleware;
 
-use App\Helpers\SubscriptionHelper;
 use App\Models\Team;
-use App\Services\SubscriptionService;
+use App\Support\OrganizationRole;
 use Closure;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Redirect;
-use Inertia\Inertia;
 
 class CheckClientRole
 {
@@ -21,9 +18,9 @@ class CheckClientRole
             // Check if the user role is 'user'
             if ($user->role === 'user') {
                 $organizationId = session()->get('current_organization');
-                $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
-                if($team->role === 'manager' || $team->role === 'agent'){
-                    return to_route('dashboard');
+                $team = Team::where('organization_id', $organizationId)->where('user_id', $user->id)->first();
+                if ($team && OrganizationRole::isAgent($team->role)) {
+                    return redirect('/chats');
                 }
             }
         }

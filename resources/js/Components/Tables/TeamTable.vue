@@ -26,6 +26,10 @@
     });
 
     const user = computed(() => usePage().props.auth.user);
+    const canManageTeam = computed(() => {
+        const r = user.value?.organization_team_role ?? user.value?.teams?.[0]?.role;
+        return ['owner', 'manager'].includes(r);
+    });
     const { isOpenAlert, openAlert, confirmAlert } = useAlertModal();
 
     const form = useForm({'test': null});
@@ -91,7 +95,7 @@
                 <TableHeaderRowItem>{{ $t('Role') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Last updated') }}</TableHeaderRowItem>
-                <TableHeaderRowItem v-if="user.teams[0].role === 'owner'" :position="'last'"></TableHeaderRowItem>
+                <TableHeaderRowItem v-if="canManageTeam" :position="'last'"></TableHeaderRowItem>
             </TableHeaderRow>
         </TableHeader>
         <TableBody>
@@ -103,7 +107,7 @@
                     <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">{{ $t(item.status) }}</span>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">{{ item.updated_at }}</TableBodyRowItem>
-                <TableBodyRowItem v-if="user.teams[0].role === 'owner'" :position="'last'">
+                <TableBodyRowItem v-if="canManageTeam" :position="'last'">
                     <Dropdown v-if="item.role != 'owner'" :align="'right'" class="mt-2">
                         <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
                             <span class="hover:bg-[#F6F7F9] hover:rounded-full w-[fit-content] p-2">

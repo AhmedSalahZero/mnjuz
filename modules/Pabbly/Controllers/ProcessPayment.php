@@ -58,7 +58,8 @@ class ProcessPayment extends BaseController
                     }
 
                     $userId = Team::where('organization_id', $organizationId)
-                        ->where('role', 'owner')
+                        ->whereIn('role', ['owner', 'manager'])
+                        ->orderByRaw("FIELD(role, 'owner', 'manager')")
                         ->value('user_id');
 
                     $payment = BillingPayment::create([

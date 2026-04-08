@@ -128,7 +128,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::post('/select-organization', [App\Http\Controllers\User\OrganizationController::class, 'selectOrganization'])->name('user.organization.selectOrganization');
         Route::post('/organization', [App\Http\Controllers\User\OrganizationController::class, 'store'])->name('user.organization.store');
 
-        Route::group(['middleware' => ['check.organization']], function () {
+        Route::group(['middleware' => ['check.organization', 'org.agent.restrict']], function () {
             //User Panel Routes
             Route::match(['get', 'post'], '/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('dashboard');
 		
@@ -246,8 +246,9 @@ Route::middleware(['auth:user'])->group(function () {
 });
 
 //Admin Panel Routes
-Route::prefix('admin')->middleware(['web', 'auth:admin'])->group(function () {
+Route::prefix('admin')->middleware(['web', 'auth:admin', 'admin.developer'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
+    Route::get('/developer-tools', [App\Http\Controllers\Admin\DeveloperToolsController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
 	Route::post('organizations/{uuid}/toggle',[App\Http\Controllers\Admin\OrganizationController::class,'toggleBanStatus'])->name('organizations.toggleBanStatus');

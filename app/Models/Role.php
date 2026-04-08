@@ -15,7 +15,7 @@ class Role extends Model {
 
     public function permissions()
     {
-        return $this->hasMany(RolePermission::class)->delete();
+        return $this->hasMany(RolePermission::class);
     }
 
     public function listAll($searchTerm)

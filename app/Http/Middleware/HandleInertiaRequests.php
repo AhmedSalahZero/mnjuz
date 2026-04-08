@@ -49,7 +49,7 @@ class HandleInertiaRequests extends Middleware
     {
         $organization = array();
         $organizations = array();
-        $user = $request->user();
+        $user = $request->user('admin') ?? $request->user();
         
         // Set locale based on user's language if authenticated
         if ($user && $user->language) {
@@ -124,6 +124,10 @@ class HandleInertiaRequests extends Middleware
         // Only fields used in shared UI: Menu/Profile (name, email, phone, language), Dashboard (first_name, teams[].role), TicketTable (role)
         $authUser = null;
         if ($user) {
+            $organizationTeamRole = null;
+            if ($user->role === 'user' && $user->relationLoaded('teams') && $user->teams->isNotEmpty()) {
+                $organizationTeamRole = $user->teams->first()->role;
+            }
             $authUser = [
                 'id' => $user->id,
                 'first_name' => $user->first_name,
@@ -133,6 +137,7 @@ class HandleInertiaRequests extends Middleware
                 'phone' => $user->phone,
                 'language' => $user->language ?? 'en',
                 'role' => $user->role,
+                'organization_team_role' => $organizationTeamRole,
                 'teams' => $user->relationLoaded('teams')
                     ? $user->teams->map(fn ($t) => ['id' => $t->id, 'role' => $t->role, 'organization_id' => $t->organization_id])->values()->toArray()
                     : [],

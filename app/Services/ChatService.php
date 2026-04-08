@@ -23,6 +23,7 @@ use App\Models\Template;
 use App\Models\User;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
+use App\Support\OrganizationRole;
 use App\Traits\TemplateTrait;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
@@ -79,7 +80,10 @@ class ChatService
 		 * @var User $currentUser
 		 */
 		$role = $currentUser->getRoleNameForOrganization($this->organizationId);
-		
+		if ($role === '') {
+			$role = OrganizationRole::OWNER;
+		}
+
 		$contact = null ;
 		if($uuid !== null){
 			$contact = Contact::where('uuid', $uuid)->first();

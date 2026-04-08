@@ -57,7 +57,7 @@
 	<div class="flex-grow space-y-3 px-2 overflow-y-scroll">
 		<div class="flex-1">
 			<ul class="pt-2 space-y-1 text-sm mb-2">
-				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/dashboard') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/dashboard"
 						class="flex items-center p-2 space-x-3 rounded-md">
@@ -119,7 +119,7 @@
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Message templates') }}</span>
 					</Link>
 				</li>
-				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/automation/basic"
 						class="flex items-center p-2 space-x-3 rounded-md">
@@ -135,7 +135,7 @@
 				<hr>
 			</div>
 			<ul class="pb-4 space-y-1 text-sm mt-2">
-				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/team" class="flex items-center p-2 space-x-3 rounded-md">
 						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -146,7 +146,7 @@
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Team') }}</span>
 					</Link>
 				</li>
-				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/settings') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/settings"
 						class="md:flex items-center p-2 space-x-3 rounded-md hidden">
@@ -167,7 +167,19 @@
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
 					</Link>
 				</li>
-				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+				<li v-if="isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					:class="$page.url.startsWith('/settings/devices') || $page.url.startsWith('/settings/device') ? 'bg-slate-50 text-black' : ''">
+					<Link rel="noopener noreferrer" href="/settings/devices"
+						class="flex items-center p-2 space-x-3 rounded-md">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
+							<path fill="currentColor" fill-rule="evenodd"
+								d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z"
+								clip-rule="evenodd" />
+						</svg>
+						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Linked Devices') }}</span>
+					</Link>
+				</li>
+				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-x-3 rounded-md">
 						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -189,7 +201,7 @@
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Support') }}</span>
 					</Link>
 				</li>
-				<li v-if="user.teams[0]['role'] === 'owner'"
+				<li v-if="isOrgPrivileged"
 					class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate">
 					<Link rel="noopener noreferrer" href="/developer-tools/access-tokens"
 						class="flex items-center p-2 space-x-3 rounded-md">
@@ -279,7 +291,7 @@
 						</svg>
 					</span>
 				</div>
-				<div @click="isOpenOrganizationModal = true"
+				<div v-if="!isOrgAgent" @click="isOpenOrganizationModal = true"
 					class="flex gap-x-8 bg-slate-50 hover:bg-slate-200 rounded-lg py-1 justify-between items-center w-full cursor-pointer border border-slate-100 pl-1 pr-2 py-3">
 					<div class="w-full">
 						<h3 class="text-center">Create Organization</h3>
@@ -306,6 +318,10 @@ import ProfileModal from '@/Components/ProfileModal.vue'
 import OrganizationModal from '@/Components/OrganizationModal.vue'
 
 const props = defineProps(['config', 'user', 'organization', 'organizations', 'isSidebarOpen', 'unreadMessages'])
+
+const orgRole = computed(() => usePage().props.auth?.user?.organization_team_role ?? props.user?.teams?.[0]?.role ?? '')
+const isOrgAgent = computed(() => orgRole.value === 'agent')
+const isOrgPrivileged = computed(() => ['owner', 'manager'].includes(orgRole.value))
 
 const languages = computed(() => usePage().props.languages)
 const currentLanguage = computed(() => usePage().props.currentLanguage)

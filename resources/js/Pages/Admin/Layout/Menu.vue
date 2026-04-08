@@ -65,7 +65,7 @@
 							<span>{{ $t('Dashboard') }}</span>
 						</Link>
 					</li>
-					<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					<li v-if="!isDeveloperAdmin" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 						:class="$page.url.startsWith('/chats') ? 'bg-slate-50 text-black' : ''">
 						<Link rel="noopener noreferrer" href="/admin/organizations"
 							class="flex items-center p-2 space-x-3 rounded-md">
@@ -92,7 +92,18 @@
 							<span>{{ $t('Users') }}</span>
 						</Link>
 					</li>
-					<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					<li v-if="isDeveloperAdmin" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+						:class="$page.url.includes('/developer-tools') ? 'bg-slate-50 text-black' : ''">
+						<Link rel="noopener noreferrer" href="/admin/developer-tools"
+							class="flex items-center p-2 space-x-3 rounded-md">
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+								<path fill="currentColor"
+									d="M7.312 9H5.688L3.5 15h1.607l.446-1.226h1.894L7.893 15H9.5Zm-1.394 3.774L6.5 11.18l.582 1.595ZM14.744 9h-3.5v6h1.5v-2h2a1.473 1.473 0 0 0 1.5-1.5v-1a1.473 1.473 0 0 0-1.5-1.5m0 2.5h-2v-1h2ZM18 9h1.5v6H18z" />
+							</svg>
+							<span>{{ $t('Developer Tools') }}</span>
+						</Link>
+					</li>
+					<li v-if="!isDeveloperAdmin" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 						:class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
 						<Link rel="noopener noreferrer" href="/admin/payment-logs"
 							class="flex items-center p-2 space-x-3 rounded-md">
@@ -104,7 +115,7 @@
 							<span>{{ $t('Billing') }}</span>
 						</Link>
 					</li>
-					<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					<li v-if="!isDeveloperAdmin" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 						:class="$page.url.startsWith('/template') ? 'bg-slate-50 text-black' : ''">
 						<Link rel="noopener noreferrer" href="/admin/support"
 							class="flex items-center p-2 space-x-3 rounded-md">
@@ -116,7 +127,7 @@
 							<span>{{ $t('Support desk') }}</span>
 						</Link>
 					</li>
-					<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					<li v-if="!isDeveloperAdmin" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 						:class="$page.url.startsWith('/canned-replies') ? 'bg-slate-50 text-black' : ''">
 						<Link rel="noopener noreferrer" href="/admin/team/users"
 							class="flex items-center p-2 space-x-3 rounded-md">
@@ -129,10 +140,10 @@
 						</Link>
 					</li>
 				</ul>
-				<div class="px-4">
+				<div v-if="!isDeveloperAdmin" class="px-4">
 					<hr>
 				</div>
-				<ul class="pb-4 space-y-1 text-sm mt-2">
+				<ul v-if="!isDeveloperAdmin" class="pb-4 space-y-1 text-sm mt-2">
 					<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 						:class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
 						<Link rel="noopener noreferrer" href="/admin/team/roles"
@@ -195,7 +206,7 @@
 			</div>
 		</div>
 		<div class="mt-auto flex-shrink-0">
-			<Link href="/admin/addons"
+			<Link v-if="!isDeveloperAdmin" href="/admin/addons"
 				class="border-2 border-primary text-sm rounded-[5px] mb-1 m-3 py-2 px-4 flex items-center justify-between cursor-pointer">
 				<div class="flex items-center space-x-3">
 					<span>
@@ -257,6 +268,8 @@ import { defineProps, ref, computed, onMounted } from "vue"
 import ProfileModal from '@/Components/ProfileModal.vue'
 
 const props = defineProps(['config', 'user', 'organization', 'organizations', 'isSidebarOpen'])
+
+const isDeveloperAdmin = computed(() => (usePage().props.auth?.user?.role || '') === 'Developer')
 
 const languages = computed(() => usePage().props.languages)
 const currentLanguage = computed(() => usePage().props.currentLanguage)

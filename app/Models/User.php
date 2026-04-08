@@ -123,9 +123,11 @@ class User extends Authenticatable implements MustVerifyEmail
 	{
 		return $this->teams()->where('organization_id', $organizationId)->exists();
 	}
-	public function getRoleNameForOrganization($organizationId):string
+	public function getRoleNameForOrganization($organizationId): string
 	{
-		return $this->teams()->where('organization_id', $organizationId)->first()->role;
+		$team = $this->teams()->where('organization_id', $organizationId)->first();
+
+		return $team ? (string) $team->role : '';
 	}
 
     public function device()

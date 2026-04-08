@@ -7,6 +7,7 @@ use App\Models\Module;
 use App\Models\Role;
 use App\Models\RolePermission;
 use App\Models\User;
+use App\Support\AdminRoleAccess;
 use DB;
 
 class RoleService
@@ -36,7 +37,11 @@ class RoleService
     {
         $role = $uuid ? Role::where('uuid', $uuid)->first() : null;
 
-        $modules = Module::all();
+        $modulesQuery = Module::query();
+        if ($role && strcasecmp($role->name, AdminRoleAccess::DEVELOPER_ROLE_NAME) === 0) {
+            $modulesQuery->whereIn('name', ['developer_tools', 'contacts']);
+        }
+        $modules = $modulesQuery->orderBy('name')->get();
         $permissions = [];
 
         if ($role) {
@@ -60,6 +65,9 @@ class RoleService
 
             // Extract and store permissions in the form permissions[module|action]
             $permissions = $request->input('permissions', []);
+            if (strcasecmp($newRole->name, AdminRoleAccess::DEVELOPER_ROLE_NAME) === 0) {
+                $permissions = $this->filterDeveloperPermissionsInput($permissions);
+            }
 
             $test = [];
             foreach ($permissions as $module => $actions) {
@@ -98,6 +106,9 @@ class RoleService
 
             // Extract and store permissions in the form permissions[module|action]
             $permissions = $request->input('permissions', []);
+            if (strcasecmp($role->name, AdminRoleAccess::DEVELOPER_ROLE_NAME) === 0) {
+                $permissions = $this->filterDeveloperPermissionsInput($permissions);
+            }
 
             // Delete existing permissions
             RolePermission::where('role_id', $role->id)->delete();
@@ -121,6 +132,17 @@ class RoleService
 
             return $role;
         });
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $permissions
+     * @return array<string, array<string, mixed>>
+     */
+    private function filterDeveloperPermissionsInput(array $permissions): array
+    {
+        $allowed = ['developer_tools', 'contacts'];
+
+        return array_intersect_key($permissions, array_flip($allowed));
     }
 
     /**

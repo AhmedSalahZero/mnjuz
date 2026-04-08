@@ -31,6 +31,12 @@ class RolesTableSeeder extends Seeder
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ],
+            [
+                'uuid' => Str::uuid(),
+                'name' => 'Developer',
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ],
         ];
 
         foreach ($roles as $role) {
