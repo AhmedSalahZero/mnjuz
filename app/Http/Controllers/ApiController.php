@@ -1405,12 +1405,12 @@ class ApiController extends Controller
         if ($request->is('api/v1/*')) {
             $organizationId = $request->user()->current_organization_id;
         }
-		$rows = DB::table('users')
-		->join('teams', 'users.id', '=', 'teams.user_id')
-		->where('teams.organization_id', '=', $organizationId)
+		$rows = User::join('teams', 'users.id', '=', 'teams.user_id')
+		->where('teams.organization_id', $organizationId)
 		->whereNull('teams.deleted_at')
 		->select('users.*')
-		->get();
+		->get()
+		->makeHidden(['password','tfa_secret']);
 		return response()->json([
 			'statusCode' => 200,
 			'success' => true,
@@ -1518,18 +1518,6 @@ class ApiController extends Controller
                   AND chats.deleted_at IS NULL) as unread_messages_count'
                 )
             )
-            // ->when($searchTerm !== null && $searchTerm !== '', function ($q) use ($searchTerm) {
-            //     $q->where(function ($sub) use ($searchTerm) {
-            //         $sub->where('contacts.first_name', 'like', "%{$searchTerm}%")
-            //             ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
-            //             ->orWhere('contacts.phone', 'like', "%{$searchTerm}%")
-            //             ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
-            //             ->orWhereRaw(
-            //                 "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
-            //                 ["%{$searchTerm}%"]
-            //             );
-            //     });
-            // })
             ->get();
         $results = [];
         foreach ($contacts as $contact) {
