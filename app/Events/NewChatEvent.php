@@ -126,10 +126,10 @@ class NewChatEvent implements ShouldBroadcast
 						logger('user not found');
 					}
 					if($user){
-						$titleEn = __('New message received');
-						$titleAr = __('تم استقبال رسالة جديدة');
-						$messageEn = __('You have a new message from :name', ['name' =>$contactName]);
-						$messageAr = __('لديك رسالة جديدة من :name', ['name' => $contactName]);
+						$titleEn = $this->buildNotificationTitle($value);
+						$titleAr = $titleEn;
+						$messageEn = $this->formatNotificationMessageLocale($value, 'en');
+						$messageAr = $this->formatNotificationMessageLocale($value, 'ar');
 						// $secondaryType = 'new_message';
 						// $modelId = $this->chat[0]['value']['contact_id'];
 						// $mainType = 'notification';
@@ -412,5 +412,170 @@ class NewChatEvent implements ShouldBroadcast
         }
 
         return $out;
+    }
+
+    /**
+     * عنوان الإشعار (مثل واتساب): الاسم إن وُجد، وإلا رقم الهاتف.
+     */
+    private function buildNotificationTitle(array $value): string
+    {
+        $name = trim((string) ($value['contact_full_name'] ?? ''));
+        if ($name !== '') {
+            return $this->truncateToBytes($name, 160);
+        }
+        $phone = trim((string) ($value['formatted_phone_number'] ?? $value['phone'] ?? ''));
+        if ($phone !== '') {
+            return $this->truncateToBytes($phone, 80);
+        }
+
+        return __('Unknown');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decodeChatMetadata(?string $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function formatNotificationMessageLocale(array $value, string $locale): string
+    {
+        $previous = app()->getLocale();
+        app()->setLocale($locale);
+        try {
+            return $this->buildNotificationMessageBody($value);
+        } finally {
+            app()->setLocale($previous);
+        }
+    }
+
+    /**
+     * نص الإشعار: نص الرسالة كما هو، أو أيقونة + نوع الوسائط (مثل واتساب).
+     */
+    private function buildNotificationMessageBody(array $value): string
+    {
+        $metaRaw = $value['metadata'] ?? null;
+        $metadata = is_array($metaRaw) ? $metaRaw : $this->decodeChatMetadata(is_string($metaRaw) ? $metaRaw : null);
+        $type = $metadata['type'] ?? null;
+
+        if (! $type && ! empty($value['media']) && is_array($value['media'])) {
+            return $this->notificationMessageFromMediaMime($value['media'], $metadata);
+        }
+
+        switch ($type) {
+            case 'text':
+                $body = trim((string) ($metadata['text']['body'] ?? ''));
+
+                return $body !== '' ? $this->truncateToBytes($body, 1000) : __('Message');
+
+            case 'button':
+                $body = trim((string) (($metadata['button']['text'] ?? null) ?? ($metadata['button']['payload'] ?? '')));
+
+                return $body !== '' ? $this->truncateToBytes($body, 1000) : __('Message');
+
+            case 'interactive':
+                $interactive = $metadata['interactive'] ?? [];
+                $it = $interactive['type'] ?? null;
+                if ($it === 'button_reply') {
+                    $body = trim((string) ($interactive['button_reply']['title'] ?? ''));
+
+                    return $body !== '' ? $this->truncateToBytes($body, 1000) : $this->formatMediaStyleLine('interactive', []);
+                }
+                if ($it === 'list_reply') {
+                    $t = trim((string) ($interactive['list_reply']['title'] ?? ''));
+                    $d = trim((string) ($interactive['list_reply']['description'] ?? ''));
+                    $line = $t !== '' && $d !== '' ? $t.' — '.$d : ($t !== '' ? $t : $d);
+
+                    return $line !== '' ? $this->truncateToBytes($line, 1000) : $this->formatMediaStyleLine('interactive', []);
+                }
+
+                return $this->formatMediaStyleLine('interactive', []);
+
+            case 'image':
+            case 'video':
+            case 'audio':
+            case 'document':
+            case 'sticker':
+            case 'location':
+            case 'contacts':
+                return $this->formatMediaStyleLine($type, $metadata);
+
+            default:
+                if (! empty($metadata['text']['body'])) {
+                    return $this->truncateToBytes((string) $metadata['text']['body'], 1000);
+                }
+                if (! empty($value['media']) && is_array($value['media'])) {
+                    return $this->notificationMessageFromMediaMime($value['media'], $metadata);
+                }
+
+                return __('Message');
+        }
+    }
+
+    private function formatMediaStyleLine(string $type, array $metadata): string
+    {
+        $label = $this->mediaLabelWithEmoji($type, $metadata);
+        $caption = trim($this->extractCaptionForType($type, $metadata));
+        if ($caption !== '') {
+            return $label.': '.$this->truncateToBytes($caption, 500);
+        }
+
+        return $label;
+    }
+
+    private function extractCaptionForType(string $type, array $metadata): string
+    {
+        return match ($type) {
+            'image' => (string) ($metadata['image']['caption'] ?? ''),
+            'video' => (string) ($metadata['video']['caption'] ?? ''),
+            'document' => (string) (($metadata['document']['filename'] ?? '') ?: ($metadata['document']['caption'] ?? '')),
+            default => '',
+        };
+    }
+
+    private function mediaLabelWithEmoji(string $type, array $metadata): string
+    {
+        return match ($type) {
+            'image' => '📷 '.__('Photo'),
+            'video' => '🎥 '.__('Video'),
+            'audio' => (! empty($metadata['audio']['voice']))
+                ? '🎤 '.__('Voice message')
+                : '🎵 '.__('Audio'),
+            'document' => '📄 '.__('File'),
+            'sticker' => '🎨 '.__('Sticker'),
+            'location' => '📍 '.__('Location'),
+            'contacts' => '👤 '.__('Contact'),
+            'interactive' => '💬 '.__('Message'),
+            default => '💬 '.__('Message'),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $media
+     * @param  array<string, mixed>  $metadata
+     */
+    private function notificationMessageFromMediaMime(array $media, array $metadata): string
+    {
+        $mime = strtolower((string) ($media['type'] ?? ''));
+        if (str_starts_with($mime, 'image/')) {
+            return $this->formatMediaStyleLine('image', $metadata);
+        }
+        if (str_starts_with($mime, 'video/')) {
+            return $this->formatMediaStyleLine('video', $metadata);
+        }
+        if (str_starts_with($mime, 'audio/')) {
+            return $this->formatMediaStyleLine('audio', $metadata);
+        }
+        if (str_starts_with($mime, 'application/') || str_contains($mime, 'pdf')) {
+            return $this->formatMediaStyleLine('document', $metadata);
+        }
+
+        return '📎 '.__('File');
     }
 }

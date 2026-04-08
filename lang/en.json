@@ -192,6 +192,8 @@
     "Your browser does not support the audio element": "Your browser does not support the audio element",
     "Your browser does not support the video element": "Your browser does not support the video element",
     "Photo": "Photo",
+    "Voice message": "Voice message",
+    "Unknown": "Unknown",
     "Sticker": "Sticker",
     "Location": "Location",
     "File": "File",
