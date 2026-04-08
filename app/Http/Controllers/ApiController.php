@@ -1496,65 +1496,221 @@ class ApiController extends Controller
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
-        $entityTypes = $request->input('message_types', []);
-        
-        $createdAt = $request->input('created_at', null);
-        // $page = $request->input('page', 1);
-        // $perPage = $request->input('per_page', 10);
-        $organization = Organization::where('id', $organizationId)->first();
-        $orgId = (int) $organizationId;
-        // $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
 
-        $contacts = $organization->contacts()
-            ->with('contactCategories:id,name,uuid,background_color,text_color', 'ticket:id,status,assigned_to,contact_id')
+        $entityTypes = $request->input('message_types', []);
+        $createdAt = $request->input('created_at', null);
+        $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
+        $orgId = (int) $organizationId;
+
+        // Step 1: Load only contacts that have matching chat_logs (skip empty contacts)
+        $contactsQuery = Contact::where('organization_id', $orgId)
+            ->whereNull('deleted_at')
+            ->with([
+                'contactCategories:id,name,uuid,background_color,text_color',
+                'ticket:id,status,assigned_to,contact_id',
+            ])
             ->addSelect(
                 'contacts.*',
                 DB::raw(
                     '(SELECT COUNT(*) FROM chats
-                  WHERE chats.contact_id = contacts.id
-                  AND chats.type = \'inbound\'
-                  AND chats.is_read = 0
-                  AND chats.organization_id = '.$orgId.'
-                  AND chats.deleted_at IS NULL) as unread_messages_count'
+                      WHERE chats.contact_id = contacts.id
+                      AND chats.type = \'inbound\'
+                      AND chats.is_read = 0
+                      AND chats.organization_id = ' . $orgId . '
+                      AND chats.deleted_at IS NULL) as unread_messages_count'
                 )
             )
+            ->whereExists(function ($sub) use ($createdAt, $entityTypes) {
+                $sub->select(DB::raw(1))
+                    ->from('chat_logs')
+                    ->whereColumn('chat_logs.contact_id', 'contacts.id')
+                    ->whereNull('chat_logs.deleted_at');
+                if ($createdAt) {
+                    $sub->where('chat_logs.created_at', '>=', $createdAt);
+                }
+                if (!empty($entityTypes)) {
+                    $sub->whereIn('chat_logs.entity_type', $entityTypes);
+                }
+            });
+
+       
+
+        $contacts = $contactsQuery->orderBy('latest_chat_created_at', 'desc')->get();
+
+        if ($contacts->isEmpty()) {
+            return response()->json([
+                'statusCode' => 200,
+                'success' => true,
+                'message' => __('Chat messages fetched successfully'),
+                'data' => [],
+            ], 200);
+        }
+
+        $contactIds = $contacts->pluck('id')->all();
+        $contactsById = $contacts->keyBy('id');
+
+        // Step 2: Load ALL chat_logs in one query (instead of N separate queries)
+        $allChatLogs = ChatLog::whereIn('contact_id', $contactIds)
+            ->whereNull('deleted_at')
+            ->when($createdAt, fn ($q) => $q->where('created_at', '>=', $createdAt))
+            ->when(!empty($entityTypes), fn ($q) => $q->whereIn('entity_type', $entityTypes))
+            ->orderBy('created_at', 'asc')
             ->get();
+
+        // Step 3: Batch-load all related entities (3 queries total instead of 3×N)
+        $chatIds    = $allChatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
+        $ticketIds  = $allChatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
+        $noteIds    = $allChatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
+
+        $chatsMap = !empty($chatIds)
+            ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
+            : collect();
+        $ticketLogsMap = !empty($ticketIds)
+            ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
+            : collect();
+        $notesMap = !empty($noteIds)
+            ? ChatNote::whereIn('id', $noteIds)->get()->keyBy('id')
+            : collect();
+
+        // Step 4: Group by contact and build response (zero additional DB queries)
+        $chatLogsByContact = $allChatLogs->groupBy('contact_id');
+        $isDev = config('app.env') === 'development';
+
         $results = [];
-        foreach ($contacts as $contact) {
-            $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
-            $data = [] ;
-			$ticket=$contact->ticket;
-            if ($result) {
-                $data['contact_id']=$contact->id;
-                $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
-				$data['is_blocked']=$contact->is_blocked;
-				$data['ticket_status']=$ticket ? $ticket->status : null;
-				$data['ticket_assigned_to']=$ticket ? $ticket->assigned_to : null;
-				$data['unread_messages_count']  = $contact->unread_messages_count;
-                $data['contact_categories'] = $contact->relationLoaded('contactCategories')
+        foreach ($contactsById as $contactId => $contact) {
+            $logs = $chatLogsByContact->get($contactId);
+            if (!$logs || $logs->isEmpty()) {
+                continue;
+            }
+
+            $messages = [];
+            foreach ($logs as $chatLog) {
+                $value = null;
+                if ($chatLog->entity_type === 'chat') {
+                    $chat = $chatsMap->get($chatLog->entity_id);
+                    if (!$chat) continue;
+                    if ($isDev) {
+                        $meta = is_string($chat->metadata) ? json_decode($chat->metadata, true) : $chat->metadata;
+                        if (isset($meta['buttons']) || isset($meta['context'])) continue;
+                    }
+                    $value = $this->formatChatValue($chat, $contact);
+                } elseif ($chatLog->entity_type === 'ticket') {
+                    $value = $ticketLogsMap->get($chatLog->entity_id);
+                } elseif ($chatLog->entity_type === 'notes') {
+                    $value = $notesMap->get($chatLog->entity_id);
+                }
+                $messages[] = ['type' => $chatLog->entity_type, 'value' => $value];
+            }
+
+            if (empty($messages)) continue;
+
+            $ticket = $contact->ticket;
+            $results[] = [
+                'contact_id' => $contact->id,
+                'last_inbound_chat_created_at' => $contact->last_inbound_chat_created_at,
+                'is_blocked' => $contact->is_blocked,
+                'ticket_status' => $ticket ? $ticket->status : null,
+                'ticket_assigned_to' => $ticket ? $ticket->assigned_to : null,
+                'unread_messages_count' => $contact->unread_messages_count,
+                'contact_categories' => $contact->relationLoaded('contactCategories')
                     ? $contact->contactCategories->map(fn ($c) => [
                         'id' => $c->id,
                         'name' => $c->name,
                         'background_color' => $c->background_color ?? '#22c55e',
                         'text_color' => $c->text_color ?? '#ffffff',
                     ])->values()->all()
-                    : [];
-                foreach ($result as $item) {
-                    foreach ($item as $item2) {
-                        $data['messages'][] =$item2;
-                    }
-                }
-					$results[] = $data;
-            }
+                    : [],
+                'messages' => $messages,
+            ];
         }
-	
+
         return response()->json([
             'statusCode' => 200,
             'success' => true,
             'message' => __('Chat messages fetched successfully'),
-            'data' => $results
+            'data' => $results,
         ], 200);
     }
+    /**
+     * Format a chat record for the mobile API using the already-loaded contact
+     * instead of re-querying it from DB (replaces minimalChatValue N+1).
+     */
+    private function formatChatValue($chat, $contact): array
+    {
+        $arr = $chat instanceof \Illuminate\Database\Eloquent\Model ? $chat->toArray() : (array) $chat;
+
+        $user = null;
+        if (!empty($arr['user']) && is_array($arr['user'])) {
+            $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
+        }
+
+        $media = null;
+        if (!empty($arr['media']) && is_array($arr['media'])) {
+            $media = [
+                'type' => $arr['media']['type'] ?? null,
+                'size' => $arr['media']['size'] ?? null,
+                'path' => mb_strcut($arr['media']['path'] ?? '', 0, 200, 'UTF-8'),
+                'name' => mb_strcut($arr['media']['name'] ?? '', 0, 80, 'UTF-8'),
+            ];
+        }
+
+        $rawLogs = $arr['logs'] ?? [];
+        $logs = [];
+        if (!empty($rawLogs) && is_array($rawLogs)) {
+            $rawLogs = array_slice($rawLogs, -6, 6);
+            foreach ($rawLogs as $log) {
+                $logArr = is_array($log) ? $log : (array) $log;
+                $rawMetadata = $logArr['metadata'] ?? '{}';
+                $decoded = is_string($rawMetadata) ? json_decode($rawMetadata, true) : $rawMetadata;
+                if (!is_array($decoded)) {
+                    $decoded = [];
+                }
+                $minimal = array_intersect_key($decoded, array_flip(['status', 'errors', 'id']));
+                $logs[] = ['metadata' => json_encode($minimal)];
+            }
+        }
+
+        $metadata = $arr['metadata'] ?? null;
+        $metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+        $type = $metadata['type'] ?? null;
+        if (is_array($metadata) && isset($metadata['type']) && $type && empty($metadata[$type])) {
+            $metadata[$type] = null;
+        }
+        if (is_array($metadata)) {
+            $metadata = json_encode($metadata);
+        }
+
+        $fullName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
+        if (strlen($fullName) > 120) {
+            $fullName = mb_strcut($fullName, 0, 120, 'UTF-8');
+        }
+
+        return [
+            'id' => $arr['id'] ?? null,
+            'uuid' => $arr['uuid'] ?? null,
+            'contact_uuid' => $contact->uuid,
+            'contact_id' => $contact->id,
+            'is_new_contact' => false,
+            'phone' => $contact->phone,
+            'formatted_phone_number' => $contact->formatted_phone_number,
+            'organization_id' => $contact->organization_id,
+            'latest_chat_created_at' => $contact->latest_chat_created_at,
+            'is_blocked' => $contact->is_blocked,
+            'is_favorite' => $contact->is_favorite,
+            'contact_full_name' => $fullName ?: null,
+            'unread_messages_count' => (int) ($contact->unread_messages_count ?? 0),
+            'created_at' => $arr['created_at'] ?? null,
+            'deleted_at' => $arr['deleted_at'] ?? null,
+            'metadata' => $metadata,
+            'type' => $arr['type'] ?? 'outbound',
+            'wam_id' => $arr['wam_id'] ?? null,
+            'status' => $arr['status'] ?? null,
+            'media' => $media,
+            'logs' => $logs,
+            'user' => $user,
+        ];
+    }
+
     protected function getChatMessages($contactId, $createdAt, $entityTypes)
     {
         $query = ChatLog::where('contact_id', $contactId)
@@ -1605,6 +1761,132 @@ class ApiController extends Controller
         }
         return array_reverse($chats) ;
     }
+	
+	
+	// public function listChatMessagesFromUuidToEnd(Request $request)
+    // {
+    //     $organizationId = $request->organization;
+    //     if ($request->is('api/v1/*')) {
+    //         $organizationId = $request->user()->current_organization_id;
+    //     }
+    //     $validator = Validator::make($request->all(), [
+    //         'created_at' => 'sometimes|max:255',
+    //         'message_types' => 'sometimes|array|in:chat,ticket,notes',
+    //         'search' => 'sometimes|string|max:255',
+    //     ]);
+    //     if ($validator->fails()) {
+    //         return response()->json(['error' => $validator->errors()], 400);
+    //     }
+    //     $entityTypes = $request->input('message_types', []);
+        
+    //     $createdAt = $request->input('created_at', null);
+    //     // $page = $request->input('page', 1);
+    //     // $perPage = $request->input('per_page', 10);
+    //     $organization = Organization::where('id', $organizationId)->first();
+    //     $orgId = (int) $organizationId;
+    //     // $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
+
+    //     $contacts = $organization->contacts()
+    //         ->with('contactCategories:id,name,uuid,background_color,text_color', 'ticket:id,status,assigned_to,contact_id')
+    //         ->addSelect(
+    //             'contacts.*',
+    //             DB::raw(
+    //                 '(SELECT COUNT(*) FROM chats
+    //               WHERE chats.contact_id = contacts.id
+    //               AND chats.type = \'inbound\'
+    //               AND chats.is_read = 0
+    //               AND chats.organization_id = '.$orgId.'
+    //               AND chats.deleted_at IS NULL) as unread_messages_count'
+    //             )
+    //         )
+    //         ->get();
+    //     $results = [];
+    //     foreach ($contacts as $contact) {
+    //         $result = $this->getChatMessages($contact->id, $createdAt, $entityTypes);
+    //         $data = [] ;
+	// 		$ticket=$contact->ticket;
+    //         if ($result) {
+    //             $data['contact_id']=$contact->id;
+    //             $data['last_inbound_chat_created_at']=$contact->last_inbound_chat_created_at;
+	// 			$data['is_blocked']=$contact->is_blocked;
+	// 			$data['ticket_status']=$ticket ? $ticket->status : null;
+	// 			$data['ticket_assigned_to']=$ticket ? $ticket->assigned_to : null;
+	// 			$data['unread_messages_count']  = $contact->unread_messages_count;
+    //             $data['contact_categories'] = $contact->relationLoaded('contactCategories')
+    //                 ? $contact->contactCategories->map(fn ($c) => [
+    //                     'id' => $c->id,
+    //                     'name' => $c->name,
+    //                     'background_color' => $c->background_color ?? '#22c55e',
+    //                     'text_color' => $c->text_color ?? '#ffffff',
+    //                 ])->values()->all()
+    //                 : [];
+    //             foreach ($result as $item) {
+    //                 foreach ($item as $item2) {
+    //                     $data['messages'][] =$item2;
+    //                 }
+    //             }
+	// 				$results[] = $data;
+    //         }
+    //     }
+	
+    //     return response()->json([
+    //         'statusCode' => 200,
+    //         'success' => true,
+    //         'message' => __('Chat messages fetched successfully'),
+    //         'data' => $results
+    //     ], 200);
+    // }
+    // protected function getChatMessages($contactId, $createdAt, $entityTypes)
+    // {
+    //     $query = ChatLog::where('contact_id', $contactId)
+    //         ->where('deleted_at', null)
+    //         ->orderBy('created_at', 'desc')
+    //         ->when($createdAt, function ($q) use ($createdAt) {
+    //             $q->where('created_at', '>=', $createdAt);
+    //         })
+    //         ->when(count($entityTypes), function ($q) use ($entityTypes) {
+    //             $q->whereIn('entity_type', $entityTypes);
+    //         });
+
+    //     $chatLogs = $query->get() ;
+    //     $chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
+    //     $ticketIds = $chatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
+    //     $noteIds = $chatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
+
+    //     $chatsMap = !empty($chatIds)
+    //         ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
+    //         : collect();
+    //     $ticketLogsMap = !empty($ticketIds)
+    //         ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
+    //         : collect();
+    //     $notesMap = !empty($noteIds)
+    //         ? ChatNote::whereIn('id', $noteIds)->get()->keyBy('id')
+    //         : collect();
+
+    //     $chats = [];
+    //     foreach ($chatLogs as $chatLog) {
+    //         $value = null;
+    //         if ($chatLog->entity_type === 'chat') {
+    //             $value = $chatsMap->get($chatLog->entity_id);
+    //             // temp condition to skip buttons and context for mobile testing now
+    //             if (env('APP_ENV') == 'development') {
+    //                 if (isset($value['metadata']) && (isset(json_decode($value['metadata'], true)['buttons']) || isset(json_decode($value['metadata'], true)['context']))
+    //                 ) {
+    //                     continue;
+    //                 }
+    //             }
+                
+    //             $value = minimalChatValue($value);
+    //         } elseif ($chatLog->entity_type === 'ticket') {
+    //             $value = $ticketLogsMap->get($chatLog->entity_id);
+    //         } elseif ($chatLog->entity_type === 'notes') {
+    //             $value = $notesMap->get($chatLog->entity_id);
+    //         }
+    //         $chats[] = [['type' => $chatLog->entity_type, 'value' => $value]];
+    //     }
+    //     return array_reverse($chats) ;
+    // }
+	
     public function deleteChatForContact(Request $request, $uuid)
     {
         $organizationId = $request->user()->current_organization_id;
