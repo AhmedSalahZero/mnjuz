@@ -104,7 +104,15 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
     Route::post('/forgot-password', [App\Http\Controllers\AuthController::class, 'createPasswordResetToken']);
     Route::get('/reset-password', [App\Http\Controllers\AuthController::class, 'showResetForm'])->name('password.reset');
     Route::post('/reset-password', [App\Http\Controllers\AuthController::class, 'resetPassword']);
+    Route::get('/reset-devices', [App\Http\Controllers\AuthController::class, 'showResetDevicesForm'])->name('reset-devices');
+    Route::post('/reset-devices', [App\Http\Controllers\AuthController::class, 'sendResetDevicesLink'])
+        ->middleware('throttle:5,1')
+        ->name('reset-devices.send');
 });
+
+Route::get('/auth/reset-devices/{user}', [App\Http\Controllers\AuthController::class, 'processResetDevices'])
+    ->middleware('signed')
+    ->name('auth.reset-devices');
 
 Route::middleware(['auth:user,admin'])->group(function () {
     Route::put('/profile', [App\Http\Controllers\ProfileController::class, 'update']);

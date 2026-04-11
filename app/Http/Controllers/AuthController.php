@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\Email;
 use App\Http\Controllers\Controller as BaseController;
+use App\Http\Requests\ResetDevicesRequest;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\PasswordResetRequest;
 use App\Http\Requests\PasswordValidateResetRequest;
@@ -21,6 +22,8 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Models\UserDevice;
+use App\Mail\ResetLinkedDevicesMail;
 use App\Services\UserDeviceService;
 use App\Services\AuthService;
 use App\Services\PasswordResetService;
@@ -32,8 +35,11 @@ use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -588,6 +594,77 @@ class AuthController extends BaseController
             'status', [
                 'type' => 'success', 
                 'message' => __('Password reset successful!')
+            ]
+        );
+    }
+
+    public function showResetDevicesForm()
+    {
+        $keys = ['logo', 'company_name', 'address', 'email', 'phone', 'socials', 'trial_period'];
+        $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
+
+        return Inertia::render('Auth/ResetDevices', $data);
+    }
+
+    public function sendResetDevicesLink(ResetDevicesRequest $request)
+    {
+        $email = $request->validated('email');
+        $user = User::where('email', $email)
+            ->whereNull('deleted_at')
+            ->where('role', 'user')
+            ->first();
+
+        if ($user) {
+            $smtpActive = Setting::where('key', 'smtp_email_active')->value('value');
+            if ((string) $smtpActive === '1') {
+                $companyName = (string) (Setting::where('key', 'company_name')->value('value') ?? config('app.name'));
+                $logo = Setting::where('key', 'logo')->value('value');
+                $logoUrl = $logo ? url('/media/'.ltrim($logo, '/')) : '';
+
+                $signedUrl = URL::temporarySignedRoute(
+                    'auth.reset-devices',
+                    now()->addMinutes(30),
+                    ['user' => $user->getKey()]
+                );
+
+                try {
+                    Mail::to($user->email)->queue(new ResetLinkedDevicesMail($user, $signedUrl, $logoUrl, $companyName));
+                } catch (\Throwable $e) {
+                    Log::error('Reset linked devices email failed: '.$e->getMessage(), ['email' => $user->email]);
+                }
+            } else {
+                Log::warning('Reset linked devices: SMTP not active, email not sent', ['email' => $user->email]);
+            }
+        }
+
+        return redirect()->back()->with(
+            'status',
+            [
+                'type' => 'success',
+                'message' => __('If the email exists, a reset link has been sent.'),
+            ]
+        );
+    }
+
+    public function processResetDevices(Request $request, User $user)
+    {
+        if ($user->role !== 'user' || $user->trashed()) {
+            abort(404);
+        }
+
+        UserDevice::where('user_id', $user->id)->delete();
+
+        $user->tokens()->delete();
+
+        if (config('session.driver') === 'database' && Schema::hasTable('sessions')) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        return redirect('/login')->with(
+            'status',
+            [
+                'type' => 'success',
+                'message' => __('Devices reset successfully. You can now log in from any device.'),
             ]
         );
     }

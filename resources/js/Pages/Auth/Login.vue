@@ -29,7 +29,10 @@
                                     <label for="remember" class="text-gray-500 dark:text-gray-300">{{ $t('Remember me') }}</label>
                                 </div>
                             </div>
-                            <Link href="/forgot-password" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Forgot password?') }}</Link>
+                            <div class="flex flex-col items-end gap-1">
+                                <Link href="/forgot-password" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Forgot password?') }}</Link>
+                                <Link href="/reset-devices" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Reset Linked Devices?') }}</Link>
+                            </div>
                         </div>
                         <div class="mt-6">
                             <button v-if="!isLoading" type="submit" class="rounded-md bg-primary px-3 py-3 text-sm text-white shadow-sm w-full">{{ $t('Login to your account') }}</button>
