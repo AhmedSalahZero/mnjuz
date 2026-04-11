@@ -146,6 +146,7 @@ class HandleInertiaRequests extends Middleware
         // قراءة الـ flash ثم حذفه فوراً حتى لا يبقى في الجلسة بعد الطلب (مهم عند استخدام router.visit مع only لأن الطلب التالي قد يكون جزئياً)
         $message = session('status');
         session()->forget('status');
+        $showResetDevicesLink = session()->pull('show_reset_devices_link', false);
 
         return array_merge(parent::share($request), [
             'csrf_token' => csrf_token(),
@@ -158,7 +159,8 @@ class HandleInertiaRequests extends Middleware
             'organization' => $organization,
             'organizations' => $organizations,
             'flash' => [
-                'status'=> $message
+                'status'=> $message,
+                'show_reset_devices_link' => (bool) $showResetDevicesLink,
             ],
             'refresh_lang' => session('refresh_lang', false),
             'response_data' => fn () => $request->session()->get('response_data'),

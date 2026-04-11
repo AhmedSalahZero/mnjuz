@@ -757,7 +757,7 @@ class AuthController extends BaseController
 
             return redirect()->back()->withErrors([
                 'email' => __('This account is already linked to another device. Please remove it first from settings.', [], $user->language ?? 'en'),
-            ])->withInput();
+            ])->withInput()->with('show_reset_devices_link', true);
         }
 
         $this->userDeviceService->registerOrTouch($user, $deviceData);

@@ -16,7 +16,12 @@
                     </div>
                     <form @submit.prevent="submitForm()" class="mt-5">
                         <div class="mt-5 space-y-4">
-                            <FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'email'" :class="'col-span-3'"/>
+                            <div class="space-y-1">
+                                <FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'email'" :class="'col-span-3'"/>
+                                <div v-if="props.flash?.show_reset_devices_link && form.errors.email" class="text-center">
+                                    <Link href="/reset-devices" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Reset Linked Devices?') }}</Link>
+                                </div>
+                            </div>
                             <FormInput v-model="form.password" :name="$t('Password')" :error="form.errors.password" :type="'password'" :class="'col-span-3'"/>
                             <div v-if="form.errors.recaptcha_response" class="form-error text-[#b91c1c] text-xs">{{ form.errors.recaptcha_response }}</div>
                         </div>
@@ -31,7 +36,6 @@
                             </div>
                             <div class="flex flex-col items-end gap-1">
                                 <Link href="/forgot-password" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Forgot password?') }}</Link>
-                                <Link href="/reset-devices" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Reset Linked Devices?') }}</Link>
                             </div>
                         </div>
                         <div class="mt-6">
