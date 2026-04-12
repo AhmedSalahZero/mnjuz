@@ -249,7 +249,7 @@ class FlowExecutionService
         // Process nodes continuously until we encounter a message node
         $maxIterations = 50; // Prevent infinite loops
         $iteration = 0;
-		$tryAnotherTime = true ;
+        $jumpedBack = false; // Track if we already attempted a backward jump (prevent re-looping)
       //  logger('start looping');
         while ($iteration < $maxIterations) {
             $iteration++;
@@ -266,6 +266,18 @@ class FlowExecutionService
                 }
 
                 if ($edgesFromCurrentStep > 1) {
+                    // Current step is an interactive node that expected user input, but message didn't match.
+                    // Try to find a previous interactive step whose option matches the message,
+                    // so the user can navigate back by re-typing a previous keyword.
+                    if (!$jumpedBack) {
+                        $previousStep = $this->findPreviousMatchingStep($edges, $flowData->current_step, $message);
+                        if ($previousStep !== null) {
+                            FlowUserData::where('contact_id', $contactId)->update(['current_step' => $previousStep]);
+                            $flowData = FlowUserData::where('contact_id', $contactId)->first();
+                            $jumpedBack = true;
+                            continue; // Re-process with the previous matching step
+                        }
+                    }
                     return false;
                 }
 
@@ -620,6 +632,73 @@ class FlowExecutionService
         }
 
         return $buttonArray;
+    }
+
+    /**
+     * Backward BFS from the current step to find the closest previous interactive node
+     * whose button/list option matches the given message.
+     * Returns the node ID of that step so the flow can be re-set to it,
+     * allowing the user to navigate back by re-typing a previous keyword.
+     */
+    private function findPreviousMatchingStep(array $edges, $currentStep, string $message): ?string
+    {
+        $visited = [(string) $currentStep];
+        $queue   = [(string) $currentStep];
+
+        while (!empty($queue)) {
+            $nodeId = array_shift($queue);
+
+            // Find all edges pointing TO this node (backward traversal)
+            foreach ($edges as $edge) {
+                $targetId = (string) ($edge['target'] ?? '');
+                $sourceId = (string) ($edge['source'] ?? '');
+
+                if ($targetId !== $nodeId || in_array($sourceId, $visited)) {
+                    continue;
+                }
+
+                $visited[] = $sourceId;
+                $queue[]   = $sourceId;
+
+                // Check edges FROM this source node (to determine if it's interactive)
+                $edgesFromSource = array_values(array_filter(
+                    $edges,
+                    fn($e) => isset($e['source']) && (string) $e['source'] === $sourceId
+                ));
+
+                if (count($edgesFromSource) <= 1) {
+                    continue; // Not an interactive node
+                }
+
+                $firstEdge = $edgesFromSource[0];
+                $nodeType  = $firstEdge['sourceNode']['type'] ?? null;
+                $type      = $firstEdge['sourceNode']['data']['metadata']['fields']['type'] ?? null;
+
+                if ($nodeType === 'action') {
+                    continue; // Action nodes don't accept user input
+                }
+
+                if ($type === 'interactive buttons') {
+                    $buttons = $firstEdge['sourceNode']['data']['metadata']['fields']['buttons'] ?? [];
+                    foreach ($buttons as $buttonValue) {
+                        if (strtolower(trim((string) $buttonValue)) === strtolower(trim($message))) {
+                            return $sourceId;
+                        }
+                    }
+                } elseif ($type === 'interactive list') {
+                    $sections = $firstEdge['sourceNode']['data']['metadata']['fields']['sections'] ?? [];
+                    foreach ($sections as $section) {
+                        foreach ($section['rows'] ?? [] as $row) {
+                            if (strtolower(trim($row['title'] ?? '')) === strtolower(trim($message))) {
+                                return $sourceId;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private function findEdgesBySource($edges, $sourceId, $message)
