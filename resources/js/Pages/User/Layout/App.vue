@@ -92,24 +92,24 @@ onMounted(() => {
 		}
 	})
 
-	const SB_BASE = 'https://business.waz.com.sa/support'
-	const loadExternalScript = (src, id) =>
-		new Promise((resolve, reject) => {
-			if (id && document.getElementById(id)) {
-				resolve()
-				return
-			}
-			const el = document.createElement('script')
-			el.src = src
-			if (id) el.id = id
-			el.onload = () => resolve()
-			el.onerror = () => reject(new Error(`Failed to load script: ${src}`))
-			document.body.appendChild(el)
-		})
+	// const SB_BASE = 'https://business.waz.com.sa/support'
+	// const loadExternalScript = (src, id) =>
+	// 	new Promise((resolve, reject) => {
+	// 		if (id && document.getElementById(id)) {
+	// 			resolve()
+	// 			return
+	// 		}
+	// 		const el = document.createElement('script')
+	// 		el.src = src
+	// 		if (id) el.id = id
+	// 		el.onload = () => resolve()
+	// 		el.onerror = () => reject(new Error(`Failed to load script: ${src}`))
+	// 		document.body.appendChild(el)
+	// 	})
 
-	window.SB_INIT_URL = SB_BASE
-	loadExternalScript(`${SB_BASE}/js/min/jquery.min.js`, 'sb-support-jquery')
-		.then(() => loadExternalScript(`${SB_BASE}/js/main.js`, 'sbinit'))
-		.catch((e) => console.warn('Support board widget failed to load:', e))
+	// window.SB_INIT_URL = SB_BASE
+	// loadExternalScript(`${SB_BASE}/js/min/jquery.min.js`, 'sb-support-jquery')
+	// 	.then(() => loadExternalScript(`${SB_BASE}/js/main.js`, 'sbinit'))
+	// 	.catch((e) => console.warn('Support board widget failed to load:', e))
 })
 </script>

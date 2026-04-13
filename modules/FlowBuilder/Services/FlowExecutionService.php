@@ -289,6 +289,7 @@ class FlowExecutionService
 
                 // Always attempt backward navigation first (whether stuck at interactive node
                 // or at a terminal node), before giving up or deleting the flow data.
+                logger('[processFlow] empty metadataArray', ['current_step' => $flowData->current_step, 'edgesFromCurrentStep' => $edgesFromCurrentStep, 'message' => $message, 'jumpedBack' => $jumpedBack]);
                 if (!$jumpedBack) {
                     $previousStep = $this->findPreviousMatchingStep($edges, $flowData->current_step, $message);
                     if ($previousStep !== null) {
@@ -666,10 +667,23 @@ class FlowExecutionService
         $visited = [(string) $currentStep];
         $queue   = [(string) $currentStep];
 
+        logger('[BFS] start', ['currentStep' => $currentStep, 'message' => $message, 'total_edges' => count($edges)]);
+
+        // Dump all edge source→target pairs for debugging
+        $edgeMap = [];
+        foreach ($edges as $edge) {
+            $edgeMap[] = [
+                'source' => $edge['source'] ?? '?',
+                'target' => $edge['target'] ?? '?',
+                'targetNode_id' => $edge['targetNode']['id'] ?? '?',
+            ];
+        }
+        logger('[BFS] edge map', $edgeMap);
+
         while (!empty($queue)) {
             $nodeId = array_shift($queue);
+            logger('[BFS] processing node', ['nodeId' => $nodeId]);
 
-            // Find all edges pointing TO this node (backward traversal)
             foreach ($edges as $edge) {
                 $targetId = (string) ($edge['targetNode']['id'] ?? $edge['target'] ?? '');
                 $sourceId = (string) ($edge['source'] ?? '');
@@ -678,31 +692,37 @@ class FlowExecutionService
                     continue;
                 }
 
+                logger('[BFS] found parent', ['sourceId' => $sourceId, 'targetId' => $targetId]);
                 $visited[] = $sourceId;
                 $queue[]   = $sourceId;
 
-                // Check edges FROM this source node (to determine if it's interactive)
                 $edgesFromSource = array_values(array_filter(
                     $edges,
                     fn($e) => isset($e['source']) && (string) $e['source'] === $sourceId
                 ));
 
+                logger('[BFS] edges from source', ['sourceId' => $sourceId, 'count' => count($edgesFromSource)]);
+
                 if (count($edgesFromSource) <= 1) {
-                    continue; // Not an interactive node
+                    continue;
                 }
 
                 $firstEdge = $edgesFromSource[0];
                 $nodeType  = $firstEdge['sourceNode']['type'] ?? null;
                 $type      = $firstEdge['sourceNode']['data']['metadata']['fields']['type'] ?? null;
 
+                logger('[BFS] interactive check', ['sourceId' => $sourceId, 'nodeType' => $nodeType, 'type' => $type]);
+
                 if ($nodeType === 'action') {
-                    continue; // Action nodes don't accept user input
+                    continue;
                 }
 
                 if ($type === 'interactive buttons') {
                     $buttons = $firstEdge['sourceNode']['data']['metadata']['fields']['buttons'] ?? [];
+                    logger('[BFS] comparing buttons', ['buttons' => $buttons, 'message' => $message]);
                     foreach ($buttons as $buttonValue) {
                         if (strtolower(trim((string) $buttonValue)) === strtolower(trim($message))) {
+                            logger('[BFS] MATCH found', ['sourceId' => $sourceId, 'buttonValue' => $buttonValue]);
                             return $sourceId;
                         }
                     }
@@ -711,6 +731,7 @@ class FlowExecutionService
                     foreach ($sections as $section) {
                         foreach ($section['rows'] ?? [] as $row) {
                             if (strtolower(trim($row['title'] ?? '')) === strtolower(trim($message))) {
+                                logger('[BFS] MATCH found (list)', ['sourceId' => $sourceId, 'title' => $row['title']]);
                                 return $sourceId;
                             }
                         }
@@ -719,6 +740,7 @@ class FlowExecutionService
             }
         }
 
+        logger('[BFS] no match found, returning null', ['visited' => $visited]);
         return null;
     }
 
