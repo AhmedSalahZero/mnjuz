@@ -739,8 +739,6 @@ class FlowExecutionService
         // Convert $sourceId to a string to handle loose type matching
         $sourceId = (string) $sourceId;
         
-        //Log::info("findEdgesBySource: sourceId={$sourceId}, message={$message}, total_edges=" . count($edges));
-        
         // Initialize an empty array to store matching edges
         $matchingEdges = [];
 
@@ -750,12 +748,17 @@ class FlowExecutionService
             if (isset($edge['source']) && (string) $edge['source'] === $sourceId) {
                 // If there's a match, add this edge to the matching array
                 $matchingEdges[] = $edge;
-                //Log::info("Found matching edge: source={$edge['source']}, target=" . ($edge['targetNode']['id'] ?? 'unknown'));
             }
         }
 
+        // #region agent log
+        $this->_dbgLog('findEdgesBySource:result','F,G',[
+            'sourceId'=>$sourceId,'message'=>$message,
+            'matching_edges_count'=>count($matchingEdges),
+        ]);
+        // #endregion
+
         if (count($matchingEdges) === 1) {
-            //Log::info("Single edge found, returning targetNode");
             return $matchingEdges[0]['targetNode'] ?? [];
         } else if (count($matchingEdges) > 1) {
             $firstEdge = $matchingEdges[0];
@@ -776,6 +779,15 @@ class FlowExecutionService
                 $handle = null;
 
                 foreach ($buttons as $buttonKey => $buttonValue) {
+                    // #region agent log
+                    $this->_dbgLog('findEdgesBySource:button-compare','F',[
+                        'buttonKey'=>$buttonKey,
+                        'buttonValue_raw'=>$buttonValue,
+                        'buttonValue_normalized'=>strtolower(trim((string)$buttonValue)),
+                        'message_normalized'=>$message,
+                        'match'=>(strtolower(trim((string)$buttonValue)) === $message),
+                    ]);
+                    // #endregion
                     if (strtolower(trim($buttonValue)) === $message) {
                         $handle = $buttonMapping[$buttonKey] ?? null;
                     }
@@ -824,6 +836,7 @@ class FlowExecutionService
     private function _dbgLog(string $location, string $hypothesisId, array $data): void
     {
         try {
+            logger('[DBG-a9bd07]['.$hypothesisId.'] '.$location, $data);
             $entry = json_encode([
                 'sessionId'=>'a9bd07','hypothesisId'=>$hypothesisId,
                 'location'=>'FlowExecutionService:'.$location,
