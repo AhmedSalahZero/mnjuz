@@ -53,15 +53,7 @@ class FlowExecutionService
             // Find the current step for the user in the flow
             $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
             $flowId = null;
-            // #region agent log
-            $this->_dbgLog('executeFlow:entry','A,B,C,E',[
-                'contact_id'=>$chat->contact_id,'org_id'=>$chat->organization_id,
-                'message_raw'=>$message,'message_trimmed'=>strtolower(trim($message)),
-                'has_flow_data'=>(bool)$flowData,
-                'flow_data_step'=>$flowData->current_step??null,
-                'flow_data_flow_id'=>$flowData->flow_id??null,
-            ]);
-            // #endregion
+		//	logger('--inside execute flow');
             if($flowData && $flowData->exists){
                 // Check if the flow still exists in the database
                 $flow = Flow::find($flowData->flow_id);
@@ -91,14 +83,6 @@ class FlowExecutionService
                     // trigger for a different flow — allow the user to switch/restart flows.
                     if (!$result) {
                         $keywordFlow = $this->findFlowByKeyword(strtolower(trim($message)), $chat->organization_id);
-                        // #region agent log
-                        $this->_dbgLog('executeFlow:keyword-fallback','G',[
-                            'contact_id'=>$chat->contact_id,
-                            'current_flow_id'=>$flowId,
-                            'keyword_flow_found'=>$keywordFlow?$keywordFlow->id:null,
-                            'message'=>strtolower(trim($message)),
-                        ]);
-                        // #endregion
                         if ($keywordFlow) {
                             FlowUserData::where('contact_id', $chat->contact_id)->delete();
                             $newFlowData = new FlowUserData();
@@ -156,19 +140,6 @@ class FlowExecutionService
                         '( `trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
                         array_merge(['keywords', $chat->organization_id, 'active'], $bindings)
                     )->first();
-                    // #region agent log
-                    $allFlows = \DB::table('flows')
-                        ->where('trigger','keywords')
-                        ->where('organization_id',$chat->organization_id)
-                        ->where('status','active')
-                        ->whereNull('deleted_at')
-                        ->get(['id','name','keywords'])->toArray();
-                    $this->_dbgLog('executeFlow:keyword-query','A,C',[
-                        'msg'=>$msg,'bindings'=>$bindings,
-                        'flow_found'=>$flow?$flow->id:null,
-                        'all_keyword_flows'=>$allFlows,
-                    ]);
-                    // #endregion
 					// if($flow){
 					// 	logger('--from flow'.$flow->id);
 					// } else {
@@ -280,12 +251,6 @@ class FlowExecutionService
     }
 
     public function processFlow($chat, $isNewContact, $flowData, $contactId, $message){
-        // #region agent log
-        $this->_dbgLog('processFlow:entry','B,D',[
-            'contact_id'=>$contactId,'flow_id'=>$flowData->flow_id,
-            'current_step'=>$flowData->current_step,'message'=>$message,
-        ]);
-        // #endregion
         $flow = Flow::find($flowData->flow_id);
 
         if (!$flow || empty($flow->metadata)) {
@@ -323,12 +288,6 @@ class FlowExecutionService
                 }
 
                 if ($edgesFromCurrentStep > 1) {
-                    // #region agent log
-                    $this->_dbgLog('processFlow:no-match-multi-edge','B,D',[
-                        'current_step'=>$flowData->current_step,'message'=>$message,
-                        'edges_from_step'=>$edgesFromCurrentStep,'jumped_back'=>$jumpedBack,
-                    ]);
-                    // #endregion
                     // Current step is an interactive node that expected user input, but message didn't match.
                     // Try to find a previous interactive step whose option matches the message,
                     // so the user can navigate back by re-typing a previous keyword.
@@ -781,13 +740,6 @@ class FlowExecutionService
             }
         }
 
-        // #region agent log
-        $this->_dbgLog('findEdgesBySource:result','F,G',[
-            'sourceId'=>$sourceId,'message'=>$message,
-            'matching_edges_count'=>count($matchingEdges),
-        ]);
-        // #endregion
-
         if (count($matchingEdges) === 1) {
             return $matchingEdges[0]['targetNode'] ?? [];
         } else if (count($matchingEdges) > 1) {
@@ -809,15 +761,6 @@ class FlowExecutionService
                 $handle = null;
 
                 foreach ($buttons as $buttonKey => $buttonValue) {
-                    // #region agent log
-                    $this->_dbgLog('findEdgesBySource:button-compare','F',[
-                        'buttonKey'=>$buttonKey,
-                        'buttonValue_raw'=>$buttonValue,
-                        'buttonValue_normalized'=>strtolower(trim((string)$buttonValue)),
-                        'message_normalized'=>$message,
-                        'match'=>(strtolower(trim((string)$buttonValue)) === $message),
-                    ]);
-                    // #endregion
                     if (strtolower(trim($buttonValue)) === $message) {
                         $handle = $buttonMapping[$buttonKey] ?? null;
                     }
@@ -886,22 +829,6 @@ class FlowExecutionService
 
         return $flow ?: null;
     }
-
-    // #region agent log helper
-    private function _dbgLog(string $location, string $hypothesisId, array $data): void
-    {
-        try {
-            logger('[DBG-a9bd07]['.$hypothesisId.'] '.$location, $data);
-            $entry = json_encode([
-                'sessionId'=>'a9bd07','hypothesisId'=>$hypothesisId,
-                'location'=>'FlowExecutionService:'.$location,
-                'message'=>$location,'data'=>$data,
-                'timestamp'=>(int)(microtime(true)*1000),
-            ]);
-            file_put_contents('/media/salah/Software/projects/mnjuz/.cursor/debug-a9bd07.log', $entry."\n", FILE_APPEND|LOCK_EX);
-        } catch(\Throwable $e){}
-    }
-    // #endregion
 
     private function replacePlaceholders($contactUuid, $message){
         $organization = Organization::where('id', $this->organizationId)->first();

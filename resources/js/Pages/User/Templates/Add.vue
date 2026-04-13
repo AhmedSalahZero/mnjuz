@@ -1452,7 +1452,10 @@ const submitForm = () => {
     .then((response) => {
       if (response.data.success === false) {
         isLoading.value = false
-        error.value = response.data.data.error.message
+        error.value = response.data.message
+          || response.data.data?.error?.error_user_msg
+          || response.data.data?.error?.message
+          || 'Unknown error'
       } else {
         router.visit('/templates', {
           method: 'get',

@@ -934,31 +934,33 @@ class WhatsappService
                 $quickReplyButtons = [];
 
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] === 'QUICK_REPLY') {
+                    $buttonType = strtoupper($button['type'] ?? '');
+                    if ($buttonType === 'QUICK_REPLY') {
                         $quickReplyButtons[] = [
-                            'type' => $button['type'],
+                            'type' => $buttonType,
                             'text' => $button['text'],
                         ];
                     }
                 }
             
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] !== 'QUICK_REPLY') {
-                        if ($button['type'] === 'URL') {
+                    $buttonType = strtoupper($button['type'] ?? '');
+                    if ($buttonType !== 'QUICK_REPLY') {
+                        if ($buttonType === 'URL') {
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                                'type' => $buttonType,
                                 'text' => $button['text'],
                                 'url' => $button['url'],
                             ];
-                        } elseif ($button['type'] === 'PHONE_NUMBER') {
+                        } elseif ($buttonType === 'PHONE_NUMBER') {
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                                'type' => $buttonType,
                                 'text' => $button['text'],
-                                'phone_number' => $button['country'].$button['phone_number'],
+                                'phone_number' => ($button['country'] ?? '').$button['phone_number'],
                             ];
-                        } elseif ($button['type'] === 'COPY_CODE') {
+                        } elseif ($buttonType === 'COPY_CODE') {
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                                'type' => $buttonType,
                                 'example' => $button['example'],
                             ];
                         }
@@ -972,7 +974,7 @@ class WhatsappService
             }
         } else {
             $button = [
-                'type' => $request->authentication_button['type'],
+                'type' => strtoupper($request->authentication_button['type'] ?? ''),
                 'otp_type' => $request->authentication_button['otp_type'],
                 'text' => $request->authentication_button['text'],
             ];
@@ -1167,31 +1169,33 @@ class WhatsappService
                 $quickReplyButtons = [];
 
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] === 'QUICK_REPLY') {
+                    $buttonType = strtoupper($button['type'] ?? '');
+                    if ($buttonType === 'QUICK_REPLY') {
                         $quickReplyButtons[] = [
-                            'type' => $button['type'],
+                            'type' => $buttonType,
                             'text' => $button['text'],
                         ];
                     }
                 }
             
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] !== 'QUICK_REPLY') {
-                        if ($button['type'] === 'URL') {
+                    $buttonType = strtoupper($button['type'] ?? '');
+                    if ($buttonType !== 'QUICK_REPLY') {
+                        if ($buttonType === 'URL') {
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                                'type' => $buttonType,
                                 'text' => $button['text'],
                                 'url' => $button['url'],
                             ];
-                        } elseif ($button['type'] === 'PHONE_NUMBER') {
+                        } elseif ($buttonType === 'PHONE_NUMBER') {
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                                'type' => $buttonType,
                                 'text' => $button['text'],
-                                'phone_number' => $button['country'] ?? '' . $button['phone_number'],
+                                'phone_number' => ($button['country'] ?? '').$button['phone_number'],
                             ];
-                        } elseif ($button['type'] === 'COPY_CODE') {
+                        } elseif ($buttonType === 'COPY_CODE') {
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                                'type' => $buttonType,
                                 'example' => $button['example'],
                             ];
                         }
@@ -1205,7 +1209,7 @@ class WhatsappService
             }
         } else {
             $button = [
-                'type' => $request->authentication_button['type'],
+                'type' => strtoupper($request->authentication_button['type'] ?? ''),
                 'otp_type' => $request->authentication_button['otp_type'],
                 'text' => $request->authentication_button['text'],
             ];
