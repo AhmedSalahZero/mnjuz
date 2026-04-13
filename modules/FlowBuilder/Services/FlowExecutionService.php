@@ -672,7 +672,7 @@ class FlowExecutionService
 
             // Find all edges pointing TO this node (backward traversal)
             foreach ($edges as $edge) {
-                $targetId = (string) ($edge['target'] ?? '');
+                $targetId = (string) ($edge['targetNode']['id'] ?? $edge['target'] ?? '');
                 $sourceId = (string) ($edge['source'] ?? '');
 
                 if ($targetId !== $nodeId || in_array($sourceId, $visited)) {
