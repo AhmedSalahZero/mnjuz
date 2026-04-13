@@ -86,6 +86,36 @@ class FlowExecutionService
                     if ($result === 'delayed') {
                         return false; // Return false but don't delete flow data
                     }
+
+                    // If processFlow returned false, check if the message is a keyword
+                    // trigger for a different flow — allow the user to switch/restart flows.
+                    if (!$result) {
+                        $keywordFlow = $this->findFlowByKeyword(strtolower(trim($message)), $chat->organization_id);
+                        // #region agent log
+                        $this->_dbgLog('executeFlow:keyword-fallback','G',[
+                            'contact_id'=>$chat->contact_id,
+                            'current_flow_id'=>$flowId,
+                            'keyword_flow_found'=>$keywordFlow?$keywordFlow->id:null,
+                            'message'=>strtolower(trim($message)),
+                        ]);
+                        // #endregion
+                        if ($keywordFlow) {
+                            FlowUserData::where('contact_id', $chat->contact_id)->delete();
+                            $newFlowData = new FlowUserData();
+                            $newFlowData->fill([
+                                'contact_id' => $chat->contact_id,
+                                'flow_id'    => $keywordFlow->id,
+                                'current_step' => 1,
+                            ])->save();
+                            $result = $this->processFlow($chat, $isNewContact, $newFlowData, $chat->contact_id, strtolower(trim($message)));
+                            if ($result === 'validation_failed' || $result === 'delayed') {
+                                return false;
+                            }
+                            logger('--from return result (keyword switch)'.$result);
+                            return $result;
+                        }
+                    }
+
 					logger('--from return result'.$result);
                     
                     return $result;
@@ -830,6 +860,31 @@ class FlowExecutionService
         }
 
         return [];
+    }
+
+    /**
+     * Search for an active keyword-triggered flow whose keywords contain the given message.
+     * Returns the flow row (stdClass) or null if none found.
+     */
+    private function findFlowByKeyword(string $msg, int $organizationId): ?object
+    {
+        $words      = explode(' ', $msg);
+        $conditions = ["FIND_IN_SET(?, keywords)"];
+        $bindings   = [$msg];
+
+        foreach ($words as $word) {
+            $word = trim($word);
+            if ($word === '') continue;
+            $conditions[] = "FIND_IN_SET(?, keywords)";
+            $bindings[]   = $word;
+        }
+
+        $flow = \DB::table('flows')->whereRaw(
+            '(`trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
+            array_merge(['keywords', $organizationId, 'active'], $bindings)
+        )->first();
+
+        return $flow ?: null;
     }
 
     // #region agent log helper
