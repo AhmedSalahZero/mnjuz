@@ -65,37 +65,36 @@ class CampaignController extends BaseController
 
             return Inertia::render('User/Campaign/Create', $data);
         } else {
-            $data['campaign'] = Campaign::with('contactGroup', 'template')->where('uuid', $uuid)->first();
-            if ($data['campaign']) {
-                $counts = $data['campaign']->getCounts();
-                $data['campaign']['total_message_count'] = $counts->total_message_count ?? 0;
-                $data['campaign']['total_sent_count'] = $counts->total_sent_count ?? 0;
-                $data['campaign']['total_delivered_count'] = $counts->total_delivered_count ?? 0;
-                $data['campaign']['total_failed_count'] = $counts->total_failed_count ?? 0;
-                $data['campaign']['total_read_count'] = $counts->total_read_count ?? 0;
-            }else{
-                $data['campaign']['total_message_count'] = 0;
-                $data['campaign']['total_sent_count'] = 0;
-                $data['campaign']['total_delivered_count'] = 0;
-                $data['campaign']['total_read_count'] = 0;
-                $data['campaign']['total_failed_count'] = 0;
+            $campaign = Campaign::with('contactGroup', 'template')->where('uuid', $uuid)->first();
+
+            if ($campaign) {
+                $counts = $campaign->getCounts();
+                $campaign['total_message_count'] = $counts->total_message_count ?? 0;
+                $campaign['total_sent_count']     = $counts->total_sent_count ?? 0;
+                $campaign['total_delivered_count']= $counts->total_delivered_count ?? 0;
+                $campaign['total_failed_count']   = $counts->total_failed_count ?? 0;
+                $campaign['total_read_count']     = $counts->total_read_count ?? 0;
             }
+
+            $data['campaign'] = $campaign;
 
             $data['filters'] = request()->all(['search']);
 
             $searchTerm = $request->query('search');
             $data['rows'] = CampaignLogResource::collection(
-                CampaignLog::with('contact', 'chat.logs')
-                    ->where('campaign_id', $data['campaign']->id)
-                    ->where(function ($query) use ($searchTerm) {
-                        $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
-                            $contactQuery->where('first_name', 'like', '%' . $searchTerm . '%')
-                                         ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
-                                         ->orWhere('phone', 'like', '%' . $searchTerm . '%');
-                        });
-                    })
-                    ->orderBy('id')
-                    ->paginate(10)
+                $campaign
+                    ? CampaignLog::with('contact', 'chat.logs')
+                        ->where('campaign_id', $campaign->id)
+                        ->where(function ($query) use ($searchTerm) {
+                            $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
+                                $contactQuery->where('first_name', 'like', '%' . $searchTerm . '%')
+                                             ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
+                                             ->orWhere('phone', 'like', '%' . $searchTerm . '%');
+                            });
+                        })
+                        ->orderBy('id')
+                        ->paginate(10)
+                    : CampaignLog::whereRaw('0')->paginate(10)
             );
             $data['title'] = __('View campaign');
 
