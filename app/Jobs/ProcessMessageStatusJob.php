@@ -70,10 +70,10 @@ class ProcessMessageStatusJob implements ShouldQueue
                     //     'wam_id' => $chatWamId
                     // ]);
                 } else {
-                    Log::warning("Chat not found for status update", [
-                        'wam_id' => $chatWamId,
-                        'organization_id' => $this->organizationId
-                    ]);
+                    // Log::warning("Chat not found for status update", [
+                    //     'wam_id' => $chatWamId,
+                    //     'organization_id' => $this->organizationId
+                    // ]);
                 }
             }
 
