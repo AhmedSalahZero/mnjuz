@@ -287,23 +287,22 @@ class FlowExecutionService
                     }
                 }
 
-                if ($edgesFromCurrentStep > 1) {
-                    // Current step is an interactive node that expected user input, but message didn't match.
-                    // Try to find a previous interactive step whose option matches the message,
-                    // so the user can navigate back by re-typing a previous keyword.
-                    if (!$jumpedBack) {
-                        $previousStep = $this->findPreviousMatchingStep($edges, $flowData->current_step, $message);
-                        if ($previousStep !== null) {
-                            FlowUserData::where('contact_id', $contactId)->update(['current_step' => $previousStep]);
-                            $flowData = FlowUserData::where('contact_id', $contactId)->first();
-                            $jumpedBack = true;
-                            continue; // Re-process with the previous matching step
-                        }
+                // Always attempt backward navigation first (whether stuck at interactive node
+                // or at a terminal node), before giving up or deleting the flow data.
+                if (!$jumpedBack) {
+                    $previousStep = $this->findPreviousMatchingStep($edges, $flowData->current_step, $message);
+                    if ($previousStep !== null) {
+                        FlowUserData::where('contact_id', $contactId)->update(['current_step' => $previousStep]);
+                        $flowData = FlowUserData::where('contact_id', $contactId)->first();
+                        $jumpedBack = true;
+                        continue; // Re-process with the previous matching step
                     }
-                    return false;
                 }
 
-                FlowUserData::where('contact_id', $contactId)->delete();
+                if ($edgesFromCurrentStep == 0) {
+                    // Terminal node with no match anywhere — flow is truly done
+                    FlowUserData::where('contact_id', $contactId)->delete();
+                }
                 return false;
             }
 
