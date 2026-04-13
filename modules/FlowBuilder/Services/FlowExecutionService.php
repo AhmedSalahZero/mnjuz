@@ -289,7 +289,6 @@ class FlowExecutionService
 
                 // Always attempt backward navigation first (whether stuck at interactive node
                 // or at a terminal node), before giving up or deleting the flow data.
-                logger('[processFlow] empty metadataArray', ['current_step' => $flowData->current_step, 'edgesFromCurrentStep' => $edgesFromCurrentStep, 'message' => $message, 'jumpedBack' => $jumpedBack]);
                 if (!$jumpedBack) {
                     $previousStep = $this->findPreviousMatchingStep($edges, $flowData->current_step, $message);
                     if ($previousStep !== null) {
@@ -374,10 +373,13 @@ class FlowExecutionService
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
     
         } elseif ($type === 'interactive list') {
-			// logger('--from interactive list');
             $buttonType = 'interactive list';
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
             $buttonLabel = $fieldsArray['buttonLabel'] ?? '';
+            // WhatsApp: list open-button text max 20 characters
+            if ($buttonLabel !== '') {
+                $buttonLabel = mb_substr($buttonLabel, 0, 20);
+            }
         }
 
         $response = null;
@@ -404,16 +406,7 @@ class FlowExecutionService
                 break;
     
             case 'interactive buttons':
-				case 'interactive list':
-                logger('[FlowSend] sending interactive', [
-                    'type' => $buttonType,
-                    'body' => $message,
-                    'buttonLabel' => $buttonLabel,
-                    'buttonArray' => $buttonArray,
-                    'header' => $header,
-                    'footer' => $fieldsArray['footer'] ?? '',
-                    'node_id' => $metadataArray['id'] ?? null,
-                ]);
+            case 'interactive list':
                 $response = $this->whatsappService->sendMessage(
                     $contact->uuid,
                     $message,
@@ -439,7 +432,6 @@ class FlowExecutionService
                 'node_id' => $processedNodeId,
                 'node_type' => $type,
                 'error' => $errorMsg,
-                'response' => json_encode($response),
             ]);
             return false;
         }
@@ -648,18 +640,75 @@ class FlowExecutionService
                 'url' => $fieldsArray['ctaUrlButton']['url'] ?? '',
             ];
         } elseif ($type === 'interactive list') {
-            $buttonArray = collect($fieldsArray['sections'] ?? [])->map(function ($section) {
-                return [
-                    'title' => $section['title'] ?? '',
-                    'rows' => collect($section['rows'] ?? [])->map(function ($row) {
-                        return [
-                            'id' => $row['id'] ?? '',
-                            'title' => $row['title'] ?? '',
-                            'description' => $row['description'] ?? '',
-                        ];
-                    })->all()
-                ];
-            })->all();
+            // WhatsApp Cloud API: max 10 rows total across all sections; row id must be unique;
+            // row title max 24, description max 72, section title max 24 (chars).
+            $maxRowsTotal = 10;
+            $maxRowTitleLen = 24;
+            $maxRowDescLen = 72;
+            $maxSectionTitleLen = 24;
+            $totalRows = 0;
+            $seenIds = [];
+            $buttonArray = [];
+            $originalRowCount = 0;
+
+            foreach ($fieldsArray['sections'] ?? [] as $sectionIndex => $section) {
+                $originalRowCount += count($section['rows'] ?? []);
+                if ($totalRows >= $maxRowsTotal) {
+                    break;
+                }
+                $sectionTitle = mb_substr(trim($section['title'] ?? ''), 0, $maxSectionTitleLen);
+                $rowsOut = [];
+
+                foreach ($section['rows'] ?? [] as $rowIndex => $row) {
+                    if ($totalRows >= $maxRowsTotal) {
+                        break;
+                    }
+                    $title = mb_substr(trim($row['title'] ?? ''), 0, $maxRowTitleLen);
+                    if ($title === '') {
+                        continue;
+                    }
+
+                    $baseId = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) ($row['id'] ?? $rowIndex));
+                    $uniqueId = 's'.$sectionIndex.'_r'.$rowIndex.'_'.$baseId;
+                    if ($uniqueId === 's'.$sectionIndex.'_r'.$rowIndex.'_') {
+                        $uniqueId = 's'.$sectionIndex.'_r'.$rowIndex;
+                    }
+                    if (strlen($uniqueId) > 200) {
+                        $uniqueId = substr($uniqueId, 0, 200);
+                    }
+                    $suffix = 0;
+                    while (isset($seenIds[$uniqueId])) {
+                        $suffix++;
+                        $uniqueId = substr($uniqueId, 0, 180).'_'.$suffix;
+                    }
+                    $seenIds[$uniqueId] = true;
+
+                    $rowPayload = [
+                        'id' => $uniqueId,
+                        'title' => $title,
+                    ];
+                    $desc = trim($row['description'] ?? '');
+                    if ($desc !== '') {
+                        $rowPayload['description'] = mb_substr($desc, 0, $maxRowDescLen);
+                    }
+                    $rowsOut[] = $rowPayload;
+                    $totalRows++;
+                }
+
+                if ($rowsOut !== []) {
+                    $buttonArray[] = [
+                        'title' => $sectionTitle,
+                        'rows' => $rowsOut,
+                    ];
+                }
+            }
+
+            if ($originalRowCount > $maxRowsTotal) {
+                Log::warning('Flow interactive list truncated for WhatsApp API limit (10 rows max)', [
+                    'original_rows' => $originalRowCount,
+                    'sent_rows' => $totalRows,
+                ]);
+            }
         }
 
         return $buttonArray;
@@ -676,22 +725,8 @@ class FlowExecutionService
         $visited = [(string) $currentStep];
         $queue   = [(string) $currentStep];
 
-        logger('[BFS] start', ['currentStep' => $currentStep, 'message' => $message, 'total_edges' => count($edges)]);
-
-        // Dump all edge source→target pairs for debugging
-        $edgeMap = [];
-        foreach ($edges as $edge) {
-            $edgeMap[] = [
-                'source' => $edge['source'] ?? '?',
-                'target' => $edge['target'] ?? '?',
-                'targetNode_id' => $edge['targetNode']['id'] ?? '?',
-            ];
-        }
-        logger('[BFS] edge map', $edgeMap);
-
         while (!empty($queue)) {
             $nodeId = array_shift($queue);
-            logger('[BFS] processing node', ['nodeId' => $nodeId]);
 
             foreach ($edges as $edge) {
                 $targetId = (string) ($edge['targetNode']['id'] ?? $edge['target'] ?? '');
@@ -701,7 +736,6 @@ class FlowExecutionService
                     continue;
                 }
 
-                logger('[BFS] found parent', ['sourceId' => $sourceId, 'targetId' => $targetId]);
                 $visited[] = $sourceId;
                 $queue[]   = $sourceId;
 
@@ -709,8 +743,6 @@ class FlowExecutionService
                     $edges,
                     fn($e) => isset($e['source']) && (string) $e['source'] === $sourceId
                 ));
-
-                logger('[BFS] edges from source', ['sourceId' => $sourceId, 'count' => count($edgesFromSource)]);
 
                 if (count($edgesFromSource) <= 1) {
                     continue;
@@ -720,18 +752,14 @@ class FlowExecutionService
                 $nodeType  = $firstEdge['sourceNode']['type'] ?? null;
                 $type      = $firstEdge['sourceNode']['data']['metadata']['fields']['type'] ?? null;
 
-                logger('[BFS] interactive check', ['sourceId' => $sourceId, 'nodeType' => $nodeType, 'type' => $type]);
-
                 if ($nodeType === 'action') {
                     continue;
                 }
 
                 if ($type === 'interactive buttons') {
                     $buttons = $firstEdge['sourceNode']['data']['metadata']['fields']['buttons'] ?? [];
-                    logger('[BFS] comparing buttons', ['buttons' => $buttons, 'message' => $message]);
                     foreach ($buttons as $buttonValue) {
                         if (strtolower(trim((string) $buttonValue)) === strtolower(trim($message))) {
-                            logger('[BFS] MATCH found', ['sourceId' => $sourceId, 'buttonValue' => $buttonValue]);
                             return $sourceId;
                         }
                     }
@@ -740,7 +768,6 @@ class FlowExecutionService
                     foreach ($sections as $section) {
                         foreach ($section['rows'] ?? [] as $row) {
                             if (strtolower(trim($row['title'] ?? '')) === strtolower(trim($message))) {
-                                logger('[BFS] MATCH found (list)', ['sourceId' => $sourceId, 'title' => $row['title']]);
                                 return $sourceId;
                             }
                         }
@@ -749,7 +776,6 @@ class FlowExecutionService
             }
         }
 
-        logger('[BFS] no match found, returning null', ['visited' => $visited]);
         return null;
     }
 
