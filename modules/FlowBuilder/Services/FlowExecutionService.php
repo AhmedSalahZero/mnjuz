@@ -405,7 +405,15 @@ class FlowExecutionService
     
             case 'interactive buttons':
 				case 'interactive list':
-					// logger('--from interactive buttons send message');
+                logger('[FlowSend] sending interactive', [
+                    'type' => $buttonType,
+                    'body' => $message,
+                    'buttonLabel' => $buttonLabel,
+                    'buttonArray' => $buttonArray,
+                    'header' => $header,
+                    'footer' => $fieldsArray['footer'] ?? '',
+                    'node_id' => $metadataArray['id'] ?? null,
+                ]);
                 $response = $this->whatsappService->sendMessage(
                     $contact->uuid,
                     $message,
@@ -431,6 +439,7 @@ class FlowExecutionService
                 'node_id' => $processedNodeId,
                 'node_type' => $type,
                 'error' => $errorMsg,
+                'response' => json_encode($response),
             ]);
             return false;
         }
