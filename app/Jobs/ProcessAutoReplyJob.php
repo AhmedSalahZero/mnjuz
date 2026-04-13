@@ -45,6 +45,7 @@ class ProcessAutoReplyJob implements ShouldQueue
                     'message_limit'
                 )
             );
+			logger('inside process auto reply job: ');
 
             if($isLimitReached) {
                 Log::info("AutoReply skipped - message limit reached", [
@@ -56,7 +57,7 @@ class ProcessAutoReplyJob implements ShouldQueue
 
             // ✅ جلب الـ chat
             $chat = Chat::with('contact')->find($this->chatId);
-            
+           
             if(!$chat) {
                 Log::warning("AutoReply skipped - chat not found", [
                     'chat_id' => $this->chatId

@@ -110,7 +110,7 @@ class AutoReplyService
     public function checkAutoReply(Chat $chat, $isNewContact)
     {
         $organizationId = $chat->organization_id;
-
+		logger('inside check auto reply: ' . $organizationId . ' ' . $chat->id . ' ' . $isNewContact);
         $this->replySequence($organizationId, $chat, $isNewContact);
     }
 
