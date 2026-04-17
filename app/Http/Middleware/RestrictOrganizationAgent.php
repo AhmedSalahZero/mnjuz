@@ -53,6 +53,9 @@ class RestrictOrganizationAgent
         $allowedPrefixes = [
             'chats',
             'chat',
+            'tickets',
+            'notes',
+            'automation/contact',
             'contacts',
             'contact-groups',
             'contact-categories',

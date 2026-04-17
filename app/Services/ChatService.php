@@ -66,6 +66,56 @@ class ChatService
         $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $this->organizationId);
     }
 
+    private function canAccessConversation(User $user, Contact $contact): bool
+    {
+        if ((int) $contact->organization_id !== (int) $this->organizationId) {
+            return false;
+        }
+
+        $role = $user->getRoleNameForOrganization($this->organizationId);
+        if ($role === '') {
+            $role = OrganizationRole::OWNER;
+        }
+
+        if ($role !== 'agent') {
+            return true;
+        }
+
+        $organization = Organization::find($this->organizationId);
+        if (!$organization || !$organization->getTicketingActive()) {
+            return true;
+        }
+
+        if ($organization->getAllowAgentsToViewAllChats()) {
+            return true;
+        }
+
+        $ticket = ChatTicket::where('contact_id', $contact->id)
+            ->where('is_latest', true)
+            ->first();
+
+        return $ticket && (int) $ticket->assigned_to === (int) $user->id;
+    }
+
+    private function assertConversationAccess(Contact $contact): void
+    {
+        $user = auth()->user();
+        if (!$user || !$this->canAccessConversation($user, $contact)) {
+            abort(403, __('You are not allowed to access this conversation.'));
+        }
+    }
+
+    private function findAccessibleContactByUuid(string $uuid): Contact
+    {
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->firstOrFail();
+
+        $this->assertConversationAccess($contact);
+
+        return $contact;
+    }
+
     public function getChatList($request, $uuid = null, $searchTerm = null)
     {
 		$partialHeader = request()->header('X-Inertia-Partial-Data', '');
@@ -86,7 +136,7 @@ class ChatService
 
 		$contact = null ;
 		if($uuid !== null){
-			$contact = Contact::where('uuid', $uuid)->first();
+			$contact = $this->findAccessibleContactByUuid($uuid);
 			DB::table('chats')->where('contact_id', $contact->id)
 			->where('type', 'inbound')
 			->whereNull('deleted_at')
@@ -201,6 +251,7 @@ class ChatService
 				}
 				return redirect('/chats')->with('status', ['type' => 'error', 'message' => __('Contact not found')]);
 			}
+                $this->assertConversationAccess($contact);
 
 				/**
 				 * @var Contact $contact
@@ -390,14 +441,15 @@ class ChatService
     public function sendMessage(object $request)
     {
 		$this->initializeWhatsappService();
+        $contact = $this->findAccessibleContactByUuid((string) $request->uuid);
 		
 	
         if ($request->type === 'text') {
-            return $this->whatsappService->sendMessage($request->uuid, $request->message, auth()->user()->id,);
+            return $this->whatsappService->sendMessage($contact->uuid, $request->message, auth()->user()->id,);
         } elseif($request->file('file')) {
 			$fileType = $request->type;
 			$organizationId = $this->organizationId;
-			$uuid = $request->uuid;
+			$uuid = $contact->uuid;
 			$file = $request->file('file');
 			$messageUUID = $request->messageUUID;
 			$tempMessageId = Request()->get('tempMessageId');
@@ -444,7 +496,7 @@ class ChatService
 		$this->initializeWhatsappService();
 	
         $template = Template::where('uuid', $request->template)->first();
-        $contact = Contact::where('uuid', $uuid)->first();
+        $contact = $this->findAccessibleContactByUuid((string) $uuid);
         $mediaId = null;
 	
         if (in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
@@ -534,7 +586,11 @@ class ChatService
 
     public function clearContactChat($uuid)
     {
-        $contact = Contact::with('lastChat')->where('uuid', $uuid)->firstOrFail();
+        $contact = Contact::with('lastChat')
+            ->where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->firstOrFail();
+        $this->assertConversationAccess($contact);
         Chat::where('contact_id', $contact->id)->update([
             'deleted_by' => auth()->user()->id,
             'deleted_at' =>  now()
@@ -762,6 +818,7 @@ class ChatService
     }
     public function blockContact(Organization $organization, Contact $contact)
     {
+        $this->assertConversationAccess($contact);
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
         $config = json_decode(Organization::where('id', $this->organizationId)->first()->metadata?:'{}', true);
@@ -842,6 +899,7 @@ class ChatService
     }
     public function unBlockContact(Organization $organization, Contact $contact)
     {
+        $this->assertConversationAccess($contact);
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
         $config = json_decode(Organization::where('id', $this->organizationId)->first()->metadata?:'{}', true);

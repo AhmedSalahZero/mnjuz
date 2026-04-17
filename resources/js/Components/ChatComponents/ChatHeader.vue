@@ -57,7 +57,6 @@ const unblockContact = (contactId) => {
 		onError: (errors) => { },
 	})
 }
-const accountUser = computed(() => usePage().props.auth.user)
 const showAlert = ref(false)
 const displayContact = ref(props.displayContactInfo)
 const ticketState = ref(null)
@@ -185,7 +184,7 @@ const submitForm3 = () => {
 						<span @click="toggleView">{{ contact.formatted_phone_number }}</span>
 					</div>
 				</div>
-				<FormSelectCombo v-if="ticketingIsEnabled && accountUser.teams[0]['role'] != 'agent'" v-model="user"
+				<FormSelectCombo v-if="ticketingIsEnabled" v-model="user"
 					:name="''" :loadOptions="loadUsers" :class="'col-span-1 md:block hidden'"
 					:placeholder="'Select Agent'" @update:modelValue="changeTicketAgent()" />
 			</div>
