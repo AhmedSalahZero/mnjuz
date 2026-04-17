@@ -1006,6 +1006,8 @@ class WhatsappService
                     'Content-Type' => 'application/json',
                 ],
                 'json' => $requestData,
+                'connect_timeout' => 10,
+                'timeout' => 60,
             ]);
 
             $responseObject->success = true;
@@ -1032,7 +1034,7 @@ class WhatsappService
         } catch (GuzzleException $e) {
             $response = $e->getResponse();
             $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
+            $responseObject->data = $response ? json_decode($response->getBody()->getContents()) : null;
 
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;
@@ -1239,6 +1241,8 @@ class WhatsappService
                     'Content-Type' => 'application/json',
                 ],
                 'json' => $requestData,
+                'connect_timeout' => 10,
+                'timeout' => 60,
             ]);
 
             $responseObject->success = true;
@@ -1265,7 +1269,7 @@ class WhatsappService
         } catch (GuzzleException $e) {
             $response = $e->getResponse();
             $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
+            $responseObject->data = $response ? json_decode($response->getBody()->getContents()) : null;
 
             if (isset($responseObject->data->error->error_user_msg)) {
                 $responseObject->message = $responseObject->data->error->error_user_msg;

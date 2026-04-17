@@ -1253,6 +1253,7 @@ const isFormValid = computed(() => {
 
 const submitForm = () => {
   isLoading.value = true
+  error.value = null
   isModalOpen.value = true
   axios
     .post('/templates/' + props.template.uuid, form.value, {
@@ -1274,8 +1275,15 @@ const submitForm = () => {
       }
     })
     .catch((error) => {
-      // Handle any errors that occur during the request
-      //console.error('An error occurred:', error);
+      isLoading.value = false
+      error.value = error?.response?.data?.message
+        || error?.response?.data?.data?.error?.error_user_msg
+        || error?.response?.data?.data?.error?.message
+        || error?.message
+        || 'Unable to upload template. Please try again.'
+    })
+    .finally(() => {
+      isLoading.value = false
     })
 }
 
