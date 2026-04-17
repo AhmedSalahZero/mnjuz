@@ -59,7 +59,7 @@ class FlowExecutionService
                 $flow = Flow::find($flowData->flow_id);
                 
                 if(!$flow){
-					logger('--flow deleted');
+					// logger('--flow deleted');
                     // Flow has been deleted, remove FlowUserData and proceed as if it doesn't exist
                     Log::warning("DELETION POINT 1: Flow not found, deleting FlowUserData for contact {$chat->contact_id}");
                     FlowUserData::where('contact_id', $chat->contact_id)->delete();
@@ -68,7 +68,7 @@ class FlowExecutionService
                     // Flow exists, proceed to process flow
                     $flowId = $flowData->flow_id;
                     $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
-                    logger('--from result'.$result);
+                    // logger('--from result'.$result);
                     // If validation failed, don't delete flow data
                     if ($result === 'validation_failed') {
                         return false; // Return false but don't delete flow data
@@ -95,12 +95,12 @@ class FlowExecutionService
                             if ($result === 'validation_failed' || $result === 'delayed') {
                                 return false;
                             }
-                            logger('--from return result (keyword switch)'.$result);
+                            // logger('--from return result (keyword switch)'.$result);
                             return $result;
                         }
                     }
 
-					logger('--from return result'.$result);
+					// logger('--from return result'.$result);
                     
                     return $result;
                 }
@@ -108,19 +108,19 @@ class FlowExecutionService
 
             // If flowData doesn't exist or was deleted, proceed with flow determination logic
             if(!$flowData){
-				logger('--frow new flow');
+				// logger('--frow new flow');
                 // Determine the flow based on trigger type
                 $flowQuery = Flow::where('organization_id', $chat->organization_id)->where('status', 'active');
                 $flow = null;
 
                 //Check if any flow trigger has been hit
                 if($isNewContact){
-					logger('--frow is new contact');
+					// logger('--frow is new contact');
                     $flow = $flowQuery->where('trigger', 'new_contact')->first();
                 } else {
                     $msg = strtolower(trim($message)); // Normalize the message
                     $words = explode(' ', $msg); // Split message into individual words
- 					logger('--from else new');
+ 					// logger('--from else new');
                     $conditions = [];
                     $bindings = [];
 
@@ -130,12 +130,12 @@ class FlowExecutionService
 						
                     // Add individual word checks
                     foreach ($words as $word) {
-						logger('--from word'.$word);
+						// logger('--from word'.$word);
                         $word = strtolower(trim($word));
                         $conditions[] = "FIND_IN_SET(?, keywords)";
                         $bindings[] = $word;
                     }
-					logger('--from final query');
+					// logger('--from final query');
                     $flow = \DB::table('flows')->whereRaw(
                         '( `trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
                         array_merge(['keywords', $chat->organization_id, 'active'], $bindings)
@@ -174,7 +174,7 @@ class FlowExecutionService
                     
                     // If flow is delayed, don't delete flow data
                     if ($result === 'delayed') {
-						   logger('--from delayed results');
+						   // logger('--from delayed results');
                         return false; // Return false but don't delete flow data
                     }
                     
@@ -310,7 +310,7 @@ class FlowExecutionService
             $nodeType = \Arr::get($metadataArray, "type", null);
 			// logger('node type '.$nodeType);
             if ($nodeType === 'action') {
-				  logger('inside loop - action inside looping '.$iteration);
+				  // logger('inside loop - action inside looping '.$iteration);
                 $result = $this->processActionNode($metadataArray, $contact, $message, $flowData, $contactId);
                 
                 if ($result === false) {
