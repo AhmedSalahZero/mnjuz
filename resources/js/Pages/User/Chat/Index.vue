@@ -404,6 +404,7 @@ const updateSidePanel = async (chat, statusChanged) => {
 	// }
 
 	if (isInboundChat) {
+		//	console.log('isInboundChat', currentContact)
 		if (currentContact) {
 			currentContact.last_chat = currentChat
 			currentContact.last_inbound_chat = currentChat

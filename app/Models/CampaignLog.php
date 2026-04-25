@@ -48,4 +48,9 @@ class CampaignLog extends Model {
     public function retries(){
         return $this->hasMany(CampaignLogRetry::class);
     }
+
+    public function attempts()
+    {
+        return $this->hasMany(CampaignMessageAttempt::class)->orderBy('attempt_number');
+    }
 }

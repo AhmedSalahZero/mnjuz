@@ -1,4 +1,5 @@
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import axios from 'axios'
 import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
@@ -6,7 +7,6 @@ import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
-import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 const recorder = ref(null)
@@ -456,7 +456,8 @@ onBeforeUnmount(() => {
 			<button @click="sendAuthTemplate()" :disabled="sendingAuthTemplate"
 				class="rounded-md bg-primary px-3 py-1 flex items-center justify-center gap-2 text-sm text-white shadow-sm w-[15%] disabled:opacity-70">
 				<span>{{ $t('Send Template') }}</span>
-				<svg v-if="sendingAuthTemplate" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+				<svg v-if="sendingAuthTemplate" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+					viewBox="0 0 24 24">
 					<path fill="currentColor"
 						d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z"
 						opacity=".5" />

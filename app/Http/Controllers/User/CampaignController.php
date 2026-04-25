@@ -83,7 +83,7 @@ class CampaignController extends BaseController
             $searchTerm = $request->query('search');
             $data['rows'] = CampaignLogResource::collection(
                 $campaign
-                    ? CampaignLog::with('contact', 'chat.logs')
+                    ? CampaignLog::with('contact', 'chat.logs', 'attempts')
                         ->where('campaign_id', $campaign->id)
                         ->where(function ($query) use ($searchTerm) {
                             $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {

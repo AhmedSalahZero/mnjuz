@@ -32,6 +32,8 @@ const params = ref({
 const logs = ref(null)
 const messageStatus = ref(null)
 const isOpenModal = ref(false)
+const isAttemptsModalOpen = ref(false)
+const selectedAttempts = ref([])
 const isSearching = ref(false)
 const emit = defineEmits(['delete'])
 
@@ -56,6 +58,17 @@ const openModal = (status, value) => {
 	messageStatus.value = status
 	logs.value = value
 	isOpenModal.value = true
+}
+
+const openAttemptsModal = (attempts) => {
+	selectedAttempts.value = Array.isArray(attempts) ? attempts : []
+	isAttemptsModalOpen.value = true
+}
+
+const getAttemptStatusClass = (status) => {
+	if (status === 'success') return 'bg-green-700 text-white'
+	if (status === 'failed') return 'bg-red-500 text-white'
+	return 'bg-slate-200 text-slate-700'
 }
 
 const getStatus = (metadata) => {
@@ -142,9 +155,12 @@ const getErrorMessage = (details) => {
 					<span v-else class="border-b border-dashed border-black">{{ item.created_at }}</span>
 				</TableBodyRowItem>
 				<TableBodyRowItem>
-					<span>
-						{{ item.retry_count }}
-					</span>
+					<div class="flex items-center gap-2">
+						<span>{{ item.retry_count }}</span>
+						<button type="button" class="underline text-xs" @click="openAttemptsModal(item.attempts)">
+							{{ $t('View attempts') }}
+						</button>
+					</div>
 				</TableBodyRowItem>
 				<TableBodyRowItem>
 					<span class="px-2 py-1 text-xs rounded-md capitalize"
@@ -209,6 +225,35 @@ const getErrorMessage = (details) => {
 		<div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
 			<div class="mt-2 w-full">
 				<button type="button" @click="isOpenModal = false"
+					class="inline-flex float-right justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Close') }}</button>
+			</div>
+		</div>
+	</Modal>
+	<Modal :label="$t('Retry attempts')" :isOpen="isAttemptsModalOpen">
+		<div class="max-w-2xl w-full">
+			<div v-if="selectedAttempts.length" class="space-y-2 max-h-96 overflow-y-auto pr-1">
+				<div v-for="attempt in selectedAttempts" :key="attempt.id" class="border rounded-md p-3 text-sm">
+					<div class="flex items-center justify-between mb-1">
+						<span class="font-medium">
+							{{ $t('Attempt') }} #{{ attempt.attempt_number }}
+						</span>
+						<span class="px-2 py-1 text-xs rounded-md capitalize" :class="getAttemptStatusClass(attempt.status)">
+							{{ attempt.status }}
+						</span>
+					</div>
+					<div class="text-slate-600">{{ attempt.executed_at || '—' }}</div>
+					<div v-if="attempt.failure_reason" class="mt-2 text-red-700">
+						{{ attempt.failure_reason }}
+					</div>
+				</div>
+			</div>
+			<div v-else class="text-sm text-slate-500">
+				{{ $t('No attempts recorded yet.') }}
+			</div>
+		</div>
+		<div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
+			<div class="mt-2 w-full">
+				<button type="button" @click="isAttemptsModalOpen = false"
 					class="inline-flex float-right justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Close') }}</button>
 			</div>
 		</div>

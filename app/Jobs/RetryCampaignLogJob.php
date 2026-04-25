@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\CampaignLog;
 use App\Models\CampaignLogRetry;
 use App\Models\Organization;
+use App\Services\CampaignRetryService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Bus\Queueable;
@@ -15,15 +16,18 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, TemplateTrait;
 
     public $timeout = 300;
+    public $tries = 3;
     private $organizationId;
     private $campaignLogId;
     protected $retryIndex;
+    private $whatsappService;
 
     public function __construct(int $organizationId, int $campaignLogId, int $retryIndex)
     {
@@ -39,104 +43,98 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
 
     public function handle()
     {
-        $log = CampaignLog::with('campaign', 'campaign.organization', 'contact')->find($this->campaignLogId);
-        $campaignSettings = json_decode($log->campaign->organization->metadata ?? '{}', true)['campaigns'] ?? [];
-        $retryIntervals = $campaignSettings['resend_intervals'] ?? [];
-        $maxRetries = count($retryIntervals);
-        $retryCount = $log->retries()->count();
-
-        if (!$log || $log->status !== 'failed') {
-            return;
-        }
-
-        if($log->campaign->status == 'completed') {
-            return; //Don't process if the campaign has been marked as completed
-        }
-
-        if($retryCount >= $maxRetries){
-            return; //Don't process if retry count limit reached
-        }
-
-        // Initialize WhatsApp service
-        $this->initializeWhatsappService();
-
-        DB::beginTransaction();
+        $retryService = app(CampaignRetryService::class);
 
         try {
-            // Create retry log
-            $retryLog = new CampaignLogRetry();
-            $retryLog->campaign_log_id = $this->campaignLogId;
-            $retryLog->status = 'ongoing';
-            $retryLog->save();
+            DB::transaction(function () use ($retryService) {
+                $log = CampaignLog::with('campaign', 'campaign.organization', 'contact')
+                    ->lockForUpdate()
+                    ->find($this->campaignLogId);
 
-            $template = $this->buildTemplateRequest($log->campaign_id, $log->contact);
-            $campaign_user_id = $log->campaign->created_by;
-
-            $response = $this->whatsappService->sendTemplateMessage(
-                $log->contact->uuid,
-                $template,
-                $campaign_user_id,
-                $log->campaign_id
-            );
-
-            $status = ($response->success === true) ? 'success' : 'failed';
-            $retryLog->chat_id = $response->data->chat->id ?? null;
-            $retryLog->status = $status;
-
-            // Clean metadata
-            unset($response->success);
-            if (property_exists($response, 'data') && property_exists($response->data, 'chat')) {
-                unset($response->data->chat);
-            }
-
-            $retryLog->metadata = json_encode($response);
-            $retryLog->save();
-
-            // Update the retry_count on the original campaign log
-            $log->retry_count += 1;
-            $log->status = $status;
-            $log->save();
-
-            // Check if it failed and we need to schedule next retry
-            if ($retryLog->status === 'failed') {
-                $intervals = $campaignSettings['resend_intervals'] ?? [];
-
-                if (isset($intervals[$this->retryIndex])) {
-                    if($this->retryIndex + 1 < $maxRetries){
-                        $nextInterval = $intervals[$this->retryIndex + 1];
-                        self::dispatch($this->organizationId, $log->id, $this->retryIndex + 1)->onQueue('campaign-messages')->delay(now()->addMinutes($nextInterval));
-                    }
-                } 
-                
-                if (!empty($campaignSettings['move_failed_contacts_to_group']) && $retryCount >= $maxRetries) {
-                    $groupUuid = $campaignSettings['failed_campaign_group'];
-                    $failedGroupId = DB::table('contact_groups')->where('uuid', $groupUuid)->value('id');
-
-                    // Check if the group exists in the contact_groups table by UUID
-                    if (!$failedGroupId) {
-                        Log::warning('Failed to move contact: Group with UUID ' . $groupUuid . ' does not exist.');
-                        return;
-                    }
-
-                    // Remove all groups for the contact
-                    DB::table('contact_contact_group')
-                        ->where('contact_id', $log->contact_id)
-                        ->delete();
-
-                    // Add contact to the failed group
-                    DB::table('contact_contact_group')->insert([
-                        'contact_id' => $log->contact_id,
-                        'contact_group_id' => $failedGroupId, // Use the group ID here
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+                if (!$log || !$log->campaign || !$log->contact || $log->status !== 'failed') {
+                    return;
                 }
-            }
 
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Retry failed for campaign_log {$this->campaignLogId}: " . $e->getMessage());
+                if ($log->campaign->status !== 'ongoing') {
+                    return;
+                }
+
+                $settings = $retryService->getCampaignRetrySettings($log->campaign);
+                if (!$settings['enabled']) {
+                    $this->markCampaignAsCompletedIfDone($log->campaign_id, $retryService);
+                    return;
+                }
+
+                $retryCount = $log->retries()->count();
+                if ($retryCount !== $this->retryIndex || $retryCount >= $settings['max_retries']) {
+                    $this->markCampaignAsCompletedIfDone($log->campaign_id, $retryService);
+                    return;
+                }
+
+                $this->initializeWhatsappService();
+
+                $retryLog = new CampaignLogRetry();
+                $retryLog->campaign_log_id = $this->campaignLogId;
+                $retryLog->status = 'ongoing';
+                $retryLog->save();
+
+                $template = $this->buildTemplateRequest($log->campaign_id, $log->contact);
+                $campaignUserId = $log->campaign->created_by;
+
+                $response = $this->whatsappService->sendTemplateMessage(
+                    $log->contact->uuid,
+                    $template,
+                    $campaignUserId,
+                    $log->campaign_id
+                );
+
+                $status = ($response->success === true) ? 'success' : 'failed';
+                $retryLog->chat_id = $response->data->chat->id ?? null;
+                $retryLog->status = $status;
+
+                unset($response->success);
+                if (property_exists($response, 'data') && property_exists($response->data, 'chat')) {
+                    unset($response->data->chat);
+                }
+
+                $retryLog->metadata = json_encode($response);
+                $retryLog->save();
+
+                $log->retry_count = $retryCount + 1;
+                $log->status = $status;
+                $log->chat_id = $retryLog->chat_id;
+                $log->metadata = $retryLog->metadata;
+                $log->save();
+
+                $attemptNumber = $this->retryIndex + 2;
+                $failureReason = $status === 'failed'
+                    ? $retryService->extractFailureReason($response)
+                    : null;
+
+                $retryService->recordAttempt(
+                    $log,
+                    $attemptNumber,
+                    $status,
+                    $failureReason,
+                    $response,
+                    true
+                );
+
+                if ($status === 'failed') {
+                    if (!$retryService->scheduleNextRetry($log)) {
+                        $retryService->moveContactToFailedGroup($log);
+                    }
+                }
+
+                $this->markCampaignAsCompletedIfDone($log->campaign_id, $retryService);
+            });
+        } catch (Throwable $e) {
+            Log::error("Retry failed for campaign_log {$this->campaignLogId}: " . $e->getMessage(), [
+                'campaign_log_id' => $this->campaignLogId,
+                'retry_index' => $this->retryIndex,
+            ]);
+
+            throw $e;
         }
     }
 
@@ -163,5 +161,41 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
             $wabaId, 
             $this->organizationId
         );
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        $log = CampaignLog::with('campaign')->find($this->campaignLogId);
+        if (!$log) {
+            return;
+        }
+
+        app(CampaignRetryService::class)->recordAttempt(
+            $log,
+            $this->retryIndex + 2,
+            'failed',
+            'Queue job failed: ' . $exception->getMessage(),
+            null,
+            true
+        );
+    }
+
+    private function markCampaignAsCompletedIfDone(int $campaignId, CampaignRetryService $retryService): void
+    {
+        $campaign = \App\Models\Campaign::find($campaignId);
+        if (!$campaign || $campaign->status !== 'ongoing') {
+            return;
+        }
+
+        $hasPendingOrOngoing = CampaignLog::where('campaign_id', $campaignId)
+            ->whereIn('status', ['pending', 'ongoing'])
+            ->exists();
+
+        if ($hasPendingOrOngoing || $retryService->hasRetryableFailures($campaign)) {
+            return;
+        }
+
+        $campaign->status = 'completed';
+        $campaign->save();
     }
 }

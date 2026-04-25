@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Jobs\ProcessSingleCampaignLogJob;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
+use App\Services\CampaignRetryService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -26,7 +27,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 			$time = microtime(true);
             // Process logs in chunks to avoid memory issues
             CampaignLog::with(['campaign.organization', 'contact'])
-                ->whereIn('status', ['pending', 'failed'])
+                ->where('status', 'pending')
                 ->whereHas('campaign', function ($query) {
                     $query->where('status', 'ongoing');
                 })
@@ -36,15 +37,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
                     // Process logs and collect jobs
                     foreach ($logs as $log) {
-                        $orgMetadata = json_decode($log->campaign->organization->metadata ?? '{}', true);
-                        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? [];
-                        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
-                        $maxRetries = count($retryIntervals);
-
-                        // Filter the logs based on the status and retry logic
-                        if ($log->status === 'pending' || ($log->status === 'failed' && $log->retry_count < $maxRetries && $retryEnabled === true)) {
-                            $jobs[] = new ProcessSingleCampaignLogJob($log);
-                        }
+                        $jobs[] = new ProcessSingleCampaignLogJob($log);
 
                         // Track which campaigns have been processed
                         if (!in_array($log->campaign_id, $campaignsProcessed)) {
@@ -78,44 +71,25 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
     private function markCampaignAsCompleted($campaignId)
     {
-		
         $campaign = Campaign::with('organization')->find($campaignId);
-        $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? [];
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
-        $maxRetries = count($retryIntervals);
-
-        // Check if there are any pending logs left for this campaign
-        $failedLogsExists = false;
-
-        if($retryEnabled){
-            // Check if there are any failed logs left for this campaign that have not reached max retry attempts
-            $failedLogs = CampaignLog::where('campaign_id', $campaignId)
-                ->where('status', 'failed')
-                ->where(function ($query) use ($maxRetries) {
-                    // Check if the campaign is ongoing
-                    $query->whereHas('campaign', function ($subQuery) {
-                        $subQuery->where('status', 'ongoing');
-                    });
-                })
-                ->get();
-
-            foreach ($failedLogs as $log) {
-                if($log->retries->count() < $maxRetries){
-                    $failedLogsExists = true;
-                    break;
-                }
-            }
+        if (!$campaign || $campaign->status !== 'ongoing') {
+            return;
         }
 
-        if (!$failedLogsExists) {
-            // No more pending/failed logs, mark the campaign as completed
-            $campaign = Campaign::find($campaignId);
-            if ($campaign && $campaign->status === 'ongoing') {
-                $campaign->status = 'completed';
-                $campaign->save();
-            }
+        $hasPendingOrOngoing = CampaignLog::where('campaign_id', $campaignId)
+            ->whereIn('status', ['pending', 'ongoing'])
+            ->exists();
+
+        if ($hasPendingOrOngoing) {
+            return;
         }
-		
+
+        $retryService = app(CampaignRetryService::class);
+        if ($retryService->hasRetryableFailures($campaign)) {
+            return;
+        }
+
+        $campaign->status = 'completed';
+        $campaign->save();
     }
 }

@@ -377,7 +377,7 @@ onUnmounted(() => {
 							<img v-if="item.contact.avatar" class="rounded-full w-10 h-10" :src="item.contact.avatar" />
 							<div v-else
 								class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">
-								{{ item.contact.full_name.substring(0, 1) }}
+								{{ item.contact.full_name?.substring(0, 1) || '?' }}
 							</div>
 							<svg v-if="item.contact.is_blocked" width="20" height="20" viewBox="0 0 24 24" fill="none"
 								xmlns="http://www.w3.org/2000/svg">

@@ -16,6 +16,20 @@ class CampaignLogResource extends JsonResource
     public function toArray(Request $request): array
     {
         $data = parent::toArray($request);
+        $data['attempts'] = $this->whenLoaded('attempts', function () {
+            return $this->attempts->map(function ($attempt) {
+                return [
+                    'id' => $attempt->id,
+                    'attempt_number' => $attempt->attempt_number,
+                    'channel' => $attempt->channel,
+                    'is_retry' => (bool) $attempt->is_retry,
+                    'status' => $attempt->status,
+                    'failure_reason' => $attempt->failure_reason,
+                    'executed_at' => $attempt->executed_at,
+                    'response_metadata' => $attempt->response_metadata,
+                ];
+            })->values();
+        }, []);
 
         return $data;
     }

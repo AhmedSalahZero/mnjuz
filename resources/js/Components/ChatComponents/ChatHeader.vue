@@ -172,7 +172,7 @@ const submitForm3 = () => {
 			<div @click="toggleView">
 				<img v-if="contact.avatar" class="rounded-full w-14 h-14" :src="contact.avatar" />
 				<div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-100">
-					{{ contact.full_name.substring(0, 1) }}
+					{{ contact.full_name?.substring(0, 1) || '?' }}
 				</div>
 			</div>
 			<div class="flex items-center w-full gap-x-8">

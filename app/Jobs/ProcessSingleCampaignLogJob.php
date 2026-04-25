@@ -2,12 +2,10 @@
 
 namespace App\Jobs;
 
-use App\Helpers\DateTimeHelper;
-use App\Jobs\RetryCampaignLogJob;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
-use App\Models\CampaignLogRetry;
 use App\Models\Organization;
+use App\Services\CampaignRetryService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Bus\Batchable;
@@ -71,7 +69,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     protected function updateLogStatus(CampaignLog $log, $responseObject)
     {
         $log->chat_id = $responseObject->data->chat->id ?? null;
-        $log->status = ($responseObject->success === true) ? 'success' : 'failed';
+        $status = ($responseObject->success === true) ? 'success' : 'failed';
+        $log->status = $status;
         
         // Clean up response object
         unset($responseObject->success);
@@ -83,6 +82,24 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         $log->updated_at = now();
         $log->save();
 
+        $retryService = app(CampaignRetryService::class);
+        $failureReason = $status === 'failed'
+            ? $retryService->extractFailureReason($responseObject)
+            : null;
+
+        $retryService->recordAttempt(
+            $log,
+            1,
+            $status,
+            $failureReason,
+            $responseObject,
+            false
+        );
+
+        if ($status === 'failed') {
+            $retryService->scheduleNextRetry($log);
+        }
+
         // Check if campaign is completed
         $this->checkAndUpdateCampaignStatus($log->campaign_id);
     }
@@ -90,9 +107,9 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     protected function checkAndUpdateCampaignStatus($campaignId)
     {
         $campaign = Campaign::find($campaignId);
-        $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        if (!$campaign) {
+            return;
+        }
     
         $pendingOrOngoing = CampaignLog::where('campaign_id', $campaignId)
             ->whereIn('status', ['pending', 'ongoing'])
@@ -102,37 +119,12 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
             return; // Still processing logs
         }
 
-        if ($retryEnabled) {
-            $logs = CampaignLog::where('campaign_id', $campaignId)->get();
-    
-            foreach ($logs as $log) {
-                $retryCount = $log->retries()->count();
-                $maxRetries = count($retryIntervals);
-
-                // Skip if already retried max times
-                if ($retryCount >= $maxRetries) {
-                    continue;
-                }
-
-                // If log failed and hasn't reached max retries, schedule retry
-                if ($log->status === 'failed' && $retryCount < $maxRetries) {
-                    $delayHours = $retryIntervals[$retryCount] ?? null;
-
-                    if ($delayHours !== null) {
-                        RetryCampaignLogJob::dispatch($campaign->organization_id, $log->id, $retryCount)->onQueue('campaign-messages')->delay(now()->addMinutes($delayHours));
-                    }
-                }  
-            }
-        } else {
-            // Check again after potential changes
-            $unprocessed = CampaignLog::where('campaign_id', $campaignId)
-                ->whereIn('status', ['pending', 'ongoing'])
-                ->exists();
-
-            if (!$unprocessed) {
-                $campaign->update(['status' => 'completed']);
-            }
+        $retryService = app(CampaignRetryService::class);
+        if ($retryService->hasRetryableFailures($campaign)) {
+            return;
         }
+
+        $campaign->update(['status' => 'completed']);
     }
 
     private function initializeWhatsappService()
