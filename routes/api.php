@@ -32,6 +32,7 @@ Route::get('/translations/{locale}', function ($locale) {
     return response()->json(json_decode(File::get($path), true));
 });
 
+
 Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::get('/contacts', [App\Http\Controllers\ApiController::class, 'listContacts']);
     Route::post('/contacts', [App\Http\Controllers\ApiController::class, 'storeContact']);
@@ -68,6 +69,11 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
 });
 
 Route::prefix('v1')->group(function () {
+	
+	Route::post('/verification/send', [App\Http\Controllers\VerificationController::class, 'requestCode'])->middleware('throttle:6,1');
+	Route::post('/verification/confirm', [App\Http\Controllers\VerificationController::class, 'confirmCode'])->middleware('throttle:10,1');
+
+
 // Public routes (no authentication required)
 Route::prefix('auth')->group(function () {
     Route::post('login', [App\Http\Controllers\AuthController::class, 'login']);

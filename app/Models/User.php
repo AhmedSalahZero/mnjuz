@@ -33,6 +33,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'phone',
         'address',
         'language',
+        'verification_enabled',
+        'is_verified',
         'deleted_at'
     ];
 
@@ -54,6 +56,8 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'verification_enabled' => 'boolean',
+        'is_verified' => 'boolean',
     ];
 
     protected $appends = ['full_name'];

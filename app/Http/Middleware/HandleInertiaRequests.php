@@ -136,6 +136,8 @@ class HandleInertiaRequests extends Middleware
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'language' => $user->language ?? 'en',
+                'verification_enabled' => (bool) ($user->verification_enabled ?? false),
+                'is_verified' => (bool) ($user->is_verified ?? false),
                 'role' => $user->role,
                 'organization_team_role' => $organizationTeamRole,
                 'teams' => $user->relationLoaded('teams')

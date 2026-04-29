@@ -1093,5 +1093,19 @@
 "Default support ticket form URL (iframe) for all organizations":"رابط نموذج تذكرة الدعم الافتراضي (iframe) لجميع المنظمات",
 "Support ticket form URL":"رابط نموذج تذكرة الدعم",
 "Full URL of the embedded support form (iframe). Leave empty to use the default.":"الرابط الكامل لنموذج الدعم المضمّن (iframe). اتركه فارغاً لاستخدام الرابط الافتراضي.",
-"Team members fetched successfully":"تم جلب أعضاء الفريق بنجاح"
+"Team members fetched successfully":"تم جلب أعضاء الفريق بنجاح",
+"verification.required_title":"التحقق مطلوب",
+"verification.required":"يجب عليك توثيق حسابك قبل الوصول إلى لوحة التحكم.",
+"verification.method":"طريقة التحقق",
+"verification.resend_in":"إعادة الإرسال خلال",
+"verification.sending":"جارٍ الإرسال...",
+"verification.send_code":"إرسال رمز التحقق",
+"verification.code_label":"رمز مكوّن من 6 أرقام",
+"verification.code_placeholder":"أدخل الرمز",
+"verification.verifying":"جارٍ التحقق...",
+"verification.verify_continue":"تحقق ومتابعة",
+"verification.sent":"تم إرسال رمز التحقق بنجاح.",
+"verification.invalid":"رمز التحقق غير صحيح.",
+"verification.code_digits":"رمز التحقق يجب أن يتكون من 6 أرقام.",
+"verification.request_failed":"تعذر إرسال رمز التحقق."
 }

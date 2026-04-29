@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'required' => 'You must verify your account before accessing the dashboard.',
+    'sent' => 'Verification code sent successfully.',
+    'invalid' => 'Invalid verification code.',
+    'success' => 'Verification successful.',
+    'expired' => 'Verification code has expired.',
+    'no_active_request' => 'No active verification request found.',
+    'max_attempts' => 'Maximum verification attempts reached. Please request a new code.',
+    'session_invalid' => 'Verification session is invalid.',
+    'method_required' => 'Please select a verification method.',
+    'method_invalid' => 'Unsupported verification method.',
+    'email_required' => 'Email is required for email verification.',
+    'email_invalid' => 'Please enter a valid email address.',
+    'phone_required' => 'Phone is required for WhatsApp verification.',
+    'phone_invalid' => 'Please enter a valid phone number.',
+    'code_required' => 'Verification code is required.',
+    'code_digits' => 'Verification code must be 6 digits.',
+    'validation_failed' => 'The given data was invalid.',
+    'organization_missing' => 'No active organization to send WhatsApp verification.',
+    'whatsapp_template_missing' => 'WhatsApp template id=4 not found.',
+    'whatsapp_send_failed' => 'Failed to send WhatsApp verification code.',
+    'wait_seconds' => 'Please wait :seconds seconds before requesting a new code.',
+];

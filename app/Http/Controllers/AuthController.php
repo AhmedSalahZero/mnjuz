@@ -29,6 +29,7 @@ use App\Services\AuthService;
 use App\Services\PasswordResetService;
 use App\Services\SocialLoginService;
 use App\Services\TeamService;
+use App\Services\UserVerificationService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -48,12 +49,14 @@ class AuthController extends BaseController
     protected $userService;
     protected $role;
     protected UserDeviceService $userDeviceService;
+    protected UserVerificationService $userVerificationService;
 
     public function __construct($role = 'user')
     {
         $this->userService = new UserService($role);
         $this->role = $role;
         $this->userDeviceService = new UserDeviceService();
+        $this->userVerificationService = new UserVerificationService();
     }
 
     public function showLoginForm(){
@@ -119,6 +122,25 @@ class AuthController extends BaseController
             $request->session()->put('remember', $remember);
             return redirect('/tfa');
         }
+
+        if ($this->userVerificationService->verificationIsRequired($user)) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'requires_verification' => true,
+                    'message' => __('verification.required'),
+                    'verification_token' => $this->userVerificationService->createApiVerificationToken($user),
+                ], 200);
+            }
+
+            $request->session()->put(UserVerificationService::SESSION_KEY, [
+                'user_id' => $user->id,
+                'remember' => (bool) $remember,
+                'guard' => $user->role === 'admin' ? 'admin' : 'user',
+            ]);
+
+            return redirect('/verification-required');
+        }
 	
         return $this->doLogin($request, $user, $remember);
     }
@@ -145,6 +167,25 @@ class AuthController extends BaseController
             $userId = $request->session()->get('tfa');
             $remember = $request->session()->get('remember');
             $user = User::find($userId);
+        }
+
+        if ($this->userVerificationService->verificationIsRequired($user)) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'requires_verification' => true,
+                    'message' => __('verification.required'),
+                    'verification_token' => $this->userVerificationService->createApiVerificationToken($user),
+                ], 200);
+            }
+
+            $request->session()->put(UserVerificationService::SESSION_KEY, [
+                'user_id' => $user->id,
+                'remember' => (bool) ($remember ?? false),
+                'guard' => $user->role === 'admin' ? 'admin' : 'user',
+            ]);
+
+            return redirect('/verification-required');
         }
 
         return $this->doLogin($request, $user, $remember ?? false);

@@ -108,6 +108,10 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
     Route::post('/reset-devices', [App\Http\Controllers\AuthController::class, 'sendResetDevicesLink'])
         ->middleware('throttle:5,1')
         ->name('reset-devices.send');
+
+    Route::get('/verification-required', [App\Http\Controllers\VerificationController::class, 'showRequired'])->name('verification.required');
+    Route::post('/verification/request', [App\Http\Controllers\VerificationController::class, 'requestCode'])->middleware('throttle:6,1');
+    Route::post('/verification/confirm', [App\Http\Controllers\VerificationController::class, 'confirmCode'])->middleware('throttle:10,1');
 });
 
 Route::get('/auth/reset-devices/{user}', [App\Http\Controllers\AuthController::class, 'processResetDevices'])
@@ -118,6 +122,7 @@ Route::middleware(['auth:user,admin'])->group(function () {
     Route::put('/profile', [App\Http\Controllers\ProfileController::class, 'update']);
     Route::put('/profile/password', [App\Http\Controllers\ProfileController::class, 'updatePassword']);
     Route::put('/profile/tfa', [App\Http\Controllers\ProfileController::class, 'updateTfa']);
+    Route::put('/profile/verification', [App\Http\Controllers\ProfileController::class, 'updateVerification']);
     Route::put('/profile/organization', [App\Http\Controllers\ProfileController::class, 'updateOrganization']);
 });
 

@@ -7,6 +7,7 @@ use App\Http\Requests\StoreProfile;
 use App\Http\Requests\StoreProfileAddress;
 use App\Http\Requests\StoreProfilePassword;
 use App\Http\Requests\StoreProfileTfa;
+use App\Http\Requests\Verification\UpdateVerificationSettingRequest;
 use App\Models\Organization;
 use App\Models\User;
 use DB;
@@ -103,6 +104,18 @@ class ProfileController extends BaseController
         return Redirect::back()->with('status', [
             'type' => 'success',
             'message' => __('Two-factor authentication enabled successfully!'),
+        ]);
+    }
+
+    public function updateVerification(UpdateVerificationSettingRequest $request)
+    {
+        User::where('id', auth()->user()->id)->update([
+            'verification_enabled' => (bool) $request->boolean('verification_enabled'),
+        ]);
+
+        return Redirect::back()->with('status', [
+            'type' => 'success',
+            'message' => __('Verification setting updated successfully!'),
         ]);
     }
 

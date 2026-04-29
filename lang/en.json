@@ -807,5 +807,19 @@
     "Not installed": "Not installed",
     "Search": "Search",
 	"Your account is not associated with any active organization. Please contact support.":"Your account is not associated with any active organization. Please contact support.",
-	"Are You sure you want to block this contact":"Are You sure you want to block this contact"
+	"Are You sure you want to block this contact":"Are You sure you want to block this contact",
+    "verification.required_title": "Verification Required",
+    "verification.required": "You must verify your account before accessing the dashboard.",
+    "verification.method": "Verification method",
+    "verification.resend_in": "Resend in",
+    "verification.sending": "Sending...",
+    "verification.send_code": "Send verification code",
+    "verification.code_label": "6-digit code",
+    "verification.code_placeholder": "Enter code",
+    "verification.verifying": "Verifying...",
+    "verification.verify_continue": "Verify and continue",
+    "verification.sent": "Verification code sent successfully.",
+    "verification.invalid": "Invalid verification code.",
+    "verification.code_digits": "Verification code must be 6 digits.",
+    "verification.request_failed": "Unable to send code."
 }
