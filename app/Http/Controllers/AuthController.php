@@ -127,9 +127,11 @@ class AuthController extends BaseController
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'requires_verification' => true,
+                    'data' => [
+						'requires_verification' => true,
+						'verification_token' => $this->userVerificationService->createApiVerificationToken($user),
+					],
                     'message' => __('verification.required'),
-                    'verification_token' => $this->userVerificationService->createApiVerificationToken($user),
                 ], 200);
             }
 
@@ -173,9 +175,11 @@ class AuthController extends BaseController
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'requires_verification' => true,
+                    'data' => [
+						'requires_verification' => true,
+						'verification_token' => $this->userVerificationService->createApiVerificationToken($user),
+					],
                     'message' => __('verification.required'),
-                    'verification_token' => $this->userVerificationService->createApiVerificationToken($user),
                 ], 200);
             }
 
