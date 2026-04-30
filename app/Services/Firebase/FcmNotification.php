@@ -30,14 +30,14 @@ class FcmNotification
                    
                     'android' => [
                         'notification' => [
-                            'sound' => 'default',
+                            'sound' => 'on_notification.wav',
                             'color' => '#0A0A0A',
                         ],
                     ],
                     'apns' => [
                         'payload' => [
                             'aps' => [
-                                'sound' => 'default',
+                                'sound' => 'on_notification.wav',
                             ],
                         ],
                     ],
