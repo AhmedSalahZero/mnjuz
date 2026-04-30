@@ -64,7 +64,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
 
@@ -99,7 +99,7 @@ class ApiController extends Controller
         
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([
@@ -159,7 +159,7 @@ class ApiController extends Controller
         $organizationId = $request->organization;
         $uuid = $idOrUUID;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
             $contact  = Contact::find($idOrUUID); // id in this case
             if (!$contact) {
                 return response()->json([
@@ -259,7 +259,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         try {
             $contactService = new ContactService($organizationId);
@@ -309,7 +309,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         $contactGroups = ContactGroup::where('organization_id', $organizationId)
             ->where('deleted_at', null)
@@ -323,7 +323,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         if ($request->isMethod('post')) {
             $rules = [
@@ -410,7 +410,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         try {
             $contactGroup = ContactGroup::where('organization_id', $organizationId)->where('uuid', $uuid)->firstOrFail();
@@ -466,7 +466,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         $contactCategories = ContactCategory::where('organization_id', $organizationId)
             ->orderBy('name')
@@ -479,7 +479,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'contact_categories_enabled')) {
             return response()->json([
@@ -593,7 +593,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         try {
             $contactCategory = ContactCategory::where('organization_id', $organizationId)->where('uuid', $uuid)->firstOrFail();
@@ -780,7 +780,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
             $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
         }
         $rules = [
@@ -977,7 +977,7 @@ class ApiController extends Controller
         }
         
         
-        $organizationId = $request->user()->current_organization_id;
+        $organizationId = $request->user()->current_mobile_organization_id;
         $organizationId = $organizationId ?: session()->get('current_organization');
         $sendByQueue = true;
         $template = Template::where('uuid', $request->template_uuid)->where('organization_id', $organizationId)->first();
@@ -1083,7 +1083,7 @@ class ApiController extends Controller
             ], 400);
         }
 
-        $organizationId = $request->user()->current_organization_id ?? session()->get('current_organization');
+        $organizationId = $request->user()->current_mobile_organization_id ?? session()->get('current_organization');
         $organization = Organization::find($organizationId);
         if (!$organization) {
             return response()->json([
@@ -1129,7 +1129,7 @@ class ApiController extends Controller
         $organizationId = $request->organization;
         
         // if( $request->is('api/v1/*')){
-        // 	$organizationId = $request->user()->current_organization_id;
+        // 	$organizationId = $request->user()->current_mobile_organization_id;
         // }
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
@@ -1212,7 +1212,7 @@ class ApiController extends Controller
      */
     public function sendFileMessage(Request $request)
     {
-        $organizationId = $request->user()->current_organization_id;
+        $organizationId = $request->user()->current_mobile_organization_id;
         $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
@@ -1376,7 +1376,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         $templates = Template::where('organization_id', $organizationId)
             ->where('deleted_at', null)
@@ -1403,7 +1403,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
 		$rows = User::join('teams', 'users.id', '=', 'teams.user_id')
 		->where('teams.organization_id', $organizationId)
@@ -1439,7 +1439,7 @@ class ApiController extends Controller
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         return  (new ChatService($organizationId))->getChatList($request);
         // return response()->json([
@@ -1457,7 +1457,7 @@ class ApiController extends Controller
     // {
     // 	$organizationId = $request->organization;
     // 	if( $request->is('api/v1/*')){
-    // 		$organizationId = $request->user()->current_organization_id;
+    // 		$organizationId = $request->user()->current_mobile_organization_id;
     // 	}
     //     $validator = Validator::make($request->all(), [
     //         'page' => 'integer|min:1',
@@ -1486,7 +1486,7 @@ class ApiController extends Controller
     {
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_organization_id;
+            $organizationId = $request->user()->current_mobile_organization_id;
         }
         $validator = Validator::make($request->all(), [
             'created_at' => 'sometimes|max:255',
@@ -1767,7 +1767,7 @@ class ApiController extends Controller
     // {
     //     $organizationId = $request->organization;
     //     if ($request->is('api/v1/*')) {
-    //         $organizationId = $request->user()->current_organization_id;
+    //         $organizationId = $request->user()->current_mobile_organization_id;
     //     }
     //     $validator = Validator::make($request->all(), [
     //         'created_at' => 'sometimes|max:255',
@@ -1889,7 +1889,7 @@ class ApiController extends Controller
 	
     public function deleteChatForContact(Request $request, $uuid)
     {
-        $organizationId = $request->user()->current_organization_id;
+        $organizationId = $request->user()->current_mobile_organization_id;
         $contact = Contact::where('uuid', $uuid)->where('organization_id', $organizationId)->first();
         if (!$contact) {
             return response()->json([
@@ -1910,7 +1910,7 @@ class ApiController extends Controller
     }
     public function toggleTicketStatus(Request $request, $id)
     {
-        // $organizationId = $request->user()->current_organization_id;
+        // $organizationId = $request->user()->current_mobile_organization_id;
         $contact = Contact::find($id);
         if (!$contact) {
             return response()->json([
@@ -1995,7 +1995,7 @@ class ApiController extends Controller
             return response()->json(['error' => $validator->errors()], 400);
         }
 
-        $organizationId = $request->user()->current_organization_id;
+        $organizationId = $request->user()->current_mobile_organization_id;
         $chat = Chat::with('media')->where('id', $request->chat_id)
             ->where('organization_id', $organizationId)
             ->first();

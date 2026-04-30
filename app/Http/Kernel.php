@@ -39,6 +39,11 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\Localization::class,
+            // EnsureCurrentOrganization must run BEFORE HandleInertiaRequests
+            // and SetOrganizationFromSession so that the shared Inertia data
+            // and the merged `organization` request param both see the
+            // already-healed value.
+            \App\Http\Middleware\EnsureCurrentOrganization::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\SetOrganizationFromSession::class,
         ],
@@ -48,6 +53,7 @@ class Kernel extends HttpKernel
 			 \App\Http\Middleware\SetApiLanguage::class,
             \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\EnsureCurrentOrganization::class,
         ],
     ];
 
@@ -83,6 +89,7 @@ class Kernel extends HttpKernel
 		'has.mobile.app' => \App\Http\Middleware\CheckMobileApp::class,
         'admin.developer' => \App\Http\Middleware\EnsureAdminDeveloperAccess::class,
         'org.agent.restrict' => \App\Http\Middleware\RestrictOrganizationAgent::class,
+        'ensure.organization' => \App\Http\Middleware\EnsureCurrentOrganization::class,
 	
     ];
 }

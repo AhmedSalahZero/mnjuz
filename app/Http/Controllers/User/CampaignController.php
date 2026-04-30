@@ -127,24 +127,50 @@ class CampaignController extends BaseController
             ]
         );
     }
-	public function resendAllFailed(){
-		
-		$organizationId=session()->get('current_organization');
-		$count = CampaignLog::with(['campaign.organization', 'contact'])
-                	->where('status', 'failed')
-                ->whereHas('campaign', function ($query) use ($organizationId) {
-                    $query
-					->when($organizationId, function ($query) use ($organizationId) {
-						$query->where('organization_id', $organizationId);
-					});
-                })->update(['metadata' => null]);
-			
-		ProcessCampaignMessagesJob::dispatch('pending', $organizationId)->onQueue('campaign-messages');
-		return Redirect::back()->with(
-			'status', [
-				'type' => 'success', 
-				'message' => __('All failed campaigns resended successfully!')
-			]
-		);
-	}
+    public function resendAllFailed()
+    {
+        $organizationId = session()->get('current_organization');
+
+        // Reset failed logs of this organization back to "pending" so that
+        // ProcessCampaignMessagesJob picks them up. Also bump their parent
+        // campaign back to "ongoing" so the worker actually processes them.
+        DB::transaction(function () use ($organizationId) {
+            $campaignIds = Campaign::where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->pluck('id');
+
+            if ($campaignIds->isEmpty()) {
+                return;
+            }
+
+            CampaignLog::whereIn('campaign_id', $campaignIds)
+                ->where('status', 'failed')
+                ->update([
+                    'status' => 'pending',
+                    'metadata' => null,
+                    'chat_id' => null,
+                    'updated_at' => now(),
+                ]);
+
+            // Re-open any campaigns that were marked completed but now have
+            // pending logs again. Avoid touching scheduled campaigns.
+            Campaign::whereIn('id', $campaignIds)
+                ->where('status', 'completed')
+                ->update(['status' => 'ongoing']);
+        });
+
+        // ProcessCampaignMessagesJob's constructor takes no arguments. The
+        // scheduler runs it every minute, but dispatch one immediately so
+        // users see results without waiting for the next tick.
+        ProcessCampaignMessagesJob::dispatch()
+            ->onQueue('campaign-messages')
+            ->afterCommit();
+
+        return Redirect::back()->with(
+            'status', [
+                'type' => 'success',
+                'message' => __('All failed campaigns resended successfully!')
+            ]
+        );
+    }
 }

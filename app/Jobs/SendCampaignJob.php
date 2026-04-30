@@ -150,57 +150,26 @@ class SendCampaignJob implements ShouldQueue
 
     protected function processPendingOrRetryableLogs(Campaign $campaign)
     {
-        $campaign = Campaign::with('organization')->find($campaign->id);
-        $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
-        $maxRetries = count($retryIntervals);
+        // NOTE: The polling-based retry path that previously lived here has
+        // been intentionally removed. Retries are now driven exclusively by
+        // RetryCampaignLogJob (dispatched via CampaignRetryService::scheduleNextRetry)
+        // which uses the campaign_message_attempts unique index to guarantee
+        // each retry attempt is sent exactly once.
+        //
+        // Running both paths concurrently produced duplicate WhatsApp sends.
 
-        // Process pending logs
+        // Process pending logs only (initial send).
         CampaignLog::with('campaign', 'contact')
             ->where('campaign_id', $campaign->id)
             ->where('status', '=', 'pending')
             ->chunk(500, function ($pendingCampaignLogs) {
                 foreach ($pendingCampaignLogs as $campaignLog) {
-                    // Skip if the log is already being processed or processed
                     if ($campaignLog->status === 'ongoing' || $campaignLog->status === 'success') {
                         continue;
                     }
                     $this->sendTemplateMessage($campaignLog);
                 }
             });
-
-        // If retry is enabled, process eligible failed logs
-        if ($retryEnabled && $maxRetries > 0) {
-            CampaignLog::with(['campaign', 'contact', 'retries'])
-                ->where('campaign_id', $campaign->id)
-                ->where('status', 'failed')
-                ->chunk(500, function ($logs) use ($retryIntervals, $maxRetries) {
-                    foreach ($logs as $log) {
-                        $retryCount = $log->retries->count();
-
-                        // Skip if max retries have been reached
-                        if ($retryCount >= $maxRetries) {
-                            continue;
-                        }
-
-                        $requiredDelay = $retryIntervals[$retryCount] ?? null;
-
-                        // Skip if there's a retry dispatch and it's not time yet
-                        $lastRetryLog = $log->retries()->latest()->first(); // Assuming the relationship is defined
-
-                        if ($lastRetryLog) {
-                            $nextEligibleTime = \Carbon\Carbon::parse($lastRetryLog->created_at)->addHours($requiredDelay);
-                            if (now()->lt($nextEligibleTime)) {
-                                continue; // Retry time not reached yet
-                            }
-                        }
-
-                        // If the last retry or dispatched time is valid, proceed to send
-                        $this->sendRetryLogTemplateMessage($log);
-                    }
-                });
-        }
     }
 
     protected function hasPendingOrRetryableLogs(Campaign $campaign)
@@ -349,7 +318,8 @@ class SendCampaignJob implements ShouldQueue
 
         // Update campaign log status based on the response object
         $log->chat_id = $responseObject->data->chat->id ?? null;
-        $log->status = ($responseObject->success === true) ? 'success' : 'failed';
+        $status = ($responseObject->success === true) ? 'success' : 'failed';
+        $log->status = $status;
         unset($responseObject->success);
         if (property_exists($responseObject, 'data') && property_exists($responseObject->data, 'chat')) {
             unset($responseObject->data->chat);
@@ -357,6 +327,27 @@ class SendCampaignJob implements ShouldQueue
         $log->metadata = json_encode($responseObject);
         $log->updated_at =  now();
         $log->save();
+
+        // Always route failures through the unified retry pipeline so that
+        // legacy callers of SendCampaignJob still benefit from retry scheduling
+        // and per-attempt tracking via campaign_message_attempts.
+        $retryService = app(\App\Services\CampaignRetryService::class);
+        $failureReason = $status === 'failed'
+            ? $retryService->extractFailureReason($responseObject)
+            : null;
+
+        $retryService->recordAttempt(
+            $log,
+            1,
+            $status,
+            $failureReason,
+            $responseObject,
+            false
+        );
+
+        if ($status === 'failed') {
+            $retryService->scheduleNextRetry($log);
+        }
     }
 
     private function initializeWhatsappService()

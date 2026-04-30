@@ -122,10 +122,7 @@ class NewChatEvent implements ShouldBroadcast
 					 * @var User $user
 					 */
 					$user = User::find($userId);
-					if(!$user){
-						logger('user not found');
-					}
-					if($user){
+					if($user && $user->current_mobile_organization_id == $this->organizationId){
 						$titleEn = $this->buildNotificationTitle($value);
 						$titleAr = $titleEn;
 						$messageEn = $this->formatNotificationMessageLocale($value, 'en');

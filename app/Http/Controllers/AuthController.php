@@ -245,7 +245,7 @@ class AuthController extends BaseController
                 // Set current organization only if user has exactly one organization
                 if(count($organizations) == 1){
                     $currentOrganizationId = $organizations[0]['id'];
-					$user->current_organization_id = $currentOrganizationId;
+					$user->current_mobile_organization_id = $currentOrganizationId;
 					$user->save();
                 }
             }
@@ -741,8 +741,10 @@ class AuthController extends BaseController
             // Set locale based on user's language for proper translation
             if ($request->user()) {
                 App::setLocale($request->user()->language ?? 'en');
-                // Revoke the current token
-				$request->user()->current_organization_id = null;
+                // Revoke the current token. Clear ONLY the mobile column
+                // — a web session running in parallel must keep its own
+                // current_web_organization_id intact.
+				$request->user()->current_mobile_organization_id = null;
 				$request->user()->save();
                 // Delete all tokens for the user (more reliable than currentAccessToken in tests)
                 $request->user()->tokens()->delete();
@@ -769,12 +771,24 @@ class AuthController extends BaseController
 				'message' => __('Organization not found')
 			], 404);
 		}
-		$user = $request->user();
-		$user->current_organization_id = $organization->id;
-		$user->save();
+
+		$context = app(\App\Services\OrganizationContextService::class);
+		// UserHasOrganizationRequest already enforces membership via
+		// OrganizationHasUserRule, but setCurrent() re-checks and ALSO
+		// rejects banned/soft-deleted organizations.
+		if (!$context->setCurrent($request->user(), $organization->id)) {
+			return response()->json([
+				'success' => false,
+				'message' => __('The selected organization is not associated with the user.')
+			], 403);
+		}
+
 		return response()->json([
 			'success' => true,
-			'message' => __('Organization set successfully')
+			'message' => __('Organization set successfully'),
+			'data' => [
+				'current_organization_id' => $organization->id,
+			],
 		], 200);
 	}
 

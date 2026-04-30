@@ -197,8 +197,16 @@ class UserVerificationService
 
     private function resolveOrganizationId(User $user): ?int
     {
-        if (!empty($user->current_organization_id)) {
-            return (int) $user->current_organization_id;
+        // Verification can be triggered from either platform (web or
+        // mobile), and is also dispatched from queued jobs without a
+        // request context. Prefer whichever active platform column is
+        // currently set; fall back to the first team membership.
+        if (!empty($user->current_web_organization_id)) {
+            return (int) $user->current_web_organization_id;
+        }
+
+        if (!empty($user->current_mobile_organization_id)) {
+            return (int) $user->current_mobile_organization_id;
         }
 
         $team = $user->teams()->whereNull('deleted_at')->first();

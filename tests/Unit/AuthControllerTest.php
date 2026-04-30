@@ -124,7 +124,7 @@ class AuthControllerTest extends TestCase
     }
 
     /**
-     * Test doLogin method sets current_organization_id when single organization
+     * Test doLogin method sets current mobile organization id when single organization
      */
     public function test_do_login_sets_current_organization_single(): void
     {
@@ -143,7 +143,7 @@ class AuthControllerTest extends TestCase
     }
 
     /**
-     * Test doLogin method doesn't set current_organization_id when multiple organizations
+     * Test doLogin method doesn't set current mobile organization id when multiple organizations
      */
     public function test_do_login_no_current_organization_multiple(): void
     {
@@ -230,7 +230,7 @@ class AuthControllerTest extends TestCase
 
         $this->assertEquals(200, $response->getStatusCode());
         $this->user->refresh();
-        $this->assertEquals($this->organization->id, $this->user->current_organization_id);
+        $this->assertEquals($this->organization->id, $this->user->current_mobile_organization_id);
     }
 
     /**

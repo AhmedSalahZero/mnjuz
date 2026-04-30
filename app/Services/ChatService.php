@@ -723,45 +723,7 @@ class ChatService
             'nextPage' => $isPaginated ? $chatLogs->currentPage() + 1 : null,
         ];
     }
-	// public function listChatMessagesFromChatIdToEnd($page,$perPage)
-	// {
-	// 	$organizationId = auth()->user()->current_organization_id;
-	// 	$organization = Organization::where('id', $organizationId)->first();
-	// 	$contacts = $organization->contacts;
-	// 	ChatLog::where('organization_id', $organizationId)->where('entity_type', 'chat')->where('entity_id', $chatId)->orderBy('created_at', 'desc')->get();
-	// 	$chatLogs = ChatLog::where('contact_id', $contactId)
-	// 	->where('deleted_at', null)
-	// 	->orderBy('created_at', 'desc')
-	// 	->paginate($perPage, ['*'], 'page', $page);
-
-	// 	$chatIds = $chatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
-	// 	$ticketIds = $chatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
-	// 	$noteIds = $chatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
-
-	// 	$chatsMap = !empty($chatIds)
-	// 	? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
-	// 	: collect();
-	// $ticketLogsMap = !empty($ticketIds)
-	// 	? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
-	// 	: collect();
-	// $notesMap = !empty($noteIds)
-	// 	? ChatNote::whereIn('id', $noteIds)->get()->keyBy('id')
-	// 	: collect();
-
-	// $chats = [];
-	// foreach ($chatLogs as $chatLog) {
-	// 	$value = null;
-	// 	if ($chatLog->entity_type === 'chat') {
-	// 		$value = $chatsMap->get($chatLog->entity_id);
-	// 	} elseif ($chatLog->entity_type === 'ticket') {
-	// 		$value = $ticketLogsMap->get($chatLog->entity_id);
-	// 	} elseif ($chatLog->entity_type === 'notes') {
-	// 		$value = $notesMap->get($chatLog->entity_id);
-	// 	}
-	// 	$chats[] = [['type' => $chatLog->entity_type, 'value' => $value]];
-	// }
 	
-	// }
     private function ensureChatTicketsExist()
     {
         // ✅ استخدام Cache لتجنب تشغيل هذا في كل طلب

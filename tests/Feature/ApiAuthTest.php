@@ -318,7 +318,7 @@ class ApiAuthTest extends TestCase
 
         // Verify organization was set
         $this->user->refresh();
-        $this->assertEquals($this->organization->id, $this->user->current_organization_id);
+        $this->assertEquals($this->organization->id, $this->user->current_mobile_organization_id);
     }
 
     /**

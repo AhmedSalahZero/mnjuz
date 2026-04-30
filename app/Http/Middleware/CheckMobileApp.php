@@ -21,8 +21,8 @@ class CheckMobileApp
             return $next($request);
         }
         
-        // If user doesn't have current_organization_id, deny access
-        if (!$user->current_organization_id) {
+        // If user doesn't have a current mobile organization, deny access
+        if (!$user->current_mobile_organization_id) {
             return response()->json([
                 'success' => false,
                 'message' => __('Mobile App requires a selected organization. Please set your current organization.')
@@ -31,7 +31,7 @@ class CheckMobileApp
         
         // Check if addon exists and is enabled for the organization
         $addon = Addon::where('name', 'Mobile App')->where('status', 1)->where('is_active', 1)->first();
-		$mobileAppEnabled = CustomHelper::isModuleEnabled('Mobile App', $user->current_organization_id);
+		$mobileAppEnabled = CustomHelper::isModuleEnabled('Mobile App', $user->current_mobile_organization_id);
 		$mobileAppEnabled = true;
         if(!$addon || !$mobileAppEnabled){
             // Delete the token if it exists
