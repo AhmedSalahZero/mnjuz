@@ -2,577 +2,187 @@
 
 namespace App\Events;
 
-use App\Models\ChatTicket;
-use App\Models\Contact;
-use App\Models\Organization;
-use App\Models\Team;
-use App\Models\User;
-use Exception;
-use Illuminate\Broadcasting\Channel;
+use App\Jobs\SendNewChatPushNotificationJob;
+use App\Services\Chat\ChatBroadcastPayloadBuilder;
+use App\Services\Chat\ChatChannelRecipients;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Realtime broadcast for "a chat row changed" — fired on inbound messages,
+ * outbound replies, and status updates. Subscribers are presence channels
+ * `chats.ch{organizationId}.{userId}` listened to by the web dashboard
+ * (see {@see resources/js/echo.js}).
+ *
+ * This class is intentionally thin: every responsibility that requires
+ * database access or business rules has been delegated to a service so
+ * the event remains cheap to dispatch and the queue payload stays small.
+ *
+ *   - {@see ChatBroadcastPayloadBuilder}: builds the minimal Pusher
+ *     payload, including 10KB-fit shrinking.
+ *   - {@see ChatChannelRecipients}     : computes which user ids should
+ *     receive the broadcast (and the FCM push).
+ *   - {@see SendNewChatPushNotificationJob}: delivers WhatsApp-style
+ *     mobile push notifications independently of the broadcast.
+ */
 class NewChatEvent implements ShouldBroadcast
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable;
+    use InteractsWithSockets;
+    use SerializesModels;
 
-    public $chat;
-    public $organizationId;
-    public $queue = 'high';
-    public $isNewContact = false;
-    public $statusChanged = false;
-    public $sendToFirestore = false;
-	public array $additionalData = [];
+    public string $queue = 'high';
+
+    public int $organizationId;
+    public bool $isNewContact;
+    public bool $statusChanged;
+
     /**
-     * Create a new event instance.
-     * يُخزّن فقط النسخة المُصغّرة من الـ chat (في الـ queue والـ broadcast والـ listeners).
+     * Pre-built minimal chat array — already trimmed to the keys we care
+     * about — kept on the event instance so the queued payload stays
+     * small and the broadcast worker does not need to refetch the chat
+     * row from the database.
      *
-     * @param mixed $chat
-     * @param int $organizationId
+     * @var array<int, array<string, mixed>>|array<string, mixed>
      */
-    public function __construct($chat, $organizationId, $isNewContact = false, $statusChanged = false, $sendToFirestore = false)
-    {
+    public array $chat;
+
+    /**
+     * Cached contact id pulled out of the chat for use by
+     * {@see broadcastOn()} without re-walking the chat array.
+     */
+    public ?int $contactId;
+
+    public function __construct(
+        $chat,
+        int $organizationId,
+        bool $isNewContact = false,
+        bool $statusChanged = false,
+        bool $sendToFirestore = false
+    ) {
         $this->organizationId = $organizationId;
         $this->isNewContact = $isNewContact;
         $this->statusChanged = $statusChanged;
-        $this->sendToFirestore = $sendToFirestore;
-        $this->chat = $this->buildMinimalChatPayload($chat);
-		$payload = ['chat' => $this->chat];
-        if ($this->statusChanged) {
-            $payload['statusChanged'] = $this->statusChanged;
+
+        // Build the minimal payload once at dispatch time. Doing it here
+        // (rather than lazily in broadcastWith) keeps the queued event
+        // payload bounded — without this the entire raw Chat model graph
+        // would be serialised into the queue.
+        $this->chat = $this->payloadBuilder()
+            ->buildWrappedChat($chat, $organizationId, $isNewContact);
+
+        $this->contactId = $this->extractContactId($this->chat);
+
+        if ($sendToFirestore) {
+            $this->dispatchPushNotification();
         }
-        $encoded = json_encode($payload);
-        if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
-            $this->additionalData = $payload;
-        }else{
-			$dataToBeSent = $this->shrinkPayloadToLimit($payload);
-			$this->additionalData = $dataToBeSent;
-		}
-		
     }
 
     /**
-     * Get the channels the event should broadcast on.
+     * Channels the event broadcasts on. Pure resolution — no side effects,
+     * no notifications. The push notification has already been dispatched
+     * as its own job by the constructor when needed.
      *
-     * @return \Illuminate\Broadcasting\Channel
+     * @return array<int, PresenceChannel>
      */
-    
-    public function broadcastOn()
+    public function broadcastOn(): array
     {
         try {
-            $organization = Organization::findOrFail($this->organizationId);
-            $allowAgentsViewAllChats = $organization->getAllowAgentsToViewAllChats();
-            $ticketingActive = $organization->getTicketingActive();
+            $userIds = app(ChatChannelRecipients::class)
+                ->resolveUserIds($this->organizationId, $this->contactId);
 
-            // كل أعضاء المنظمة مع أدوارهم
-            $teams = Team::where('organization_id', $this->organizationId)
-                ->get(['user_id', 'role']);
-
-            $userIds = [];
-            $value = $this->chat[0]['value'] ?? $this->chat['value'] ?? [];
-            $contactId = $value['contact_id'] ?? null;
-            $contactName = $value['contact_full_name'] ?? '';
-            $contactPhone = $value['phone'] ?? '';
-            // 1) لو التذاكر غير مفعّلة أو الوكلاء مسموح لهم يشوفوا الكل → أرسل للكل
-            if (!$ticketingActive || $allowAgentsViewAllChats) {
-                $userIds = $teams->pluck('user_id')->unique()->values()->all();
-            } else {
-                // 2) التذاكر مفعّلة + الوكلاء لا يشوفون كل المحادثات
-
-                // أصحاب الأدوار غير agent (owners, admins, ...) يرون الكل دائماً
-                $nonAgentUserIds = $teams->where('role', '!=', 'agent')
-                    ->pluck('user_id')
-                    ->all();
-
-                $userIds = $nonAgentUserIds;
-
-                if ($contactId) {
-                    $chatTicket = ChatTicket::where('contact_id', $contactId)
-                        ->where('is_latest', true)
-                        ->first();
-
-                    if ($chatTicket && $chatTicket->assigned_to) {
-                        // هل المعيَّن له agent في هذه المنظمة؟
-                        $assignedTeam = $teams->firstWhere('user_id', $chatTicket->assigned_to);
-
-                        if ($assignedTeam && $assignedTeam->role === 'agent') {
-                            // هذا الوكيل وحده يرى الـ contact في Contact.php → يحق له استلام الـ event
-                            $userIds[] = $chatTicket->assigned_to;
-                        }
-                        // لو المعيَّن له owner أو admin: هو أصلاً داخل nonAgentUserIds فلا تحتاج لإضافة خاصة
-                    }
-                    // لو لا يوجد ticket أو assigned_to = null:
-                    // لا نضيف أي agent → نفس Contact.php: لا agent يرى هذه المحادثة
-                }
-
-                $userIds = array_values(array_unique($userIds));
-            }
-
-            $channels = [];
-            foreach ($userIds as $userId) {
-                $channels[] = new PresenceChannel('chats.ch' . $this->organizationId . '.' . $userId);
-				
-				if($this->sendToFirestore){
-					/**
-					 * @var User $user
-					 */
-					$user = User::find($userId);
-					if($user && $user->current_mobile_organization_id == $this->organizationId){
-						$titleEn = $this->buildNotificationTitle($value);
-						$titleAr = $titleEn;
-						$messageEn = $this->formatNotificationMessageLocale($value, 'en');
-						$messageAr = $this->formatNotificationMessageLocale($value, 'ar');
-						// $secondaryType = 'new_message';
-						// $modelId = $this->chat[0]['value']['contact_id'];
-						// $mainType = 'notification';
-						// logger(json_encode([
-						// 	'contactFullName' => $contactName,
-						// 	'phone'=>$contactPhone,
-						// 	'userId'=>$userId,
-						// 	'chatId'=>$contactId,
-						// 	'organizationId'=>$this->organizationId,
-						// 	'createdAt'=>now()->format('Y-m-d H:i:s'),
-						// ]));
-						$user->sendAppNotification($titleEn, $titleAr, $messageEn, $messageAr, [
-							// 'lastInboundChatCreatedAt'=>(string)$lastInboundChatCreatedAt,
-							'contactFullName' => (string)$contactName,
-							'phone'=>(string)$contactPhone,
-							'userId'=>(string)$userId,
-							'chatId'=>(string)$contactId,
-							'organizationId'=>(string)$this->organizationId,
-							'createdAt'=>now()->format('Y-m-d H:i:s'),
-							
-						]);
-					}
-				}
-            }
-
-            return $channels;
-        } catch (Exception $e) {
-            Log::error('Failed to broadcast event: ' . $e->getMessage());
-            return;
-        }
-    }
-
-
-    /** حد حجم رسالة Pusher (بايت) */
-    private const PUSHER_MAX_PAYLOAD_BYTES = 10240;
-
-    /**
-     * Get the data to broadcast. الـ chat مُصغّر مسبقاً في الـ constructor.
-     * إذا تجاوز الحجم حد Pusher نُقلّص حقولاً اختيارية حتى نبقى تحت الحد.
-     *
-     * @return array
-     */
-	
-    public function broadcastWith()
-    {
-       return $this->additionalData;
-    }
-
-    /**
-     * تقليص الـ payload بإزالة/تقصير حقول اختيارية حتى يصبح تحت حد Pusher.
-     */
-    private function shrinkPayloadToLimit(array $payload): array
-    {
-        $chat = &$payload['chat'];
-        if (!is_array($chat)) {
-            return $payload;
-        }
-        $value = null;
-        if (isset($chat[0]['value'])) {
-            $value = &$chat[0]['value'];
-        } elseif (isset($chat['value'])) {
-            $value = &$chat['value'];
-        }
-        if (!is_array($value)) {
-            return $payload;
-        }
-        $steps = [
-            function (array &$v) {
-                $v['contact_full_name'] = null;
-            },
-            function (array &$v) {
-                $v['contact_phone'] = null;
-            },
-            function (array &$v) {
-                $v['metadata'] = '{}';
-            },
-            function (array &$v) {
-                $v['logs'] = array_slice($v['logs'] ?? [], -2, 2);
-            },
-        ];
-        foreach ($steps as $step) {
-            $step($value);
-            $encoded = json_encode($payload);
-            if ($encoded !== false && strlen($encoded) <= self::PUSHER_MAX_PAYLOAD_BYTES) {
-                return $payload;
-            }
-        }
-        return $payload;
-    }
-
-    /**
-     * إرجاع الـ chat بالشكل المُصغّر فقط (للتخزين في الـ event والـ queue والـ broadcast).
-     */
-    public function buildMinimalChatPayload($chat): array
-    {
-        if (is_array($chat) && isset($chat[0])) {
-            $item = $chat[0];
-            $item = is_array($item) ? $item : (array) $item;
-            if (($item['type'] ?? null) === 'chat' && array_key_exists('value', $item)) {
-                $item['value'] = $this->minimalChatValue($item['value']);
-            }
-            return [$item];
-        }
-        if (is_array($chat) && array_key_exists('value', $chat)) {
-            $chat['value'] = $this->minimalChatValue($chat['value']);
-            return $chat;
-        }
-        return is_array($chat) ? $chat : [];
-    }
-
-    /** الحقول فقط التي تستخدمها الواجهة من metadata كل log (ChatBubble: status, errors, id) */
-    private const LOG_METADATA_KEYS = ['status', 'errors', 'id'];
-
-    /** حد Pusher 10240 بايت — ن truncate الحقول الكبيرة لضمان عدم تجاوزه */
-    private const MAX_METADATA_BYTES = 1800;
-    private const MAX_MEDIA_PATH_BYTES = 200;
-    private const MAX_LOGS_ENTRIES = 6;
-
-    public function minimalChatValue($value): array
-    {
-        // return (array) $value;
-        $arr = $value instanceof \Illuminate\Database\Eloquent\Model
-            ? $value->toArray()
-            : (array) $value;
-        
-        $user = null;
-        if (!empty($arr['user']) && is_array($arr['user'])) {
-            $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
-        }
-
-        $media = null;
-        if (!empty($arr['media']) && is_array($arr['media'])) {
-            $media = [
-                'type' => $arr['media']['type'] ?? null,
-                'size' => $arr['media']['size'] ?? null,
-                'path' => $this->truncateToBytes($arr['media']['path'] ?? '', self::MAX_MEDIA_PATH_BYTES),
-                'name' => $this->truncateToBytes($arr['media']['name'] ?? '', 80),
-            ];
-        }
-
-        $logs = $this->minimalLogs($arr['logs'] ?? []);
-
-        $contactId = $arr['contact_id'] ?? null;
-        $contactPhone = null;
-        $contactFullName = null;
-        // $contactFirstName = null;
-        // $contactLastName = null;
-        //   $contactEmail = null;
-        $contactOrganizationId = null;
-        $contactLatestChatCreatedAt = null;
-        $contactIsBlocked = null;
-        $contactIsFavorite = null;
-        $contactFormattedPhoneNumber = null;
-        $contactUuid = null;
-		$unreadMessagesCount = 0;
-        if ($contactId) {
-            $contact = Contact::where('id', $contactId)
-            ->first([
-                'phone', 'first_name', 'last_name', 'email', 'organization_id',
-                'latest_chat_created_at', 'is_blocked', 'is_favorite',
-                'uuid',
+            return array_map(
+                fn (int $userId) => new PresenceChannel(
+                    'chats.ch' . $this->organizationId . '.' . $userId
+                ),
+                $userIds
+            );
+        } catch (\Throwable $e) {
+            Log::error('NewChatEvent broadcastOn failed', [
+                'organization_id' => $this->organizationId,
+                'contact_id'      => $this->contactId,
+                'exception'       => $e,
             ]);
-            if ($contact) {
-                $contactPhone = $contact->phone;
-                $contactFullName = $this->truncateToBytes(
-                    trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
-                    120
-                ) ?: null;
-                
-                $contactOrganizationId = $contact->organization_id;
-                $contactLatestChatCreatedAt = $contact->latest_chat_created_at;
-                $contactIsBlocked = $contact->is_blocked;
-                $contactIsFavorite = $contact->is_favorite;
-                $contactFormattedPhoneNumber = $contact->formatted_phone_number;
-                $contactUuid = $contact->uuid;
-				
-				$unreadQuery = DB::table('chats')
-					->where('contact_id', $contactId)
-					->where('type', 'inbound')
-					->where('is_read', 0)
-					->whereNull('deleted_at');
-					$unreadQuery->where('organization_id', $contactOrganizationId);
-				
-				$unreadMessagesCount = (int) $unreadQuery->count();
-				
-            }
-	
-				
-			
-        }
 
-       
-
-        $metadata = $arr['metadata'] ?? null;
-        // $metadataRaw = $arr['metadata'] ?? null;
-        // $metadata = is_string($metadataRaw)
-        //     ? $this->truncateToBytes($metadataRaw, self::MAX_METADATA_BYTES)
-        //     : $this->truncateToBytes(json_encode($metadataRaw), self::MAX_METADATA_BYTES);
-
-        // if($metadata){
-        // 	$metadata = json_decode($metadata, true);
-        // }
-        $metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
-        $type = $metadata['type'] ?? null;
-        
-        if ($metadata && isset($metadata['type']) && $type && empty($metadata[$type])) {
-            $metadata[$type] = null;
-        }
-        if (is_array($metadata)) {
-            $metadata = json_encode($metadata);
-        }
-        return [
-            'id' => $arr['id'] ?? null,
-            'uuid' => $arr['uuid'] ?? null,
-            'contact_uuid' => $contactUuid,
-            'contact_id' => $contactId,
-            'is_new_contact' => $this->isNewContact,
-            // 'contact_phone' => $contactPhone,
-            'phone' => $contactPhone,
-            'formatted_phone_number' => $contactFormattedPhoneNumber,
-            'organization_id' => $contactOrganizationId,
-            'latest_chat_created_at' => $contactLatestChatCreatedAt,
-            'is_blocked' => $contactIsBlocked,
-            'is_favorite' => $contactIsFavorite,
-            // 'ticket_status' => $arr['ticket_status'] ?? null,
-            // 'ticket_assigned_to' => $arr['ticket_assigned_to'] ?? null,
-            // 'full_name' => $contactFullName ?: null,
-           
-            // 'email' => $contactEmail,
-            'contact_full_name' => $contactFullName ?: null,
-            'unread_messages_count' => $unreadMessagesCount,
-            'created_at' => $arr['created_at'] ?? null,
-            'deleted_at' => $arr['deleted_at'] ?? null,
-            'metadata' => $metadata,
-            'type' => $arr['type'] ?? 'outbound',
-            'wam_id' => $arr['wam_id'] ?? null,
-            'status' => $arr['status'] ?? null,
-            'media' => $media,
-            'logs' => $logs,
-            'user' => $user,
-            // حقول الـ contact المطلوبة للواجهة
-            // 'first_name' => $contactFirstName,
-            // 'last_name' => $contactLastName,
-          
-           
-            
-        ];
-    }
-
-    /** truncate string to max bytes (UTF-8 safe) لضمان عدم تجاوز حد Pusher */
-    private function truncateToBytes(string $s, int $maxBytes): string
-    {
-        if (strlen($s) <= $maxBytes) {
-            return $s;
-        }
-        return mb_strcut($s, 0, $maxBytes, 'UTF-8') ?: '';
-    }
-
-    /**
-     * إرجاع مصفوفة logs بأقل حجم: كل عنصر فقط { "metadata": "{\"status\":\"...\",\"id\":\"...\"}" }
-     * لا نرسل: id, chat_id, created_at من الـ log ولا أي حقول داخل metadata غير status, errors, id.
-     */
-    protected function minimalLogs($rawLogs): array
-    {
-        if (empty($rawLogs) || !is_array($rawLogs)) {
             return [];
         }
-        $rawLogs = array_slice($rawLogs, -self::MAX_LOGS_ENTRIES, self::MAX_LOGS_ENTRIES);
-        
-        $out = [];
-        foreach ($rawLogs as $log) {
-            $logArr = is_array($log) ? $log : (array) $log;
-            $rawMetadata = $logArr['metadata'] ?? '{}';
-            $decoded = is_string($rawMetadata) ? json_decode($rawMetadata, true) : $rawMetadata;
-            if (!is_array($decoded)) {
-                $decoded = [];
-            }
-            $minimal = array_intersect_key($decoded, array_flip(self::LOG_METADATA_KEYS));
-            $out[] = ['metadata' => json_encode($minimal)];
-        }
-
-        return $out;
     }
 
     /**
-     * عنوان الإشعار (مثل واتساب): الاسم إن وُجد، وإلا رقم الهاتف.
-     */
-    private function buildNotificationTitle(array $value): string
-    {
-        $name = trim((string) ($value['contact_full_name'] ?? ''));
-        if ($name !== '') {
-            return $this->truncateToBytes($name, 160);
-        }
-        $phone = trim((string) ($value['formatted_phone_number'] ?? $value['phone'] ?? ''));
-        if ($phone !== '') {
-            return $this->truncateToBytes($phone, 80);
-        }
-
-        return __('Unknown');
-    }
-
-    /**
+     * Data sent to subscribed clients. Built lazily so heavy work happens
+     * on the broadcast queue worker, not in the request thread.
+     *
      * @return array<string, mixed>
      */
-    private function decodeChatMetadata(?string $raw): array
+    public function broadcastWith(): array
     {
-        if ($raw === null || $raw === '') {
-            return [];
+        $payload = ['chat' => $this->chat];
+        if ($this->statusChanged) {
+            $payload['statusChanged'] = true;
         }
-        $decoded = json_decode($raw, true);
 
-        return is_array($decoded) ? $decoded : [];
-    }
-
-    private function formatNotificationMessageLocale(array $value, string $locale): string
-    {
-        $previous = app()->getLocale();
-        app()->setLocale($locale);
-        try {
-            return $this->buildNotificationMessageBody($value);
-        } finally {
-            app()->setLocale($previous);
-        }
+        return $this->payloadBuilder()->fitToPusherLimit($payload, [
+            'organization_id' => $this->organizationId,
+            'contact_id'      => $this->contactId,
+        ]);
     }
 
     /**
-     * نص الإشعار: نص الرسالة كما هو، أو أيقونة + نوع الوسائط (مثل واتساب).
+     * Backwards-compatible passthrough for legacy callers (helpers, API
+     * controllers) that still use `(new NewChatEvent(...))->minimalChatValue($value)`.
+     *
+     * @param  mixed  $value
+     * @return array<string, mixed>
      */
-    private function buildNotificationMessageBody(array $value): string
+    public function minimalChatValue($value): array
     {
-        $metaRaw = $value['metadata'] ?? null;
-        $metadata = is_array($metaRaw) ? $metaRaw : $this->decodeChatMetadata(is_string($metaRaw) ? $metaRaw : null);
-        $type = $metadata['type'] ?? null;
-
-        if (! $type && ! empty($value['media']) && is_array($value['media'])) {
-            return $this->notificationMessageFromMediaMime($value['media'], $metadata);
-        }
-
-        switch ($type) {
-            case 'text':
-                $body = trim((string) ($metadata['text']['body'] ?? ''));
-
-                return $body !== '' ? $this->truncateToBytes($body, 1000) : __('Message');
-
-            case 'button':
-                $body = trim((string) (($metadata['button']['text'] ?? null) ?? ($metadata['button']['payload'] ?? '')));
-
-                return $body !== '' ? $this->truncateToBytes($body, 1000) : __('Message');
-
-            case 'interactive':
-                $interactive = $metadata['interactive'] ?? [];
-                $it = $interactive['type'] ?? null;
-                if ($it === 'button_reply') {
-                    $body = trim((string) ($interactive['button_reply']['title'] ?? ''));
-
-                    return $body !== '' ? $this->truncateToBytes($body, 1000) : $this->formatMediaStyleLine('interactive', []);
-                }
-                if ($it === 'list_reply') {
-                    $t = trim((string) ($interactive['list_reply']['title'] ?? ''));
-                    $d = trim((string) ($interactive['list_reply']['description'] ?? ''));
-                    $line = $t !== '' && $d !== '' ? $t.' — '.$d : ($t !== '' ? $t : $d);
-
-                    return $line !== '' ? $this->truncateToBytes($line, 1000) : $this->formatMediaStyleLine('interactive', []);
-                }
-
-                return $this->formatMediaStyleLine('interactive', []);
-
-            case 'image':
-            case 'video':
-            case 'audio':
-            case 'document':
-            case 'sticker':
-            case 'location':
-            case 'contacts':
-                return $this->formatMediaStyleLine($type, $metadata);
-
-            default:
-                if (! empty($metadata['text']['body'])) {
-                    return $this->truncateToBytes((string) $metadata['text']['body'], 1000);
-                }
-                if (! empty($value['media']) && is_array($value['media'])) {
-                    return $this->notificationMessageFromMediaMime($value['media'], $metadata);
-                }
-
-                return __('Message');
-        }
-    }
-
-    private function formatMediaStyleLine(string $type, array $metadata): string
-    {
-        $label = $this->mediaLabelWithEmoji($type, $metadata);
-        $caption = trim($this->extractCaptionForType($type, $metadata));
-        if ($caption !== '') {
-            return $label.': '.$this->truncateToBytes($caption, 500);
-        }
-
-        return $label;
-    }
-
-    private function extractCaptionForType(string $type, array $metadata): string
-    {
-        return match ($type) {
-            'image' => (string) ($metadata['image']['caption'] ?? ''),
-            'video' => (string) ($metadata['video']['caption'] ?? ''),
-            'document' => (string) (($metadata['document']['filename'] ?? '') ?: ($metadata['document']['caption'] ?? '')),
-            default => '',
-        };
-    }
-
-    private function mediaLabelWithEmoji(string $type, array $metadata): string
-    {
-        return match ($type) {
-            'image' => '📷 '.__('Photo'),
-            'video' => '🎥 '.__('Video'),
-            'audio' => (! empty($metadata['audio']['voice']))
-                ? '🎤 '.__('Voice message')
-                : '🎵 '.__('Audio'),
-            'document' => '📄 '.__('File'),
-            'sticker' => '🎨 '.__('Sticker'),
-            'location' => '📍 '.__('Location'),
-            'contacts' => '👤 '.__('Contact'),
-            'interactive' => '💬 '.__('Message'),
-            default => '💬 '.__('Message'),
-        };
+        return $this->payloadBuilder()
+            ->buildMinimalValue($value, $this->organizationId, $this->isNewContact);
     }
 
     /**
-     * @param  array<string, mixed>  $media
-     * @param  array<string, mixed>  $metadata
+     * Pull the contact id out of either wrapper shape produced by the
+     * dispatchers (`[[type=chat, value=...]]` or `[type=chat, value=...]`).
+     *
+     * @param  array<int|string, mixed>  $chat
      */
-    private function notificationMessageFromMediaMime(array $media, array $metadata): string
+    private function extractContactId(array $chat): ?int
     {
-        $mime = strtolower((string) ($media['type'] ?? ''));
-        if (str_starts_with($mime, 'image/')) {
-            return $this->formatMediaStyleLine('image', $metadata);
-        }
-        if (str_starts_with($mime, 'video/')) {
-            return $this->formatMediaStyleLine('video', $metadata);
-        }
-        if (str_starts_with($mime, 'audio/')) {
-            return $this->formatMediaStyleLine('audio', $metadata);
-        }
-        if (str_starts_with($mime, 'application/') || str_contains($mime, 'pdf')) {
-            return $this->formatMediaStyleLine('document', $metadata);
+        $value = $chat[0]['value'] ?? $chat['value'] ?? null;
+        if (!is_array($value)) {
+            return null;
         }
 
-        return '📎 '.__('File');
+        $contactId = $value['contact_id'] ?? null;
+        return $contactId ? (int) $contactId : null;
+    }
+
+    /**
+     * Snapshot the inner chat-value used purely for building push title /
+     * body, then enqueue the FCM job. The job runs independently of the
+     * realtime broadcast and uses {@see ChatChannelRecipients} to apply
+     * the same visibility rules.
+     */
+    private function dispatchPushNotification(): void
+    {
+        $value = $this->chat[0]['value'] ?? $this->chat['value'] ?? null;
+        if (!is_array($value)) {
+            return;
+        }
+
+        SendNewChatPushNotificationJob::dispatch(
+            $this->organizationId,
+            $this->contactId,
+            $value
+        );
+    }
+
+    private function payloadBuilder(): ChatBroadcastPayloadBuilder
+    {
+        return app(ChatBroadcastPayloadBuilder::class);
     }
 }

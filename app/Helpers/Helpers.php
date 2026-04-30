@@ -1,6 +1,6 @@
 <?php
 
-use App\Events\NewChatEvent;
+use App\Services\Chat\ChatBroadcastPayloadBuilder;
 
 if (!function_exists('getApiLang')) {
     function getApiLang(): string
@@ -135,8 +135,22 @@ if (!function_exists('sanitize_filename_for_storage')) {
 }
 
 if (!function_exists('minimalChatValue')) {
+    /**
+     * Build the minimal Pusher / mobile-API representation of a chat row
+     * without paying the price of instantiating a full {@see \App\Events\NewChatEvent}
+     * (which would otherwise also build the full broadcast payload, perform
+     * shrink-to-fit, etc. — work that the helper does not need).
+     *
+     * @param  mixed  $chat  Either a Chat Eloquent model or an array.
+     * @return array<string, mixed>
+     */
     function minimalChatValue($chat): array
     {
-        return (new NewChatEvent($chat, $chat->organization_id))->minimalChatValue($chat);
+        $organizationId = is_object($chat)
+            ? (int) ($chat->organization_id ?? 0)
+            : (int) ($chat['organization_id'] ?? 0);
+
+        return app(ChatBroadcastPayloadBuilder::class)
+            ->buildMinimalValue($chat, $organizationId, false);
     }
 }
