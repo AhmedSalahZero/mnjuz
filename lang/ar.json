@@ -985,7 +985,7 @@
 "Envato purchase code": "رمز شراء Envato",
 "Not installed": "لم يتم التثبيت",
 "Search": "البحث",
-"Your account is not associated with any active organization. Please contact support.":" حسابك غير مرتبط بأي شركة نشطة. يرجى التواصل مع الدعم.",
+"Your account is not associated with any active organization. Please contact support.":"قد يكون حسابك غير موجود أو غير مرتبط بأي شركة نشطة. يرجى التحقق من بيانات تسجيل الدخول أو التواصل مع الدعم.",
 "Cannot block contact. They must have messaged you within the last 24 hours.":"لا يمكن الحظر. يجب أن تكون جهة الاتصال قد راسلتك خلال آخر 24 ساعة",
 "Cannot block contact.":"لا يمكن حظر هذة الجهه حاليا",
 "Contact blocked successfully":"تم حظر المستخدم بنجاح",
@@ -1107,5 +1107,17 @@
 "verification.sent":"تم إرسال رمز التحقق بنجاح.",
 "verification.invalid":"رمز التحقق غير صحيح.",
 "verification.code_digits":"رمز التحقق يجب أن يتكون من 6 أرقام.",
-"verification.request_failed":"تعذر إرسال رمز التحقق."
+"verification.request_failed":"تعذر إرسال رمز التحقق.",
+"Leave organization":"مغادرة المنظمة",
+"Leave this organization":"مغادرة هذه المنظمة",
+"Remove yourself from this organization. You will be taken to choose another workspace if you still belong to one, or signed out if this was your only organization.":"ستُزال عضويتك من هذه المنظمة. إن كنت عضوًا في منظمة أخرى ستُوجَّه لاختيار مساحة عمل، وإلا سيتم تسجيل خروجك.",
+"Are you sure you want to leave this organization? You will lose access to its data for this account.":"هل أنت متأكد من مغادرة هذه المنظمة؟ ستفقد صلاحية الوصول إلى بياناتها لهذا الحساب.",
+"Invalid organization.":"منظمة غير صالحة.",
+"You are not a member of this organization.":"أنت لست عضوًا في هذه المنظمة.",
+"You cannot leave as the organization owner. Transfer ownership first.":"لا يمكنك المغادرة بصفتك مالك المنظمة. نقل الملكية أولًا.",
+"You have left this organization.":"لقد غادرت هذه المنظمة.",
+"You have left the organization and been signed out.":"لقد غادرت المنظمة وتم تسجيل خروجك.",
+"No organization is selected.":"لم يتم اختيار منظمة.",
+"You have left the organization. Your session has been closed.":"لقد غادرت المنظمة وتم إغلاق جلستك.",
+"As the organization owner you cannot leave this workspace from here. Transfer ownership to another team member first, then you can leave or delete the organization from team settings.":"بصفتك مالك المنظمة لا يمكنك مغادرة مساحة العمل من هنا. انقل الملكية أولاً إلى عضو آخر في الفريق، ثم يمكنك المغادرة أو حذف المنظمة من إعدادات الفريق."
 }

@@ -224,6 +224,7 @@ Route::middleware(['auth:user'])->group(function () {
 				// dd 'remove middleware check.client.role';
                 Route::group([], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
+                    Route::post('/settings/leave-organization', [App\Http\Controllers\User\SettingController::class, 'leaveCurrentOrganization']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index']);

@@ -1,0 +1,1 @@
+import{x as s}from"./index-df0dc687.js";import{C as t,f as r,g as n,aa as p,ab as l,u as c,o as f,A as m}from"./app-d7cad8e1.js";const _=t({__name:"SelectItemText",props:{asChild:{type:Boolean},as:{}},setup(e){const a=e;return(o,u)=>(f(),r(c(s),p(l(a)),{default:n(()=>[m(o.$slots,"default")]),_:3},16))}});export{_ as default};

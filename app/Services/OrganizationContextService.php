@@ -74,6 +74,48 @@ class OrganizationContextService
     }
 
     /**
+     * Remove the user's membership from an organization (soft-deletes the team row).
+     * The organization owner cannot leave; they must transfer ownership first.
+     *
+     * @return array{ok: bool, message?: string, status?: int}
+     */
+    public function detachMembership(User $user, int $organizationId): array
+    {
+        if ($organizationId <= 0) {
+            return [
+                'ok' => false,
+                'message' => __('Invalid organization.'),
+                'status' => 422,
+            ];
+        }
+
+        $team = Team::query()
+            ->where('user_id', $user->id)
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if (!$team) {
+            return [
+                'ok' => false,
+                'message' => __('You are not a member of this organization.'),
+                'status' => 404,
+            ];
+        }
+
+        if ($team->role === 'owner') {
+            return [
+                'ok' => false,
+                'message' => __('You cannot leave as the organization owner. Transfer ownership first.'),
+                'status' => 403,
+            ];
+        }
+
+        $team->delete();
+
+        return ['ok' => true];
+    }
+
+    /**
      * True if the given organization id is one the user belongs to AND
      * the organization itself is active (not soft-deleted, not banned).
      *
@@ -192,6 +234,24 @@ class OrganizationContextService
             return $current;
         }
 
+        // Web + mobile: more than one workspace and no valid current id — do not
+        // auto-pick a default. Web user must use /select-organization; API clients
+        // must call set-current-organization (same as login JSON when org count > 1).
+        if (
+            ($platform === self::PLATFORM_WEB || $platform === self::PLATFORM_MOBILE)
+            && $this->activeOrganizationMembershipCount($user) > 1
+        ) {
+            if ($user->{$column} !== null) {
+                $user->{$column} = null;
+                $user->save();
+            }
+            if ($platform === self::PLATFORM_WEB) {
+                $this->forgetSession();
+            }
+
+            return null;
+        }
+
         $resolved = $this->resolveFor($user, $platform);
 
         if ($resolved === null) {
@@ -240,6 +300,18 @@ class OrganizationContextService
         return $row ? (int) $row : null;
     }
 
+    private function activeOrganizationMembershipCount(User $user): int
+    {
+        return Team::query()
+            ->where('user_id', $user->id)
+            ->whereHas('organization', function ($q) {
+                $q->where(function ($qq) {
+                    $qq->whereNull('is_banned')->orWhere('is_banned', false);
+                });
+            })
+            ->count();
+    }
+
     private function syncSession(int $organizationId): void
     {
         if (!$this->sessionAvailable()) {
@@ -259,20 +331,28 @@ class OrganizationContextService
     }
 
     /**
-     * True only when a real session store is bound and started. Avoids
-     * touching the session during stateless API requests, console
-     * commands, queue workers, or tests with no session driver.
+     * True only when the HTTP session store is bound and started.
+     *
+     * Important: {@see app('session')} is the SessionManager, which does not
+     * implement {@see \Illuminate\Session\Store::isStarted()}. Using it here
+     * always returned false, so `current_organization` was never written to
+     * the session while `current_web_organization_id` was updated in the DB
+     * — and {@see \App\Http\Middleware\CheckOrganizationId} redirected users
+     * back to the organization picker forever.
      */
     private function sessionAvailable(): bool
     {
         try {
-            $session = app('session');
+            if (! app()->bound('session')) {
+                return false;
+            }
+
+            $store = session()->driver();
+
+            return $store instanceof \Illuminate\Contracts\Session\Session
+                && $store->isStarted();
         } catch (\Throwable $e) {
             return false;
         }
-
-        return method_exists($session, 'isStarted')
-            ? (bool) $session->isStarted()
-            : false;
     }
 }

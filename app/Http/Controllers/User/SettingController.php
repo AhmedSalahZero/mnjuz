@@ -10,11 +10,14 @@ use App\Models\Addon;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Models\Team;
 use App\Models\Template;
 use App\Services\ContactFieldService;
+use App\Services\OrganizationContextService;
 use App\Services\WhatsappService;
 use DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Validator;
@@ -29,7 +32,7 @@ class SettingController extends BaseController
 
     public function index(Request $request, $display = null){
         if ($request->isMethod('get')) {
-            $organizationId = session()->get('current_organization');
+            $organizationId = $this->webCurrentOrganizationId();
             $data['title'] = __('Settings');
             $data['settings'] = Organization::where('id', $organizationId)->first();
             $data['timezones'] = config('formats.timezones');
@@ -45,6 +48,7 @@ class SettingController extends BaseController
             $data['modules'] = Addon::get();
             $contactModel = new Contact;
             $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
+            $data = array_merge($data, $this->leaveOrganizationInertiaProps($organizationId));
             return Inertia::render('User/Settings/General', $data);
         }
     }
@@ -57,13 +61,51 @@ class SettingController extends BaseController
 
     public function viewGeneralSettings(Request $request){
         $contactModel = new Contact;
-        $organizationId = session()->get('current_organization');
+        $organizationId = $this->webCurrentOrganizationId();
         $data['title'] = __('Settings');
-        $data['settings'] = Organization::where('id', session()->get('current_organization'))->first();
+        $data['settings'] = Organization::where('id', $organizationId)->first();
         $data['modules'] = Addon::get();
         $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
-        
+        $data = array_merge($data, $this->leaveOrganizationInertiaProps($organizationId));
+
         return Inertia::render('User/Settings/General', $data);
+    }
+
+    public function leaveCurrentOrganization(Request $request, OrganizationContextService $organizationContext)
+    {
+        if ($demo = $this->abortIfDemo()) {
+            return $demo;
+        }
+
+        $user = auth()->user();
+        $organizationId = $this->webCurrentOrganizationId();
+
+        $detach = $organizationContext->detachMembership($user, $organizationId);
+        if (!$detach['ok']) {
+            return back()->with('status', [
+                'type' => 'error',
+                'message' => $detach['message'],
+            ]);
+        }
+
+        $user->refresh();
+        $organizationContext->ensureValid($user, OrganizationContextService::PLATFORM_WEB);
+
+        if ($user->fresh()->canNotAccessDashboard()) {
+            Auth::guard('user')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->with('status', [
+                'type' => 'success',
+                'message' => __('You have left the organization and been signed out.'),
+            ]);
+        }
+
+        return redirect()->route('user.organization.index')->with('status', [
+            'type' => 'success',
+            'message' => __('You have left this organization.'),
+        ]);
     }
 
     public function viewWhatsappSettings(Request $request){
@@ -458,5 +500,47 @@ class SettingController extends BaseController
         }
 
         return null;
+    }
+
+    /**
+     * Prefer session (legacy) then DB column so settings stay consistent if the
+     * session key is missing while current_web_organization_id is valid.
+     */
+    private function webCurrentOrganizationId(): int
+    {
+        $fromSession = (int) session()->get('current_organization', 0);
+        if ($fromSession > 0) {
+            return $fromSession;
+        }
+
+        $user = auth()->user();
+        if ($user && ($user->role ?? null) === 'user') {
+            return (int) ($user->current_web_organization_id ?? 0);
+        }
+
+        return 0;
+    }
+
+    /**
+     * @return array{leaveOrganizationSectionVisible: bool, canDetachFromCurrentOrganization: bool}
+     */
+    private function leaveOrganizationInertiaProps(int $organizationId): array
+    {
+        if ($organizationId <= 0 || ! auth()->check()) {
+            return [
+                'leaveOrganizationSectionVisible' => false,
+                'canDetachFromCurrentOrganization' => false,
+            ];
+        }
+
+        $team = Team::query()
+            ->where('user_id', auth()->id())
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        return [
+            'leaveOrganizationSectionVisible' => $team !== null,
+            'canDetachFromCurrentOrganization' => $team !== null && $team->role !== 'owner',
+        ];
     }
 }

@@ -29,6 +29,7 @@ use App\Services\AuthService;
 use App\Services\PasswordResetService;
 use App\Services\SocialLoginService;
 use App\Services\TeamService;
+use App\Services\OrganizationContextService;
 use App\Services\UserVerificationService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
@@ -795,6 +796,62 @@ class AuthController extends BaseController
 			],
 		], 200);
 	}
+
+    public function leaveCurrentOrganization(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Unauthenticated'),
+            ], 401);
+        }
+
+        $context = app(OrganizationContextService::class);
+        $platform = OrganizationContextService::PLATFORM_MOBILE;
+        $organizationId = (int) ($user->current_mobile_organization_id ?? 0);
+
+        if ($organizationId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => __('No organization is selected.'),
+            ], 422);
+        }
+
+        $detach = $context->detachMembership($user, $organizationId);
+        if (!$detach['ok']) {
+            return response()->json([
+                'success' => false,
+                'message' => $detach['message'],
+            ], (int) ($detach['status'] ?? 400));
+        }
+
+        $user->refresh();
+        $context->ensureValid($user, $platform);
+        $user->refresh();
+
+        if ($user->canNotAccessDashboard()) {
+            $user->current_mobile_organization_id = null;
+            $user->save();
+            $user->tokens()->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => __('You have left the organization. Your session has been closed.'),
+                'data' => [
+                    'current_organization_id' => null,
+                ],
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => __('You have left this organization.'),
+            'data' => [
+                'current_organization_id' => (int) $user->current_mobile_organization_id,
+            ],
+        ], 200);
+    }
 
     private function validateDeviceAndRegister(Request $request, User $user)
     {

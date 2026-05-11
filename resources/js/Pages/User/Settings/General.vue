@@ -303,6 +303,24 @@
 							</div>
 						</div>
 					</div>
+					<div v-if="props.leaveOrganizationSectionVisible"
+						class="bg-white border border-red-200 rounded-lg py-2 text-sm mb-4">
+						<div class="px-4 pt-2 pb-4">
+							<h2 class="text-[17px] text-red-800">{{ $t('Leave organization') }}</h2>
+							<p v-if="props.canDetachFromCurrentOrganization" class="mt-2 text-slate-600 leading-relaxed">
+								{{ $t('Remove yourself from this organization. You will be taken to choose another workspace if you still belong to one, or signed out if this was your only organization.') }}
+							</p>
+							<p v-else class="mt-2 text-slate-600 leading-relaxed">
+								{{ $t('As the organization owner you cannot leave this workspace from here. Transfer ownership to another team member first, then you can leave or delete the organization from team settings.') }}
+							</p>
+							<button v-if="props.canDetachFromCurrentOrganization" type="button" @click="leaveOrganization"
+								class="mt-4 rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50"
+								:disabled="leaveProcessing">
+								<span v-if="leaveProcessing">{{ $t('Processing') }}…</span>
+								<span v-else>{{ $t('Leave this organization') }}</span>
+							</button>
+						</div>
+					</div>
 					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm pb-4 mb-20">
 						<div class="flex px-4 pt-1 pb-2">
 							<div class="ml-auto">
@@ -345,8 +363,20 @@ import { useTrans } from '@/Composables/useTrans'
 const trans = useTrans()
 import { router, useForm } from "@inertiajs/vue3"
 
-const props = defineProps(['contactGroups', 'settings', 'timezones', 'modules', 'organization', 'countries', 'sounds', 'templates'])
+const props = defineProps({
+	contactGroups: { type: Array, default: () => [] },
+	settings: { type: Object, default: null },
+	timezones: { type: Array, default: () => [] },
+	modules: { type: Array, default: () => [] },
+	organization: { type: Object, default: null },
+	countries: { type: Array, default: () => [] },
+	sounds: { type: Array, default: () => [] },
+	templates: { type: Array, default: () => [] },
+	leaveOrganizationSectionVisible: { type: Boolean, default: false },
+	canDetachFromCurrentOrganization: { type: Boolean, default: false },
+})
 const statusView = ref(false)
+const leaveProcessing = ref(false)
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 const audioPlayer = ref(null)
@@ -425,6 +455,19 @@ const submitForm = () => {
 const submitForm2 = () => {
 	form2.put('./profile/organization', {
 		preserveScroll: true
+	})
+}
+
+const leaveOrganization = () => {
+	if (!confirm(trans('Are you sure you want to leave this organization? You will lose access to its data for this account.'))) {
+		return
+	}
+	leaveProcessing.value = true
+	router.post('/settings/leave-organization', {}, {
+		preserveScroll: true,
+		onFinish: () => {
+			leaveProcessing.value = false
+		},
 	})
 }
 </script>
