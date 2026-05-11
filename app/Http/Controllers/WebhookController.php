@@ -140,9 +140,10 @@ class WebhookController extends BaseController
 	  protected function handleAjaxPostRequest(Request $request, Organization $organization)
     {
         $res = $request->entry[0]['changes'][0]??null;
-		// if($organization->id == 1){
-		// 	logger('res: ' . json_encode($res));
-		// }
+		if($organization->id == 134){
+			logger('organization id: ' . $organization->id);
+			logger('res: ' . json_encode($res));
+		}
 		// logger('org id-'.$organization->id);
 		if(is_null($res)){
 			 return Response::json(['status' => 'success'], 200);

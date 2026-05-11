@@ -110,7 +110,7 @@ class AutoReplyService
     public function checkAutoReply(Chat $chat, $isNewContact)
     {
         $organizationId = $chat->organization_id;
-		logger('inside check auto reply: ' . $organizationId . ' ' . $chat->id . ' ' . $isNewContact);
+		// logger('inside check auto reply: ' . $organizationId . ' ' . $chat->id . ' ' . $isNewContact);
         $this->replySequence($organizationId, $chat, $isNewContact);
     }
 
@@ -130,10 +130,10 @@ class AutoReplyService
 
         // Override response sequence if there is an active flow
         if ($activeFlow) {
-			logger('inside $activeFlow if');
+			// logger('inside $activeFlow if');
             $response_sequence = ['Automated Flows'];
         } else {
-			logger('inside $activeFlow else');
+			// logger('inside $activeFlow else');
             // Use the response sequence from metadata or fallback to default
             $response_sequence = $metadataArray['automation']['response_sequence'] ?? ['Basic Replies', 'Automated Flows', 'AI Reply Assistant'];
         }
@@ -157,7 +157,7 @@ class AutoReplyService
         // Iterate through the sequence, applying each function in order
         foreach ($response_sequence as $sequenceItem) {
             if (isset($sequenceFunctions[$sequenceItem])) {
-				logger('inside if'.$sequenceItem);
+				// logger('inside if'.$sequenceItem);
                 $response = $sequenceFunctions[$sequenceItem]();
 
                 // \Log::info($sequenceItem);
@@ -249,7 +249,7 @@ class AutoReplyService
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/FlowBuilder/Services/FlowExecutionService.php'))) {
-				logger('--start execute flow');
+				// logger('--start execute flow');
             $query = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId);
             return $query->executeFlow($chat, $isNewContact, $receivedMessage);
         }
@@ -257,7 +257,7 @@ class AutoReplyService
 
     private function getTriggerValues($trigger)
     {
-		logger('get trigger values');
+		// logger('get trigger values');
         return is_string($trigger) && strpos($trigger, ',') !== false
             ? explode(',', $trigger)
             : (array) $trigger;

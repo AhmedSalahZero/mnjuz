@@ -45,7 +45,7 @@ class ProcessAutoReplyJob implements ShouldQueue
                     'message_limit'
                 )
             );
-			logger('inside process auto reply job: ');
+			// logger('inside process auto reply job: ');
 
             if($isLimitReached) {
                 Log::info("AutoReply skipped - message limit reached", [
