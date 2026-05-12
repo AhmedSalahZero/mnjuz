@@ -1,17 +1,29 @@
 <template>
 	<div :class="rtlClass">
 		<div v-if="adminOrganizationImpersonation"
-			class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-700 bg-amber-500 px-3 py-2 text-sm text-white md:px-4">
-			<p class="min-w-0 font-medium">
-				{{ $t('Admin preview mode') }}
-				<span v-if="impersonationOrgName" class="opacity-90"> — {{ impersonationOrgName }}</span>.
-				{{ $t('You are viewing this workspace as an administrator.') }}
-			</p>
-			<button type="button"
-				class="shrink-0 rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 shadow hover:bg-amber-50"
-				:disabled="exitForm.processing" @click="submitExitPreview">
-				{{ $t('Return to organizations') }}
-			</button>
+			class="sticky top-0 z-40 border-b border-slate-200 bg-slate-50">
+			<div
+				class="mx-auto flex max-w-[100rem] flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-2.5 md:px-6"
+				role="status"
+				aria-live="polite">
+				<div class="flex min-w-0 flex-1 items-start gap-2.5 sm:items-center">
+					<span class="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary sm:mt-0.5" aria-hidden="true" />
+					<p class="min-w-0 flex-1 text-sm leading-relaxed text-slate-600">
+						<span class="font-semibold text-slate-900">{{ $t('Admin preview mode') }}</span>
+						<template v-if="impersonationOrgName">
+							<span class="text-slate-300"> · </span>
+							<span class="font-medium text-slate-800">{{ impersonationOrgName }}</span>
+						</template>
+						<span class="text-slate-300"> — </span>
+						<span>{{ $t('You are viewing this workspace as an administrator.') }}</span>
+					</p>
+				</div>
+				<button type="button"
+					class="shrink-0 self-stretch rounded-md border border-slate-300 bg-white px-3 py-1.5 text-center text-xs font-medium text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-center sm:px-4 md:text-sm"
+					:disabled="exitForm.processing" @click="submitExitPreview">
+					{{ $t('Return to organizations') }}
+				</button>
+			</div>
 		</div>
 		<MobileSidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
 			:title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"></MobileSidebar>
@@ -28,8 +40,8 @@
 </template>
 <script setup>
 import { useRtl } from '@/Composables/useRtl'
-import { usePage, useForm } from "@inertiajs/vue3"
-import { computed, onMounted, ref, watch, provide } from 'vue'
+import { useForm, usePage } from "@inertiajs/vue3"
+import { computed, onMounted, provide, ref, watch } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 import { getOrJoinChatChannel } from '../../../echo'
