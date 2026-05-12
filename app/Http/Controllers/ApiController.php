@@ -967,6 +967,7 @@ class ApiController extends Controller
         
         $validator = Validator::make($request->all(), $rules);
 
+
         if ($validator->fails()) {
             return response()->json([
                 'statusCode' => 400,
@@ -975,10 +976,18 @@ class ApiController extends Controller
                 'errors' => $validator->errors()
             ], 400);
         }
+      $organizationId = $request->user()->current_web_organization_id;
+      
         
+        if ($request->is('api/v1/*')) {
+            $organizationId = $request->user()->current_mobile_organization_id;
+        }
+      	if(!$organizationId){
+           $organizationId =  session()->get('current_organization');
         
-        $organizationId = $request->user()->current_mobile_organization_id;
-        $organizationId = $organizationId ?: session()->get('current_organization');
+        }
+     
+     
         $sendByQueue = true;
         $template = Template::where('uuid', $request->template_uuid)->where('organization_id', $organizationId)->first();
         if (!$template) {

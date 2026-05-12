@@ -92,7 +92,7 @@ class ChatController extends BaseController
 		if ($authParams && isset($authParams['template']) && $authParams['template'] === $template->uuid) {
 			$request->merge(['template_parameters' => $authParams]);
 		}
-
+		
 		$res = (new ApiController)->sendTemplateMessageByUUID($request);
 		return json_decode($res->getContent(), true);
 	}
