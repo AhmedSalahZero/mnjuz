@@ -155,6 +155,8 @@ class HandleInertiaRequests extends Middleware
             'applicationVersion' => fn () => Config::get('version.version'),
             'applicationReleaseDate' => fn () => Config::get('version.release_date'),
             'config' => $config,
+            'admin_organization_impersonation' => (bool) session('admin_org_impersonation', false),
+            'admin_impersonation_org_name' => session('admin_impersonation_org_name'),
             'auth' => [
                 'user' => $authUser,
             ],

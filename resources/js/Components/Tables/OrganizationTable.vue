@@ -31,6 +31,11 @@ const props = defineProps({
 const { isOpenAlert, openAlert, confirmAlert } = useAlertModal();
 
 const form = useForm({ test: null });
+const enterManagerForm = useForm({});
+
+const enterAsManager = (uuid) => {
+  enterManagerForm.post(`/admin/organizations/${uuid}/enter-as-manager`);
+};
 
 const deleteAction = (key) => {
   form.delete('/admin/organizations/' + key);
@@ -253,7 +258,16 @@ const runSearch = () => {
           <span class="float-right">{{ item.updated_at }}</span>
         </TableBodyRowItem>
         <TableBodyRowItem :position="'last'">
-          <Dropdown :align="'right'" class="mt-2">
+          <div class="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-primary bg-white px-2 py-1.5 text-xs font-medium text-primary shadow-sm hover:bg-primary/5 disabled:opacity-60"
+              :disabled="enterManagerForm.processing"
+              @click="enterAsManager(item.uuid)"
+            >
+              {{ $t('Enter as manager') }}
+            </button>
+            <Dropdown :align="'right'" class="mt-2">
             <button
               class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75"
             >
@@ -284,6 +298,7 @@ const runSearch = () => {
               </DropdownItemGroup>
             </template>
           </Dropdown>
+          </div>
         </TableBodyRowItem>
       </TableBodyRow>
     </TableBody>

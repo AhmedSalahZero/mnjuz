@@ -35,6 +35,10 @@ class ClearCurrentOrganizationOnLogout
             return;
         }
 
+        if (session()->pull('skip_clear_organization_on_logout', false)) {
+            return;
+        }
+
         $this->context->clear($user);
     }
 }

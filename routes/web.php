@@ -259,12 +259,19 @@ Route::middleware(['auth:user'])->group(function () {
     });
 });
 
+Route::middleware(['auth:user'])->group(function () {
+    Route::post('/admin-exit-organization-preview', [App\Http\Controllers\Admin\OrganizationController::class, 'exitManagerPreview'])
+        ->name('admin.exit-organization-preview');
+});
+
 //Admin Panel Routes
 Route::prefix('admin')->middleware(['web', 'auth:admin', 'admin.developer'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
     Route::get('/developer-tools', [App\Http\Controllers\Admin\DeveloperToolsController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
+    Route::post('organizations/{uuid}/enter-as-manager', [App\Http\Controllers\Admin\OrganizationController::class, 'enterAsManager'])
+        ->name('admin.organizations.enter-as-manager');
 	Route::post('organizations/{uuid}/toggle',[App\Http\Controllers\Admin\OrganizationController::class,'toggleBanStatus'])->name('organizations.toggleBanStatus');
     /*Route::resource('blog/posts', App\Http\Controllers\Admin\BlogController::class);
     Route::resource('blog/categories', App\Http\Controllers\Admin\BlogCategoryController::class);

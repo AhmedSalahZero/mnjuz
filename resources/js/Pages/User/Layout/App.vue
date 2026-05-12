@@ -1,5 +1,18 @@
 <template>
 	<div :class="rtlClass">
+		<div v-if="adminOrganizationImpersonation"
+			class="flex flex-wrap items-center justify-between gap-2 border-b border-amber-700 bg-amber-500 px-3 py-2 text-sm text-white md:px-4">
+			<p class="min-w-0 font-medium">
+				{{ $t('Admin preview mode') }}
+				<span v-if="impersonationOrgName" class="opacity-90"> — {{ impersonationOrgName }}</span>.
+				{{ $t('You are viewing this workspace as an administrator.') }}
+			</p>
+			<button type="button"
+				class="shrink-0 rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 shadow hover:bg-amber-50"
+				:disabled="exitForm.processing" @click="submitExitPreview">
+				{{ $t('Return to organizations') }}
+			</button>
+		</div>
 		<MobileSidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
 			:title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"></MobileSidebar>
 		<div class="md:mt-0 md:pt-0 flex md:h-screen w-full tracking-[0.3px] bg-gray-300/10"
@@ -15,7 +28,7 @@
 </template>
 <script setup>
 import { useRtl } from '@/Composables/useRtl'
-import { usePage } from "@inertiajs/vue3"
+import { usePage, useForm } from "@inertiajs/vue3"
 import { computed, onMounted, ref, watch, provide } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
@@ -30,6 +43,13 @@ const user = computed(() => usePage().props.auth.user)
 const config = computed(() => usePage().props.config)
 const organization = computed(() => usePage().props.organization)
 const organizations = computed(() => usePage().props.organizations)
+const adminOrganizationImpersonation = computed(() => usePage().props.admin_organization_impersonation)
+const impersonationOrgName = computed(() => usePage().props.admin_impersonation_org_name || '')
+const exitForm = useForm({})
+
+const submitExitPreview = () => {
+	exitForm.post('/admin-exit-organization-preview')
+}
 const currentPageTitle = computed(() => usePage().props.title)
 const displayCreateBtn = computed(() => usePage().props.allowCreate)
 const unreadMessages = ref(usePage().props.unreadMessages)
@@ -56,6 +76,7 @@ const getValueByKey = (key) => {
 }
 
 const setupSound = () => {
+	if (!organization.value) return
 	const settings = organization.value.metadata ? JSON.parse(organization.value.metadata) : {}
 	const notifications = settings.notifications || {}
 
@@ -77,6 +98,10 @@ provide('updateTotalUnreadMessages', (val) => {
 })
 onMounted(() => {
 	setupSound()
+
+	if (!organization.value?.id || !user.value?.id) {
+		return
+	}
 
 	const { subscribe } = getOrJoinChatChannel(
 		organization.value.id,
