@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Helpers\CustomHelper;
 use App\Models\Addon;
 use App\Models\Chat;
 use App\Models\Language;
@@ -150,6 +151,14 @@ class HandleInertiaRequests extends Middleware
         session()->forget('status');
         $showResetDevicesLink = session()->pull('show_reset_devices_link', false);
 
+        $settingsModuleWorkingHours = false;
+        if ($user && ($user->role ?? null) === 'user' && session()->has('current_organization')) {
+            $settingsModuleWorkingHours = CustomHelper::isModuleEnabled(
+                'Working Hours',
+                (int) session('current_organization')
+            );
+        }
+
         return array_merge(parent::share($request), [
             'csrf_token' => csrf_token(),
             'applicationVersion' => fn () => Config::get('version.version'),
@@ -178,6 +187,7 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => $user ? $user->tfa : false,
             ],
             'isRtl' => $isRtl,
+            'settingsModuleWorkingHours' => $settingsModuleWorkingHours,
         ]);
     }
 

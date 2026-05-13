@@ -86,6 +86,7 @@ Route::middleware(['auth:sanctum'])->prefix('auth')->group(function () {
     Route::post('logout', [App\Http\Controllers\AuthController::class, 'logout']);
     Route::post('set-current-organization', [App\Http\Controllers\AuthController::class, 'setCurrentOrganization']);
     Route::post('leave-current-organization', [App\Http\Controllers\AuthController::class, 'leaveCurrentOrganization']);
+    Route::post('delete-account', [App\Http\Controllers\AuthController::class, 'deleteAccount']);
 });
 
 Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','check.has.selected.organization'])->group(function () {

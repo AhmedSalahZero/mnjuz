@@ -321,6 +321,23 @@
 							</button>
 						</div>
 					</div>
+					<div class="bg-white border border-red-200 rounded-lg py-2 text-sm mb-4">
+						<div class="px-4 pt-2 pb-4">
+							<h2 class="text-[17px] text-red-800">{{ $t('Delete account') }}</h2>
+							<p v-if="props.canDeleteAccount" class="mt-2 text-slate-600 leading-relaxed">
+								{{ $t('Permanently close your account for this platform. Your data will be marked as deleted; you will be signed out and must register again to use the service.') }}
+							</p>
+							<p v-else class="mt-2 text-slate-600 leading-relaxed">
+								{{ $t('As the organization owner you cannot delete your account from here. Transfer ownership to another team member first, then you can delete your account or leave the organization.') }}
+							</p>
+							<button v-if="props.canDeleteAccount" type="button" @click="deleteAccount"
+								class="mt-4 rounded-md border border-red-600 bg-red-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+								:disabled="deleteAccountProcessing">
+								<span v-if="deleteAccountProcessing">{{ $t('Processing') }}…</span>
+								<span v-else>{{ $t('Delete my account') }}</span>
+							</button>
+						</div>
+					</div>
 					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm pb-4 mb-20">
 						<div class="flex px-4 pt-1 pb-2">
 							<div class="ml-auto">
@@ -374,9 +391,11 @@ const props = defineProps({
 	templates: { type: Array, default: () => [] },
 	leaveOrganizationSectionVisible: { type: Boolean, default: false },
 	canDetachFromCurrentOrganization: { type: Boolean, default: false },
+	canDeleteAccount: { type: Boolean, default: false },
 })
 const statusView = ref(false)
 const leaveProcessing = ref(false)
+const deleteAccountProcessing = ref(false)
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 const audioPlayer = ref(null)
@@ -467,6 +486,19 @@ const leaveOrganization = () => {
 		preserveScroll: true,
 		onFinish: () => {
 			leaveProcessing.value = false
+		},
+	})
+}
+
+const deleteAccount = () => {
+	if (!confirm(trans('Are you sure you want to delete your account? This cannot be undone from the app; you will be signed out immediately.'))) {
+		return
+	}
+	deleteAccountProcessing.value = true
+	router.post('/settings/delete-account', {}, {
+		preserveScroll: true,
+		onFinish: () => {
+			deleteAccountProcessing.value = false
 		},
 	})
 }

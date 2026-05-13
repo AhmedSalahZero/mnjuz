@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
@@ -9,6 +10,7 @@ use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Services\PhoneService;
 use App\Services\SubscriptionService;
+use App\Services\WorkingHoursService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -79,8 +81,12 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
               
 
-                // ✅ AutoReply في job منفصل (مع التحقق من حد الرسائل)
                 $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit');
+                if (!$isMessageLimitReached) {
+                    $this->maybeSendWorkingHoursAwayNotice($chat, $contact);
+                }
+
+                // ✅ AutoReply في job منفصل (مع التحقق من حد الرسائل)
                 if (!$isMessageLimitReached && $this->shouldCheckAutoReply()) {
                     ProcessAutoReplyJob::dispatch(
                         $chat->id,
@@ -206,6 +212,30 @@ class ProcessIncomingMessageJob implements ShouldQueue
             'entity_id' => $chatId,
             'created_at' =>  now()
         ]);
+    }
+
+    private function maybeSendWorkingHoursAwayNotice(Chat $chat, Contact $contact): void
+    {
+        if (!CustomHelper::isModuleEnabled('Working Hours', $this->organizationId)) {
+            return;
+        }
+        if (WorkingHoursService::slotsForOrganization($this->organizationId) === []) {
+            return;
+        }
+        if (WorkingHoursService::isOrganizationOpenNow($this->organizationId)) {
+            return;
+        }
+        $cacheKey = 'working_hours_away_' . $this->organizationId . '_' . $contact->id;
+        if (Cache::has($cacheKey)) {
+            return;
+        }
+        $body = WorkingHoursService::buildAwayNoticeMessage($this->organizationId);
+        SendTextMessageJob::dispatch(
+            $this->organizationId,
+            $contact->uuid,
+            $body
+        )->onQueue('high');
+        Cache::put($cacheKey, 1, now()->addHours(4));
     }
 
     private function formatChatForEvent($chat, bool $isNewContact = false, $contactUuid = null)

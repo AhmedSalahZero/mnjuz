@@ -53,7 +53,7 @@ class SubscriptionPlanController extends BaseController
         return Inertia::render('Admin/SubscriptionPlan/Show', [
             'title' => __('Subscription plans'), 
             'plan' => $plan,
-            'addons' => Addon::where('status', 1)->where('is_plan_restricted', 1)->pluck('name'),
+            'addons' => $this->orderedPlanRestrictedAddonNames(),
             'enable_ai_billing' => Setting::where('key', 'enable_ai_billing')->value('value') ?? 0,
         ]);
     }
@@ -70,7 +70,7 @@ class SubscriptionPlanController extends BaseController
         return Inertia::render('Admin/SubscriptionPlan/Show', [
             'title' => __('Subscription plans'), 
             'plan' => $plan,
-            'addons' => Addon::where('status', 1)->where('is_plan_restricted', 1)->pluck('name'),
+            'addons' => $this->orderedPlanRestrictedAddonNames(),
             'enable_ai_billing' => Setting::where('key', 'enable_ai_billing')->value('value') ?? 0,
         ]);
     }
@@ -174,5 +174,32 @@ class SubscriptionPlanController extends BaseController
     public function destroy($uuid)
     {
         $this->subscriptionPlanService->destroy($uuid);
+    }
+
+    /**
+     * Plan addon toggles: stable alphabetical order, with "Working Hours" immediately after "Mobile App".
+     *
+     * @return array<int, string>
+     */
+    private function orderedPlanRestrictedAddonNames(): array
+    {
+        $names = Addon::where('status', 1)
+            ->where('is_plan_restricted', 1)
+            ->orderBy('name')
+            ->pluck('name')
+            ->values()
+            ->all();
+
+        $ma = array_search('Mobile App', $names, true);
+        $wh = array_search('Working Hours', $names, true);
+        if ($ma !== false && $wh !== false && $wh !== $ma + 1) {
+            $whName = $names[$wh];
+            unset($names[$wh]);
+            $names = array_values($names);
+            $ma = array_search('Mobile App', $names, true);
+            array_splice($names, $ma + 1, 0, [$whName]);
+        }
+
+        return $names;
     }
 }

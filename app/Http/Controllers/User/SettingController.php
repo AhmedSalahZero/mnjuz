@@ -14,6 +14,7 @@ use App\Models\Team;
 use App\Models\Template;
 use App\Services\ContactFieldService;
 use App\Services\OrganizationContextService;
+use App\Services\UserAccountDeletionService;
 use App\Services\WhatsappService;
 use DB;
 use Illuminate\Http\Request;
@@ -105,6 +106,35 @@ class SettingController extends BaseController
         return redirect()->route('user.organization.index')->with('status', [
             'type' => 'success',
             'message' => __('You have left this organization.'),
+        ]);
+    }
+
+    public function deleteAccount(Request $request, UserAccountDeletionService $userAccountDeletionService)
+    {
+        if ($demo = $this->abortIfDemo()) {
+            return $demo;
+        }
+
+        $user = auth()->user();
+        if (!$user) {
+            abort(403);
+        }
+
+        $result = $userAccountDeletionService->softDeleteDashboardUser($user);
+        if (!$result['ok']) {
+            return back()->with('status', [
+                'type' => 'error',
+                'message' => $result['message'],
+            ]);
+        }
+
+        Auth::guard('user')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login')->with('status', [
+            'type' => 'success',
+            'message' => __('Your account has been deleted.'),
         ]);
     }
 
@@ -487,6 +517,61 @@ class SettingController extends BaseController
         }
     }
 
+    public function workingHours(Request $request)
+    {
+        $organizationId = (int) session()->get('current_organization');
+        if (!CustomHelper::isModuleEnabled('Working Hours', $organizationId)) {
+            abort(403);
+        }
+
+        if ($request->isMethod('get')) {
+            $settings = Organization::where('id', $organizationId)->firstOrFail();
+            $metadata = $settings->metadata ? json_decode($settings->metadata, true) : [];
+            $slots = $metadata['working_hours'] ?? [];
+            if (!is_array($slots)) {
+                $slots = [];
+            }
+
+            return Inertia::render('User/Settings/WorkingHours', [
+                'title' => __('Settings'),
+                'modules' => Addon::get(),
+                'working_hours' => array_values($slots),
+            ]);
+        }
+
+        if ($response = $this->abortIfDemo()) {
+            return $response;
+        }
+
+        $validated = $request->validate([
+            'slots' => 'nullable|array|max:64',
+            'slots.*.day' => 'required|integer|between:0,6',
+            'slots.*.open' => 'required|regex:/^\d{2}:\d{2}$/',
+            'slots.*.close' => 'required|regex:/^\d{2}:\d{2}$/',
+        ]);
+
+        foreach ($validated['slots'] ?? [] as $slot) {
+            if (strcmp($slot['open'], $slot['close']) >= 0) {
+                return back()->with('status', [
+                    'type' => 'error',
+                    'message' => __('Each working hours row must have an end time after the start time.'),
+                ]);
+            }
+        }
+
+        $organizationConfig = Organization::where('id', $organizationId)->firstOrFail();
+        $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+        $metadataArray['working_hours'] = $validated['slots'] ?? [];
+
+        $organizationConfig->metadata = json_encode($metadataArray);
+        $organizationConfig->save();
+
+        return back()->with('status', [
+            'type' => 'success',
+            'message' => __('Settings updated successfully'),
+        ]);
+    }
+
     protected function abortIfDemo(){
         $organizationId = session()->get('current_organization');
 
@@ -538,9 +623,18 @@ class SettingController extends BaseController
             ->where('organization_id', $organizationId)
             ->first();
 
+        $user = auth()->user();
+        $ownsAnyOrganization = $user
+            ? Team::query()
+                ->where('user_id', $user->id)
+                ->where('role', 'owner')
+                ->exists()
+            : false;
+
         return [
             'leaveOrganizationSectionVisible' => $team !== null,
             'canDetachFromCurrentOrganization' => $team !== null && $team->role !== 'owner',
+            'canDeleteAccount' => $user && ($user->role ?? null) === 'user' && !$ownsAnyOrganization,
         ];
     }
 }

@@ -56,6 +56,12 @@
                                 <span>{{ $t('Plugins') }}</span>
                             </Link>
                         </li>
+                        <li v-if="$page.props.settingsModuleWorkingHours" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/working-hours') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/settings/working-hours" class="flex items-center p-2 space-x-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>
+                                <span>{{ $t('Working hours') }}</span>
+                            </Link>
+                        </li>
                     </ul>
                 </div>
 

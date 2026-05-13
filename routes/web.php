@@ -225,9 +225,11 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::group([], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::post('/settings/leave-organization', [App\Http\Controllers\User\SettingController::class, 'leaveCurrentOrganization']);
+                    Route::post('/settings/delete-account', [App\Http\Controllers\User\SettingController::class, 'deleteAccount']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index']);
+                    Route::match(['get', 'post'], '/settings/working-hours', [App\Http\Controllers\User\SettingController::class, 'workingHours']);
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
                     Route::post('/settings/whatsapp/token', [App\Http\Controllers\User\SettingController::class, 'updateToken']);

@@ -30,6 +30,7 @@ use App\Services\PasswordResetService;
 use App\Services\SocialLoginService;
 use App\Services\TeamService;
 use App\Services\OrganizationContextService;
+use App\Services\UserAccountDeletionService;
 use App\Services\UserVerificationService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
@@ -850,6 +851,30 @@ class AuthController extends BaseController
             'data' => [
                 'current_organization_id' => (int) $user->current_mobile_organization_id,
             ],
+        ], 200);
+    }
+
+    public function deleteAccount(Request $request, UserAccountDeletionService $userAccountDeletionService)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Unauthenticated'),
+            ], 401);
+        }
+
+        $result = $userAccountDeletionService->softDeleteDashboardUser($user);
+        if (!$result['ok']) {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], (int) ($result['status'] ?? 400));
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => __('Your account has been deleted.'),
         ], 200);
     }
 
