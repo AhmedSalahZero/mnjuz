@@ -65,6 +65,35 @@ class WorkingHoursService
         return trim($intro . "\n\n" . $heading . "\n" . $schedule);
     }
 
+    /**
+     * Custom WhatsApp text when contacts message outside configured hours (metadata).
+     * Non-empty value replaces the default intro + weekly schedule message.
+     */
+    public static function customOutsideHoursMessage(int $organizationId): string
+    {
+        $org = Organization::find($organizationId);
+        if (!$org || !$org->metadata) {
+            return '';
+        }
+        $meta = json_decode($org->metadata, true) ?: [];
+        $raw = $meta['working_hours_outside_message'] ?? '';
+        if (!is_string($raw)) {
+            return '';
+        }
+
+        return trim($raw);
+    }
+
+    public static function resolveAwayNoticeBody(int $organizationId): string
+    {
+        $custom = self::customOutsideHoursMessage($organizationId);
+        if ($custom !== '') {
+            return $custom;
+        }
+
+        return self::buildAwayNoticeMessage($organizationId);
+    }
+
     public static function formatWeeklyScheduleText(int $organizationId, ?string $locale = null): string
     {
         $slots = self::slotsForOrganization($organizationId);

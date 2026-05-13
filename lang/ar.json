@@ -1138,6 +1138,8 @@
 "working_hours_away_intro":"نعتذر، الشركة غير متصلة حالياً. سنعاود التواصل معك خلال أوقات العمل.",
 "working_hours_weekly_schedule_heading":"أوقات العمل:",
 "working_hours_not_configured":"لم يتم ضبط أوقات العمل بعد.",
+"working_hours_outside_message_hint":"تُرسَل عند مراسلة جهات الاتصال خارج أوقات العمل (مرة كل بضع ساعات لكل جهة). إذا تركت الحقل فارغاً يُرسَل الإشعار الافتراضي مع جدول الأسبوع. استخدم «إضافة متغير» لإدراج حقول جهة الاتصال؛ تُستبدل تلقائياً عند الإرسال.",
+"working_hours_variable_modal_intro":"اختر عنصراً نائباً لإدراجه. يُستبدل ببيانات جهة الاتصال عند إرسال الرسالة.",
 "Each working hours row must have an end time after the start time.":"يجب أن يكون وقت النهاية بعد وقت البداية في كل صف.",
 "Delete account":"حذف الحساب",
 "Permanently close your account for this platform. Your data will be marked as deleted; you will be signed out and must register again to use the service.":"إغلاق حسابك على هذه المنصة. ستُعلَّم بياناتك كمحذوفة؛ سيتم تسجيل خروجك ويلزمك إنشاء حساب جديد لاستخدام الخدمة.",

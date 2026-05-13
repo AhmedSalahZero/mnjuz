@@ -10,6 +10,7 @@ use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\ContactPlaceholderService;
 use App\Services\MediaService;
 use App\Services\WhatsappService;
 use DB;
@@ -347,58 +348,8 @@ class AutoReplyService
         return new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
     }
 
-    private function replacePlaceholders($organizationId, $contactUuid, $message){
-		// logger('replace placeholders');
-        $organization = Organization::where('id', $organizationId)->first();
-        $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
-        $address = $contact->address ? json_decode($contact->address, true) : [];
-        $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
-        $full_address = ($address['street'] ?? Null) . ', ' .
-                        ($address['city'] ?? Null) . ', ' .
-                        ($address['state'] ?? Null) . ', ' .
-                        ($address['zip'] ?? Null) . ', ' .
-                        ($address['country'] ?? Null);
-
-        $data = [
-            'first_name' => $contact->first_name ?? Null,
-            'last_name' => $contact->last_name ?? Null,
-            'full_name' => $contact->full_name ?? Null,
-            'email' => $contact->email ?? Null,
-            'phone' => $contact->phone ?? Null,
-            'organization_name' => $organization->name,
-            'full_address' => $full_address,
-            'street' => $address['street'] ?? Null,
-            'city' => $address['city'] ?? Null,
-            'state' => $address['state'] ?? Null,
-            'zip_code' => $address['zip'] ?? Null,
-            'country' => $address['country'] ?? Null,
-        ];
-
-        $transformedMetadata = [];
-        if($metadata){
-            foreach ($metadata as $key => $value) {
-                $transformedKey = strtolower(str_replace(' ', '_', $key));
-                $transformedMetadata[$transformedKey] = $value;
-            }
-        }
-
-        $mergedData = array_merge($data, $transformedMetadata);
-
-        //Log::info($mergedData);
-
-        // First handle URL-encoded placeholders with {url:placeholder} syntax
-        $message = preg_replace_callback('/\{url:(\w+)\}/', function ($matches) use ($mergedData) {
-            $key = $matches[1];
-            if (isset($mergedData[$key])) {
-                return rawurlencode($mergedData[$key]);
-            }
-            return $matches[0];
-        }, $message);
-        
-        // Then handle regular placeholders
-        return preg_replace_callback('/\{(\w+)\}/', function ($matches) use ($mergedData) {
-            $key = $matches[1];
-            return isset($mergedData[$key]) ? $mergedData[$key] : $matches[0];
-        }, $message);
+    private function replacePlaceholders($organizationId, $contactUuid, $message)
+    {
+        return ContactPlaceholderService::replace((int) $organizationId, $contactUuid, $message);
     }
 }

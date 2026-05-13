@@ -10,6 +10,7 @@ use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Services\PhoneService;
 use App\Services\SubscriptionService;
+use App\Services\ContactPlaceholderService;
 use App\Services\WorkingHoursService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -229,7 +230,8 @@ class ProcessIncomingMessageJob implements ShouldQueue
         if (Cache::has($cacheKey)) {
             return;
         }
-        $body = WorkingHoursService::buildAwayNoticeMessage($this->organizationId);
+        $body = WorkingHoursService::resolveAwayNoticeBody($this->organizationId);
+        $body = ContactPlaceholderService::replace($this->organizationId, $contact->uuid, $body);
         SendTextMessageJob::dispatch(
             $this->organizationId,
             $contact->uuid,

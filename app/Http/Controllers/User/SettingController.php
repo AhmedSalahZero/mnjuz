@@ -532,10 +532,17 @@ class SettingController extends BaseController
                 $slots = [];
             }
 
+            $outsideMessage = $metadata['working_hours_outside_message'] ?? '';
+            if (!is_string($outsideMessage)) {
+                $outsideMessage = '';
+            }
+
             return Inertia::render('User/Settings/WorkingHours', [
                 'title' => __('Settings'),
                 'modules' => Addon::get(),
                 'working_hours' => array_values($slots),
+                'working_hours_outside_message' => $outsideMessage,
+                'placeholders' => $this->replyMessagePlaceholdersForOrganization($organizationId),
             ]);
         }
 
@@ -548,6 +555,7 @@ class SettingController extends BaseController
             'slots.*.day' => 'required|integer|between:0,6',
             'slots.*.open' => 'required|regex:/^\d{2}:\d{2}$/',
             'slots.*.close' => 'required|regex:/^\d{2}:\d{2}$/',
+            'working_hours_outside_message' => 'nullable|string|max:4096',
         ]);
 
         foreach ($validated['slots'] ?? [] as $slot) {
@@ -562,6 +570,7 @@ class SettingController extends BaseController
         $organizationConfig = Organization::where('id', $organizationId)->firstOrFail();
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $metadataArray['working_hours'] = $validated['slots'] ?? [];
+        $metadataArray['working_hours_outside_message'] = $validated['working_hours_outside_message'] ?? '';
 
         $organizationConfig->metadata = json_encode($metadataArray);
         $organizationConfig->save();
@@ -585,6 +594,40 @@ class SettingController extends BaseController
         }
 
         return null;
+    }
+
+    /**
+     * Placeholder options for working-hours outbound text: built-ins + org contact fields.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    private function replyMessagePlaceholdersForOrganization(int $organizationId): array
+    {
+        $placeholders = config('formats.placeholders') ?? [];
+        if (! is_array($placeholders)) {
+            $placeholders = [];
+        }
+
+        $additionalFields = DB::table('contact_fields')
+            ->where('organization_id', $organizationId)
+            ->where('deleted_at', null)
+            ->pluck('name');
+
+        $additionalPlaceholders = $additionalFields->map(static function ($name) {
+            return [
+                'value' => '{' . strtolower(str_replace(' ', '_', $name)) . '}',
+                'label' => $name,
+            ];
+        })->toArray();
+
+        $additionalUrlPlaceholders = $additionalFields->map(static function ($name) {
+            return [
+                'value' => '{url:' . strtolower(str_replace(' ', '_', $name)) . '}',
+                'label' => $name . ' (URL encoded)',
+            ];
+        })->toArray();
+
+        return array_merge($placeholders, $additionalPlaceholders, $additionalUrlPlaceholders);
     }
 
     /**
