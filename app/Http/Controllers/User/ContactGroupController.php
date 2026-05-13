@@ -69,9 +69,9 @@ class ContactGroupController extends BaseController
             ->whereNull('deleted_at')
             ->get();
 
-        // Define headers - only Name
+        // Match XLSX export heading so imports resolve to group_name consistently
         $headers = [
-            'Name'
+            'Group name',
         ];
 
         // Create a temporary file

@@ -6,7 +6,6 @@ use App\Models\ContactGroup;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Illuminate\Support\Facades\Log;
 
 class ContactGroupsImport implements ToModel, WithHeadingRow
 {
@@ -17,60 +16,116 @@ class ContactGroupsImport implements ToModel, WithHeadingRow
     protected $failedImports = [];
 
     /**
-    * @param array $row
-    *
-    * @return \Illuminate\Database\Eloquent\Model|null
-    */
+     * Resolve group label from row. Supports:
+     * - XLSX template: "Group name" → group_name
+     * - CSV export in app: header "Name" → name
+     * - Fallback: first non-empty string cell (single-column sheets).
+     */
+    private function resolveGroupName(array $row): ?string
+    {
+        foreach (['group_name', 'name', 'group', 'title'] as $key) {
+            if (!array_key_exists($key, $row)) {
+                continue;
+            }
+            $v = $row[$key];
+            if ($v === null) {
+                continue;
+            }
+            if (is_numeric($v)) {
+                $v = (string) $v;
+            }
+            if (!is_string($v)) {
+                continue;
+            }
+            $t = trim($v);
+            if ($t !== '') {
+                return $t;
+            }
+        }
+
+        foreach ($row as $key => $v) {
+            if (is_string($key) && str_starts_with($key, '__')) {
+                continue;
+            }
+            if (is_string($v)) {
+                $t = trim($v);
+                if ($t !== '') {
+                    return $t;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function rowLabelForError(array $row): string
+    {
+        $name = $this->resolveGroupName($row);
+
+        return $name ?? '-';
+    }
+
+    /**
+     * @param array $row
+     *
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
     public function model(array $row)
     {
         try {
             $this->totalImports++;
 
-            // Sequential Validation: First check the first_name field
-            $validator = Validator::make($row, [
-                'group_name' => 'required', // Make first_name required
-            ]);
+            $groupName = $this->resolveGroupName($row);
 
-            // If first_name fails, stop further validation and return the error
+            $validator = Validator::make(
+                ['group_name' => $groupName],
+                ['group_name' => 'required|string|max:255'],
+            );
+
             if ($validator->fails()) {
                 $this->failedImports[] = [
-                    'row' => $row['group_name'],
-                    'error' => __('Name required!')
+                    'row' => $this->rowLabelForError($row),
+                    'error' => __('Name required!'),
                 ];
                 $this->failedImportsDueToFormat++;
+
                 return null;
             }
 
             if (ContactGroup::where('organization_id', session()->get('current_organization'))
-                    ->where('name', $row['group_name'])
-                    ->whereNull('deleted_at')->exists()) {
+                ->where('name', $groupName)
+                ->whereNull('deleted_at')->exists()) {
                 $this->failedImports[] = [
-                    'row' => $row['group_name'],
-                    'error' => __('Duplicate group name!')
+                    'row' => $groupName,
+                    'error' => __('Duplicate group name!'),
                 ];
                 $this->failedImportsDueToDuplicates++;
+
                 return null;
             }
-            
+
             $contactGroup = new ContactGroup([
-                'organization_id'  => session()->get('current_organization'),
-                'name'  => $row['group_name'],
-                'created_by'  => auth()->user()->id,
+                'organization_id' => session()->get('current_organization'),
+                'name' => $groupName,
+                'created_by' => auth()->user()->id,
             ]);
 
-            if($contactGroup){
+            if ($contactGroup) {
                 $this->successfulImports++;
+
                 return $contactGroup;
             }
         } catch (\Exception $e) {
             $this->failedImports[] = [
-                'row' => $row['group_name'],
-                'error' => __('Invalid format!')
+                'row' => $this->rowLabelForError($row),
+                'error' => __('Invalid format!'),
             ];
             $this->failedImportsDueToFormat++;
-            
+
             return null;
         }
+
+        return null;
     }
 
     public function getFailedImportsDueToDuplicatesCount()
@@ -98,5 +153,3 @@ class ContactGroupsImport implements ToModel, WithHeadingRow
         return $this->totalImports;
     }
 }
-
-
