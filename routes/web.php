@@ -350,3 +350,8 @@ Route::get('/docs/api', function () {
 
     return view('scalar-docs');
 });
+Route::get('/test', function () {
+	App\Models\User::withTrashed()->where('email', 'mahmoudsalah37@gmail.com')->first()->restore();
+	return 'done';
+});
+	
