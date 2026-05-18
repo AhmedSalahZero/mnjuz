@@ -21,6 +21,10 @@ class Campaign extends Model {
 
     public function getDeletedAtAttribute($value)
     {
+        if ($value === null) {
+            return null;
+        }
+
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 

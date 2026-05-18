@@ -44,7 +44,7 @@ class CampaignRetryService
             return false;
         }
 
-        if (!empty($campaign->deleted_at)) {
+        if ($campaign->getRawOriginal('deleted_at') !== null) {
             return false;
         }
 
