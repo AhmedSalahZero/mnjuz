@@ -137,6 +137,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/user/device', [App\Http\Controllers\UserDeviceController::class, 'destroy']);
 });
 
+Route::middleware(['auth:sanctum', 'check.active.organization', 'check.has.selected.organization'])->prefix('payments/myfatoorah')->group(function () {
+    Route::post('/init', [App\Http\Controllers\Api\MyFatoorahPaymentController::class, 'initialize']);
+    Route::get('/status/{paymentId}', [App\Http\Controllers\Api\MyFatoorahPaymentController::class, 'status']);
+});
+
 Route::post('/broadcasting/auth', function (Request $request) {
     return Broadcast::auth($request);
 })->middleware('auth:sanctum'); // أو auth:api

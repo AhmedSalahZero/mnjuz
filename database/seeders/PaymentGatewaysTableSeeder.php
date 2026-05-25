@@ -39,6 +39,13 @@ class PaymentGatewaysTableSeeder extends Seeder
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ],
+            [
+                'name' => 'MyFatoorah',
+                'metadata' => NULL,
+                'is_active' => 0,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ],
         ];
 
         foreach ($gateways as $gateway) {

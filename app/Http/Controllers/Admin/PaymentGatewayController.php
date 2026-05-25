@@ -26,7 +26,8 @@ class PaymentGatewayController extends BaseController
 
     public function show($type)
     {
-        $gateway = PaymentGateway::where('name', $type)->first();
+        $gateway = PaymentGateway::whereRaw('LOWER(name) = ?', [strtolower($type)])->first();
+
         return response()->json(['success' => true, 'data'=> $gateway]);
     }
 
@@ -68,9 +69,31 @@ class PaymentGatewayController extends BaseController
                     'secret_key' => $request->secret_key,
                 ];
                 break;
+
+            case 'myfatoorah':
+                $metadata = [
+                    'api_key' => $request->api_key,
+                    'webhook_secret' => $request->webhook_secret,
+                    'mode' => $request->mode,
+                    'country_code' => $request->country_code ?? 'SAU',
+                    'currency' => $request->currency ?? 'SAR',
+                    'language' => $request->language ?? 'ar',
+                ];
+                break;
         }
 
-        $method = PaymentGateway::where('name', '=', $type)->update([
+        $gateway = PaymentGateway::whereRaw('LOWER(name) = ?', [strtolower($type)])->first();
+
+        if (!$gateway) {
+            return Redirect::back()->with(
+                'status', [
+                    'type' => 'error',
+                    'message' => __('Payment gateway not found.'),
+                ]
+            );
+        }
+
+        PaymentGateway::where('id', $gateway->id)->update([
             'metadata' => $metadata,
             'is_active' => $request->status
         ]);

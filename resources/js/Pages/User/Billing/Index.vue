@@ -90,20 +90,7 @@
                 <p class="text-sm">{{ $t('Add your own custom amount') }}</p>
                 <FormInput v-model="form.amount" :error="form.errors.amount" :name="''" :type="'number'" :class="'w-100'"/>
                 <h2 class="text-sm mt-4 mb-2">{{ $t('Pay via') }}</h2>
-                <div class="grid grid-cols-2 gap-2">
-                    <div v-for="(item, index) in props.methods" :key="index" class="">
-                        <div class="flex items-center">
-                            <label @click="selectPayment(item.name)" for="myCheckbox" class="cursor-pointer">
-                                <div class="w-5 h-5 border border-gray-400 rounded-md flex items-center justify-center" :class="form.method === item.name ? 'bg-[#000]' : ''">
-                                    <svg v-if="form.method === item.name" class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                    </svg>
-                                </div>
-                            </label>
-                            <span @click="selectPayment(item.name)" class="ml-2 text-sm cursor-pointer">{{ item.name }}</span>
-                        </div>
-                    </div>
-                </div>
+                <PaymentMethodSelector v-model="form.method" :methods="props.methods" />
                 <div class="form-error text-[#b91c1c] text-xs mt-2">{{ form.errors.method }}</div>
                 <div class="mt-6 flex">
                     <button type="button" @click.self="onClose" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
@@ -131,6 +118,7 @@
     import { Link, useForm, router } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
+    import PaymentMethodSelector from '@/Components/Payment/PaymentMethodSelector.vue';
     import { ref, onMounted } from 'vue';
     import Echo from 'laravel-echo';
     import Pusher from 'pusher-js';
@@ -156,10 +144,6 @@
         'amount' : null,
         'method' : null
     });
-
-    const selectPayment = (method) => {
-        form.method = method;
-    };
 
     function openModal(){
         isOpenModal.value = true;

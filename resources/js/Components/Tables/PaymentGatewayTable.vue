@@ -4,6 +4,7 @@
     import { useForm } from "@inertiajs/vue3";
     import { useAlertModal } from '@/Composables/useAlertModal';
     import FlutterwaveFormModal from '@/Components/PaymentConfigModals/FlutterwaveModal.vue';
+    import MyFatoorahFormModal from '@/Components/PaymentConfigModals/MyFatoorahModal.vue';
     import PayPalFormModal from '@/Components/PaymentConfigModals/PayPalModal.vue';
     import PaystackFormModal from '@/Components/PaymentConfigModals/PaystackModal.vue';
     import StripeFormModal from '@/Components/PaymentConfigModals/StripeModal.vue';
@@ -53,6 +54,7 @@
     </Table>
 
     <FlutterwaveFormModal v-if="paymentMethod === 'Flutterwave'" v-model="isOpenFormModal" @closeModal="isOpenFormModal = false"/>
+    <MyFatoorahFormModal v-if="paymentMethod === 'MyFatoorah'" v-model="isOpenFormModal" @closeModal="isOpenFormModal = false"/>
     <PayPalFormModal v-if="paymentMethod === 'Paypal'" v-model="isOpenFormModal" @closeModal="isOpenFormModal = false"/>
     <PaystackFormModal v-if="paymentMethod === 'Paystack'" v-model="isOpenFormModal" @closeModal="isOpenFormModal = false"/>
     <StripeFormModal v-if="paymentMethod === 'Stripe'" v-model="isOpenFormModal" @closeModal="isOpenFormModal = false"/>

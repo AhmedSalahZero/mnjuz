@@ -331,26 +331,11 @@
 							</div>
 							<hr>
 							<h2 v-if="parseFloat(amountDue) > 0" class="text-[14px] mt-3 mb-2">{{ $t('Pay via') }}</h2>
-							<div v-if="parseFloat(amountDue) > 0" class="flex grid grid-cols-2 gap-2">
-								<div v-for="(item, index) in props.methods" :key="index" class="">
-									<div class="flex items-center">
-										<label @click="selectPayment(item.name)" for="myCheckbox"
-											class="cursor-pointer">
-											<div class="w-5 h-5 border border-gray-400 rounded-md flex items-center justify-center"
-												:class="form.method === item.name ? 'bg-[#000]' : ''">
-												<svg v-if="form.method === item.name" class="w-4 h-4 text-white"
-													fill="none" stroke="currentColor" viewBox="0 0 24 24"
-													xmlns="http://www.w3.org/2000/svg">
-													<path stroke-linecap="round" stroke-linejoin="round"
-														stroke-width="2" d="M5 13l4 4L19 7"></path>
-												</svg>
-											</div>
-										</label>
-										<span @click="selectPayment(item.name)"
-											class="ml-2 text-sm cursor-pointer">{{ item.name }}</span>
-									</div>
-								</div>
-							</div>
+							<PaymentMethodSelector
+								v-if="parseFloat(amountDue) > 0"
+								v-model="form.method"
+								:methods="props.methods"
+							/>
 							<div class="mt-8">
 								<button
 									v-if="(buttonLoading == false && form.method != null) || (buttonLoading == false && amountDue <= 0)"
@@ -394,6 +379,7 @@
 import { router, useForm } from "@inertiajs/vue3"
 import { ref } from 'vue'
 import AppLayout from "./../Layout/App.vue"
+import PaymentMethodSelector from '@/Components/Payment/PaymentMethodSelector.vue'
 
 const props = defineProps(['addons', 'enable_ai_billing', 'plans', 'methods', 'subscription', 'subscriptionDetails'])
 const subscriptionDetails = ref(props.subscriptionDetails)
@@ -428,10 +414,6 @@ const selectPlan = (plan, name, period, amount) => {
 	form.plan = plan
 	selectedPlan.value = { name, period, amount }
 	getPlanDetails(plan)
-}
-
-const selectPayment = (method) => {
-	form.method = method
 }
 
 const getDetail = (value, key) => {

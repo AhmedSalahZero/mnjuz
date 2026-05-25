@@ -151,11 +151,14 @@ class SubscriptionService
                 'created_by' => $userId,
             ]);
 
-            if(abs($billingDetails['credit']['new']) > 0){
+            $creditNew = str_replace(',', '', (string) ($billingDetails['credit']['new'] ?? 0));
+            $creditNew = (float) $creditNew;
+
+            if (abs($creditNew) > 0) {
                 BillingCredit::create([
                     'organization_id' => $organizationId,
                     'description' => 'Credit memo',
-                    'amount' => abs($billingDetails['credit']['new'])
+                    'amount' => abs($creditNew)
                 ]);
 
                 $creditBillingTransaction = BillingTransaction::create([
@@ -163,7 +166,7 @@ class SubscriptionService
                     'entity_type' => 'credit',
                     'entity_id' => $invoice->id,
                     'description' => 'Credit memo',
-                    'amount' => $billingDetails['credit']['new'],
+                    'amount' => $creditNew,
                     'created_by' => $userId,
                 ]);
             }

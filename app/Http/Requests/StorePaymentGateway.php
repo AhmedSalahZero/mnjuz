@@ -44,6 +44,15 @@ class StorePaymentGateway extends FormRequest
                 'public_key' => 'required',
                 'secret_key' => 'required',
             ];
+        } else if ($type == 'myfatoorah') {
+            $rules = [
+                'api_key' => 'required',
+                'webhook_secret' => 'nullable|string',
+                'mode' => 'required|in:sandbox,production',
+                'country_code' => 'nullable|string|size:3',
+                'currency' => 'nullable|string|size:3',
+                'language' => 'nullable|string|in:ar,en',
+            ];
         }
 
         return $rules;

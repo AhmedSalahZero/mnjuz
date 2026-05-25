@@ -52,6 +52,10 @@ return [
         'class' => App\Services\FlutterwaveService::class,
     ],
 
+    'myfatoorah' => [
+        'class' => App\Services\MyFatoorahService::class,
+    ],
+
     // 'clickpay' => [
     //     'class' => Modules\Clickpaysa\Controllers\ProcessPayment::class,
     // ],
