@@ -7,24 +7,26 @@ return [
     | MyFatoorah Payment Gateway
     |--------------------------------------------------------------------------
     |
-    | Credentials can be configured via .env or the admin payment gateway panel.
-    | Environment variables take precedence when set.
+    | Live credentials and runtime settings (API key, mode, currency, language)
+    | are configured in the admin panel:
+    | /admin/payment-gateways → MyFatoorah
+    |
+    | .env is not used for mode or currency.
     |
     */
 
+    'defaults' => [
+        'mode' => 'sandbox',
+        'currency' => 'SAR',
+        'language' => 'ar',
+        'country_code' => 'SAU',
+    ],
+
+    /** Optional fallback only when admin panel has no API key yet (local dev). */
     'api_key' => env('MYFATOORAH_API_KEY'),
 
-    'base_url' => env('MYFATOORAH_BASE_URL'),
-
+    /** Optional fallback for webhook secret if not set in admin. */
     'webhook_secret' => env('MYFATOORAH_WEBHOOK_SECRET'),
-
-    'mode' => env('MYFATOORAH_MODE', 'sandbox'),
-
-    'country_code' => env('MYFATOORAH_COUNTRY_CODE', 'SAU'),
-
-    'currency' => env('MYFATOORAH_CURRENCY', 'SAR'),
-
-    'language' => env('MYFATOORAH_LANGUAGE', 'ar'),
 
     'base_urls' => [
         'sandbox' => 'https://apitest.myfatoorah.com',

@@ -27,37 +27,44 @@ class MyFatoorahApiClient
     }
 
     /**
-     * Resolve credentials from environment variables or the admin gateway panel.
+     * Resolve credentials — admin panel (payment_gateways) is the primary source.
      */
     public static function resolveConfig(): array
     {
         $gateway = PaymentGateway::where('name', config('myfatoorah.gateway_name'))->first();
-        $metadata = $gateway?->metadata;
+        $metadata = self::normalizeMetadata($gateway?->metadata);
+        $defaults = config('myfatoorah.defaults');
 
-        if (is_string($metadata)) {
-            $metadata = json_decode($metadata, true) ?? [];
-        } elseif (is_object($metadata)) {
-            $metadata = (array) $metadata;
-        } else {
-            $metadata = is_array($metadata) ? $metadata : [];
-        }
-
-        $mode = config('myfatoorah.api_key')
-            ? config('myfatoorah.mode', 'sandbox')
-            : ($metadata['mode'] ?? config('myfatoorah.mode', 'sandbox'));
-
-        $baseUrl = config('myfatoorah.base_url')
-            ?: ($metadata['base_url'] ?? config("myfatoorah.base_urls.{$mode}"));
+        $mode = $metadata['mode'] ?? $defaults['mode'];
+        $baseUrl = $metadata['base_url'] ?? config("myfatoorah.base_urls.{$mode}");
 
         return [
-            'api_key' => config('myfatoorah.api_key') ?: ($metadata['api_key'] ?? null),
-            'base_url' => $baseUrl,
-            'webhook_secret' => config('myfatoorah.webhook_secret') ?: ($metadata['webhook_secret'] ?? null),
+            'api_key' => $metadata['api_key'] ?? config('myfatoorah.api_key'),
+            'base_url' => rtrim((string) $baseUrl, '/'),
+            'webhook_secret' => $metadata['webhook_secret'] ?? config('myfatoorah.webhook_secret'),
             'mode' => $mode,
-            'country_code' => $metadata['country_code'] ?? config('myfatoorah.country_code', 'SAU'),
-            'currency' => $metadata['currency'] ?? config('myfatoorah.currency', 'SAR'),
-            'language' => $metadata['language'] ?? config('myfatoorah.language', 'ar'),
+            'country_code' => $metadata['country_code'] ?? $defaults['country_code'],
+            'currency' => $metadata['currency'] ?? $defaults['currency'],
+            'language' => $metadata['language'] ?? $defaults['language'],
         ];
+    }
+
+    private static function normalizeMetadata(mixed $metadata): array
+    {
+        if (is_string($metadata)) {
+            return json_decode($metadata, true) ?? [];
+        }
+
+        if (is_object($metadata)) {
+            return (array) $metadata;
+        }
+
+        return is_array($metadata) ? $metadata : [];
+    }
+
+    public function sendPayment(array $payload): object
+    {
+        return $this->post('/v2/SendPayment', $payload);
     }
 
     public function executePayment(array $payload): object
@@ -105,7 +112,8 @@ class MyFatoorahApiClient
     {
         $response = Http::withToken($this->apiKey)
             ->acceptJson()
-            ->timeout(30)
+            ->connectTimeout(15)
+            ->timeout(60)
             ->post("{$this->baseUrl}{$endpoint}", $payload);
 
         if ($response->failed()) {
@@ -119,6 +127,10 @@ class MyFatoorahApiClient
         }
 
         $body = (object) $response->json();
+
+        if (isset($body->Data) && is_array($body->Data)) {
+            $body->Data = (object) $body->Data;
+        }
 
         if (!($body->IsSuccess ?? false)) {
             Log::warning('MyFatoorah API returned unsuccessful response', [

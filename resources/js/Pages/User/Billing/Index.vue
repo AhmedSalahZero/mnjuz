@@ -92,6 +92,7 @@
                 <h2 class="text-sm mt-4 mb-2">{{ $t('Pay via') }}</h2>
                 <PaymentMethodSelector v-model="form.method" :methods="props.methods" />
                 <div class="form-error text-[#b91c1c] text-xs mt-2">{{ form.errors.method }}</div>
+                <p v-if="paymentError" class="text-[#b91c1c] text-xs mt-2">{{ paymentError }}</p>
                 <div class="mt-6 flex">
                     <button type="button" @click.self="onClose" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
                     <button 
@@ -119,6 +120,7 @@
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
     import PaymentMethodSelector from '@/Components/Payment/PaymentMethodSelector.vue';
+    import { redirectToPaymentGateway } from '@/Composables/usePaymentGatewayRedirect';
     import { ref, onMounted } from 'vue';
     import Echo from 'laravel-echo';
     import Pusher from 'pusher-js';
@@ -139,6 +141,7 @@
     const subscription = ref(props.subscription.data)
     const isOpenModal = ref(false);
     const isLoading = ref(false);
+    const paymentError = ref(null);
     
     const form = useForm({
         'amount' : null,
@@ -155,12 +158,17 @@
 
     const submitForm = async () => {
         isLoading.value = true;
-        form.post('/pay', {
-            preserveScroll: true,
-            onFinish: () => { 
-                isLoading.value = false
-            },
-        });
+        paymentError.value = null;
+
+        try {
+            await redirectToPaymentGateway('/pay', {
+                amount: form.amount,
+                method: form.method,
+            });
+        } catch (error) {
+            paymentError.value = error.message;
+            isLoading.value = false;
+        }
     };
 
     onMounted(() => {

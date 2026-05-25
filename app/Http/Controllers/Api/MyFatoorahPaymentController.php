@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\MyFatoorahInitPaymentRequest;
 use App\Http\Resources\MyFatoorahPaymentResource;
 use App\Resolvers\PaymentPlatformResolver;
+use App\Services\MyFatoorah\MyFatoorahApiClient;
 use App\Services\SubscriptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -58,7 +59,7 @@ class MyFatoorahPaymentController extends Controller
                 'payment_url' => $response->data,
                 'invoice_id' => $response->invoice_id ?? null,
                 'amount' => $amount,
-                'currency' => config('myfatoorah.currency', 'SAR'),
+                'currency' => MyFatoorahApiClient::resolveConfig()['currency'],
             ]),
         ]);
     }

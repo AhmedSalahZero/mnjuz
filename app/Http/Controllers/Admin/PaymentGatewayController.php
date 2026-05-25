@@ -78,6 +78,9 @@ class PaymentGatewayController extends BaseController
                     'country_code' => $request->country_code ?? 'SAU',
                     'currency' => $request->currency ?? 'SAR',
                     'language' => $request->language ?? 'ar',
+                    'base_url' => $request->mode === 'production'
+                        ? 'https://api-sa.myfatoorah.com'
+                        : 'https://apitest.myfatoorah.com',
                 ];
                 break;
         }

@@ -4,7 +4,6 @@ namespace App\Services\MyFatoorah;
 
 use App\Models\BillingPayment;
 use App\Models\BillingTransaction;
-use App\Models\Setting;
 use App\Models\User;
 use App\Services\SubscriptionService;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +24,7 @@ class MyFatoorahPaymentProcessor
         $paymentId = (string) ($context['payment_id'] ?? '');
         $invoiceId = (string) ($context['invoice_id'] ?? '');
         $amount = (float) ($context['amount'] ?? 0);
-        $currency = (string) ($context['currency'] ?? config('myfatoorah.currency', 'SAR'));
+        $currency = (string) ($context['currency'] ?? MyFatoorahApiClient::resolveConfig()['currency']);
         $paymentMethod = (string) ($context['payment_method'] ?? '');
         $paymentStatus = (string) ($context['payment_status'] ?? 'paid');
         $organizationId = (int) ($context['organization_id'] ?? 0);
@@ -115,27 +114,29 @@ class MyFatoorahPaymentProcessor
         ];
     }
 
-    public function buildExecutePaymentPayload(float $amount, int $organizationId, int $userId, mixed $planId = null): array
+    public function buildSendPaymentPayload(float $amount, int $organizationId, int $userId, mixed $planId = null): array
     {
         $config = MyFatoorahApiClient::resolveConfig();
         $user = User::find($userId);
-        $companyName = Setting::where('key', 'company_name')->value('value') ?? config('app.name');
 
         $planSegment = $planId === null ? 'topup' : (string) $planId;
         $reference = $this->buildCustomerReference($organizationId, $userId, $planId);
+        $mobile = $this->normalizeMobileNumber($user?->phone);
 
         return [
             'InvoiceValue' => round($amount, 2),
             'DisplayCurrencyIso' => $config['currency'],
             'CustomerName' => trim(($user?->first_name ?? '') . ' ' . ($user?->last_name ?? '')) ?: 'Customer',
-            'CustomerEmail' => $user?->email,
-            'CustomerMobile' => $user?->phone,
-            'MobileCountryCode' => '+966',
+            'CustomerEmail' => $user?->email ?: 'customer@example.com',
+            'CustomerMobile' => $mobile,
+            'MobileCountryCode' => '966',
             'CustomerReference' => $reference,
             'UserDefinedField' => json_encode([
                 'organization_id' => $organizationId,
                 'user_id' => $userId,
                 'plan_id' => $planSegment,
+                'requested_amount' => round($amount, 2),
+                'requested_currency' => $config['currency'],
             ]),
             'CallBackUrl' => url('/payment/myfatoorah/success'),
             'ErrorUrl' => url('/payment/myfatoorah/error'),
@@ -148,15 +149,28 @@ class MyFatoorahPaymentProcessor
                     'UnitPrice' => round($amount, 2),
                 ],
             ],
-            'Suppliers' => [],
-            'ProcessingDetails' => [
-                'AutoCapture' => true,
-                'Bypass3DS' => false,
-            ],
-            'CustomerCivilId' => null,
-            'ExpiryDate' => null,
-            'SourceInfo' => $companyName,
         ];
+    }
+
+    /**
+     * @deprecated Use buildSendPaymentPayload() — ExecutePayment requires PaymentMethodId.
+     */
+    public function buildExecutePaymentPayload(float $amount, int $organizationId, int $userId, mixed $planId = null): array
+    {
+        return $this->buildSendPaymentPayload($amount, $organizationId, $userId, $planId);
+    }
+
+    private function normalizeMobileNumber(?string $phone): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $phone);
+
+        if (str_starts_with($digits, '966')) {
+            $digits = substr($digits, 3);
+        }
+
+        $digits = ltrim($digits, '0');
+
+        return substr($digits, 0, 11) ?: '500000000';
     }
 
     private function paymentAlreadyProcessed(string $paymentId, string $invoiceId): bool

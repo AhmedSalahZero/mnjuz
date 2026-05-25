@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\MyFatoorah\MyFatoorahApiClient;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -17,7 +18,7 @@ class BillingPaymentResource extends JsonResource
             'payment_status' => $this->payment_status,
             'payment_method' => $this->payment_method,
             'amount' => number_format((float) $this->amount, 2, '.', ''),
-            'currency' => $this->currency ?? config('myfatoorah.currency', 'SAR'),
+            'currency' => $this->currency ?? MyFatoorahApiClient::resolveConfig()['currency'],
             'created_at' => $this->created_at ?? null,
         ];
     }

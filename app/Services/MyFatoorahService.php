@@ -47,34 +47,42 @@ class MyFatoorahService
                 ];
             }
 
-            $payload = $this->processor->buildExecutePaymentPayload(
+            $payload = $this->processor->buildSendPaymentPayload(
                 (float) $amount,
                 $organizationId,
                 $userId,
                 $planId
             );
 
-            $response = $this->client()->executePayment($payload);
+            $response = $this->client()->sendPayment($payload);
 
-            if (!($response->IsSuccess ?? false) || empty($response->Data->PaymentURL)) {
+            $data = $response->Data ?? null;
+            $paymentUrl = is_object($data)
+                ? ($data->InvoiceURL ?? $data->PaymentURL ?? null)
+                : ($data['InvoiceURL'] ?? $data['PaymentURL'] ?? null);
+
+            if (!($response->IsSuccess ?? false) || empty($paymentUrl)) {
+                $validationMessage = $this->formatValidationErrors($response->ValidationErrors ?? null);
+
                 return (object) [
                     'success' => false,
-                    'error' => $response->Message ?? __('Unable to initialize MyFatoorah payment.'),
+                    'error' => $validationMessage ?: ($response->Message ?? __('Unable to initialize MyFatoorah payment.')),
                 ];
             }
 
             Log::info('MyFatoorah payment initialized', [
-                'invoice_id' => $response->Data->InvoiceId ?? null,
+                'invoice_id' => is_object($data) ? ($data->InvoiceId ?? null) : ($data['InvoiceId'] ?? null),
                 'organization_id' => $organizationId,
                 'user_id' => $userId,
                 'plan_id' => $planId,
                 'amount' => $amount,
+                'payment_url' => $paymentUrl,
             ]);
 
             return (object) [
                 'success' => true,
-                'data' => $response->Data->PaymentURL,
-                'invoice_id' => $response->Data->InvoiceId ?? null,
+                'data' => $paymentUrl,
+                'invoice_id' => is_object($data) ? ($data->InvoiceId ?? null) : ($data['InvoiceId'] ?? null),
             ];
         } catch (\Throwable $exception) {
             Log::error('MyFatoorah handlePayment failed', [
@@ -83,7 +91,9 @@ class MyFatoorahService
 
             return (object) [
                 'success' => false,
-                'error' => __('Could not initialize payment. Please try again.'),
+                'error' => str_contains($exception->getMessage(), 'timed out')
+                    ? __('Could not reach MyFatoorah. Check your internet connection and try again.')
+                    : __('Could not initialize payment. Please try again.'),
             ];
         }
     }
@@ -109,10 +119,16 @@ class MyFatoorahService
 
             $data = $statusResponse->Data ?? null;
 
+            if (is_array($data)) {
+                $data = (object) $data;
+            }
+
             if (!$this->isPaidStatus($data)) {
+                $failureReason = $this->extractFailureReason($data);
+
                 return (object) [
                     'success' => false,
-                    'message' => __('Payment was not completed successfully.'),
+                    'message' => $failureReason ?: __('Payment was not completed successfully.'),
                     'payment_status' => $data->InvoiceStatus ?? null,
                 ];
             }
@@ -202,7 +218,7 @@ class MyFatoorahService
         $transactions = $data->InvoiceTransactions ?? [];
 
         foreach ($transactions as $transaction) {
-            $transaction = (object) $transaction;
+            $transaction = is_array($transaction) ? (object) $transaction : $transaction;
             $transactionStatus = strtoupper((string) ($transaction->TransactionStatus ?? ''));
 
             if (in_array($transactionStatus, ['SUCCSS', 'SUCCESS', 'PAID'], true)) {
@@ -211,6 +227,32 @@ class MyFatoorahService
         }
 
         return false;
+    }
+
+    private function extractFailureReason(object $data): ?string
+    {
+        foreach ($data->InvoiceTransactions ?? [] as $transaction) {
+            $transaction = is_array($transaction) ? (object) $transaction : $transaction;
+            $status = strtoupper((string) ($transaction->TransactionStatus ?? ''));
+
+            if (in_array($status, ['FAILED', 'CANCELED', 'CANCELLED'], true)) {
+                $error = trim((string) ($transaction->Error ?? ''));
+
+                if ($error !== '') {
+                    return __('Payment failed: :reason', ['reason' => $error]);
+                }
+
+                return __('Payment was declined by the gateway.');
+            }
+        }
+
+        $invoiceStatus = strtolower((string) ($data->InvoiceStatus ?? ''));
+
+        if ($invoiceStatus === 'pending') {
+            return __('Payment is still pending. Please complete the payment on MyFatoorah or try again.');
+        }
+
+        return null;
     }
 
     private function buildContextFromStatusResponse(object $data, string $paymentId): array
@@ -229,7 +271,7 @@ class MyFatoorahService
         $transaction = null;
 
         foreach ($data->InvoiceTransactions ?? [] as $item) {
-            $item = (object) $item;
+            $item = is_array($item) ? (object) $item : $item;
 
             if ((string) ($item->PaymentId ?? '') === $paymentId) {
                 $transaction = $item;
@@ -238,19 +280,101 @@ class MyFatoorahService
         }
 
         if ($transaction === null && !empty($data->InvoiceTransactions)) {
-            $transaction = (object) $data->InvoiceTransactions[0];
+            $first = $data->InvoiceTransactions[0];
+            $transaction = is_array($first) ? (object) $first : $first;
         }
+
+        $amountDetails = $this->resolvePaymentAmount($data, $userDefined, $transaction);
 
         return [
             'payment_id' => $paymentId,
             'invoice_id' => (string) ($data->InvoiceId ?? ''),
-            'amount' => (float) ($data->InvoiceValue ?? $data->InvoiceDisplayValue ?? 0),
-            'currency' => (string) ($data->InvoiceDisplayCurrency ?? config('myfatoorah.currency', 'SAR')),
+            'amount' => $amountDetails['amount'],
+            'currency' => $amountDetails['currency'],
             'payment_method' => (string) ($transaction->PaymentGateway ?? $transaction->PaymentMethod ?? ''),
             'payment_status' => strtolower((string) ($data->InvoiceStatus ?? 'paid')),
             'organization_id' => (int) ($reference['organization_id'] ?? 0),
             'user_id' => (int) ($reference['user_id'] ?? 0),
             'plan_id' => $reference['plan_id'],
         ];
+    }
+
+    /**
+     * Resolve the amount credited to the customer account.
+     *
+     * In MyFatoorah sandbox (KWT test token), InvoiceValue is in KWD while the
+     * customer-facing amount stays in SAR (InvoiceDisplayValue). Production SA
+     * accounts charge in SAR directly.
+     */
+    private function resolvePaymentAmount(object $data, ?array $userDefined, ?object $transaction): array
+    {
+        if (is_array($userDefined) && !empty($userDefined['requested_amount'])) {
+            return [
+                'amount' => (float) $userDefined['requested_amount'],
+                'currency' => (string) ($userDefined['requested_currency'] ?? MyFatoorahApiClient::resolveConfig()['currency']),
+            ];
+        }
+
+        $displayParsed = $this->parseInvoiceDisplayValue($data->InvoiceDisplayValue ?? null);
+
+        if ($displayParsed !== null) {
+            return $displayParsed;
+        }
+
+        $currency = strtoupper((string) (
+            $data->InvoiceDisplayCurrency
+            ?? $transaction->PaidCurrency
+            ?? $transaction->Currency
+            ?? MyFatoorahApiClient::resolveConfig()['currency']
+        ));
+
+        $currency = match ($currency) {
+            'KD' => 'KWD',
+            'SR' => 'SAR',
+            default => $currency,
+        };
+
+        return [
+            'amount' => (float) ($data->InvoiceValue ?? 0),
+            'currency' => $currency,
+        ];
+    }
+
+    private function parseInvoiceDisplayValue(?string $displayValue): ?array
+    {
+        if (empty($displayValue)) {
+            return null;
+        }
+
+        if (!preg_match('/^([\d,.]+)\s*([A-Za-z]{2,3}|SR)?/i', trim($displayValue), $matches)) {
+            return null;
+        }
+
+        $currency = strtoupper($matches[2] ?? 'SAR');
+
+        return [
+            'amount' => (float) str_replace(',', '', $matches[1]),
+            'currency' => match ($currency) {
+                'SR' => 'SAR',
+                'KD' => 'KWD',
+                default => $currency,
+            },
+        ];
+    }
+
+    private function formatValidationErrors(mixed $validationErrors): ?string
+    {
+        if (empty($validationErrors)) {
+            return null;
+        }
+
+        $messages = [];
+
+        foreach ($validationErrors as $error) {
+            $error = (object) $error;
+            $messages[] = trim(($error->Name ?? '') . ': ' . ($error->Error ?? ''));
+        }
+
+        return implode(' | ', array_filter($messages)) ?: null;
     }
 }

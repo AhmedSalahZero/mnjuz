@@ -336,6 +336,7 @@
 								v-model="form.method"
 								:methods="props.methods"
 							/>
+							<p v-if="paymentError" class="text-[#b91c1c] text-xs mt-2">{{ paymentError }}</p>
 							<div class="mt-8">
 								<button
 									v-if="(buttonLoading == false && form.method != null) || (buttonLoading == false && amountDue <= 0)"
@@ -380,6 +381,7 @@ import { router, useForm } from "@inertiajs/vue3"
 import { ref } from 'vue'
 import AppLayout from "./../Layout/App.vue"
 import PaymentMethodSelector from '@/Components/Payment/PaymentMethodSelector.vue'
+import { redirectToPaymentGateway } from '@/Composables/usePaymentGatewayRedirect'
 
 const props = defineProps(['addons', 'enable_ai_billing', 'plans', 'methods', 'subscription', 'subscriptionDetails'])
 const subscriptionDetails = ref(props.subscriptionDetails)
@@ -394,6 +396,7 @@ const form1 = useForm({
 })
 
 const buttonLoading = ref(false)
+const paymentError = ref(null)
 
 const selectedPlan = ref({
 	name: props.subscription?.plan?.name,
@@ -505,10 +508,17 @@ const applyCoupon = () => {
 
 const submitForm = async () => {
 	buttonLoading.value = true
+	paymentError.value = null
 
-	form.post('/subscription', {
-		preserveScroll: true,
-	})
+	try {
+		await redirectToPaymentGateway('/subscription', {
+			plan: form.plan,
+			method: form.method,
+		})
+	} catch (error) {
+		paymentError.value = error.message
+		buttonLoading.value = false
+	}
 }
 
 const convertToInt = (numberInput) => {

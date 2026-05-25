@@ -82,8 +82,11 @@
                     <FormSelect v-model="form.status" :name="$t('Status')" :options="statusOptions" :error="form.errors.status" class="sm:col-span-6" />
                 </div>
 
+                <p class="text-xs text-gray-500 mb-2">
+                    {{ $t('API key, environment mode, currency, and webhook secret are managed here — not from .env.') }}
+                </p>
                 <p class="text-xs text-gray-500 mb-4">
-                    {{ $t('Webhook URL') }}: {{ $t('Use') }} /webhook/myfatoorah
+                    {{ $t('Webhook URL') }}: /webhook/myfatoorah
                 </p>
 
                 <div class="mt-4 flex">

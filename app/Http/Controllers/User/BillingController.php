@@ -91,15 +91,29 @@ class BillingController extends BaseController
         $response = $paymentPlatform->handlePayment($request->amount);
 
         if ($response->success === true) {
-            return inertia::location($response->data);
-        } else {
-            return redirect('/billing')->with(
-                'status', [
-                    'type' => 'error', 
-                    'message' => __('Could not process your payment successfully!')
-                ]
-            );
+            if ($request->boolean('redirect_json') || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'redirect_url' => $response->data,
+                ]);
+            }
+
+            return Inertia::location($response->data);
         }
+
+        if ($request->boolean('redirect_json') || $request->ajax()) {
+            return response()->json([
+                'success' => false,
+                'message' => $response->error ?? __('Could not process your payment successfully!'),
+            ], 422);
+        }
+
+        return redirect('/billing')->with(
+            'status', [
+                'type' => 'error',
+                'message' => $response->error ?? __('Could not process your payment successfully!'),
+            ]
+        );
     }
 
     private function paymentMethods(){

@@ -64,8 +64,22 @@ class SubscriptionController extends BaseController
 
         if($response){
             if($response->success){
+                if ($request->boolean('redirect_json') || $request->ajax()) {
+                    return response()->json([
+                        'success' => true,
+                        'redirect_url' => $response->data,
+                    ]);
+                }
+
                 return inertia::location($response->data);
             } else {
+                if ($request->boolean('redirect_json') || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $response->error ?? __('Could not process your payment successfully!'),
+                    ], 422);
+                }
+
                 return Redirect::back()->with(
                     'status', [
                         'type' => 'error', 

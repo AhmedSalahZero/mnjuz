@@ -30,6 +30,7 @@ class PaymentRequest extends FormRequest
         $rules = [
             'amount' => [ 'required', 'numeric' ],
             'method' => [ 'required' ],
+            'redirect_json' => [ 'nullable', 'boolean' ],
         ];
 
         return $rules;
