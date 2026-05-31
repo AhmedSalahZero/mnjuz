@@ -403,7 +403,8 @@ class AuthController extends BaseController
                     
                     // Register first social-login device (new account)
                     if (!$user->device) {
-                        $this->userDeviceService->registerOrTouch($user, $this->userDeviceService->extractDeviceData($request));
+                        $deviceData = $this->userDeviceService->extractDeviceData($request);
+                        $this->userDeviceService->registerOrTouch($user, $deviceData, $this->userDeviceService->getDeviceCategory($deviceData));
                     }
 
                     // Log the user in
@@ -496,7 +497,8 @@ class AuthController extends BaseController
                 }
 
                 if (!$user->device) {
-                    $this->userDeviceService->registerOrTouch($user, $this->userDeviceService->extractDeviceData($request));
+                    $deviceData = $this->userDeviceService->extractDeviceData($request);
+                    $this->userDeviceService->registerOrTouch($user, $deviceData, $this->userDeviceService->getDeviceCategory($deviceData));
                 }
 
                 Auth::guard('user')->login($user, true);
@@ -881,10 +883,13 @@ class AuthController extends BaseController
     private function validateDeviceAndRegister(Request $request, User $user)
     {
         $deviceData = $this->userDeviceService->extractDeviceData($request);
-        $existingDevice = $user->device;
+        $category   = $this->userDeviceService->getDeviceCategory($deviceData);
+
+        // كل category (web / mobile) مستقلة — نجلب الجهاز المسجّل لهذا الـ category فقط
+        $existingDevice = $user->deviceForCategory($category);
 
         if (!$existingDevice) {
-            $this->userDeviceService->registerOrTouch($user, $deviceData);
+            $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
             return null;
         }
 
@@ -901,7 +906,7 @@ class AuthController extends BaseController
             ])->withInput()->with('show_reset_devices_link', true);
         }
 
-        $this->userDeviceService->registerOrTouch($user, $deviceData);
+        $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
         return null;
     }
 }

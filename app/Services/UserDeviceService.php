@@ -70,6 +70,11 @@ class UserDeviceService
         ];
     }
 
+    public function getDeviceCategory(array $deviceData): string
+    {
+        return ($deviceData['device_type'] ?? '') === 'mobile' ? 'mobile' : 'web';
+    }
+
     public function matches(UserDevice $stored, array $current): bool
     {
         return $this->normalized($stored->browser) === $this->normalized($current['browser'] ?? null)
@@ -77,9 +82,12 @@ class UserDeviceService
             && $this->normalized($stored->device_type) === $this->normalized($current['device_type'] ?? null);
     }
 
-    public function registerOrTouch(User $user, array $deviceData): UserDevice
+    public function registerOrTouch(User $user, array $deviceData, string $category = null): UserDevice
     {
-        $device = $user->device;
+        $category = $category ?? $this->getDeviceCategory($deviceData);
+        $deviceData['device_category'] = $category;
+
+        $device = $user->deviceForCategory($category);
 
         if (!$device) {
             return UserDevice::create([

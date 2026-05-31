@@ -138,6 +138,16 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasOne(UserDevice::class);
     }
+
+    public function devices()
+    {
+        return $this->hasMany(UserDevice::class);
+    }
+
+    public function deviceForCategory(string $category)
+    {
+        return $this->devices()->where('device_category', $category)->first();
+    }
 	// public static function sendNewMessageReceivedToFirestore(int $contactId,array $additionalDataToBeSent = []){
 	// 	try{
 	// 		$firestore = new Firestore;

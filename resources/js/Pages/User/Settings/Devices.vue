@@ -11,30 +11,46 @@
 
                         <div v-if="isLoading" class="text-slate-500">{{ $t('Loading...') }}</div>
 
-                        <div v-else-if="!device" class="text-slate-500">
+                        <div v-else-if="!devices.length" class="text-slate-500">
                             {{ $t('No linked device found') }}
                         </div>
 
-                        <div v-else class="border border-slate-200 rounded-lg p-4">
-                            <div class="text-base font-medium">{{ device.device_name || $t('Unknown device') }}</div>
-                            <div class="text-slate-600 mt-1">
-                                {{ device.browser || $t('Unknown browser') }} - {{ device.platform || $t('Unknown platform') }}
-                            </div>
-                            <div class="text-slate-500 mt-1">
-                                {{ $t('Device Type') }}: {{ formatDeviceType(device.device_type) }}
-                            </div>
-                            <div class="text-slate-500 mt-1">
-                                {{ $t('Last active') }}: {{ formatDate(device.last_used_at) }}
-                            </div>
-
-                            <button
-                                type="button"
-                                @click="isOpenRemoveModal = true"
-                                class="mt-4 rounded-md bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700"
-                                :disabled="isRemoving"
+                        <div v-else class="flex flex-col gap-3">
+                            <div
+                                v-for="device in devices"
+                                :key="device.id"
+                                class="border border-slate-200 rounded-lg p-4"
                             >
-                                {{ $t('Remove Device') }}
-                            </button>
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-base font-medium flex items-center gap-2">
+                                            <span>{{ device.device_name || $t('Unknown device') }}</span>
+                                            <span
+                                                class="text-xs px-2 py-0.5 rounded-full"
+                                                :class="device.device_category === 'mobile'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : 'bg-blue-100 text-blue-700'"
+                                            >
+                                                {{ device.device_category === 'mobile' ? $t('Mobile') : $t('Web') }}
+                                            </span>
+                                        </div>
+                                        <div class="text-slate-600 mt-1">
+                                            {{ device.browser || $t('Unknown browser') }} - {{ device.platform || $t('Unknown platform') }}
+                                        </div>
+                                        <div class="text-slate-500 mt-1">
+                                            {{ $t('Last active') }}: {{ formatDate(device.last_used_at) }}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @click="confirmRemove(device)"
+                                        class="rounded-md bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700"
+                                        :disabled="isRemoving"
+                                    >
+                                        {{ $t('Remove') }}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -78,19 +94,26 @@ const props = defineProps(['modules'])
 const isLoading = ref(true)
 const isRemoving = ref(false)
 const isOpenRemoveModal = ref(false)
-const device = ref(null)
+const devices = ref([])
+const deviceToRemove = ref(null)
 
 const closeModal = () => {
     isOpenRemoveModal.value = false
+    deviceToRemove.value = null
 }
 
-const fetchDevice = async () => {
+const confirmRemove = (device) => {
+    deviceToRemove.value = device
+    isOpenRemoveModal.value = true
+}
+
+const fetchDevices = async () => {
     isLoading.value = true
     try {
         const response = await axios.get('/settings/device')
-        device.value = response?.data?.data ?? null
+        devices.value = response?.data?.data ?? []
     } catch (error) {
-        device.value = null
+        devices.value = []
     } finally {
         isLoading.value = false
     }
@@ -99,7 +122,9 @@ const fetchDevice = async () => {
 const removeDevice = async () => {
     isRemoving.value = true
     try {
-        await axios.delete('/settings/device')
+        await axios.delete('/settings/device', {
+            data: { device_id: deviceToRemove.value?.id }
+        })
         window.location.href = '/login'
     } finally {
         isRemoving.value = false
@@ -107,24 +132,12 @@ const removeDevice = async () => {
     }
 }
 
-const formatDeviceType = (value) => {
-    const map = {
-        desktop: 'Desktop',
-        mobile: 'Mobile',
-        tablet: 'Tablet',
-    }
-    return map[value] ? map[value] : value || 'Unknown'
-}
-
 const formatDate = (value) => {
-    if (!value) {
-        return '-'
-    }
-
+    if (!value) return '-'
     return new Date(value).toLocaleString()
 }
 
 onMounted(() => {
-    fetchDevice()
+    fetchDevices()
 })
 </script>

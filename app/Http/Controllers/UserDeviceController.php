@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\UserDeviceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class UserDeviceController extends Controller
 {
+    public function __construct(protected UserDeviceService $deviceService) {}
+
     public function show(Request $request)
     {
         $user = $request->user();
 
+        // إرجاع كل الأجهزة المرتبطة (web و mobile منفصلين)
         return response()->json([
             'success' => true,
-            'data' => $user?->device,
+            'data' => $user?->devices()->orderBy('last_used_at', 'desc')->get(),
         ]);
     }
 
@@ -28,8 +32,13 @@ class UserDeviceController extends Controller
             ], 401);
         }
 
-        if ($user->device) {
-            $user->device->delete();
+        // حذف الجهاز الخاص بالـ category الحالي فقط (web أو mobile)
+        $deviceData = $this->deviceService->extractDeviceData($request);
+        $category   = $this->deviceService->getDeviceCategory($deviceData);
+        $device     = $user->deviceForCategory($category);
+
+        if ($device) {
+            $device->delete();
         }
 
         if ($request->user()->currentAccessToken()) {

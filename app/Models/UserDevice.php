@@ -19,6 +19,7 @@ class UserDevice extends Model
         'user_id',
         'device_name',
         'device_type',
+        'device_category',
         'browser',
         'platform',
         'user_agent',
