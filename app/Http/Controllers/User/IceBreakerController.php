@@ -191,6 +191,34 @@ class IceBreakerController extends BaseController
         ]);
     }
 
+    public function checkMeta(Request $request)
+    {
+        if (!$this->isFeatureEnabled()) {
+            return response()->json(['success' => false, 'message' => 'Feature not enabled'], 403);
+        }
+
+        $organizationId = $this->getCurrentOrganizationId();
+        $organization = Organization::find($organizationId);
+        $config = $organization->metadata ? json_decode($organization->metadata, true) : [];
+        $whatsapp = $config['whatsapp'] ?? [];
+
+        $service = new \App\Services\WhatsappService(
+            $whatsapp['access_token'] ?? null,
+            config('graph.api_version'),
+            $whatsapp['app_id'] ?? null,
+            $whatsapp['phone_number_id'] ?? null,
+            $whatsapp['waba_id'] ?? null,
+            $organizationId
+        );
+
+        $result = $service->getConversationalAutomation();
+
+        return response()->json([
+            'success' => true,
+            'meta_data' => $result,
+        ]);
+    }
+
     protected function abortIfDemo()
     {
         $organizationId = session()->get('current_organization');
