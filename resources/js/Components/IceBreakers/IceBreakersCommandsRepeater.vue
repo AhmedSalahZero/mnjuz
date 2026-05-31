@@ -29,14 +29,14 @@
                                     <input
                                         v-model="element.command_name"
                                         type="text"
-                                        maxlength="30"
-                                        dir="ltr"
-                                        class="w-full rounded-md border border-gray-300 py-2 ps-7 pe-14 text-sm focus:border-primary focus:ring-primary"
-                                        :placeholder="$t('Command name')"
-                                        @input="onNameInput(index)"
-                                    />
+                                    maxlength="32"
+                                    dir="ltr"
+                                    class="w-full rounded-md border border-gray-300 py-2 ps-7 pe-14 text-sm focus:border-primary focus:ring-primary"
+                                    :placeholder="$t('Command name')"
+                                    @input="onNameInput(index)"
+                                />
                                     <span class="absolute inset-y-0 end-3 flex items-center text-xs text-slate-400 pointer-events-none">
-                                        {{ (element.command_name || '').length }}/30
+                                        {{ (element.command_name || '').length }}/32
                                     </span>
                                 </div>
                             </div>
@@ -100,7 +100,7 @@ const props = defineProps({
     },
     max: {
         type: Number,
-        default: 4,
+        default: 30,
     },
 })
 
@@ -130,7 +130,7 @@ const syncToParent = () => {
     )
 }
 
-const sanitizeName = (value) => value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 30)
+const sanitizeName = (value) => value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 32)
 
 const onNameInput = (index) => {
     localItems.value[index].command_name = sanitizeName(localItems.value[index].command_name || '')

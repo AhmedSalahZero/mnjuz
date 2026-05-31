@@ -17,7 +17,7 @@ class SyncWhatsappCommandsRequest extends FormRequest
         $organizationId = session()->get('current_organization');
 
         return [
-            'items' => 'present|array|max:4',
+            'items' => 'present|array|max:30',
             'items.*.id' => [
                 'nullable',
                 'integer',
@@ -25,7 +25,7 @@ class SyncWhatsappCommandsRequest extends FormRequest
                     return $query->where('organization_id', $organizationId);
                 }),
             ],
-            'items.*.command_name' => 'required|string|max:30|regex:/^[a-zA-Z0-9_]+$/',
+            'items.*.command_name' => 'required|string|max:32|regex:/^[a-zA-Z0-9_]+$/',
             'items.*.command_description' => 'required|string|max:256',
             'items.*.sort_order' => 'required|integer|min:0',
         ];
