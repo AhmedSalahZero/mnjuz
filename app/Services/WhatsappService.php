@@ -1570,6 +1570,18 @@ class WhatsappService
         return $responseObject;
     }
 
+    public function syncIceBreakers(array $prompts, array $commands = [])
+    {
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/conversational_automation";
+        $headers = $this->setHeaders();
+        $requestData = [
+            'prompts' => array_values($prompts),
+            'commands' => array_values($commands),
+        ];
+
+        return $this->sendHttpRequest('POST', $url, $requestData, $headers);
+    }
+
     public function deRegisterPhone(){
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/deregister";
         

@@ -67,4 +67,9 @@ return [
     'pabbly subscriptions' => [
         'class' => Modules\Pabbly\Controllers\ProcessPayment::class,
     ],
+
+    'firebase' => [
+        'project_id' => env('FIREBASE_PROJECT_ID'),
+        'credentials' => env('FIREBASE_CREDENTIALS', resource_path('firebase/wazz-chat-firebase-adminsdk-fbsvc-bd4e1c725b.json')),
+    ],
 ];

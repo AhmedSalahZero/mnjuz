@@ -32,6 +32,12 @@
                                 <span>{{ $t('Contact fields') }}</span>
                             </Link>
                         </li>
+                        <li v-if="$page.props.organization?.plan?.features?.ice_breakers" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/conversations') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/settings/conversations" class="flex items-center p-2 space-x-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2m0 14H6l-2 2V4h16z"/></svg>
+                                <span>{{ $t('Conversation components') }}</span>
+                            </Link>
+                        </li>
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/tickets') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/tickets" class="flex items-center p-2 space-x-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2a2 2 0 0 1-2 2v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a2 2 0 0 1-2-2a2 2 0 0 1 2-2V6a2 2 0 0 0-2-2zm0 2h16v2.54c-1.24.71-2 2.03-2 3.46s.76 2.75 2 3.46V18H4v-2.54c1.24-.71 2-2.03 2-3.46s-.76-2.75-2-3.46z"/></svg>

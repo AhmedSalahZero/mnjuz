@@ -56,6 +56,16 @@ class Handler extends ExceptionHandler
     {
         // For API requests, return JSON responses instead of HTML views
         if ($request->expectsJson() || $request->is('api/*')) {
+            // AuthenticationException must be handled before isHttpException check
+            // because it is NOT an HttpException and would otherwise fall through to 500
+            if ($exception instanceof AuthenticationException) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Unauthenticated'),
+                    'error' => __('You are not authenticated. Please login first.'),
+                ], 401);
+            }
+
             if ($this->isHttpException($exception)) {
                 $statusCode = method_exists($exception, 'getStatusCode') ? $exception->getStatusCode() : 500;
                 return response()->json([

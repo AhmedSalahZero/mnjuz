@@ -10,6 +10,7 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\SubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
@@ -100,6 +101,15 @@ class HandleInertiaRequests extends Middleware
                 ->get();
             $organization = Organization::where('id', $organizationId)
                 ->first(['id', 'uuid', 'name', 'metadata', 'address']);
+            $organizationArray = $organization ? $organization->toArray() : null;
+            if ($organizationArray) {
+                $organizationArray['plan'] = [
+                    'features' => [
+                        'ice_breakers' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'ice_breakers'),
+                    ],
+                ];
+                $organization = $organizationArray;
+            }
             $unreadMessages = Chat::where('organization_id', $organizationId)
                 ->where('type', 'inbound')
                 ->where('deleted_at', NULL)

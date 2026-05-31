@@ -115,6 +115,9 @@ class ChatMetadataHelper
         if ($keys === array_keys(array_values($block))) {
             return array_fill_keys($allowedKeys, null);
         }
-        return array_intersect_key($block, $allowed);
+        $filtered = array_intersect_key($block, $allowed);
+        // لو ما في أي مفتاح مسموح موجود، نُرجع map بقيم null بدل [] الفارغة
+        // لأن json_encode([]) = "[]" (list) وليس "{}" (object)
+        return empty($filtered) ? array_fill_keys($allowedKeys, null) : $filtered;
     }
 }

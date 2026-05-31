@@ -59,6 +59,7 @@ class SubscriptionPlanService
                 'ai_audio_response_limit' => $request->input('ai_audio_response_limit'),
                 'addons' => $request->input('addons', []),
                 'contact_categories_enabled' => $request->input('contact_categories_enabled', 0),
+                'ice_breakers' => $request->input('ice_breakers', 0),
             ]),
         ]);
 
@@ -96,6 +97,7 @@ class SubscriptionPlanService
         $metadata['ai_audio_response_limit'] = $request->input('ai_audio_response_limit');
         $metadata['addons'] = $request->input('addons', []);
         $metadata['contact_categories_enabled'] = $request->input('contact_categories_enabled', 0);
+        $metadata['ice_breakers'] = $request->input('ice_breakers', 0);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');

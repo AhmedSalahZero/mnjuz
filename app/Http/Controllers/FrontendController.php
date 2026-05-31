@@ -48,7 +48,7 @@ class FrontendController extends BaseController
 
     public function pages(Request $request, $slug){
         $name = str_replace('-', ' ', $slug);
-        $page = Page::where('name', $name)->first();
+        $page = Page::where('name', $name)->firstOrFail();
 
         $data['page'] = new PageResource($page);
         $data['pages'] = Page::get();

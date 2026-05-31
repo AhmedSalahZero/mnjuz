@@ -77,10 +77,18 @@ class SendNewChatPushNotificationJob implements ShouldQueue
                 'createdAt'       => now()->format('Y-m-d H:i:s'),
             ];
 
-            // Single FCM client serves every recipient. Constructed once
-            // because it pulls a fresh OAuth token from the Firebase admin
-            // SDK on every instantiation.
+            // Single FCM client serves every recipient. Auth is lazy so a
+            // bad/missing service account does not throw during construction.
             $fcm = new FcmNotification();
+            if (! $fcm->isConfigured()) {
+                Log::warning('SendNewChatPushNotificationJob skipped: FCM not configured', [
+                    'organization_id' => $this->organizationId,
+                    'contact_id' => $this->contactId,
+                    'error' => $fcm->getLastAuthError(),
+                ]);
+
+                return;
+            }
 
             foreach ($users as $user) {
                 $tokens = $user->getDeviceTokens();

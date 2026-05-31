@@ -152,20 +152,33 @@ class ProcessIncomingMessageJob implements ShouldQueue
         $phone = PhoneService::getE164Format(
             '+' . ltrim($this->message['from'], '+')
         );
-        $contact = Contact::firstOrCreate(
-            [
-                'organization_id' => $this->organizationId,
-                'phone' => $phone,
-            ],
-            [
-                'first_name' => $this->contactData['profile']['name'] ?? null,
-                'last_name' => null,
-                'email' => null,
-                'created_by' => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]
-        );
+
+        try {
+            $contact = Contact::firstOrCreate(
+                [
+                    'organization_id' => $this->organizationId,
+                    'phone' => $phone,
+                ],
+                [
+                    'first_name' => $this->contactData['profile']['name'] ?? null,
+                    'last_name' => null,
+                    'email' => null,
+                    'created_by' => 0,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Duplicate key — جوب آخر سبق وأنشأ نفس الرقم، نجلب الموجود
+            if ($e->errorInfo[1] === 1062) {
+                $contact = Contact::where('organization_id', $this->organizationId)
+                    ->where('phone', $phone)
+                    ->firstOrFail();
+            } else {
+                throw $e;
+            }
+        }
+
         return [$contact, $contact->wasRecentlyCreated];
     }
 
@@ -178,16 +191,38 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function createChat($contact)
     {
-        return Chat::create([
-            'organization_id' => $this->organizationId,
-            'wam_id' => $this->message['id'],
-            'contact_id' => $contact->id,
-            'type' => 'inbound',
-            'metadata' => json_encode(\App\Helpers\ChatMetadataHelper::minimalPayloadForStorage($this->message)),
-            'created_at' =>  now(),
-            'status' => 'delivered',
-            'is_read' => 0,
-        ]);
+        $wamId = $this->message['id'];
+
+        // تحقق سريع من الـ cache قبل الوصول للـ DB
+        if (Cache::has("wam_processed_{$wamId}")) {
+            Log::info('ProcessIncomingMessageJob: duplicate wam_id skipped (cache)', ['wam_id' => $wamId]);
+            return null;
+        }
+
+        try {
+            $chat = Chat::create([
+                'organization_id' => $this->organizationId,
+                'wam_id' => $wamId,
+                'contact_id' => $contact->id,
+                'type' => 'inbound',
+                'metadata' => json_encode(\App\Helpers\ChatMetadataHelper::minimalPayloadForStorage($this->message)),
+                'created_at' => now(),
+                'status' => 'delivered',
+                'is_read' => 0,
+            ]);
+
+            Cache::put("wam_processed_{$wamId}", true, 3600);
+
+            return $chat;
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Duplicate wam_id — الرسالة معالَجة مسبقاً
+            if ($e->errorInfo[1] === 1062) {
+                Log::info('ProcessIncomingMessageJob: duplicate wam_id skipped (DB)', ['wam_id' => $wamId]);
+                Cache::put("wam_processed_{$wamId}", true, 3600);
+                return null;
+            }
+            throw $e;
+        }
     }
 
     private function hasMedia()

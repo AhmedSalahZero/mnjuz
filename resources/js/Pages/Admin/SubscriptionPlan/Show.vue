@@ -116,6 +116,17 @@
                         <FormToggleSwitch v-model="form.contact_categories_enabled" class="float-left"/>
                     </div>
                 </div>
+                <div class="py-5 sm:flex border-b">
+                    <div class="hidden sm:block w-[40%] mb-1">
+                        <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Enable Ice Breakers') }}</h1>
+                        <div class="text-xs text-slate-700 flex items-center">
+                            <span>{{ $t('When enabled, organizations on this plan can configure WhatsApp conversation starter ice breakers.') }}</span>
+                        </div>
+                    </div>
+                    <div class="sm:w-[20%]">
+                        <FormToggleSwitch v-model="form.ice_breakers" class="float-left"/>
+                    </div>
+                </div>
                 <div class="py-6">
                     <button type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         {{ $t('Save') }}
@@ -179,6 +190,7 @@ const trans = useTrans();
         receive_messages_after_expiration: getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == 1 || getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == null ? true : false,
         addons: getAddons(props.plan?.metadata, 'addons'),
         contact_categories_enabled: getDetail(props.plan?.metadata, 'contact_categories_enabled') == 1 || getDetail(props.plan?.metadata, 'contact_categories_enabled') === true,
+        ice_breakers: getDetail(props.plan?.metadata, 'ice_breakers') == 1 || getDetail(props.plan?.metadata, 'ice_breakers') === true,
     })
 
     const statusOptions = ref([

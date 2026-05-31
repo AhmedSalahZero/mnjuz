@@ -3,7 +3,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build"
     },
     "devDependencies": {
         "@vitejs/plugin-vue": "^4.6.2",

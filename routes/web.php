@@ -240,6 +240,9 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'deleteWhatsappIntegration']);
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
+                    Route::get('/settings/conversations', [App\Http\Controllers\User\IceBreakerController::class, 'index']);
+                    Route::post('/settings/conversations/ice-breakers/sync', [App\Http\Controllers\User\IceBreakerController::class, 'sync']);
+                    Route::post('/settings/conversations/commands/sync', [App\Http\Controllers\User\IceBreakerController::class, 'syncCommands']);
                     Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
                     Route::get('/settings/devices', [App\Http\Controllers\User\SettingController::class, 'devices']);
                     Route::get('/settings/device', [App\Http\Controllers\UserDeviceController::class, 'show']);
