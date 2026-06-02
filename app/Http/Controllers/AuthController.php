@@ -401,10 +401,11 @@ class AuthController extends BaseController
                         session()->put('current_organization', $organization->id);
                     }
                     
-                    // Register first social-login device (new account)
-                    if (!$user->device) {
-                        $deviceData = $this->userDeviceService->extractDeviceData($request);
-                        $this->userDeviceService->registerOrTouch($user, $deviceData, $this->userDeviceService->getDeviceCategory($deviceData));
+                    // Register social-login device per category (web/mobile)
+                    $deviceData = $this->userDeviceService->extractDeviceData($request);
+                    $category   = $this->userDeviceService->getDeviceCategory($deviceData);
+                    if (!$user->deviceForCategory($category)) {
+                        $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
                     }
 
                     // Log the user in
@@ -496,9 +497,10 @@ class AuthController extends BaseController
                     $user->sendEmailVerificationNotification();
                 }
 
-                if (!$user->device) {
-                    $deviceData = $this->userDeviceService->extractDeviceData($request);
-                    $this->userDeviceService->registerOrTouch($user, $deviceData, $this->userDeviceService->getDeviceCategory($deviceData));
+                $deviceData = $this->userDeviceService->extractDeviceData($request);
+                $category   = $this->userDeviceService->getDeviceCategory($deviceData);
+                if (!$user->deviceForCategory($category)) {
+                    $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
                 }
 
                 Auth::guard('user')->login($user, true);

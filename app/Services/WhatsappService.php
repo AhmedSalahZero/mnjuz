@@ -1584,10 +1584,10 @@ class WhatsappService
 
     public function getConversationalAutomation()
     {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}";
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}?fields=conversational_automation";
         $headers = $this->setHeaders();
 
-        return $this->sendHttpRequest('GET', $url, ['fields' => 'conversational_automation'], $headers);
+        return $this->sendHttpRequest('GET', $url, [], $headers);
     }
 
     public function deRegisterPhone(){
