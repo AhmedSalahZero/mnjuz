@@ -296,24 +296,15 @@ class ApiController extends Controller
    
     public function listContactGroups(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'page' => 'integer|min:1',
-            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['error' => $validator->errors()], 400);
-        }
-
-        $page = $request->input('page', 1);
-        $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
             $organizationId = $request->user()->current_mobile_organization_id;
         }
+
         $contactGroups = ContactGroup::where('organization_id', $organizationId)
             ->where('deleted_at', null)
-            ->paginate($perPage, ['*'], 'page', $page);
+            ->orderBy('name')
+            ->get();
 
         return ContactGroupResource::collection($contactGroups);
     }
