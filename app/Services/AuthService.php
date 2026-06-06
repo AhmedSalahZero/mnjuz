@@ -28,6 +28,8 @@ class AuthService
 
             session()->put('current_organization', $team->organization_id);
         }
-        $request->session()->regenerate();
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
     }
 }

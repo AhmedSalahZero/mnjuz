@@ -214,7 +214,11 @@ class AuthController extends BaseController
         } else {
             Auth::guard($guard)->login($user, $remember);
         }
-        $request->session()->regenerate();
+
+        // API routes لا تستخدم session middleware — regenerate للويب فقط
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 		/**
 		 * @var User $user
 		 */
