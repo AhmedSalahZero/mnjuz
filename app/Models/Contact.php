@@ -190,31 +190,36 @@ class Contact extends Model
             });
         });
 
-        // ✅ شروط التذاكر مع JOIN على آخر تذكرة فقط (is_latest = true لتجنب تكرار الـ contact)
+        // ✅ شروط التذاكر — نستخدم subquery للحصول على آخر ticket فقط لكل contact
+        // (is_latest = true قد يكون مكرراً لنفس الـ contact → LEFT JOIN ينتج صفوفاً مكررة)
         if ($ticketingActive) {
-            $query->leftJoin('chat_tickets', function ($join) {
-                $join->on('contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.is_latest', true);
-            });
+            // subquery: آخر ticket ID لكل contact
+            $latestTicketSub = DB::table('chat_tickets as t_inner')
+                ->select('t_inner.contact_id', DB::raw('MAX(t_inner.id) as max_ticket_id'))
+                ->groupBy('t_inner.contact_id');
+
+            $query->leftJoinSub($latestTicketSub, 'lt', function ($join) {
+                $join->on('contacts.id', '=', 'lt.contact_id');
+            })->leftJoin('chat_tickets as ct', 'ct.id', '=', 'lt.max_ticket_id');
 
             // إضافة أعمدة التذكرة (للفلترة من جهة العميل)
             $query->addSelect([
-                'chat_tickets.status as ticket_status',
-                'chat_tickets.assigned_to as ticket_assigned_to',
+                'ct.status as ticket_status',
+                'ct.assigned_to as ticket_assigned_to',
             ]);
 
             // فلترة حسب الحالة (عند الفلترة من جهة العميل نحمّل الكل ولا نفلتر هنا)
             if (!$clientSideFilter) {
                 if ($ticketState === 'unassigned') {
-                    $query->whereNull('chat_tickets.assigned_to');
+                    $query->whereNull('ct.assigned_to');
                 } elseif ($ticketState !== null && $ticketState !== 'all') {
-                    $query->where('chat_tickets.status', $ticketState);
+                    $query->where('ct.status', $ticketState);
                 }
             }
 
             // صلاحيات الوكلاء
             if ($role === 'agent' && !$allowAgentsViewAllChats) {
-                $query->where('chat_tickets.assigned_to', auth()->id());
+                $query->where('ct.assigned_to', auth()->id());
             }
         }
 
@@ -235,7 +240,8 @@ class Contact extends Model
         // ✅ الترتيب باستخدام العمود الموجود
         $query
 		->with('organization')
-		->orderBy('contacts.latest_chat_created_at', $sortDirection);
+		->orderBy('contacts.latest_chat_created_at', $sortDirection)
+		->orderBy('contacts.id', 'desc');
 		/**
 		 * @var Builder $query 
 		 */

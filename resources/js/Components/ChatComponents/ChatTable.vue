@@ -300,6 +300,24 @@ function onScroll() {
 	}
 }
 
+let _loadMorePending = false
+function onScrollThrottled() {
+	if (_loadMorePending) return
+	const el = scrollContainer.value
+	if (!el) return
+	scrollTop.value = el.scrollTop
+	if (!containerHeight.value && el.clientHeight) containerHeight.value = el.clientHeight
+	if (props.hasMoreContacts && !props.isLoadingMoreContacts) {
+		const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+		if (distanceFromBottom < 300) {
+			_loadMorePending = true
+			emit('load-more-contacts')
+			// Reset after a safe delay to allow the parent's isLoadingMoreContacts to propagate
+			setTimeout(() => { _loadMorePending = false }, 500)
+		}
+	}
+}
+
 function updateContainerHeight() {
 	const el = scrollContainer.value
 	if (el) containerHeight.value = el.clientHeight
@@ -378,7 +396,7 @@ onUnmounted(() => {
 			</div>
 		</div>
 	</div>
-	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer" @scroll="onScroll">
+	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer" @scroll="onScrollThrottled">
 		<div :style="{ height: virtualList.totalHeight + 'px', position: 'relative' }">
 			<div :style="{ transform: `translateY(${virtualList.offsetY}px)` }">
 				<a v-for="item in virtualList.visibleItems" :key="item.contact.uuid"

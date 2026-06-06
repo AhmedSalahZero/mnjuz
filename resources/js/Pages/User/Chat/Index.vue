@@ -99,7 +99,22 @@ const props = defineProps({
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
 const unsubscribeChatChannel = ref(null)
 
-const rows = ref(props.rows)
+// deduplication helper: يزيل جهات الاتصال المكررة بنفس id (قد تنتج عن JOIN مع tickets)
+function deduplicateContacts(data) {
+	if (!Array.isArray(data)) return data
+	const seen = new Set()
+	return data.filter(c => {
+		if (seen.has(c.id)) return false
+		seen.add(c.id)
+		return true
+	})
+}
+
+const rows = ref(
+	props.rows?.data
+		? { ...props.rows, data: deduplicateContacts(props.rows.data) }
+		: props.rows
+)
 const rowCount = ref(props.rowCount)
 const isCategoryFilterActive = ref(false)
 const scrollContainer2 = ref(null)
@@ -130,7 +145,10 @@ async function loadMoreContacts() {
 		const response = await axios.get('/chats-load-more?' + params.toString())
 		const newData = response.data
 		const currentData = rows.value?.data ?? []
-		rows.value = { data: [...currentData, ...(newData.data ?? [])] }
+		// Deduplication: avoid showing the same contact twice (pagination boundary issue)
+		const existingIds = new Set(currentData.map(c => c.id))
+		const uniqueNew = (newData.data ?? []).filter(c => !existingIds.has(c.id))
+		rows.value = { data: [...currentData, ...uniqueNew] }
 		rowCount.value = newData.rowCount ?? rowCount.value
 		hasMoreContacts.value = newData.hasMoreContacts ?? false
 		nextContactsPage.value = newData.nextContactsPage ?? null
@@ -147,7 +165,9 @@ watch(
 	() => props.rows,
 	(newRows) => {
 		if (!isCategoryFilterActive.value) {
-			rows.value = newRows
+			rows.value = newRows?.data
+				? { ...newRows, data: deduplicateContacts(newRows.data) }
+				: newRows
 		}
 	},
 )

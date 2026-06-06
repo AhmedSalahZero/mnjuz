@@ -214,6 +214,7 @@ class AuthController extends BaseController
         } else {
             Auth::guard($guard)->login($user, $remember);
         }
+        $request->session()->regenerate();
 		/**
 		 * @var User $user
 		 */
@@ -768,7 +769,8 @@ class AuthController extends BaseController
         
         // Web authentication
         Auth::guard('user')->logout();
-        Session::flush();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
         return redirect('login');
     }
