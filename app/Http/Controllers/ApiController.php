@@ -69,7 +69,6 @@ class ApiController extends Controller
         $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
 
         $contacts = Contact::where('organization_id', $organizationId)
-            ->where('deleted_at', null)
             ->with(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color'])
             ->when($searchTerm !== null && $searchTerm !== '', function ($q) use ($searchTerm) {
                 $q->where(function ($sub) use ($searchTerm) {
@@ -915,8 +914,7 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('phone', $phone)->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')->first();
+        $contact = Contact::where('phone', $phone)->where('organization_id', $organizationId)->first();
 
         if (!$contact) {
             $contact = new Contact();
@@ -1024,8 +1022,7 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('phone', $phone)->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')->first();
+        $contact = Contact::where('phone', $phone)->where('organization_id', $organizationId)->first();
 
         if (!$contact) {
             $contact = new Contact();
@@ -1504,7 +1501,6 @@ class ApiController extends Controller
 
         // Step 1: Load only contacts that have matching chat_logs (skip empty contacts)
         $contactsQuery = Contact::where('organization_id', $orgId)
-            ->whereNull('deleted_at')
             ->with([
                 'contactCategories:id,name,uuid,background_color,text_color',
                 'ticket:id,status,assigned_to,contact_id',

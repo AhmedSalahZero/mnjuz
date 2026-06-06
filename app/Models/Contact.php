@@ -190,36 +190,32 @@ class Contact extends Model
             });
         });
 
-        // ✅ شروط التذاكر — نستخدم subquery للحصول على آخر ticket فقط لكل contact
-        // (is_latest = true قد يكون مكرراً لنفس الـ contact → LEFT JOIN ينتج صفوفاً مكررة)
+        // ✅ شروط التذاكر — JOIN مباشر على is_latest لاستخدام الـ index (contact_id, is_latest)
+        // ملاحظة: migration 2026_06_06 يضمن صف واحد فقط بـ is_latest=true لكل contact
         if ($ticketingActive) {
-            // subquery: آخر ticket ID لكل contact
-            $latestTicketSub = DB::table('chat_tickets as t_inner')
-                ->select('t_inner.contact_id', DB::raw('MAX(t_inner.id) as max_ticket_id'))
-                ->groupBy('t_inner.contact_id');
-
-            $query->leftJoinSub($latestTicketSub, 'lt', function ($join) {
-                $join->on('contacts.id', '=', 'lt.contact_id');
-            })->leftJoin('chat_tickets as ct', 'ct.id', '=', 'lt.max_ticket_id');
+            $query->leftJoin('chat_tickets', function ($join) {
+                $join->on('contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.is_latest', true);
+            });
 
             // إضافة أعمدة التذكرة (للفلترة من جهة العميل)
             $query->addSelect([
-                'ct.status as ticket_status',
-                'ct.assigned_to as ticket_assigned_to',
+                'chat_tickets.status as ticket_status',
+                'chat_tickets.assigned_to as ticket_assigned_to',
             ]);
 
             // فلترة حسب الحالة (عند الفلترة من جهة العميل نحمّل الكل ولا نفلتر هنا)
             if (!$clientSideFilter) {
                 if ($ticketState === 'unassigned') {
-                    $query->whereNull('ct.assigned_to');
+                    $query->whereNull('chat_tickets.assigned_to');
                 } elseif ($ticketState !== null && $ticketState !== 'all') {
-                    $query->where('ct.status', $ticketState);
+                    $query->where('chat_tickets.status', $ticketState);
                 }
             }
 
             // صلاحيات الوكلاء
             if ($role === 'agent' && !$allowAgentsViewAllChats) {
-                $query->where('ct.assigned_to', auth()->id());
+                $query->where('chat_tickets.assigned_to', auth()->id());
             }
         }
 

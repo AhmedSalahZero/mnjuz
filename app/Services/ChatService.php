@@ -29,7 +29,6 @@ use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -776,32 +775,17 @@ class ChatService
 	
     private function ensureChatTicketsExist()
     {
-        // ✅ استخدام Cache لتجنب تشغيل هذا في كل طلب
- //       $cacheKey = "chat_tickets_created_{$this->organizationId}";
-        
-        // تشغيل مرة واحدة كل ساعة
-        // if (Cache::has($cacheKey)) {
-        //     return;
-        // }
+        $contactsWithoutTickets = DB::table('contacts')
+            ->select('contacts.id')
+            ->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+            ->where('contacts.organization_id', $this->organizationId)
+            ->whereNull('contacts.deleted_at')
+            ->whereNotNull('contacts.latest_chat_created_at')
+            ->whereNull('chat_tickets.id')
+            ->pluck('contacts.id');
 
-   //     try {
-            // ✅ إيجاد جهات الاتصال بدون تذاكر (استعلام واحد)
-            $contactsWithoutTickets = DB::table('contacts')
-                ->select('contacts.id')
-                ->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                ->where('contacts.organization_id', $this->organizationId)
-                ->whereNull('contacts.deleted_at')
-                ->whereNotNull('contacts.latest_chat_created_at')
-                ->whereNull('chat_tickets.id')
-                ->pluck('contacts.id');
-
-            // if ($contactsWithoutTickets->isEmpty()) {
-            //     Cache::put($cacheKey, true, 3600); // ساعة واحدة
-            //     return;
-            // }
-
-            //  إنشاء دفعي - استعلام واحد فقط!
-            $now =  now();
+        if (!$contactsWithoutTickets->isEmpty()) {
+            $now = now();
             $ticketsData = $contactsWithoutTickets->map(function ($contactId) use ($now) {
                 return [
                     'contact_id' => $contactId,
@@ -813,20 +797,11 @@ class ChatService
                 ];
             })->toArray();
 
-            //  إدراج دفعي - Query واحد بدلاً من 1000!
-            if (!empty($ticketsData)) {
-                // تقسيم إلى chunks لتجنب مشاكل memory
-                collect($ticketsData)->chunk(500)->each(function ($chunk) {
-                    ChatTicket::insert($chunk->toArray());
-                });
-            }
-
-            // وضع علامة أن العملية تمت
-         //   Cache::put($cacheKey, true, 3600); // ساعة واحدة
-
-        // } catch (\Exception $e) {
-        //     Log::error('Error creating chat tickets: ' . $e->getMessage());
-        // }
+            collect($ticketsData)->chunk(500)->each(function ($chunk) {
+                // INSERT IGNORE لتجنب إنشاء tickets مكررة عند race conditions
+                DB::table('chat_tickets')->insertOrIgnore($chunk->toArray());
+            });
+        }
     }
     public function blockContact(Organization $organization, Contact $contact)
     {
