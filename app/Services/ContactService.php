@@ -22,6 +22,42 @@ class ContactService
         $this->organizationId = $organizationId;
     }
 
+    /**
+     * يبحث عن contact بالرقم داخل الشركة أو ينشئه.
+     * يستخدم نفس تنسيق E.164 المستخدم في webhook الوارد (ProcessIncomingMessageJob)
+     * لضمان عدم إنشاء contact مكرر لنفس الرقم.
+     */
+    public function findOrCreateByPhone(string $phone, array $attributes = []): Contact
+    {
+        $e164 = PhoneService::getE164Format(PhoneService::normalize($phone));
+        if (!$e164) {
+            throw new \InvalidArgumentException('Invalid phone number');
+        }
+
+        $defaults = [
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        try {
+            return Contact::firstOrCreate(
+                [
+                    'organization_id' => $this->organizationId,
+                    'phone' => $e164,
+                ],
+                array_merge($defaults, $attributes)
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] === 1062) {
+                return Contact::where('organization_id', $this->organizationId)
+                    ->where('phone', $e164)
+                    ->firstOrFail();
+            }
+            throw $e;
+        }
+    }
+
     public function store(object $request, $uuid = null){
         $contact = $uuid === null ? new Contact() : Contact::where('uuid', $uuid)->firstOrFail();
 		if($request->has('first_name')){

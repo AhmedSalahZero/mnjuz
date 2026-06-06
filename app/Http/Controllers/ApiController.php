@@ -810,30 +810,8 @@ class ApiController extends Controller
             ], 403);
         }
 
-        // Check if the contact exists, if not, create a new one
-        $phone = $request->phone;
+        $contact = $this->resolveContactByPhone($request, $organizationId);
 
-        if (substr($phone, 0, 1) !== '+') {
-            $phone = '+' . $phone;
-        }
-
-        $phone = new PhoneNumber($phone);
-        $phone = $phone->formatE164();
-
-        $contact = Contact::where('organization_id', $organizationId)->where('phone', $phone)->first();
-
-        if (!$contact) {
-            $contact = new Contact();
-            $contact->organization_id = $organizationId;
-            $contact->first_name = $request->first_name;
-            $contact->last_name = $request->last_name;
-            $contact->email = $request->email;
-            $contact->phone = $phone;
-            $contact->created_by = 0;
-            $contact->save();
-        }
-
-        // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);
         $type = !isset($request->buttons) ? 'text' : 'interactive buttons';
 
@@ -844,12 +822,22 @@ class ApiController extends Controller
         }
         
         $message = $this->whatsappService->sendMessage($contact->uuid, $request->message, 0, $type, $request->buttons, $header, $request->footer);
+
+        $data = $message;
+        if ($message === null) {
+            $data = [
+                'queued' => true,
+                'contact_id' => $contact->id,
+                'contact_uuid' => $contact->uuid,
+                'phone' => $contact->phone,
+            ];
+        }
         
         return response()->json([
             'statusCode' => 200,
             'success' => true,
             'message' => $message === null ? __('Message queued for sending.') : null,
-            'data' => $message
+            'data' => $data,
         ], 200);
     }
     public function sendMsg(Request $request)
@@ -904,30 +892,8 @@ class ApiController extends Controller
             ], 403);
         }
 
-        // Check if the contact exists, if not, create a new one
-        $phone = $request->phone;
+        $contact = $this->resolveContactByPhone($request, $organizationId);
 
-        if (substr($phone, 0, 1) !== '+') {
-            $phone = '+' . $phone;
-        }
-
-        $phone = new PhoneNumber($phone);
-        $phone = $phone->formatE164();
-
-        $contact = Contact::where('phone', $phone)->where('organization_id', $organizationId)->first();
-
-        if (!$contact) {
-            $contact = new Contact();
-            $contact->organization_id = $organizationId;
-            $contact->first_name = $request->first_name;
-            $contact->last_name = $request->last_name;
-            $contact->email = $request->email;
-            $contact->phone = $phone;
-            $contact->created_by = 0;
-            $contact->save();
-        }
-
-        // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);
         $responseObject = $this->whatsappService->sendTemplateMessage($contact->uuid, $request->template, 0, null, null, $sendByQueue);
 
@@ -1012,28 +978,7 @@ class ApiController extends Controller
             ], 403);
         }
 
-        // Check if the contact exists, if not, create a new one
-        $phone = $request->phone;
-
-        if (substr($phone, 0, 1) !== '+') {
-            $phone = '+' . $phone;
-        }
-
-        $phone = new PhoneNumber($phone);
-        $phone = $phone->formatE164();
-
-        $contact = Contact::where('phone', $phone)->where('organization_id', $organizationId)->first();
-
-        if (!$contact) {
-            $contact = new Contact();
-            $contact->organization_id = $organizationId;
-            $contact->first_name = $request->first_name;
-            $contact->last_name = $request->last_name;
-            $contact->email = $request->email;
-            $contact->phone = $phone;
-            $contact->created_by = 0;
-            $contact->save();
-        }
+        $contact = $this->resolveContactByPhone($request, $organizationId);
 
         // If we have saved template parameters (e.g. auth template from settings), build full template with components for WhatsApp.
         $templateParameters = $request->input('template_parameters');
@@ -1168,30 +1113,8 @@ class ApiController extends Controller
             ], 403);
         }
 
-        // Check if the contact exists, if not, create a new one
-        $phone = $request->phone;
+        $contact = $this->resolveContactByPhone($request, $organizationId);
 
-        if (substr($phone, 0, 1) !== '+') {
-            $phone = '+' . $phone;
-        }
-
-        $phone = new PhoneNumber($phone);
-        $phone = $phone->formatE164();
-
-        $contact = Contact::where('organization_id', $organizationId)->where('phone', $phone)->first();
-
-        if (!$contact) {
-            $contact = new Contact();
-            $contact->organization_id = $organizationId;
-            $contact->first_name = $request->first_name;
-            $contact->last_name = $request->last_name;
-            $contact->email = $request->email;
-            $contact->phone = $phone;
-            $contact->created_by = 0;
-            $contact->save();
-        }
-
-        // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);
         $type = !isset($request->buttons) ? 'text' : 'interactive';
 
@@ -1248,27 +1171,8 @@ class ApiController extends Controller
             ], 403);
         }
 
-        // Check if the contact exists, if not, create a new one
-        $phone = $request->phone;
+        $contact = $this->resolveContactByPhone($request, $organizationId);
 
-        if (substr($phone, 0, 1) !== '+') {
-            $phone = '+' . $phone;
-        }
-
-        $phone = new PhoneNumber($phone);
-        $phone = $phone->formatE164();
-
-        $contact = Contact::where('organization_id', $organizationId)->where('phone', $phone)->first();
-        if (!$contact) {
-            $contact = new Contact();
-            $contact->organization_id = $organizationId;
-            $contact->first_name = $request->first_name;
-            $contact->last_name = $request->last_name;
-            $contact->email = $request->email;
-            $contact->phone = $phone;
-            $contact->created_by = 0;
-            $contact->save();
-        }
         $file = $request->file('file');
 		logger('sendFileMessage');
 		logger(json_encode([
@@ -1296,9 +1200,35 @@ class ApiController extends Controller
             'statusCode' => 200,
             'success' => true,
             'message' => __('Message sent successfully'),
-         //   'data' => $message
+            'data' => [
+                'queued' => true,
+                'contact_id' => $contact->id,
+                'contact_uuid' => $contact->uuid,
+                'phone' => $contact->phone,
+            ],
         ], 200);
     }
+
+    private function resolveContactByPhone(Request $request, int $organizationId): Contact
+    {
+        $contactService = new ContactService($organizationId);
+
+        $contact = $contactService->findOrCreateByPhone($request->phone, array_filter([
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'email' => $request->email,
+        ], fn ($value) => $value !== null && $value !== ''));
+
+        if ($request->filled('first_name') && blank($contact->first_name)) {
+            $contact->update([
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+            ]);
+        }
+
+        return $contact;
+    }
+
     private static function getFileTypeFromExtension($extension)
     {
         $extension = strtolower($extension);

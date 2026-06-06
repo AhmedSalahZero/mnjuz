@@ -25,15 +25,16 @@ use Illuminate\Support\Facades\Broadcast;
  * User must be subscribing to their own channel and belong to the organization.
  */
 Broadcast::channel('chats.ch{organizationId}.{userId}', function ($user, $organizationId, $userId) {
-	// if ((int) $user->id !== (int) $userId) {
-	// 	return false;
-	// }
-	// $belongsToOrg = Team::where('organization_id', (int) $organizationId)
-	// 	->where('user_id', $user->id)
-	// 	->exists();
-	// if (!$belongsToOrg) {
-	// 	return false;
-	// }
+	if ((int) $user->id !== (int) $userId) {
+		return false;
+	}
+	$belongsToOrg = Team::where('organization_id', (int) $organizationId)
+		->where('user_id', $user->id)
+		->whereNull('deleted_at')
+		->exists();
+	if (!$belongsToOrg) {
+		return false;
+	}
 	return [
 		'id' => $user->id,
 	];
