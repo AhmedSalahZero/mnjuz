@@ -141,7 +141,9 @@ class Contact extends Model
         $allowAgentsViewAllChats = true,
         $clientSideFilter = false,
         $eagerLoadCategories = false,
- 	   ) {
+        $perPage = null,
+        $page = 1,
+    ) {
         $query = $this->newQuery()
             ->select([
                 'contacts.id',
@@ -237,8 +239,10 @@ class Contact extends Model
 		/**
 		 * @var Builder $query 
 		 */
+		if ($perPage !== null) {
+			return $query->paginate($perPage, ['*'], 'contact_page', $page);
+		}
 		return $query->get();
-		// $perPage = Request()->input('per_page', 20);
 		// return $query->paginate($perPage); // for web app pagination
 
     }

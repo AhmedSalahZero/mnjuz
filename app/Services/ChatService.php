@@ -171,13 +171,17 @@ class ChatService
 		$rowCount = -1;
 		$pusherSettings = [];
 		$contacts = [];
+		$hasMoreContacts = false;
+		$nextContactsPage = null;
 	
 		if(!$skipRowsQuery){
 			// عند تفعيل التذاكر نحمّل كل الجهات مع ticket_status للفلترة من جهة العميل
 			$queryTicketState = $ticketingActive ? 'all' : $ticketState;
 			$clientSideFilter = $ticketingActive;
 			$contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
-			$contactsQuery = $contact->contactsWithChatsOptimized(
+
+			$contactPage = $request->input('contact_page', 1);
+			$contactsPaginated = $contact->contactsWithChatsOptimized(
 				$this->organizationId,
 				$searchTerm,
 				$ticketingActive,
@@ -187,10 +191,14 @@ class ChatService
 				$allowAgentsToViewAllChats,
 				$clientSideFilter,
 				$contactCategoriesEnabled,
+				50,
+				$contactPage,
 			);
 
-			$contacts = $contactsQuery;
-			$rowCount = count($contacts);
+			$contacts = $contactsPaginated;
+			$rowCount = $contactsPaginated->total();
+			$hasMoreContacts = $contactsPaginated->hasMorePages();
+			$nextContactsPage = $hasMoreContacts ? (int)$contactPage + 1 : null;
 			$pusherSettings = Setting::whereIn('key', [
 				'pusher_app_id',
 				'pusher_app_key',
@@ -202,7 +210,6 @@ class ChatService
 
 		$rowsForResponse = is_array($contacts) ? $contacts : ContactListResource::collection($contacts);
         // $rowCount = $contacts->total();
-		
 
         // تجنّب N+1: ربط الـ organization مرة واحدة لاستخدامه في ContactResource
      //   $contacts->getCollection()->each(fn ($c) => $c->setRelation('organization', $config));
@@ -304,6 +311,8 @@ class ChatService
 					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
                     'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
+                    'hasMoreContacts' => $hasMoreContacts,
+                    'nextContactsPage' => $nextContactsPage,
                 ]);
             }
         }
@@ -341,8 +350,49 @@ class ChatService
                 'hasMoreMessages' => false,
                 'nextPage' => 1,
                 'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
+                'hasMoreContacts' => $hasMoreContacts,
+                'nextContactsPage' => $nextContactsPage,
             ]);
         }
+    }
+
+    public function getContactsPage($request)
+    {
+        $currentUser = auth()->user();
+        $role = $currentUser->getRoleNameForOrganization($this->organizationId);
+        if ($role === '') {
+            $role = OrganizationRole::OWNER;
+        }
+        $config = Organization::find($this->organizationId);
+        $ticketingActive = $config->getTicketingActive();
+        $allowAgentsToViewAllChats = $ticketingActive ? $config->getAllowAgentsToViewAllChats() : true;
+        $clientSideFilter = $ticketingActive;
+        $queryTicketState = $ticketingActive ? 'all' : ($request->status == null ? 'all' : $request->status);
+        $sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
+        $searchTerm = $request->query('search');
+        $contactPage = $request->input('contact_page', 1);
+        $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
+
+        $contactsPaginated = (new Contact)->contactsWithChatsOptimized(
+            $this->organizationId,
+            $searchTerm,
+            $ticketingActive,
+            $queryTicketState,
+            $sortDirection,
+            $role,
+            $allowAgentsToViewAllChats,
+            $clientSideFilter,
+            $contactCategoriesEnabled,
+            50,
+            $contactPage,
+        );
+
+        return response()->json([
+            'data' => ContactListResource::collection($contactsPaginated->items())->resolve(),
+            'hasMoreContacts' => $contactsPaginated->hasMorePages(),
+            'nextContactsPage' => $contactsPaginated->hasMorePages() ? (int)$contactPage + 1 : null,
+            'rowCount' => $contactsPaginated->total(),
+        ]);
     }
 
     public function handleTicketAssignment($contactId)

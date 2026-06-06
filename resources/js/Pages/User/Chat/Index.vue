@@ -6,6 +6,9 @@
 					:ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
 					:chatSortDirection="props.chat_sort_direction"
 					:contactCategoriesEnabled="props.contactCategoriesEnabled"
+					:hasMoreContacts="hasMoreContacts"
+					:isLoadingMoreContacts="isLoadingMoreContacts"
+					@load-more-contacts="loadMoreContacts"
 					@category-filter-change="onCategoryFilterChange" />
 			</div>
 			<div class="min-w-0 bg-cover flex flex-col chat-bg"
@@ -89,6 +92,8 @@ const props = defineProps({
 	user: Array,
 	timezone: String,
 	contactCategoriesEnabled: Boolean,
+	hasMoreContacts: { type: Boolean, default: false },
+	nextContactsPage: { type: Number, default: null },
 })
 
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
@@ -111,6 +116,30 @@ const ticketingIsEnabled = ref(settings.value?.tickets?.active ?? false)
 const chatThread = ref(props.chatThread)
 const contact = ref(props.contact)
 const templates = ref(props.templates ?? [])
+
+const hasMoreContacts = ref(props.hasMoreContacts)
+const nextContactsPage = ref(props.nextContactsPage)
+const isLoadingMoreContacts = ref(false)
+
+async function loadMoreContacts() {
+	if (isLoadingMoreContacts.value || !hasMoreContacts.value || nextContactsPage.value === null) return
+	isLoadingMoreContacts.value = true
+	try {
+		const params = new URLSearchParams(window.location.search)
+		params.set('contact_page', nextContactsPage.value)
+		const response = await axios.get('/chats-load-more?' + params.toString())
+		const newData = response.data
+		const currentData = rows.value?.data ?? []
+		rows.value = { data: [...currentData, ...(newData.data ?? [])] }
+		rowCount.value = newData.rowCount ?? rowCount.value
+		hasMoreContacts.value = newData.hasMoreContacts ?? false
+		nextContactsPage.value = newData.nextContactsPage ?? null
+	} catch (e) {
+		console.error('loadMoreContacts error', e)
+	} finally {
+		isLoadingMoreContacts.value = false
+	}
+}
 
 
 

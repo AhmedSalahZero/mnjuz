@@ -166,4 +166,9 @@ class ChatController extends BaseController
         
         return response()->json($messages);
     }
+
+    public function loadMoreContacts(Request $request)
+    {
+        return $this->chatService()->getContactsPage($request);
+    }
 }

@@ -40,13 +40,21 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	hasMoreContacts: {
+		type: Boolean,
+		default: false,
+	},
+	isLoadingMoreContacts: {
+		type: Boolean,
+		default: false,
+	},
 })
 
 const isSearching = ref(false)
 const selectedContact = ref(null)
 const scrollContainer = ref(null)
 const categoryFilterUuid = ref(null)
-const emit = defineEmits(['view', 'category-filter-change'])
+const emit = defineEmits(['view', 'category-filter-change', 'load-more-contacts'])
 
 function viewChat(contact) {
 	selectedContact.value = contact
@@ -282,6 +290,13 @@ function onScroll() {
 	if (el) {
 		scrollTop.value = el.scrollTop
 		if (!containerHeight.value && el.clientHeight) containerHeight.value = el.clientHeight
+		// Trigger load more when within 300px of the bottom
+		if (props.hasMoreContacts && !props.isLoadingMoreContacts) {
+			const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+			if (distanceFromBottom < 300) {
+				emit('load-more-contacts')
+			}
+		}
 	}
 }
 
@@ -524,6 +539,13 @@ onUnmounted(() => {
 				</a>
 			</div>
 		</div>
+	</div>
+	<!-- loading more indicator -->
+	<div v-if="isLoadingMoreContacts" class="flex justify-center items-center py-3 text-slate-400 text-sm">
+		<svg class="animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+			<path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8V2Z"/>
+		</svg>
+		{{ $t('Loading...') }}
 	</div>
 	<!-- <div class="px-4 pb-4">
 		<Pagination class="mt-3" :pagination="rows.meta" />
