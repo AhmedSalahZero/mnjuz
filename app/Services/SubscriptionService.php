@@ -53,7 +53,44 @@ class SubscriptionService
         if($billingDetails['amountDue'] == 0){
             self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
         } else {
-            $paymentPlatform = (new PaymentPlatformResolver())->resolveService($request->method);
+            if (empty($request->method)) {
+                return (object) [
+                    'success' => false,
+                    'error' => __('Please select a payment method.'),
+                ];
+            }
+
+            $resolver = new PaymentPlatformResolver();
+
+            if (! $resolver->isSupported($request->method)) {
+                Log::warning('Unsupported payment platform selected', [
+                    'method' => $request->method,
+                    'organization_id' => $organizationId,
+                    'user_id' => $userId,
+                ]);
+
+                return (object) [
+                    'success' => false,
+                    'error' => __('The selected payment method is not available. Please choose another method or contact support.'),
+                ];
+            }
+
+            try {
+                $paymentPlatform = $resolver->resolveService($request->method);
+            } catch (\Throwable $e) {
+                Log::warning('Payment platform resolution failed', [
+                    'method' => $request->method,
+                    'organization_id' => $organizationId,
+                    'user_id' => $userId,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return (object) [
+                    'success' => false,
+                    'error' => $e->getMessage(),
+                ];
+            }
+
             session()->put('paymentPlatform', $request->method);
 
             $amountDue = str_replace(',', '', $billingDetails['amountDue']);

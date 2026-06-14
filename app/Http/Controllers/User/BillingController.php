@@ -138,6 +138,6 @@ class BillingController extends BaseController
             $mergedData[] = ['name' => $addonName];
         }
 
-        return $mergedData;
+        return (new PaymentPlatformResolver())->filterSupportedMethods($mergedData);
     }
 }

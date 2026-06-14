@@ -356,7 +356,10 @@ class FlowExecutionService
         $fieldsArray = \Arr::get($metadataArray, "data.metadata.fields", null);
         $type = $fieldsArray['type'] ?? null;
 
-        $message = $this->replacePlaceholders($contact->uuid, $fieldsArray['body'] ?? '');
+        $message = mb_substr($this->replacePlaceholders($contact->uuid, $fieldsArray['body'] ?? ''), 0, 1024);
+        $footer = ($fieldsArray['footer'] ?? '') !== ''
+            ? mb_substr((string) $fieldsArray['footer'], 0, 60)
+            : '';
 
         // Initialize the header array if needed for interactive messages
         $header = $this->prepareHeader($fieldsArray ?? []);
@@ -371,6 +374,27 @@ class FlowExecutionService
                 ? 'interactive buttons'
                 : 'interactive call to action url';
             $buttonArray = $this->prepareButtonArray($fieldsArray ?? [], $buttonType);
+
+            if ($buttonType === 'interactive buttons' && $buttonArray === []) {
+                Log::error('Flow interactive buttons node has no valid buttons', [
+                    'flow_id' => $flowData->flow_id,
+                    'contact_id' => $contactId,
+                    'node_id' => $metadataArray['id'] ?? null,
+                ]);
+
+                return false;
+            }
+
+            if ($buttonType === 'interactive call to action url'
+                && (empty($buttonArray['url']) || empty($buttonArray['display_text']))) {
+                Log::error('Flow interactive CTA node is missing button text or URL', [
+                    'flow_id' => $flowData->flow_id,
+                    'contact_id' => $contactId,
+                    'node_id' => $metadataArray['id'] ?? null,
+                ]);
+
+                return false;
+            }
     
         } elseif ($type === 'interactive list') {
             $buttonType = 'interactive list';
@@ -380,6 +404,17 @@ class FlowExecutionService
             if ($buttonLabel !== '') {
                 $buttonLabel = mb_substr($buttonLabel, 0, 20);
             }
+        }
+
+        if (in_array($type, ['interactive buttons', 'interactive list'], true) && trim($message) === '') {
+            Log::error('Flow interactive node is missing body text', [
+                'flow_id' => $flowData->flow_id,
+                'contact_id' => $contactId,
+                'node_id' => $metadataArray['id'] ?? null,
+                'node_type' => $type,
+            ]);
+
+            return false;
         }
 
         $response = null;
@@ -414,7 +449,7 @@ class FlowExecutionService
                     $buttonType,
                     $buttonArray,
                     $header,
-                    ($fieldsArray['footer'] ?? ''),
+                    $footer,
                     $buttonLabel
                 );
                 break;
@@ -431,7 +466,12 @@ class FlowExecutionService
                 'contact_id' => $contactId,
                 'node_id' => $processedNodeId,
                 'node_type' => $type,
+                'button_type' => $buttonType,
+                'button_count' => is_array($buttonArray) ? count($buttonArray) : 0,
                 'error' => $errorMsg,
+                'error_code' => $response->data->error->code ?? null,
+                'error_subcode' => $response->data->error->error_subcode ?? null,
+                'fbtrace_id' => $response->data->error->fbtrace_id ?? null,
             ]);
             return false;
         }
@@ -603,18 +643,48 @@ class FlowExecutionService
         $header = [];
 
         if (($fieldsArray['headerType'] ?? '') === 'text') {
+            $headerText = mb_substr(trim((string) ($fieldsArray['headerText'] ?? '')), 0, 60);
+            if ($headerText === '') {
+                return [];
+            }
+
             $header = [
                 'type' => 'text',
-                'text' => clean($fieldsArray['headerText'] ?? ''),
+                'text' => clean($headerText),
             ];
         } elseif (($fieldsArray['headerType'] ?? '') !== 'none') {
-            $header['type'] = $fieldsArray['headerType'] ?? '';
-            $header[$fieldsArray['headerType'] ?? ''] = [
-                'link' => $fieldsArray['headerMedia']['path'] ?? '',
+            $headerType = (string) ($fieldsArray['headerType'] ?? '');
+            $headerMedia = $fieldsArray['headerMedia'] ?? [];
+            if (is_object($headerMedia)) {
+                $headerMedia = (array) $headerMedia;
+            }
+
+            $mediaLink = $this->normalizeMediaUrl((string) ($headerMedia['path'] ?? ''));
+            if ($mediaLink === '') {
+                return [];
+            }
+
+            $header['type'] = $headerType;
+            $header[$headerType] = [
+                'link' => $mediaLink,
             ];
         }
 
         return $header;
+    }
+
+    private function normalizeMediaUrl(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            return '';
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+
+        return rtrim((string) config('app.url'), '/') . '/' . ltrim($path, '/');
     }
 
     private function prepareButtonArray(array $fieldsArray, string $type): array
@@ -622,13 +692,24 @@ class FlowExecutionService
         $buttonArray = [];
 
         if ($type === 'interactive buttons') {
+            // WhatsApp Cloud API: max 3 reply buttons; title max 20 chars.
+            $maxButtons = 3;
+            $maxTitleLen = 20;
+
             foreach ($fieldsArray['buttons'] ?? [] as $id => $title) {
-                if (!empty($title)) {
-                    $buttonArray[] = [
-                        'id' => $id,
-                        'title' => $title,
-                    ];
+                if (count($buttonArray) >= $maxButtons) {
+                    break;
                 }
+
+                $title = mb_substr(trim((string) $title), 0, $maxTitleLen);
+                if ($title === '') {
+                    continue;
+                }
+
+                $buttonArray[] = [
+                    'id' => (string) $id,
+                    'title' => $title,
+                ];
             }
         } elseif ($type === 'interactive call to action url') {
             $displayText = $fieldsArray['ctaUrlButton']['displayText'] ?? '';

@@ -9,6 +9,7 @@ use App\Http\Requests\CouponRequest;
 use App\Http\Resources\SubscriptionPlanResource;
 use App\Models\Addon;
 use App\Models\PaymentGateway;
+use App\Resolvers\PaymentPlatformResolver;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\Setting;
@@ -160,6 +161,6 @@ class SubscriptionController extends BaseController
             $mergedData[] = ['name' => $addonName];
         }
 
-        return $mergedData;
+        return (new PaymentPlatformResolver())->filterSupportedMethods($mergedData);
     }
 }

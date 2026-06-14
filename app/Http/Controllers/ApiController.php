@@ -662,8 +662,10 @@ class ApiController extends Controller
             ], 403);
         }
 
+        $organizationId = $request->organization;
+
         if ($request->isMethod('post')) {
-            if (SubscriptionService::isSubscriptionFeatureLimitReached($request->organizationId, 'canned_replies_limit')) {
+            if (SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'canned_replies_limit')) {
                 return response()->json([
                     'statusCode' => 403,
                     'message' => __('You\'ve reached your limit. Upgrade your account'),
@@ -672,12 +674,22 @@ class ApiController extends Controller
         }
 
         try {
-            $model = $uuid == null ? new AutoReply : AutoReply::where('uuid', $uuid)->first();
-            $model['name'] = $request->name;
-            $model['trigger'] = $request->trigger;
-            $model['match_criteria'] = $request->match_criteria;
+            $model = $request->isMethod('post')
+                ? new AutoReply()
+                : AutoReply::where('uuid', $uuid)
+                    ->where('organization_id', $organizationId)
+                    ->whereNull('deleted_at')
+                    ->firstOrFail();
 
-            $metadata['type'] = $request->response_type;
+            $model->name = $request->name;
+            $model->trigger = $request->trigger;
+            $model->match_criteria = $request->match_criteria;
+
+            $metadata = [
+                'type' => $request->response_type,
+                'data' => [],
+            ];
+
             if ($request->response_type === 'image' || $request->response_type === 'audio') {
                 if ($request->hasFile('response')) {
                     $uploadedMedia = MediaService::upload($request->file('response'));
@@ -685,7 +697,17 @@ class ApiController extends Controller
                     $metadata['data']['file']['name'] = $uploadedMedia['name'];
                     $metadata['data']['file']['location'] = $uploadedMedia['path'];
                 } else {
-                    $media = json_decode($model->metadata)->data;
+                    $existingMetadata = json_decode($model->metadata ?? '{}');
+                    $media = $existingMetadata->data ?? null;
+
+                    if (!$media || !isset($media->file->name, $media->file->location)) {
+                        return response()->json([
+                            'statusCode' => 400,
+                            'message' => __('The given data was invalid.'),
+                            'errors' => ['response' => [__('Response file is required.')]],
+                        ], 400);
+                    }
+
                     $metadata['data']['file']['name'] = $media->file->name;
                     $metadata['data']['file']['location'] = $media->file->location;
                 }
@@ -695,13 +717,13 @@ class ApiController extends Controller
                 $metadata['data']['template'] = $request->response;
             }
 
-            $model['metadata'] = json_encode($metadata);
-            $model['updated_at'] = now();
+            $model->metadata = json_encode($metadata);
+            $model->updated_at = now();
 
-            if ($uuid === null) {
-                $model['organization_id'] = $request->organization;
-                $model['created_by'] = 0;
-                $model['created_at'] = now();
+            if ($request->isMethod('post')) {
+                $model->organization_id = $organizationId;
+                $model->created_by = 0;
+                $model->created_at = now();
             }
 
             $model->save();
@@ -710,13 +732,18 @@ class ApiController extends Controller
             $cleanModel = $model->makeHidden(['id', 'organization_id', 'created_by']);
 
             // Trigger webhook
-            WebhookHelper::triggerWebhookEvent($uuid === null ? 'autoreply.created' : 'autoreply.updated', $cleanModel, $request->organization);
+            WebhookHelper::triggerWebhookEvent($request->isMethod('post') ? 'autoreply.created' : 'autoreply.updated', $cleanModel, $organizationId);
 
             return response()->json([
                 'statusCode' => 200,
                 'id' => $model->uuid,
                 'message' => __('Request processed successfully')
             ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'statusCode' => 404,
+                'message' => __('Resource not found.'),
+            ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'statusCode' => 500,

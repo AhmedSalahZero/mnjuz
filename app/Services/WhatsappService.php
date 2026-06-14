@@ -479,7 +479,14 @@ class WhatsappService
             ->where('language', $templateContent['language']['code'])
             ->first();
 
-
+        if (!$template || empty($template->metadata)) {
+            return json_encode([
+                'type' => 'text',
+                'text' => [
+                    'body' => (string) ($templateContent['name'] ?? 'template'),
+                ],
+            ]);
+        }
 
         $template = json_decode($template->metadata);
         $templateMetadatas = $template->components;
@@ -502,7 +509,7 @@ class WhatsappService
                                 if($headerParameters && count($headerParameters) >= 1){
                                     foreach($headerParameters as $index => $parameter){
                                         $placeholder = '{{' . ($index + 1) . '}}';
-                                        $value = $parameter['type'] === 'text' ? $parameter['text'] : $this->getParameters($contact, $parameter['text']);
+                                        $value = $this->resolveTemplateParameterValue($parameter, $contact);
 
                                         $headerText = str_replace($placeholder, $value, $headerText);
                                     }
@@ -535,7 +542,7 @@ class WhatsappService
                                 if($bodyParameters && count($bodyParameters) >= 1){
                                     foreach($bodyParameters as $index => $parameter){
                                         $placeholder = '{{' . ($index + 1) . '}}';
-                                        $value = $parameter['type'] === 'text' ? $parameter['text'] : $this->getParameters($contact, $parameter['text']);
+                                        $value = $this->resolveTemplateParameterValue($parameter, $contact);
 
 
 
@@ -578,6 +585,45 @@ class WhatsappService
 
         //\Log::info(json_encode($array));
         return json_encode($array);
+    }
+
+    private function resolveTemplateParameterValue(array $parameter, $contact): string
+    {
+        $type = strtolower((string) ($parameter['type'] ?? 'text'));
+
+        if ($type === 'text') {
+            $text = (string) ($parameter['text'] ?? '');
+
+            return $text !== ''
+                ? $text
+                : (string) ($this->getParameters($contact, (string) ($parameter['value'] ?? '')) ?? '');
+        }
+
+        if ($type === 'currency') {
+            return (string) ($parameter['currency']['fallback_value'] ?? '');
+        }
+
+        if ($type === 'date_time') {
+            return (string) ($parameter['date_time']['fallback_value'] ?? '');
+        }
+
+        if ($type === 'image') {
+            return (string) ($parameter['image']['link'] ?? $parameter['image']['id'] ?? '');
+        }
+
+        if ($type === 'video') {
+            return (string) ($parameter['video']['link'] ?? $parameter['video']['id'] ?? '');
+        }
+
+        if ($type === 'document') {
+            return (string) ($parameter['document']['link'] ?? $parameter['document']['id'] ?? '');
+        }
+
+        if ($type === 'payload') {
+            return (string) ($parameter['payload'] ?? '');
+        }
+
+        return (string) ($this->getParameters($contact, (string) ($parameter['text'] ?? $parameter['value'] ?? '')) ?? '');
     }
 
     private function getParameters($contact, $parameter){

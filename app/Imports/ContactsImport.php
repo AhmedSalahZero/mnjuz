@@ -35,11 +35,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         try {
             $this->totalImports++;
 
-            $phoneNumberValue = $row['phone'];
-
-            if (!str_starts_with($phoneNumberValue, '+')) {
-                $phoneNumberValue = '+' . $phoneNumberValue;
-            }
+            $phoneNumberValue = trim((string) ($row['phone'] ?? ''));
 
             // Sequential Validation: First check the first_name field
             $validator = Validator::make($row, [
@@ -49,7 +45,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             // If first_name fails, stop further validation and return the error
             if ($validator->fails()) {
                 $this->failedImports[] = [
-                    'row' => $row['phone']??'-',
+                    'row' => $this->rowIdentifier($row),
                     'error' => __('First name required!')
                 ];
                 $this->failedImportsDueToFormat++;
@@ -57,24 +53,28 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             }
 
             // If first_name passes, proceed to validate the phone field
-            $validator = Validator::make($row, [
+            $validator = Validator::make(['phone' => $phoneNumberValue], [
                 'phone' => 'required', // Make phone required
             ]);
 
             // If phone is invalid, add the error and return
             if ($validator->fails()) {
                 $this->failedImports[] = [
-                    'row' => $row['phone'],
+                    'row' => $this->rowIdentifier($row),
                     'error' => __('Phone number required!')
                 ];
                 $this->failedImportsDueToFormat++;
                 return null;
             }
 
+            if (!str_starts_with($phoneNumberValue, '+')) {
+                $phoneNumberValue = '+' . $phoneNumberValue;
+            }
+
             // Now validate the phone number format
             if (!PhoneService::isValid($phoneNumberValue)) {
                 $this->failedImports[] = [
-                    'row' => $row['phone'],
+                    'row' => $this->rowIdentifier($row),
                     'error' => __('Invalid format!')
                 ];
                 $this->failedImportsDueToFormat++;
@@ -88,7 +88,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                     ->whereNull('deleted_at')
                     ->exists()) {
                 $this->failedImports[] = [
-                    'row' => $row['phone'],
+                    'row' => $this->rowIdentifier($row),
                     'error' => __('Duplicate phone number!')
                 ];
                 $this->failedImportsDueToDuplicates++;
@@ -105,7 +105,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 
                 if (($existingContactCount + 1) > $contactLimit) {
                     $this->failedImports[] = [
-                        'row' => $row['phone'],
+                        'row' => $this->rowIdentifier($row),
                         'error' => __('Contact limit reached!')
                     ];
                     $this->failedImportsDueToLimit++;
@@ -129,9 +129,9 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             $contact =  Contact::create([
                 'organization_id'  => $organizationId,
                 'first_name'  => $row['first_name'],
-                'last_name'   => $row['last_name'],
+                'last_name'   => $row['last_name'] ?? null,
                 'phone'       => PhoneService::getE164Format($phoneNumberValue), 
-                'email'       => $row['email'],
+                'email'       => $row['email'] ?? null,
                 'address'     => json_encode([
                     'street'  => $row['street'] ?? null,
                     'city'    => $row['city'] ?? null,
@@ -167,15 +167,35 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
                 return $contact;
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->failedImports[] = [
-                'row' => $row['phone'],
+                'row' => $this->rowIdentifier($row),
                 'error' => __('Invalid format!')
             ];
             $this->failedImportsDueToFormat++;
 
             return null;
         }
+    }
+
+    private function rowIdentifier(array $row): string
+    {
+        $phone = trim((string) ($row['phone'] ?? ''));
+        if ($phone !== '') {
+            return $phone;
+        }
+
+        $firstName = trim((string) ($row['first_name'] ?? ''));
+        if ($firstName !== '') {
+            return $firstName;
+        }
+
+        $email = trim((string) ($row['email'] ?? ''));
+        if ($email !== '') {
+            return $email;
+        }
+
+        return '-';
     }
 
     public function getFailedImportsDueToFormat()

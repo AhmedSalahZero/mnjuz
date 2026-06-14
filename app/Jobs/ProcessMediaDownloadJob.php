@@ -18,7 +18,6 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -49,53 +48,102 @@ class ProcessMediaDownloadJob implements ShouldQueue
         if (!$chat) {
             return;
         }
-        $organization = Organization::find($this->organizationId);
-        $type = $this->message['type'];
-        $mediaId = $this->message[$type]['id'];
-		try{
-        $media = $this->getMedia($mediaId, $organization);
-        
-        $downloadedFile = $this->downloadMedia($media, $organization);
-        $chatMedia = ChatMedia::create([
-            'name' => $type === 'document' && isset($this->message[$type]['filename'])
-                ? $this->message[$type]['filename']
-                : 'N/A',
-            'path' => $downloadedFile['media_url'],
-            'type' => $media['mime_type'],
-            'size' => $media['file_size'],
-            'location' => $downloadedFile['location'],
-            'created_at' =>  now(),
-        ]);
-        $chat->update(['media_id' => $chatMedia->id]);
-        
-        
-        event(new \App\Events\NewChatEvent(
-            $this->formatChatForEvent($chat, $this->isNewContact, $this->contactUuid),
-            $this->organizationId,
-            $this->isNewContact,
-			false,
-			true
-        ));
 
-        // ✅ Webhook
-        WebhookHelper::triggerWebhookEvent(
-            'message.received',
-            ['data' => $this->message],
-            $this->organizationId
-        );
-		}
-		catch (\Exception $e){
-			return;
-		}
-                    
+        $organization = Organization::find($this->organizationId);
+        if (!$organization) {
+            Log::warning('ProcessMediaDownloadJob: organization not found', [
+                'chat_id' => $this->chatId,
+                'organization_id' => $this->organizationId,
+            ]);
+
+            return;
+        }
+
+        $type = $this->message['type'] ?? null;
+        $mediaId = $type ? ($this->message[$type]['id'] ?? null) : null;
+        if (!$type || !$mediaId) {
+            Log::warning('ProcessMediaDownloadJob: missing media metadata', [
+                'chat_id' => $this->chatId,
+                'message_type' => $type,
+            ]);
+
+            return;
+        }
+
+        try {
+            $media = $this->getMedia($mediaId, $organization);
+            if (!is_array($media) || empty($media['url'])) {
+                Log::warning('ProcessMediaDownloadJob: failed to fetch media metadata', [
+                    'chat_id' => $this->chatId,
+                    'media_id' => $mediaId,
+                    'organization_id' => $this->organizationId,
+                ]);
+
+                return;
+            }
+
+            $downloadedFile = $this->downloadMedia($media, $organization);
+            if (!is_array($downloadedFile) || empty($downloadedFile['media_url'])) {
+                Log::warning('ProcessMediaDownloadJob: failed to download media file', [
+                    'chat_id' => $this->chatId,
+                    'media_id' => $mediaId,
+                    'organization_id' => $this->organizationId,
+                ]);
+
+                return;
+            }
+
+            $chatMedia = ChatMedia::create([
+                'name' => $type === 'document' && isset($this->message[$type]['filename'])
+                    ? $this->message[$type]['filename']
+                    : 'N/A',
+                'path' => $downloadedFile['media_url'],
+                'type' => $media['mime_type'] ?? 'application/octet-stream',
+                'size' => $media['file_size'] ?? null,
+                'location' => $downloadedFile['location'],
+                'created_at' => now(),
+            ]);
+            $chat->update(['media_id' => $chatMedia->id]);
+
+            event(new \App\Events\NewChatEvent(
+                $this->formatChatForEvent($chat, $this->isNewContact, $this->contactUuid),
+                $this->organizationId,
+                $this->isNewContact,
+                false,
+                true
+            ));
+
+            WebhookHelper::triggerWebhookEvent(
+                'message.received',
+                ['data' => $this->message],
+                $this->organizationId
+            );
+        } catch (\Throwable $e) {
+            Log::error('ProcessMediaDownloadJob failed', [
+                'chat_id' => $this->chatId,
+                'media_id' => $mediaId,
+                'organization_id' => $this->organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
-    private function downloadMedia($mediaInfo, Organization $organization)
+
+    private function downloadMedia($mediaInfo, Organization $organization): ?array
     {
+        if (! is_array($mediaInfo) || empty($mediaInfo['url'])) {
+            Log::warning('ProcessMediaDownloadJob: invalid media metadata for download', [
+                'organization_id' => $organization->id,
+            ]);
+
+            return null;
+        }
+
         $metadata = json_decode($organization->metadata);
 
         if (empty($metadata) || empty($metadata->whatsapp->access_token)) {
-            return $this->forbiddenResponse();
+            return null;
         }
+
         try {
             $client = new Client();
 
@@ -108,41 +156,46 @@ class ProcessMediaDownloadJob implements ShouldQueue
 
             $response = $client->request('GET', $mediaInfo['url'], $requestOptions);
             $fileContent = $response->getBody();
-            $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream'; // Default fallback
-            $fileName = $this->generateFilename($fileContent, $mediaInfo['mime_type']);
+            $mimeType = $mediaInfo['mime_type'] ?? 'application/octet-stream';
+            $fileName = $this->generateFilename($fileContent, $mimeType);
             $storage = Setting::where('key', 'storage_system')->first()->value;
+            $mediaUrl = null;
+            $location = null;
 
             if ($storage === 'local') {
-                $t = microtime(true);
                 $location = 'local';
-                $file = Storage::disk('local')->put('public/' . $fileName, $fileContent);
-                $mediaFilePath = $file;
+                Storage::disk('local')->put('public/' . $fileName, $fileContent);
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . 'public/' . $fileName;
             } elseif ($storage === 'aws') {
-                $t = microtime(true);
                 $location = 'amazon';
-                $filePath = 'uploads/media/received/'  . $organization->id . '/' . Str::random(40) . time();
-                $file = Storage::disk('s3')->put($filePath, $fileContent, [
-                    'ContentType' => $mimeType
+                $filePath = 'uploads/media/received/' . $organization->id . '/' . Str::random(40) . time();
+                Storage::disk('s3')->put($filePath, $fileContent, [
+                    'ContentType' => $mimeType,
                 ]);
                 $mediaUrl = Storage::disk('s3')->url($filePath);
-
             }
 
-            $mediaData = [
+            if ($mediaUrl === null || $location === null) {
+                Log::warning('ProcessMediaDownloadJob: unsupported storage system', [
+                    'storage' => $storage,
+                    'organization_id' => $organization->id,
+                ]);
+
+                return null;
+            }
+
+            return [
                 'media_url' => $mediaUrl,
                 'location' => $location,
             ];
-    
-            return $mediaData;
-        } catch (\Exception $e) {
-            Log::error("Error processing webhook: " . $e->getMessage());
-            return Response::json(['error' => 'Failed to download file'], 403);
+        } catch (\Throwable $e) {
+            Log::error('ProcessMediaDownloadJob: media download failed', [
+                'organization_id' => $organization->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
-    }
-    protected function forbiddenResponse()
-    {
-        return Response::json(['error' => 'Forbidden'], 403);
     }
     private function generateFilename($fileContent, $mimeType)
     {
@@ -158,13 +211,12 @@ class ProcessMediaDownloadJob implements ShouldQueue
         return $filename;
     }
 
-    private function getMedia($mediaId, Organization $organization)
+    private function getMedia($mediaId, Organization $organization): ?array
     {
-        //	$time= microtime(true);
         $metadata = json_decode($organization->metadata);
 
         if (empty($metadata) || empty($metadata->whatsapp->access_token)) {
-            return $this->forbiddenResponse();
+            return null;
         }
 
         $client = new Client();
@@ -178,9 +230,17 @@ class ProcessMediaDownloadJob implements ShouldQueue
             ];
 
             $response = $client->request('GET', "https://graph.facebook.com/v18.0/{$mediaId}", $requestOptions);
-            return json_decode($response->getBody()->getContents(), true);
-        } catch (\Exception $e) {
-            return Response::json(['error' => 'Method Invalid'], 400);
+            $media = json_decode($response->getBody()->getContents(), true);
+
+            return is_array($media) ? $media : null;
+        } catch (\Throwable $e) {
+            Log::warning('ProcessMediaDownloadJob: media metadata request failed', [
+                'media_id' => $mediaId,
+                'organization_id' => $organization->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
         }
     }
 	private function formatChatForEvent($chat, bool $isNewContact = false, $contactUuid = null)
