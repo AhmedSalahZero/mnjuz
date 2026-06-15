@@ -101,7 +101,7 @@ class ContactGroupController extends BaseController
     public function import(Request $request) 
     {
         $import = new ContactGroupsImport();
-        Excel::import($import, $request->file);
+        Excel::import($import, $request->file('file'));
 
        // Get the count of successful imports
        $successfulImports = $import->getsuccessfulImports();

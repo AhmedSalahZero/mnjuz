@@ -108,7 +108,15 @@ const trans = useTrans();
                             <div class="mt-1 text-sm">
                                 <div class="text-green-800 flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M14.25 8.75c-.5 2.5-2.385 4.854-5.03 5.38A6.25 6.25 0 0 1 3.373 3.798C5.187 1.8 8.25 1.25 10.75 2.25"/><path d="m5.75 7.75l2.5 2.5l6-6.5"/></g></svg>
-                                    {{ flashResponse.import_summary.successful_imports + '/' + flashResponse.import_summary.total_imports }} {{ $t('rows added successfully!') }}
+                                    <span v-if="flashResponse.import_summary.updated_imports">
+                                        {{ flashResponse.import_summary.successful_imports + '/' + flashResponse.import_summary.total_imports }}
+                                        {{ $t('rows processed') }}
+                                        ({{ flashResponse.import_summary.created_imports || 0 }} {{ $t('created') }},
+                                        {{ flashResponse.import_summary.updated_imports }} {{ $t('updated') }})
+                                    </span>
+                                    <span v-else>
+                                        {{ flashResponse.import_summary.successful_imports + '/' + flashResponse.import_summary.total_imports }} {{ $t('rows added successfully!') }}
+                                    </span>
                                 </div>
                             </div>
                         </div>

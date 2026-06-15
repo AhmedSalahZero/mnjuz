@@ -136,6 +136,9 @@ class ContactController extends BaseController
         
         // Open file for writing
         $handle = fopen($tempFile, 'w');
+
+        // UTF-8 BOM so Excel preserves Arabic characters when editing CSV
+        fwrite($handle, "\xEF\xBB\xBF");
         
         // Write headers
         fputcsv($handle, $headers);
@@ -228,6 +231,9 @@ class ContactController extends BaseController
         
         // Open file for writing
         $handle = fopen($tempFile, 'w');
+
+        // UTF-8 BOM so Excel preserves Arabic characters when editing CSV
+        fwrite($handle, "\xEF\xBB\xBF");
         
         // Write headers
         fputcsv($handle, $allColumns);
@@ -248,24 +254,42 @@ class ContactController extends BaseController
     }
 
     public function import(Request $request) {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt,xlsx',
+        ]);
+
         // Initialize the import process
         $import = new ContactsImport();
 
         // Handle file import
-        Excel::import($import, $request->file);
+        Excel::import($import, $request->file('file'));
 
         // Get the count of successful imports
         $successfulImports = $import->getsuccessfulImports();
+        $updatedImports = $import->getUpdatedImports();
+        $createdImports = $successfulImports - $updatedImports;
         $totalImports = $import->getTotalImportsCount();
         $failedImports = $totalImports - $successfulImports;
 
         // Prepare status message based on the import outcome
-        if ($successfulImports === 0) {
+        if ($totalImports === 0) {
+            $statusType = 'error';
+            $statusMessage = __('No data rows were imported. Make sure the file has a header row (first_name, phone, email, group_name, ...) and at least one data row below it.');
+        } elseif ($successfulImports === 0) {
             $statusType = 'error';
             $statusMessage = __('All rows failed to import. Please check the data format or duplicates.');
         } elseif ($failedImports === 0) {
             $statusType = 'success';
-            $statusMessage = __('All rows have been imported successfully!');
+            if ($updatedImports > 0 && $createdImports > 0) {
+                $statusMessage = __(':created contacts created and :updated contacts updated successfully!', [
+                    'created' => $createdImports,
+                    'updated' => $updatedImports,
+                ]);
+            } elseif ($updatedImports > 0) {
+                $statusMessage = __(':updated contacts updated successfully!', ['updated' => $updatedImports]);
+            } else {
+                $statusMessage = __('All rows have been imported successfully!');
+            }
         } elseif ($successfulImports > 0 && $failedImports > 0) {
             $statusType = 'warning';
             $statusMessage = __('Some rows have been imported successfully, while others failed. Please check the error logs for details.');
@@ -278,6 +302,8 @@ class ContactController extends BaseController
                 'import_summary' => array(
                     'total_imports' => $totalImports,
                     'successful_imports' => $successfulImports,
+                    'created_imports' => $createdImports,
+                    'updated_imports' => $updatedImports,
                     'failed_imports' => $failedImports,
                     'duplicate_entries'  => $import->getFailedImportsDueToDuplicatesCount(),
                     'invalid_format_entries' => $import->getFailedImportsDueToFormat(),

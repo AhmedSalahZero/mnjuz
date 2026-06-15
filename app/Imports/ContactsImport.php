@@ -8,8 +8,8 @@ use App\Models\ContactGroup;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
-use App\Rules\ContactLimit;
 use App\Services\PhoneService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -18,168 +18,305 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder implements ToModel, WithHeadingRow, WithCustomValueBinder, WithChunkReading
 {
+    protected int $organizationId;
+
+    protected int $userId;
+
     protected $totalImports = 0;
+
     protected $successfulImports = 0;
+
+    protected $updatedImports = 0;
+
     protected $failedImports = [];
+
     protected $failedImportsDueToFormat = 0;
+
     protected $failedImportsDueToDuplicates = 0;
+
     protected $failedImportsDueToLimit = 0;
 
+    public function __construct()
+    {
+        $this->organizationId = (int) session()->get('current_organization');
+        $this->userId = (int) (auth()->id() ?? 0);
+    }
+
     /**
-    * @param array $row
-    *
-    * @return \Illuminate\Database\Eloquent\Model|null
-    */
+     * @param array $row
+     *
+     * @return \Illuminate\Database\Eloquent\Model|null
+     */
     public function model(array $row)
     {
         try {
             $this->totalImports++;
 
-            $phoneNumberValue = trim((string) ($row['phone'] ?? ''));
-
-            // Sequential Validation: First check the first_name field
-            $validator = Validator::make($row, [
-                'first_name' => 'required', // Make first_name required
-            ]);
-
-            // If first_name fails, stop further validation and return the error
-            if ($validator->fails()) {
+            if ($this->organizationId <= 0) {
                 $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row),
-                    'error' => __('First name required!')
+                    'row' => '-',
+                    'error' => __('No organization selected. Please select an organization and try again.'),
                 ];
                 $this->failedImportsDueToFormat++;
+
                 return null;
             }
 
-            // If first_name passes, proceed to validate the phone field
-            $validator = Validator::make(['phone' => $phoneNumberValue], [
-                'phone' => 'required', // Make phone required
-            ]);
+            $row = $this->normalizeRow($row);
 
-            // If phone is invalid, add the error and return
-            if ($validator->fails()) {
+            $firstName = trim((string) ($row['first_name'] ?? ''));
+            $phoneNumberValue = $this->normalizePhoneFromRow($row['phone'] ?? null);
+
+            if ($firstName === '') {
                 $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row),
-                    'error' => __('Phone number required!')
+                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
+                    'error' => __('First name required!'),
                 ];
                 $this->failedImportsDueToFormat++;
+
                 return null;
             }
 
-            if (!str_starts_with($phoneNumberValue, '+')) {
-                $phoneNumberValue = '+' . $phoneNumberValue;
+            if ($phoneNumberValue === '') {
+                $this->failedImports[] = [
+                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
+                    'error' => __('Phone number required!'),
+                ];
+                $this->failedImportsDueToFormat++;
+
+                return null;
             }
 
-            // Now validate the phone number format
             if (!PhoneService::isValid($phoneNumberValue)) {
                 $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row),
-                    'error' => __('Invalid format!')
+                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
+                    'error' => __('Invalid phone number format!'),
                 ];
                 $this->failedImportsDueToFormat++;
+
                 return null;
             }
 
-            // Check if the phone number already exists in the database
             $formattedPhone = PhoneService::getE164Format($phoneNumberValue);
-            if (Contact::where('organization_id', session()->get('current_organization'))
-                    ->where('phone', $formattedPhone)
-                    ->whereNull('deleted_at')
-                    ->exists()) {
+
+            if ($formattedPhone === null) {
                 $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row),
-                    'error' => __('Duplicate phone number!')
+                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
+                    'error' => __('Invalid phone number format!'),
                 ];
-                $this->failedImportsDueToDuplicates++;
+                $this->failedImportsDueToFormat++;
+
                 return null;
             }
 
-            // Fetch dynamic fields from contact_fields table
-            $organizationId = session()->get('current_organization');
-            $contactLimit = $this->contactSubscriptionLimit($organizationId);
+            $existingContact = $this->findExistingContact($this->organizationId, $formattedPhone);
 
-            // Check if the total contacts would exceed the limit using atomic operation
+            $contactFields = ContactField::where('organization_id', $this->organizationId)->pluck('name')->toArray();
+            $metadata = $this->buildMetadataFromRow($row, $contactFields);
+            $address = json_encode([
+                'street'  => $this->nullableString($row['street'] ?? null),
+                'city'    => $this->nullableString($row['city'] ?? null),
+                'state'   => $this->nullableString($row['state'] ?? null),
+                'zip'     => $this->nullableString($row['zip'] ?? null),
+                'country' => $this->nullableString($row['country'] ?? null),
+            ]);
+
+            if ($existingContact) {
+                if ($existingContact->trashed()) {
+                    $existingContact->restore();
+                }
+
+                $existingMetadata = is_string($existingContact->metadata)
+                    ? (json_decode($existingContact->metadata, true) ?? [])
+                    : [];
+
+                $existingContact->update([
+                    'first_name' => $firstName,
+                    'last_name'  => $this->nullableString($row['last_name'] ?? null),
+                    'phone'      => $formattedPhone,
+                    'email'      => $this->nullableString($row['email'] ?? null),
+                    'address'    => $address,
+                    'metadata'   => !empty(array_merge($existingMetadata, $metadata))
+                        ? json_encode(array_merge($existingMetadata, $metadata))
+                        : null,
+                    'updated_at' => now(),
+                ]);
+
+                if ($this->rowHasGroupName($row)) {
+                    $this->syncContactGroups($existingContact, $row['group_name'], $this->organizationId);
+                }
+
+                $this->successfulImports++;
+                $this->updatedImports++;
+
+                return $existingContact;
+            }
+
+            $contactLimit = $this->contactSubscriptionLimit($this->organizationId);
+
             if ($contactLimit > 0) {
-                $existingContactCount = Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
-                
+                $existingContactCount = Contact::where('organization_id', $this->organizationId)
+                    ->whereNull('deleted_at')
+                    ->count();
+
                 if (($existingContactCount + 1) > $contactLimit) {
                     $this->failedImports[] = [
-                        'row' => $this->rowIdentifier($row),
-                        'error' => __('Contact limit reached!')
+                        'row' => $this->rowIdentifier($row, $phoneNumberValue),
+                        'error' => __('Contact limit reached!'),
                     ];
                     $this->failedImportsDueToLimit++;
+
                     return null;
                 }
             }
 
-            // Fetch dynamic fields from contact_fields table
-            $contactFields = ContactField::where('organization_id', $organizationId)->pluck('name')->toArray();
-
-            $metadata = [];
-
-            foreach ($contactFields as $field) {
-                $normalizedField = strtolower($field); 
-
-                if (isset($row[$normalizedField])) {
-                    $metadata[$field] = $row[$normalizedField];
-                }
-            }
-
-            $contact =  Contact::create([
-                'organization_id'  => $organizationId,
-                'first_name'  => $row['first_name'],
-                'last_name'   => $row['last_name'] ?? null,
-                'phone'       => PhoneService::getE164Format($phoneNumberValue), 
-                'email'       => $row['email'] ?? null,
-                'address'     => json_encode([
-                    'street'  => $row['street'] ?? null,
-                    'city'    => $row['city'] ?? null,
-                    'state'   => $row['state'] ?? null,
-                    'zip'     => $row['zip'] ?? null,
-                    'country' => $row['country'] ?? null
-                ]),
-                'metadata'    => !empty($metadata) ? json_encode($metadata) : null, 
-                'created_by'  => auth()->user()->id,
+            $contact = Contact::create([
+                'organization_id' => $this->organizationId,
+                'first_name'      => $firstName,
+                'last_name'       => $this->nullableString($row['last_name'] ?? null),
+                'phone'           => $formattedPhone,
+                'email'           => $this->nullableString($row['email'] ?? null),
+                'address'         => $address,
+                'metadata'        => !empty($metadata) ? json_encode($metadata) : null,
+                'created_by'      => $this->userId,
             ]);
 
-            if($contact){
+            if ($contact) {
                 $this->successfulImports++;
 
-                // Process contact groups (if provided)
-                if (!empty($row['group_name'])) {
-                    $groupNames = explode('|', $row['group_name'] ?? ''); // Split by comma
-                    $groupNames = array_map('trim', $groupNames); // Trim whitespace
-
-                    foreach ($groupNames as $groupName) {
-                        $group = ContactGroup::firstOrCreate([
-                            'organization_id' => $organizationId,
-                            'name'            => $groupName,
-                            'deleted_at'      => null
-                        ], [
-                            'created_by' => auth()->user()->id,
-                        ]);
-
-                        // Attach contact to the group via pivot table
-                        $contact->contactGroups()->attach($group->id);
-                    }
+                if ($this->rowHasGroupName($row)) {
+                    $this->syncContactGroups($contact, $row['group_name'], $this->organizationId);
                 }
 
                 return $contact;
             }
         } catch (\Throwable $e) {
+            Log::warning('ContactsImport row failed', [
+                'organization_id' => $this->organizationId,
+                'error' => $e->getMessage(),
+            ]);
+
             $this->failedImports[] = [
-                'row' => $this->rowIdentifier($row),
-                'error' => __('Invalid format!')
+                'row' => $this->rowIdentifier($row ?? [], $phoneNumberValue ?? ''),
+                'error' => __('Import failed for this row. Please verify the data format.'),
             ];
             $this->failedImportsDueToFormat++;
 
             return null;
         }
+
+        return null;
     }
 
-    private function rowIdentifier(array $row): string
+    /**
+     * Map Excel heading variants (slug / spaces / dashes) to canonical column names.
+     */
+    private function normalizeRow(array $row): array
     {
+        $canonicalKeys = [
+            'first_name' => ['first_name', 'firstname', 'first'],
+            'last_name'  => ['last_name', 'lastname', 'last'],
+            'phone'      => ['phone', 'mobile', 'phone_number', 'phonenumber', 'tel', 'telephone'],
+            'email'      => ['email', 'e_mail', 'mail'],
+            'group_name' => ['group_name', 'groupname', 'group', 'groups', 'contact_group'],
+            'street'     => ['street', 'address', 'address_street'],
+            'city'       => ['city'],
+            'state'      => ['state', 'province', 'region'],
+            'zip'        => ['zip', 'zip_code', 'postal_code', 'postcode'],
+            'country'    => ['country'],
+        ];
+
+        $normalized = [];
+
+        foreach ($row as $key => $value) {
+            $slug = str_replace(['-', ' '], '_', strtolower(trim((string) $key)));
+
+            foreach ($canonicalKeys as $canonical => $aliases) {
+                if (in_array($slug, $aliases, true)) {
+                    $normalized[$canonical] = $value;
+                    continue 2;
+                }
+            }
+
+            $normalized[$slug] = $value;
+        }
+
+        return $normalized;
+    }
+
+    private function normalizePhoneFromRow(mixed $rawPhone): string
+    {
+        if ($rawPhone === null || $rawPhone === '') {
+            return '';
+        }
+
+        if (is_float($rawPhone)) {
+            $rawPhone = sprintf('%.0f', $rawPhone);
+        } elseif (is_int($rawPhone)) {
+            $rawPhone = (string) $rawPhone;
+        } else {
+            $rawPhone = trim((string) $rawPhone);
+
+            if (preg_match('/^[\d.]+E\+?\d+$/i', $rawPhone)) {
+                $rawPhone = sprintf('%.0f', (float) $rawPhone);
+            }
+        }
+
+        $rawPhone = preg_replace('/[^\d+]/', '', $rawPhone) ?? '';
+
+        if ($rawPhone !== '' && !str_starts_with($rawPhone, '+')) {
+            $rawPhone = '+' . $rawPhone;
+        }
+
+        return $rawPhone;
+    }
+
+    private function findExistingContact(int $organizationId, string $formattedPhone): ?Contact
+    {
+        $digitsOnly = preg_replace('/\D+/', '', ltrim($formattedPhone, '+')) ?? '';
+
+        $variants = array_unique(array_filter([
+            $formattedPhone,
+            ltrim($formattedPhone, '+'),
+            '+' . $digitsOnly,
+            $digitsOnly,
+        ]));
+
+        $contact = Contact::withTrashed()
+            ->where('organization_id', $organizationId)
+            ->where(function ($query) use ($variants, $digitsOnly) {
+                $query->whereIn('phone', $variants);
+
+                if ($digitsOnly !== '') {
+                    $query->orWhereRaw(
+                        "REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', ''), '.', '') = ?",
+                        [$digitsOnly]
+                    );
+                }
+            })
+            ->first();
+
+        return $contact;
+    }
+
+    private function rowHasGroupName(array $row): bool
+    {
+        return array_key_exists('group_name', $row);
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+
+        return $value === '' ? null : $value;
+    }
+
+    private function rowIdentifier(array $row, string $phone = ''): string
+    {
+        if ($phone !== '') {
+            return $phone;
+        }
+
         $phone = trim((string) ($row['phone'] ?? ''));
         if ($phone !== '') {
             return $phone;
@@ -196,6 +333,66 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         }
 
         return '-';
+    }
+
+    private function buildMetadataFromRow(array $row, array $contactFields): array
+    {
+        $metadata = [];
+
+        foreach ($contactFields as $field) {
+            $normalizedField = strtolower(str_replace([' ', '-'], '_', $field));
+
+            if (isset($row[$normalizedField])) {
+                $metadata[$field] = $row[$normalizedField];
+            }
+        }
+
+        return $metadata;
+    }
+
+    /**
+     * Sync contact groups to match the import row (add missing, remove extras).
+     * Group names are pipe-separated in group_name column.
+     */
+    private function syncContactGroups(Contact $contact, mixed $groupNameValue, int $organizationId): void
+    {
+        $groupIds = $this->resolveGroupIdsFromImport($groupNameValue, $organizationId);
+        $contact->contactGroups()->sync($groupIds);
+    }
+
+    private function resolveGroupIdsFromImport(mixed $groupNameValue, int $organizationId): array
+    {
+        $groupNames = array_filter(array_map('trim', explode('|', (string) $groupNameValue)));
+
+        $groupIds = [];
+
+        foreach ($groupNames as $groupName) {
+            $group = ContactGroup::withTrashed()
+                ->where('organization_id', $organizationId)
+                ->where('name', $groupName)
+                ->first();
+
+            if ($group) {
+                if ($group->trashed()) {
+                    $group->restore();
+                }
+            } else {
+                $group = ContactGroup::create([
+                    'organization_id' => $organizationId,
+                    'name'            => $groupName,
+                    'created_by'      => $this->userId,
+                ]);
+            }
+
+            $groupIds[] = $group->id;
+        }
+
+        return array_values(array_unique($groupIds));
+    }
+
+    public function getUpdatedImports()
+    {
+        return $this->updatedImports;
     }
 
     public function getFailedImportsDueToFormat()
@@ -230,28 +427,25 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
     public function chunkSize(): int
     {
-        return 1000; // Adjust the chunk size as needed
+        return 1000;
     }
 
     private function contactSubscriptionLimit($organizationId)
     {
         $subscription = Subscription::where('organization_id', $organizationId)->first();
-        
-        // Default to 0 if no subscription found
+
         if (!$subscription) {
             return 0;
         }
-        
-        $usageLimit = 0; // Default limit
-        
-        // Check trial status first
+
+        $usageLimit = 0;
+
         if ($subscription->status === 'trial' && $subscription->valid_until > now()) {
             $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
             $usageLimit = $limit ? json_decode($limit, true)['contacts'] ?? 0 : 0;
         } else {
-            // Check subscription plan
             $subscriptionPlan = SubscriptionPlan::find($subscription->plan_id);
-            
+
             if ($subscriptionPlan) {
                 $subscriptionPlanLimits = json_decode($subscriptionPlan->metadata, true);
                 $usageLimit = $subscriptionPlanLimits['contacts_limit'] ?? 0;
