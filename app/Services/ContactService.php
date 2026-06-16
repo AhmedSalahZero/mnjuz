@@ -23,6 +23,54 @@ class ContactService
     }
 
     /**
+     * Find an active contact in the organization by numeric id or uuid.
+     */
+    public function findInOrganizationByIdOrUuid(int|string $idOrUuid): ?Contact
+    {
+        $query = Contact::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at');
+
+        if (is_numeric($idOrUuid)) {
+            return $query->where('id', (int) $idOrUuid)->first();
+        }
+
+        return $query->where('uuid', (string) $idOrUuid)->first();
+    }
+
+    /**
+     * Find contact by phone within organization (E.164 + digit-normalized fallback).
+     */
+    public function findByPhoneInOrganization(string $phone): ?Contact
+    {
+        $e164 = PhoneService::getE164Format(PhoneService::normalize($phone));
+        if (!$e164) {
+            return null;
+        }
+
+        $contact = Contact::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->where('phone', $e164)
+            ->first();
+
+        if ($contact) {
+            return $contact;
+        }
+
+        $digitsOnly = preg_replace('/\D+/', '', ltrim($e164, '+')) ?? '';
+        if ($digitsOnly === '') {
+            return null;
+        }
+
+        return Contact::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->whereRaw(
+                "REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', ''), '.', '') = ?",
+                [$digitsOnly]
+            )
+            ->first();
+    }
+
+    /**
      * يبحث عن contact بالرقم داخل الشركة أو ينشئه.
      * يستخدم نفس تنسيق E.164 المستخدم في webhook الوارد (ProcessIncomingMessageJob)
      * لضمان عدم إنشاء contact مكرر لنفس الرقم.
@@ -34,6 +82,15 @@ class ContactService
             throw new \InvalidArgumentException('Invalid phone number');
         }
 
+        $existing = $this->findByPhoneInOrganization($phone);
+        if ($existing) {
+            if ($existing->phone !== $e164) {
+                $existing->update(['phone' => $e164, 'updated_at' => now()]);
+            }
+
+            return $existing;
+        }
+
         $defaults = [
             'created_by' => 0,
             'created_at' => now(),
@@ -41,18 +98,16 @@ class ContactService
         ];
 
         try {
-            return Contact::firstOrCreate(
-                [
-                    'organization_id' => $this->organizationId,
-                    'phone' => $e164,
-                ],
-                array_merge($defaults, $attributes)
-            );
+            return Contact::create(array_merge($defaults, $attributes, [
+                'organization_id' => $this->organizationId,
+                'phone' => $e164,
+            ]));
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->errorInfo[1] === 1062) {
-                return Contact::where('organization_id', $this->organizationId)
-                    ->where('phone', $e164)
-                    ->firstOrFail();
+                return $this->findByPhoneInOrganization($phone)
+                    ?? Contact::where('organization_id', $this->organizationId)
+                        ->where('phone', $e164)
+                        ->firstOrFail();
             }
             throw $e;
         }

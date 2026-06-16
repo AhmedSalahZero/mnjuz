@@ -159,7 +159,8 @@ class ApiController extends Controller
         $uuid = $idOrUUID;
         if ($request->is('api/v1/*')) {
             $organizationId = $request->user()->current_mobile_organization_id;
-            $contact  = Contact::find($idOrUUID); // id in this case
+            $contactService = new ContactService($organizationId);
+            $contact = $contactService->findInOrganizationByIdOrUuid($idOrUUID);
             if (!$contact) {
                 return response()->json([
                     'statusCode' => 404,
@@ -214,7 +215,12 @@ class ApiController extends Controller
     }
     public function getContactDetail(Request $request, $id)
     {
-        $contact = Contact::find($id);
+        $organizationId = $request->is('api/v1/*')
+            ? (int) $request->user()->current_mobile_organization_id
+            : (int) $request->organization;
+
+        $contactService = new ContactService($organizationId);
+        $contact = $contactService->findInOrganizationByIdOrUuid($id);
         if (!$contact) {
             return response()->json([
                 'statusCode' => 404,
@@ -262,7 +268,16 @@ class ApiController extends Controller
         }
         try {
             $contactService = new ContactService($organizationId);
-            $contactService->delete([$uuid]);
+            $contact = $contactService->findInOrganizationByIdOrUuid($uuid);
+            if (!$contact) {
+                return response()->json([
+                    'statusCode' => 404,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Contact not found', [], getApiLang())
+                ], 404);
+            }
+            $contactService->delete([$contact->uuid]);
             if ($request->is('api/v1/*')) {
                 return response()->json([
                     'statusCode' => 200,
@@ -796,8 +811,10 @@ class ApiController extends Controller
     public function sendMessage(Request $request)
     {
         $organizationId = $request->organization;
-        if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_mobile_organization_id;
+        $mobileOrganizationId = $request->user()?->current_mobile_organization_id;
+        // Mobile endpoints use the current_mobile_organization_id (never rely on request->organization).
+        if ($mobileOrganizationId && ($request->is('api/v1/*') || $request->is('api/send-msg'))) {
+            $organizationId = $mobileOrganizationId;
             $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
         }
         $rules = [
@@ -958,15 +975,11 @@ class ApiController extends Controller
                 'errors' => $validator->errors()
             ], 400);
         }
-      $organizationId = $request->user()->current_web_organization_id;
-      
-        
-        if ($request->is('api/v1/*')) {
-            $organizationId = $request->user()->current_mobile_organization_id;
-        }
-      	if(!$organizationId){
-           $organizationId =  session()->get('current_organization');
-        
+        $organizationId = $request->user()?->current_mobile_organization_id
+            ?: $request->user()?->current_web_organization_id;
+
+        if(!$organizationId){
+            $organizationId =  session()->get('current_organization');
         }
      
      

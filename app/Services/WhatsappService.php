@@ -109,7 +109,9 @@ class WhatsappService
 		$messageUUID = null,
 		$tempMessageId = null
 	) {
-		$contact = Contact::where('uuid', $contactUuId)->first();
+		$contact = Contact::where('uuid', $contactUuId)
+			->where('organization_id', $this->organizationId)
+			->first();
 		if (!$contact) {
 			return (object) ['success' => false];
 		}
@@ -311,7 +313,9 @@ class WhatsappService
 
         $service = function() use ($contactUuId, $templateContent, $userId, $campaignId, $mediaId){
 			
-			$contact = Contact::where('uuid', $contactUuId)->first();
+			$contact = Contact::where('uuid', $contactUuId)
+				->where('organization_id', $this->organizationId)
+				->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -390,7 +394,9 @@ class WhatsappService
     }
 
     private function buildCampaignTemplateChatMessage($templateMetadata, $contactUuId){
-        $contact = Contact::where('uuid', $contactUuId)->first();
+        $contact = Contact::where('uuid', $contactUuId)
+			->where('organization_id', $this->organizationId)
+			->first();
         $array = [];
         
         if($templateMetadata->header->format == 'IMAGE' || $templateMetadata->header->format == 'VIDEO' || $templateMetadata->header->format == 'DOCUMENT' || $templateMetadata->header->format == 'LOCATION'){
@@ -683,7 +689,9 @@ class WhatsappService
     public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null, $messageUUID = null)
     {
 
-        $contact = Contact::where('uuid', $contactUuId)->first();
+        $contact = Contact::where('uuid', $contactUuId)
+			->where('organization_id', $this->organizationId)
+			->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
