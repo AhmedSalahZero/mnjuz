@@ -51,8 +51,12 @@ class PasswordResetService
         }
     }
 
-    public function verifyResetCode(string $email, string $token): bool
+    public function verifyResetCode(?string $email, ?string $token): bool
     {
+        if ($email === null || $token === null || $email === '' || $token === '') {
+            return false;
+        }
+
         $storedToken = $this->getStoredCode($email);
 
         return isset($storedToken) && Hash::check($token, $storedToken);

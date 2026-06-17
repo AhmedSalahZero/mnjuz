@@ -62,6 +62,10 @@ class CreateCampaignLogsJob implements ShouldQueue
         
         if ($this->createCampaignLogs($campaign, $contacts)) {
             Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
+
+            ProcessCampaignMessagesJob::dispatch()
+                ->onQueue('campaign-messages')
+                ->afterCommit();
         }
     }
 
@@ -104,7 +108,11 @@ class CreateCampaignLogsJob implements ShouldQueue
 
         // Insert new logs if any
         if (!empty($campaignLogs)) {
-            return CampaignLog::insert($campaignLogs);
+            foreach (array_chunk($campaignLogs, 500) as $chunk) {
+                CampaignLog::insert($chunk);
+            }
+
+            return true;
         }
 
         return false;

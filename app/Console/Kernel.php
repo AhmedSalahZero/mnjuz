@@ -19,9 +19,22 @@ class Kernel extends ConsoleKernel
             ->everyMinute()
             ->withoutOverlapping();
 
-        $schedule->job(new ProcessCampaignMessagesJob(), 'campaign-messages')
-            ->everyMinute()
-            ->withoutOverlapping();
+        $campaignSendInterval = max(1, (int) config('campaigns.send_interval_seconds', 5));
+        $overlapSeconds = max(1, $campaignSendInterval - 1);
+
+        $campaignMessageSchedule = $schedule->job(new ProcessCampaignMessagesJob(), 'campaign-messages');
+
+        if ($campaignSendInterval === 5) {
+            $campaignMessageSchedule->everyFiveSeconds();
+        } elseif ($campaignSendInterval === 10) {
+            $campaignMessageSchedule->everyTenSeconds();
+        } elseif ($campaignSendInterval === 30) {
+            $campaignMessageSchedule->everyThirtySeconds();
+        } else {
+            $campaignMessageSchedule->cron("*/{$campaignSendInterval} * * * * *");
+        }
+
+        $campaignMessageSchedule->withoutOverlapping($overlapSeconds);
 
         /*$schedule->command('queue:work --queue=campaign-messages,campaign-logs --stop-when-empty')
             ->everyMinute()
