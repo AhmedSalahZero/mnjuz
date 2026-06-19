@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Events\ContactChatDeletedEvent;
 use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
+use App\Helpers\MessagingWindowHelper;
 use App\Http\Resources\ContactListResource;
 use App\Jobs\SendMediaJob;
 use App\Models\Chat;
@@ -491,7 +492,10 @@ class ChatService
     {
 		$this->initializeWhatsappService();
         $contact = $this->findAccessibleContactByUuid((string) $request->uuid);
-		
+
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowJsonResponse();
+        }
 	
         if ($request->type === 'text') {
             return $this->whatsappService->sendMessage($contact->uuid, $request->message, auth()->user()->id,);
@@ -961,6 +965,8 @@ class ChatService
      */
     public static function contactPayloadForChatView(Contact $contact): array
     {
+        $messagingWindow = MessagingWindowHelper::payloadForContact($contact);
+
         return array_merge(
             $contact->only([
                 'id',
@@ -973,14 +979,11 @@ class ChatService
                 'is_favorite',
                 'address',
                 'avatar',
-                'last_inbound_chat_created_at',
             ]),
+            $messagingWindow,
             [
                 'full_name' => $contact->full_name,
                 'formatted_phone_number' => $contact->formatted_phone_number,
-                'last_inbound_chat' => $contact->last_inbound_chat_created_at
-                    ? ['created_at' => $contact->last_inbound_chat_created_at]
-                    : null,
                 'contact_groups' => $contact->relationLoaded('contactGroups')
                     ? $contact->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all()
                     : [],

@@ -12,11 +12,18 @@ class UpdateLastInboundChatCreatedAt extends Command
 
     public function handle()
     {
-		
+        $updated = DB::update("
+            UPDATE contacts c
+            INNER JOIN (
+                SELECT contact_id, MAX(created_at) AS last_inbound
+                FROM chats
+                WHERE type = 'inbound' AND deleted_at IS NULL
+                GROUP BY contact_id
+            ) sub ON c.id = sub.contact_id
+            SET c.last_inbound_chat_created_at = sub.last_inbound
+        ");
 
-     
-
-        $this->info('last_inbound_chat_created_at updated successfully.');
+        $this->info("Updated {$updated} contact(s). last_inbound_chat_created_at synced from inbound chats (UTC).");
         return 0;
     }
 }

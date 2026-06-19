@@ -21,9 +21,11 @@ class Chat extends Model {
         static::created(function ($chat) {
             $contact = $chat->contact;
             if ($contact) {
-                $contact->latest_chat_created_at = $chat->created_at;
+                $createdAtUtc = $chat->getAttributes()['created_at'] ?? now()->utc()->toDateTimeString();
+
+                $contact->latest_chat_created_at = $createdAtUtc;
                 if ($chat->type === 'inbound') {
-                    $contact->last_inbound_chat_created_at = $chat->created_at;
+                    $contact->last_inbound_chat_created_at = $createdAtUtc;
                 }
                 $contact->save();
             }

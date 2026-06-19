@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Helpers\MessagingWindowHelper;
+use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\WhatsappService;
@@ -61,6 +63,15 @@ class SendMediaJob implements ShouldQueue
 
         $organization = Organization::find($this->organizationId);
         if (!$organization) {
+            return;
+        }
+
+        $contact = Contact::where('uuid', $this->uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$contact || !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
             return;
         }
 

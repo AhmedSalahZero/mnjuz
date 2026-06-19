@@ -2,7 +2,7 @@
 
 namespace App\Http\Resources;
 
-use App\Helpers\DateTimeHelper;
+use App\Helpers\MessagingWindowHelper;
 use App\Models\Contact;
 use App\Models\Organization;
 use Illuminate\Http\Request;
@@ -21,6 +21,7 @@ class ContactResource extends JsonResource
 		$organization =$this->organization ;
 		$shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
 		$this->encryptPhoneNumber($shouldBeEncrypted);
+        $messagingWindow = MessagingWindowHelper::payloadForContact($this->resource);
 		 return [
             'id' => $this->id,
             'uuid' => $this->uuid,
@@ -30,7 +31,6 @@ class ContactResource extends JsonResource
             'email' => $this->email,
             'organization_id' => $this->organization_id,
             'latest_chat_created_at' => $this->latest_chat_created_at,
-            'last_inbound_chat_created_at' => $this->last_inbound_chat_created_at ?? null,
             'is_blocked' => $this->is_blocked,
             'is_favorite' => $this->is_favorite,
 			// 'is_new_contact'=>$this->is_new_contact,
@@ -59,11 +59,11 @@ class ContactResource extends JsonResource
               //     'media' => $this->lastChat->media,
                 ];
             }),
-            
-            // استخدام العمود last_inbound_chat_created_at بدل تحميل العلاقة (أسرع)
-            'last_inbound_chat' => $this->last_inbound_chat_created_at
-                ? ['created_at' => $this->last_inbound_chat_created_at]
-                : $this->whenLoaded('lastInboundChat', fn () => $this->lastInboundChat ? ['created_at' => $this->lastInboundChat->created_at] : null),
+
+            'last_inbound_chat_created_at' => $messagingWindow['last_inbound_chat_created_at'],
+            'last_inbound_chat_created_at_iso' => $messagingWindow['last_inbound_chat_created_at_iso'],
+            'last_inbound_chat' => $messagingWindow['last_inbound_chat'],
+            'is_messaging_window_open' => $messagingWindow['is_messaging_window_open'],
        
             'unread_messages' => $this->unread_messages_count ?? 0,
 

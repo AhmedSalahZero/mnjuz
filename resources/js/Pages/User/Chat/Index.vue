@@ -453,25 +453,41 @@ const updateSidePanel = async (chat, statusChanged) => {
 	// }
 
 	if (isInboundChat) {
+		const inboundIso = new Date().toISOString()
 		//	console.log('isInboundChat', currentContact)
 		if (currentContact) {
 			currentContact.last_chat = currentChat
-			currentContact.last_inbound_chat = currentChat
+			currentContact.last_inbound_chat = {
+				created_at: inboundIso,
+				created_at_iso: inboundIso,
+			}
 			currentContact.unread_messages = currentContact.unread_messages + 1
-			currentContact.last_inbound_chat_created_at = currentChat.created_at
+			currentContact.last_inbound_chat_created_at = inboundIso
+			currentContact.last_inbound_chat_created_at_iso = inboundIso
+			currentContact.is_messaging_window_open = true
 			currentContact.latest_chat_created_at = currentChat.created_at
 			if (isChatFormOpen) {
-				contact.value.last_inbound_chat = currentChat
-				contact.value.last_inbound_chat_created_at = currentChat.created_at
+				contact.value.last_inbound_chat = {
+					created_at: inboundIso,
+					created_at_iso: inboundIso,
+				}
+				contact.value.last_inbound_chat_created_at = inboundIso
+				contact.value.last_inbound_chat_created_at_iso = inboundIso
+				contact.value.is_messaging_window_open = true
 			}
 		} else if (chat[0].value.contact_uuid) {
 			rows.value.data.push({
 				id: currentChat.contact_id,
 				uuid: chat[0].value.contact_uuid,
-				last_inbound_chat: currentChat,
+				last_inbound_chat: {
+					created_at: inboundIso,
+					created_at_iso: inboundIso,
+				},
 				last_chat: currentChat,
 				unread_messages: 1,
-				last_inbound_chat_created_at: currentChat.created_at,
+				last_inbound_chat_created_at: inboundIso,
+				last_inbound_chat_created_at_iso: inboundIso,
+				is_messaging_window_open: true,
 				latest_chat_created_at: currentChat.created_at,
 				full_name: currentChat.contact_full_name,
 				ticket_status: null,

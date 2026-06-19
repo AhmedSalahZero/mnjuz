@@ -79,7 +79,7 @@ class ContactService
     {
         $e164 = PhoneService::getE164Format(PhoneService::normalize($phone));
         if (!$e164) {
-            throw new \InvalidArgumentException('Invalid phone number');
+            throw new \InvalidArgumentException('Invalid phone number: '.$phone.'- for organization: '.$this->organizationId);
         }
 
         $existing = $this->findByPhoneInOrganization($phone);

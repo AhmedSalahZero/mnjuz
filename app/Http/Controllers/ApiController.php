@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\MessagingWindowHelper;
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\Api\StoreContactRequest;
 use App\Http\Resources\AutoReplyResource;
@@ -856,6 +857,10 @@ class ApiController extends Controller
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
 
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowApiJsonResponse();
+        }
+
         $this->initializeWhatsappService($organizationId);
         $type = !isset($request->buttons) ? 'text' : 'interactive buttons';
 
@@ -1154,6 +1159,10 @@ class ApiController extends Controller
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
+
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowApiJsonResponse();
+        }
 
         $this->initializeWhatsappService($organizationId);
         $type = !isset($request->buttons) ? 'text' : 'interactive';

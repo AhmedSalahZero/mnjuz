@@ -123,7 +123,10 @@ const sendMessage = async () => {
 		} catch (error) {
 			processingForm.value = false
 			form.value.file = null
-			// console.error('Error:', error);
+			const msg = error.response?.data?.message
+			if (msg) {
+				toast.error(trans(msg))
+			}
 		}
 	} else {
 		if (isAudioRecording.value == true) {
@@ -178,14 +181,35 @@ const handleEnterKey = (event) => {
 	}
 }
 
+const nowTick = ref(null)
+let messagingWindowTimer = null
+
+const parseUtcDate = (value) => {
+	if (!value) return null
+	if (value instanceof Date) return value
+	const normalized = typeof value === 'string' && !value.endsWith('Z') && !value.includes('+')
+		? value.replace(' ', 'T') + 'Z'
+		: value
+	const parsed = new Date(normalized)
+	return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
 const isInboundChatWithin24Hours = computed(() => {
+	nowTick.value
 
-	if (props.contact.last_inbound_chat) {
-		const lastInboundChatTime = new Date(props.contact.last_inbound_chat.created_at)
-		const currentTime = new Date()
-		const timeDifference = currentTime - lastInboundChatTime
+	const iso = props.contact?.last_inbound_chat_created_at_iso
+		?? props.contact?.last_inbound_chat?.created_at_iso
+		?? props.contact?.last_inbound_chat?.created_at
 
-		return timeDifference < 24 * 60 * 60 * 1000
+	if (iso) {
+		const lastInbound = parseUtcDate(iso)
+		if (lastInbound) {
+			return Date.now() - lastInbound.getTime() < 24 * 60 * 60 * 1000
+		}
+	}
+
+	if (typeof props.contact?.is_messaging_window_open === 'boolean') {
+		return props.contact.is_messaging_window_open
 	}
 
 	return false
@@ -395,12 +419,19 @@ onMounted(() => {
 	recorder.value = new MicRecorder({
 		bitRate: 128,
 	})
+	nowTick.value = Date.now()
+	messagingWindowTimer = setInterval(() => {
+		nowTick.value = Date.now()
+	}, 60000)
 })
 
 onBeforeUnmount(() => {
 	document.removeEventListener('click', handleClickOutside)
 	stopTimer()
 	stopPlaybackTimer()
+	if (messagingWindowTimer) {
+		clearInterval(messagingWindowTimer)
+	}
 	if (audioPreviewUrl.value) {
 		URL.revokeObjectURL(audioPreviewUrl.value)
 	}

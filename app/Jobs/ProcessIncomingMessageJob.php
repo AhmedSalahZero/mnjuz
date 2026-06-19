@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Helpers\CustomHelper;
-use App\Helpers\DateTimeHelper;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\ChatLog;
@@ -54,8 +53,6 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
             $chat = $this->createChat($contact);
             if ($chat) {
-                $contact->update(['last_inbound_chat_created_at' => DateTimeHelper::convertToOrganizationTimezone(now(), null)]);
-				
 				 // ✅ ChatLog
 				 $this->createChatLog($contact->id, $chat->id);
 				 
