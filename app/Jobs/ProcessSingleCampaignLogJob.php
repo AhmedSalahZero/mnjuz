@@ -63,22 +63,27 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                 $log->status = 'failed';
                 $log->save();
 
+                $attemptInfo = $retryService->resolveAttemptNumber($log);
                 $retryService->recordAttempt(
                     $log,
-                    1,
+                    $attemptInfo['number'],
                     'failed',
                     'Contact missing or deleted',
                     null,
-                    false
+                    $attemptInfo['is_retry']
                 );
 
                 return null;
             }
 
-            $attempt = $retryService->claimAttempt($log, 1, false);
+            $attemptInfo = $retryService->resolveAttemptNumber($log);
+            $attempt = $retryService->claimAttempt(
+                $log,
+                $attemptInfo['number'],
+                $attemptInfo['is_retry']
+            );
             if (!$attempt) {
-                // Another worker / a previous run of this job already claimed
-                // attempt #1. Do not re-send.
+                // Another worker already claimed this attempt slot. Do not re-send.
                 return null;
             }
 
@@ -226,13 +231,14 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         }
 
         $retryService = app(CampaignRetryService::class);
+        $attemptInfo = $retryService->resolveAttemptNumber($log);
         $retryService->recordAttempt(
             $log,
-            1,
+            $attemptInfo['number'],
             'failed',
             'Queue job failed: ' . $exception->getMessage(),
             null,
-            false
+            $attemptInfo['is_retry']
         );
 
         if ($log->status === 'ongoing') {

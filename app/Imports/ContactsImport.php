@@ -18,9 +18,18 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder implements ToModel, WithHeadingRow, WithCustomValueBinder, WithChunkReading
 {
+    private const MAX_FAILED_DETAILS = 500;
+
     protected int $organizationId;
 
     protected int $userId;
+
+    /** @var array<int, string> */
+    protected array $contactFields = [];
+
+    protected int $contactLimit = 0;
+
+    protected int $currentContactCount = 0;
 
     protected $totalImports = 0;
 
@@ -36,10 +45,22 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
     protected $failedImportsDueToLimit = 0;
 
-    public function __construct()
+    protected bool $failedImportsTruncated = false;
+
+    public function __construct(?int $organizationId = null, ?int $userId = null)
     {
-        $this->organizationId = (int) session()->get('current_organization');
-        $this->userId = (int) (auth()->id() ?? 0);
+        $this->organizationId = (int) ($organizationId ?? session()->get('current_organization'));
+        $this->userId = (int) ($userId ?? auth()->id() ?? 0);
+        $this->contactFields = ContactField::where('organization_id', $this->organizationId)
+            ->pluck('name')
+            ->toArray();
+        $this->contactLimit = $this->contactSubscriptionLimit($this->organizationId);
+
+        if ($this->contactLimit > 0) {
+            $this->currentContactCount = Contact::where('organization_id', $this->organizationId)
+                ->whereNull('deleted_at')
+                ->count();
+        }
     }
 
     /**
@@ -53,11 +74,11 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             $this->totalImports++;
 
             if ($this->organizationId <= 0) {
-                $this->failedImports[] = [
-                    'row' => '-',
-                    'error' => __('No organization selected. Please select an organization and try again.'),
-                ];
-                $this->failedImportsDueToFormat++;
+                $this->recordFailedImport(
+                    '-',
+                    __('No organization selected. Please select an organization and try again.'),
+                    'format'
+                );
 
                 return null;
             }
@@ -68,31 +89,31 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             $phoneNumberValue = $this->normalizePhoneFromRow($row['phone'] ?? null);
 
             if ($firstName === '') {
-                $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
-                    'error' => __('First name required!'),
-                ];
-                $this->failedImportsDueToFormat++;
+                $this->recordFailedImport(
+                    $this->rowIdentifier($row, $phoneNumberValue),
+                    __('First name required!'),
+                    'format'
+                );
 
                 return null;
             }
 
             if ($phoneNumberValue === '') {
-                $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
-                    'error' => __('Phone number required!'),
-                ];
-                $this->failedImportsDueToFormat++;
+                $this->recordFailedImport(
+                    $this->rowIdentifier($row, $phoneNumberValue),
+                    __('Phone number required!'),
+                    'format'
+                );
 
                 return null;
             }
 
             if (!PhoneService::isValid($phoneNumberValue)) {
-                $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
-                    'error' => __('Invalid phone number format!'),
-                ];
-                $this->failedImportsDueToFormat++;
+                $this->recordFailedImport(
+                    $this->rowIdentifier($row, $phoneNumberValue),
+                    __('Invalid phone number format!'),
+                    'format'
+                );
 
                 return null;
             }
@@ -100,19 +121,18 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             $formattedPhone = PhoneService::getE164Format($phoneNumberValue);
 
             if ($formattedPhone === null) {
-                $this->failedImports[] = [
-                    'row' => $this->rowIdentifier($row, $phoneNumberValue),
-                    'error' => __('Invalid phone number format!'),
-                ];
-                $this->failedImportsDueToFormat++;
+                $this->recordFailedImport(
+                    $this->rowIdentifier($row, $phoneNumberValue),
+                    __('Invalid phone number format!'),
+                    'format'
+                );
 
                 return null;
             }
 
             $existingContact = $this->findExistingContact($this->organizationId, $formattedPhone);
 
-            $contactFields = ContactField::where('organization_id', $this->organizationId)->pluck('name')->toArray();
-            $metadata = $this->buildMetadataFromRow($row, $contactFields);
+            $metadata = $this->buildMetadataFromRow($row, $this->contactFields);
             $address = json_encode([
                 'street'  => $this->nullableString($row['street'] ?? null),
                 'city'    => $this->nullableString($row['city'] ?? null),
@@ -152,19 +172,15 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 return $existingContact;
             }
 
-            $contactLimit = $this->contactSubscriptionLimit($this->organizationId);
+            $contactLimit = $this->contactLimit;
 
             if ($contactLimit > 0) {
-                $existingContactCount = Contact::where('organization_id', $this->organizationId)
-                    ->whereNull('deleted_at')
-                    ->count();
-
-                if (($existingContactCount + 1) > $contactLimit) {
-                    $this->failedImports[] = [
-                        'row' => $this->rowIdentifier($row, $phoneNumberValue),
-                        'error' => __('Contact limit reached!'),
-                    ];
-                    $this->failedImportsDueToLimit++;
+                if (($this->currentContactCount + 1) > $contactLimit) {
+                    $this->recordFailedImport(
+                        $this->rowIdentifier($row, $phoneNumberValue),
+                        __('Contact limit reached!'),
+                        'limit'
+                    );
 
                     return null;
                 }
@@ -183,6 +199,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
             if ($contact) {
                 $this->successfulImports++;
+                $this->currentContactCount++;
 
                 if ($this->rowHasGroupName($row)) {
                     $this->syncContactGroups($contact, $row['group_name'], $this->organizationId);
@@ -196,16 +213,34 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 'error' => $e->getMessage(),
             ]);
 
-            $this->failedImports[] = [
-                'row' => $this->rowIdentifier($row ?? [], $phoneNumberValue ?? ''),
-                'error' => __('Import failed for this row. Please verify the data format.'),
-            ];
-            $this->failedImportsDueToFormat++;
+            $this->recordFailedImport(
+                $this->rowIdentifier($row ?? [], $phoneNumberValue ?? ''),
+                __('Import failed for this row. Please verify the data format.'),
+                'format'
+            );
 
             return null;
         }
 
         return null;
+    }
+
+    private function recordFailedImport(string $row, string $error, string $reason): void
+    {
+        if (count($this->failedImports) < self::MAX_FAILED_DETAILS) {
+            $this->failedImports[] = [
+                'row' => $row,
+                'error' => $error,
+            ];
+        } else {
+            $this->failedImportsTruncated = true;
+        }
+
+        match ($reason) {
+            'limit' => $this->failedImportsDueToLimit++,
+            'duplicate' => $this->failedImportsDueToDuplicates++,
+            default => $this->failedImportsDueToFormat++,
+        };
     }
 
     /**
@@ -420,6 +455,11 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         return $this->failedImports;
     }
 
+    public function getFailedImportsTruncated(): bool
+    {
+        return $this->failedImportsTruncated;
+    }
+
     public function getTotalImportsCount()
     {
         return $this->totalImports;
@@ -427,7 +467,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
     public function chunkSize(): int
     {
-        return 1000;
+        return 500;
     }
 
     private function contactSubscriptionLimit($organizationId)

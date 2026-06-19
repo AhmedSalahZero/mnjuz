@@ -109,6 +109,26 @@ class CampaignRetryService
     }
 
     /**
+     * Determine the next attempt slot for a campaign log send.
+     * First send uses attempt #1; manual resends and re-queued failures use #2+.
+     *
+     * @return array{number: int, is_retry: bool}
+     */
+    public function resolveAttemptNumber(CampaignLog $log, string $channel = 'whatsapp'): array
+    {
+        $max = CampaignMessageAttempt::where('campaign_log_id', $log->id)
+            ->where('channel', $channel)
+            ->max('attempt_number');
+
+        $number = ((int) $max) + 1;
+
+        return [
+            'number' => $number,
+            'is_retry' => $number > 1,
+        ];
+    }
+
+    /**
      * Atomically reserve an attempt slot before performing the external send.
      *
      * Relies on the unique index on (campaign_log_id, channel, attempt_number)

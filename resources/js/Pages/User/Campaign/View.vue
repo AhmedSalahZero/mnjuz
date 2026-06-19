@@ -9,10 +9,10 @@
 					</p>
 				</div>
 				<div class="space-x-2">
-					<!-- <a :href="'/resend-all-failed-campaigns'"
+					<a :href="'/resend-all-failed-campaigns'"
 						class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
 						{{ $t('Resend Failed Campaigns') }}
-					</a> -->
+					</a>
 					<a :href="'/campaigns/export/' + props.campaign.uuid"
 						class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
 						{{ $t('Export as CSV') }}

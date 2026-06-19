@@ -178,6 +178,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/contacts/{uuid?}', [App\Http\Controllers\User\ContactController::class, 'index'])->name('contacts');
                 Route::post('/contacts', [App\Http\Controllers\User\ContactController::class, 'store']);
                 Route::post('/contacts/import', [App\Http\Controllers\User\ContactController::class, 'import']);
+                Route::get('/contacts/import/status', [App\Http\Controllers\User\ContactController::class, 'importStatus']);
                 Route::post('/contacts/{uuid}', [App\Http\Controllers\User\ContactController::class, 'update']);
                 Route::put('/contacts/favorite/{uuid}', [App\Http\Controllers\User\ContactController::class, 'favorite']);
                 Route::delete('/contacts', [App\Http\Controllers\User\ContactController::class, 'delete']);

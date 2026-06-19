@@ -1,6 +1,7 @@
 <script setup>
-    import { computed, ref, watch } from 'vue';
+    import { computed, onBeforeUnmount, ref, watch } from 'vue';
     import { Link, router, usePage } from "@inertiajs/vue3";
+    import axios from 'axios';
     import Modal from '@/Components/Modal.vue';
     import { useTrans } from '@/Composables/useTrans';
 
@@ -9,12 +10,23 @@ const trans = useTrans();
     const props = defineProps(['type', 'modelValue']);
     const emit = defineEmits(['update:modelValue']);
     const flashResponse = computed(() => usePage().props.flash.status);
+    const importResult = ref(null);
+    const pollTimer = ref(null);
     
     const modalLabel = props.type === 'contact' ? trans('Import contacts') : trans('Import contact groups');
     const isOpenModal = ref(props.modelValue);
     const fileName = ref(null);
     const progressStatus = ref(null);
+    const progressMessage = ref(null);
     const showFailedTable = ref(false);
+
+    const importSummary = computed(() => {
+        if (props.type === 'contact') {
+            return importResult.value?.status?.import_summary ?? null;
+        }
+
+        return flashResponse.value?.import_summary ?? null;
+    });
 
     watch(() => props.modelValue, (newValue) => {
         isOpenModal.value = newValue;
@@ -32,6 +44,74 @@ const trans = useTrans();
         uploadFile(file);  
     };
 
+    function stopPolling() {
+        if (pollTimer.value) {
+            clearInterval(pollTimer.value);
+            pollTimer.value = null;
+        }
+    }
+
+    async function pollImportStatus() {
+        try {
+            const response = await axios.get('/contacts/import/status');
+            const data = response.data;
+
+            if (data.state === 'processing' || data.state === 'queued') {
+                progressStatus.value = 'pending';
+                progressMessage.value = data.message ?? trans('Import in progress...');
+                return;
+            }
+
+            if (data.state === 'complete' || data.state === 'failed') {
+                stopPolling();
+                importResult.value = data;
+                progressStatus.value = 'complete';
+                progressMessage.value = data.status?.message ?? null;
+
+                if (data.state === 'complete') {
+                    router.reload({ only: ['rows', 'rowCount'] });
+                }
+            }
+        } catch (error) {
+            stopPolling();
+            progressStatus.value = null;
+            progressMessage.value = null;
+            alert(trans('Contact import failed. Please try again with a smaller file or contact support.'));
+        }
+    }
+
+    function startPolling() {
+        stopPolling();
+        pollImportStatus();
+        pollTimer.value = setInterval(pollImportStatus, 2500);
+    }
+
+    async function uploadContactFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        progressStatus.value = 'pending';
+        progressMessage.value = trans('Import in progress...');
+        importResult.value = null;
+        showFailedTable.value = false;
+
+        try {
+            const response = await axios.post('/contacts/import', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            progressMessage.value = response.data.message ?? trans('Import in progress...');
+            startPolling();
+        } catch (error) {
+            progressStatus.value = null;
+            progressMessage.value = null;
+
+            const message = error.response?.data?.message
+                ?? trans('Contact import failed. Please try again with a smaller file or contact support.');
+            alert(message);
+        }
+    }
+
     function uploadFile(file){
         if (!['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(file.type)) {
             alert(trans('please select a CSV or XLSX file'));
@@ -40,11 +120,15 @@ const trans = useTrans();
 
         fileName.value = file.name;
 
+        if (props.type === 'contact') {
+            uploadContactFile(file);
+            return;
+        }
+
         const formData = new FormData();
         formData.append('file', file);
 
-        // Use Inertia router to send the POST request
-        router.post(props.type === 'contact' ? '/contacts/import' : '/contact-groups/import', formData, {
+        router.post('/contact-groups/import', formData, {
             forceFormData: true,
             onProgress: event => {
                 progressStatus.value = 'pending';
@@ -62,13 +146,21 @@ const trans = useTrans();
         isOpenModal.value = false;
         emit('update:modelValue', false);
         setTimeout(() => {
-            progressStatus.value = null;
+            if (progressStatus.value !== 'pending') {
+                progressStatus.value = null;
+                progressMessage.value = null;
+                importResult.value = null;
+            }
         }, 500);
     }
 
     function toggleFailedTable() {
         showFailedTable.value = !showFailedTable.value;
     }
+
+    onBeforeUnmount(() => {
+        stopPolling();
+    });
 </script>
 <template>
     <!-- Import Modal-->
@@ -98,53 +190,58 @@ const trans = useTrans();
                 <div v-else class="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
                     <div>
                         <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 24 24"><path fill="none" stroke="black" stroke-dasharray="15" stroke-dashoffset="15" stroke-linecap="round" stroke-width="2" d="M12 3C16.9706 3 21 7.02944 21 12"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="15;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
-                        <div class="text-center mb-2 text-sm text-gray-500">Upload In Progress</div>
+                        <div class="text-center mb-2 text-sm text-gray-500">{{ progressMessage || $t('Import in progress...') }}</div>
                         <div class="rounded-md p-1 bg-slate-50 text-center text-sm">{{ fileName }}</div>
                     </div>
                 </div>
                 <div class="mt-4">
-                    <div class="mt-2" v-if="progressStatus == 'complete'">
-                        <div v-if="flashResponse.import_summary.successful_imports" class="bg-green-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
+                    <div class="mt-2" v-if="progressStatus == 'complete' && importSummary">
+                        <div v-if="importSummary.successful_imports" class="bg-green-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
                             <div class="mt-1 text-sm">
                                 <div class="text-green-800 flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M14.25 8.75c-.5 2.5-2.385 4.854-5.03 5.38A6.25 6.25 0 0 1 3.373 3.798C5.187 1.8 8.25 1.25 10.75 2.25"/><path d="m5.75 7.75l2.5 2.5l6-6.5"/></g></svg>
-                                    <span v-if="flashResponse.import_summary.updated_imports">
-                                        {{ flashResponse.import_summary.successful_imports + '/' + flashResponse.import_summary.total_imports }}
+                                    <span v-if="importSummary.updated_imports">
+                                        {{ importSummary.successful_imports + '/' + importSummary.total_imports }}
                                         {{ $t('rows processed') }}
-                                        ({{ flashResponse.import_summary.created_imports || 0 }} {{ $t('created') }},
-                                        {{ flashResponse.import_summary.updated_imports }} {{ $t('updated') }})
+                                        ({{ importSummary.created_imports || 0 }} {{ $t('created') }},
+                                        {{ importSummary.updated_imports }} {{ $t('updated') }})
                                     </span>
                                     <span v-else>
-                                        {{ flashResponse.import_summary.successful_imports + '/' + flashResponse.import_summary.total_imports }} {{ $t('rows added successfully!') }}
+                                        {{ importSummary.successful_imports + '/' + importSummary.total_imports }} {{ $t('rows added successfully!') }}
                                     </span>
                                 </div>
                             </div>
                         </div>
-                        <div v-if="flashResponse.import_summary.duplicate_entries" class="bg-red-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
+                        <div v-if="importSummary.duplicate_entries" class="bg-red-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
                             <div class="mt-1 text-sm">
                                 <div class="text-red-600 flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.71 8.29a1 1 0 0 0-1.42 0L12 10.59l-2.29-2.3a1 1 0 0 0-1.42 1.42l2.3 2.29l-2.3 2.29a1 1 0 0 0 0 1.42a1 1 0 0 0 1.42 0l2.29-2.3l2.29 2.3a1 1 0 0 0 1.42 0a1 1 0 0 0 0-1.42L13.41 12l2.3-2.29a1 1 0 0 0 0-1.42m3.36-3.36A10 10 0 1 0 4.93 19.07A10 10 0 1 0 19.07 4.93m-1.41 12.73A8 8 0 1 1 20 12a7.95 7.95 0 0 1-2.34 5.66"/></svg>
-                                    {{ flashResponse.import_summary.duplicate_entries }} duplicates found
+                                    {{ importSummary.duplicate_entries }} duplicates found
                                 </div>
                             </div>
                         </div>
-                        <div v-if="flashResponse.import_summary.invalid_format_entries" class="bg-red-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
+                        <div v-if="importSummary.invalid_format_entries" class="bg-red-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
                             <div class="mt-1 text-sm">
                                 <div class="text-red-600 flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.71 8.29a1 1 0 0 0-1.42 0L12 10.59l-2.29-2.3a1 1 0 0 0-1.42 1.42l2.3 2.29l-2.3 2.29a1 1 0 0 0 0 1.42a1 1 0 0 0 1.42 0l2.29-2.3l2.29 2.3a1 1 0 0 0 1.42 0a1 1 0 0 0 0-1.42L13.41 12l2.3-2.29a1 1 0 0 0 0-1.42m3.36-3.36A10 10 0 1 0 4.93 19.07A10 10 0 1 0 19.07 4.93m-1.41 12.73A8 8 0 1 1 20 12a7.95 7.95 0 0 1-2.34 5.66"/></svg>
-                                    {{ flashResponse.import_summary.invalid_format_entries }} formatting issues found
+                                    {{ importSummary.invalid_format_entries }} formatting issues found
                                 </div>
                             </div>
                         </div>
-                        <div v-if="flashResponse.import_summary.failed_limit_entries" class="bg-red-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
+                        <div v-if="importSummary.failed_limit_entries" class="bg-red-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
                             <div class="mt-1 text-sm">
                                 <div class="text-red-600 flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.71 8.29a1 1 0 0 0-1.42 0L12 10.59l-2.29-2.3a1 1 0 0 0-1.42 1.42l2.3 2.29l-2.3 2.29a1 1 0 0 0 0 1.42a1 1 0 0 0 1.42 0l2.29-2.3l2.29 2.3a1 1 0 0 0 1.42 0a1 1 0 0 0 0-1.42L13.41 12l2.3-2.29a1 1 0 0 0 0-1.42m3.36-3.36A10 10 0 1 0 4.93 19.07A10 10 0 1 0 19.07 4.93m-1.41 12.73A8 8 0 1 1 20 12a7.95 7.95 0 0 1-2.34 5.66"/></svg>
-                                    {{ flashResponse.import_summary.failed_limit_entries }} failed due to contact limit
+                                    {{ importSummary.failed_limit_entries }} failed due to contact limit
                                 </div>
                             </div>
                         </div>
-                        <div v-if="flashResponse.import_summary.failed_rows_details && flashResponse.import_summary.failed_rows_details.length > 0">
+                        <div v-if="importSummary.failed_rows_truncated" class="bg-amber-50 px-2 py-2 flex rounded-md justify-between items-center mb-1">
+                            <div class="mt-1 text-sm text-amber-800">
+                                {{ $t('Some error rows were omitted from the list due to volume.') }}
+                            </div>
+                        </div>
+                        <div v-if="importSummary.failed_rows_details && importSummary.failed_rows_details.length > 0">
                             <div class="mt-2">
                                 <div class="bg-slate-50 text-sm grid grid-cols-2 p-1 py-2 rounded-md border-b-2 border-white">
                                     <div class="col-1 pl-2">{{ $t('Row') }}</div>
@@ -153,7 +250,7 @@ const trans = useTrans();
                                         <button @click="toggleFailedTable" class="bg-primary text-white text-[11px] rounded px-2">{{ showFailedTable ? $t('Hide') : $t('Show') }}</button>
                                     </div>
                                 </div>
-                                <div v-if="showFailedTable" class="bg-red-50 text-[12px] grid grid-cols-2 border-white border-r border-l border-b p-1 rounded-md" v-for="(item, index) in flashResponse.import_summary.failed_rows_details" :key="index">
+                                <div v-if="showFailedTable" class="bg-red-50 text-[12px] grid grid-cols-2 border-white border-r border-l border-b p-1 rounded-md" v-for="(item, index) in importSummary.failed_rows_details" :key="index">
                                     <div class="col-1 pl-2">{{ item.row }}</div>
                                     <div class="col-1">{{ item.error }}</div>
                                 </div>

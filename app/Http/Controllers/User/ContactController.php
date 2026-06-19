@@ -6,7 +6,7 @@ use App\Exports\ContactsExport;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreContact;
 use App\Http\Resources\ContactResource;
-use App\Imports\ContactsImport;
+use App\Jobs\ProcessContactsImportJob;
 use App\Models\Contact;
 use App\Models\ContactCategory;
 use App\Models\ContactField;
@@ -15,6 +15,7 @@ use App\Models\Organization;
 use App\Services\SubscriptionService;
 use App\Models\User;
 use App\Services\ContactFieldService;
+use App\Services\ContactImportService;
 use App\Services\ContactService;
 use DB;
 use Excel;
@@ -258,60 +259,44 @@ class ContactController extends BaseController
             'file' => 'required|file|mimes:csv,txt,xlsx',
         ]);
 
-        // Initialize the import process
-        $import = new ContactsImport();
+        $organizationId = (int) $this->getCurrentOrganizationId();
+        $userId = (int) auth()->id();
 
-        // Handle file import
-        Excel::import($import, $request->file('file'));
-
-        // Get the count of successful imports
-        $successfulImports = $import->getsuccessfulImports();
-        $updatedImports = $import->getUpdatedImports();
-        $createdImports = $successfulImports - $updatedImports;
-        $totalImports = $import->getTotalImportsCount();
-        $failedImports = $totalImports - $successfulImports;
-
-        // Prepare status message based on the import outcome
-        if ($totalImports === 0) {
-            $statusType = 'error';
-            $statusMessage = __('No data rows were imported. Make sure the file has a header row (first_name, phone, email, group_name, ...) and at least one data row below it.');
-        } elseif ($successfulImports === 0) {
-            $statusType = 'error';
-            $statusMessage = __('All rows failed to import. Please check the data format or duplicates.');
-        } elseif ($failedImports === 0) {
-            $statusType = 'success';
-            if ($updatedImports > 0 && $createdImports > 0) {
-                $statusMessage = __(':created contacts created and :updated contacts updated successfully!', [
-                    'created' => $createdImports,
-                    'updated' => $updatedImports,
-                ]);
-            } elseif ($updatedImports > 0) {
-                $statusMessage = __(':updated contacts updated successfully!', ['updated' => $updatedImports]);
-            } else {
-                $statusMessage = __('All rows have been imported successfully!');
-            }
-        } elseif ($successfulImports > 0 && $failedImports > 0) {
-            $statusType = 'warning';
-            $statusMessage = __('Some rows have been imported successfully, while others failed. Please check the error logs for details.');
+        $existing = ContactImportService::getStatus($organizationId, $userId);
+        if ($existing && in_array($existing['state'] ?? '', ['queued', 'processing'], true)) {
+            return response()->json([
+                'state' => $existing['state'],
+                'message' => __('A contact import is already in progress. Please wait for it to finish.'),
+            ], 409);
         }
 
-        return redirect('/contacts')->with(
-            'status', [
-                'type' => $statusType, 
-                'message' => $statusMessage,
-                'import_summary' => array(
-                    'total_imports' => $totalImports,
-                    'successful_imports' => $successfulImports,
-                    'created_imports' => $createdImports,
-                    'updated_imports' => $updatedImports,
-                    'failed_imports' => $failedImports,
-                    'duplicate_entries'  => $import->getFailedImportsDueToDuplicatesCount(),
-                    'invalid_format_entries' => $import->getFailedImportsDueToFormat(),
-                    'failed_rows_details' => $import->getFailedImports(),
-                    'failed_limit_entries'  => $import->getFailedImportsDueToLimit(),
-                ),
-            ]
-        );
+        $path = $request->file('file')->store('contact-imports');
+
+        ContactImportService::putStatus($organizationId, $userId, [
+            'state' => 'queued',
+            'queued_at' => now()->toIso8601String(),
+            'file_name' => $request->file('file')->getClientOriginalName(),
+        ]);
+
+        ProcessContactsImportJob::dispatch($organizationId, $userId, $path)->afterResponse();
+
+        return response()->json([
+            'state' => 'queued',
+            'message' => __('Your contacts are being imported in the background. You can close this window and continue working.'),
+        ]);
+    }
+
+    public function importStatus(Request $request) {
+        $organizationId = (int) $this->getCurrentOrganizationId();
+        $userId = (int) auth()->id();
+
+        $status = ContactImportService::getStatus($organizationId, $userId);
+
+        if (!$status) {
+            return response()->json(['state' => 'idle']);
+        }
+
+        return response()->json($status);
     }
 
     public function store(StoreContact $request){
