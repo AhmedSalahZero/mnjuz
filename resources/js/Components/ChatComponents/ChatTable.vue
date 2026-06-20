@@ -4,7 +4,7 @@ import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
 import { Link, router } from '@inertiajs/vue3'
 import debounce from 'lodash/debounce'
-import { ref, watch, inject, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, inject, computed, onMounted, onUnmounted, nextTick } from 'vue'
 
 const ROW_HEIGHT_PX = 72
 const OVERSCAN = 8
@@ -53,8 +53,12 @@ const props = defineProps({
 const isSearching = ref(false)
 const selectedContact = ref(null)
 const scrollContainer = ref(null)
+const loadMoreSentinel = ref(null)
 const categoryFilterUuid = ref(null)
 const emit = defineEmits(['view', 'category-filter-change', 'load-more-contacts'])
+
+let loadMoreObserver = null
+let loadMoreRequested = false
 
 function viewChat(contact) {
 	selectedContact.value = contact
@@ -285,38 +289,59 @@ const virtualList = computed(() => {
 	}
 })
 
+function requestLoadMore() {
+	if (!props.hasMoreContacts || props.isLoadingMoreContacts || loadMoreRequested) return
+	loadMoreRequested = true
+	emit('load-more-contacts')
+}
+
+function ensureScrollableOrLoadMore() {
+	const el = scrollContainer.value
+	if (!el || !props.hasMoreContacts || props.isLoadingMoreContacts) return
+
+	const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+	if (el.scrollHeight <= el.clientHeight + 8 || distanceFromBottom < 320) {
+		requestLoadMore()
+	}
+}
+
+function setupLoadMoreObserver() {
+	if (loadMoreObserver) {
+		loadMoreObserver.disconnect()
+		loadMoreObserver = null
+	}
+
+	const root = scrollContainer.value
+	const target = loadMoreSentinel.value
+	if (!root || !target || !props.hasMoreContacts) return
+
+	loadMoreObserver = new IntersectionObserver(
+		(entries) => {
+			if (entries.some((entry) => entry.isIntersecting)) {
+				requestLoadMore()
+			}
+		},
+		{ root, rootMargin: '240px 0px', threshold: 0 },
+	)
+
+	loadMoreObserver.observe(target)
+}
+
 function onScroll() {
 	const el = scrollContainer.value
 	if (el) {
 		scrollTop.value = el.scrollTop
 		if (!containerHeight.value && el.clientHeight) containerHeight.value = el.clientHeight
-		// Trigger load more when within 300px of the bottom
 		if (props.hasMoreContacts && !props.isLoadingMoreContacts) {
 			const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-			if (distanceFromBottom < 300) {
-				emit('load-more-contacts')
+			if (distanceFromBottom < 320) {
+				requestLoadMore()
 			}
 		}
 	}
 }
 
-let _loadMorePending = false
-function onScrollThrottled() {
-	if (_loadMorePending) return
-	const el = scrollContainer.value
-	if (!el) return
-	scrollTop.value = el.scrollTop
-	if (!containerHeight.value && el.clientHeight) containerHeight.value = el.clientHeight
-	if (props.hasMoreContacts && !props.isLoadingMoreContacts) {
-		const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-		if (distanceFromBottom < 300) {
-			_loadMorePending = true
-			emit('load-more-contacts')
-			// Reset after a safe delay to allow the parent's isLoadingMoreContacts to propagate
-			setTimeout(() => { _loadMorePending = false }, 500)
-		}
-	}
-}
+const onScrollThrottled = debounce(onScroll, 120)
 
 function updateContainerHeight() {
 	const el = scrollContainer.value
@@ -325,15 +350,37 @@ function updateContainerHeight() {
 
 onMounted(() => {
 	updateContainerHeight()
-	requestAnimationFrame(updateContainerHeight)
+	requestAnimationFrame(() => {
+		updateContainerHeight()
+		setupLoadMoreObserver()
+		ensureScrollableOrLoadMore()
+	})
 	window.addEventListener('resize', updateContainerHeight)
 })
 onUnmounted(() => {
+	loadMoreObserver?.disconnect()
 	window.removeEventListener('resize', updateContainerHeight)
 })
+
+watch(
+	() => [props.hasMoreContacts, props.isLoadingMoreContacts, sortedContacts.value.length],
+	() => {
+		if (!props.isLoadingMoreContacts) {
+			loadMoreRequested = false
+		}
+		nextTick(() => {
+			updateContainerHeight()
+			setupLoadMoreObserver()
+			if (!props.isLoadingMoreContacts) {
+				ensureScrollableOrLoadMore()
+			}
+		})
+	},
+)
 </script>
 <template>
-	<div class="px-4 py-4 border-b">
+	<div class="flex flex-col h-full min-h-0">
+	<div class="px-4 py-4 border-b shrink-0">
 		<div class="flex items-center justify-between space-x-1 text-xl">
 			<div class="flex space-x-1 items-center flex-wrap gap-2">
 				<h2>{{ $t('Chats') }}</h2>
@@ -396,7 +443,7 @@ onUnmounted(() => {
 			</div>
 		</div>
 	</div>
-	<div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer" @scroll="onScrollThrottled">
+	<div class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer" @scroll="onScrollThrottled">
 		<div :style="{ height: virtualList.totalHeight + 'px', position: 'relative' }">
 			<div :style="{ transform: `translateY(${virtualList.offsetY}px)` }">
 				<a v-for="item in virtualList.visibleItems" :key="item.contact.uuid"
@@ -557,13 +604,14 @@ onUnmounted(() => {
 				</a>
 			</div>
 		</div>
+		<div v-if="hasMoreContacts" ref="loadMoreSentinel" class="h-px w-full" aria-hidden="true"></div>
+		<div v-if="isLoadingMoreContacts" class="flex justify-center items-center py-3 text-slate-400 text-sm">
+			<svg class="animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+				<path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8V2Z"/>
+			</svg>
+			{{ $t('Loading...') }}
+		</div>
 	</div>
-	<!-- loading more indicator -->
-	<div v-if="isLoadingMoreContacts" class="flex justify-center items-center py-3 text-slate-400 text-sm">
-		<svg class="animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-			<path fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-2a8 8 0 0 0-8-8V2Z"/>
-		</svg>
-		{{ $t('Loading...') }}
 	</div>
 	<!-- <div class="px-4 pb-4">
 		<Pagination class="mt-3" :pagination="rows.meta" />

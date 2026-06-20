@@ -1,8 +1,8 @@
 <template>
 	<AppLayout v-slot:default="slotProps">
-		<div class="md:flex md:flex-grow md:overflow-hidden">
-			<div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
-				<ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
+		<div class="md:flex md:flex-grow md:overflow-hidden md:h-screen min-h-0">
+			<div class="md:w-[30%] md:flex flex-col h-full min-h-0 bg-white border-r border-l" :class="contact ? 'hidden' : ''">
+				<ChatTable class="flex-1 min-h-0" :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
 					:ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
 					:chatSortDirection="props.chat_sort_direction"
 					:contactCategoriesEnabled="props.contactCategoriesEnabled"
@@ -142,7 +142,7 @@ async function loadMoreContacts() {
 	try {
 		const params = new URLSearchParams(window.location.search)
 		params.set('contact_page', nextContactsPage.value)
-		const response = await axios.get('/chats-load-more?' + params.toString())
+		const response = await axios.get('/chats/load-more?' + params.toString())
 		const newData = response.data
 		const currentData = rows.value?.data ?? []
 		// Deduplication: avoid showing the same contact twice (pagination boundary issue)
@@ -164,10 +164,23 @@ async function loadMoreContacts() {
 watch(
 	() => props.rows,
 	(newRows) => {
-		if (!isCategoryFilterActive.value) {
-			rows.value = newRows?.data
-				? { ...newRows, data: deduplicateContacts(newRows.data) }
-				: newRows
+		if (isCategoryFilterActive.value) return
+
+		const incoming = newRows?.data ? deduplicateContacts(newRows.data) : []
+		const current = rows.value?.data ?? []
+		const currentLen = current.length
+
+		// Keep accumulated pages unless the server sent a fresh first page (search/filter reload).
+		const isFreshServerPage =
+			incoming.length <= 50 &&
+			(currentLen === 0 ||
+				incoming.length < currentLen ||
+				(incoming[0]?.id && incoming[0].id !== current[0]?.id))
+
+		if (isFreshServerPage) {
+			rows.value = newRows?.data ? { ...newRows, data: incoming } : newRows
+			hasMoreContacts.value = props.hasMoreContacts
+			nextContactsPage.value = props.nextContactsPage
 		}
 	},
 )

@@ -71,6 +71,10 @@ class RestrictOrganizationAgent
             if ($path === $prefix || str_starts_with($path, $prefix.'/')) {
                 return true;
             }
+            // e.g. /chats-load-more (not under /chats/{uuid})
+            if ($prefix === 'chats' && str_starts_with($path, 'chats-')) {
+                return true;
+            }
         }
 
         return false;

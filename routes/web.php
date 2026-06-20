@@ -157,6 +157,8 @@ Route::middleware(['auth:user'])->group(function () {
             });
 
             Route::group(['middleware' => 'check.subscription'], function () {
+                Route::get('/chats/load-more', [App\Http\Controllers\User\ChatController::class, 'loadMoreContacts']);
+                Route::get('/chats-load-more', [App\Http\Controllers\User\ChatController::class, 'loadMoreContacts']);
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
                 Route::get('/chats/{id}/media', [App\Http\Controllers\User\ChatController::class, 'getMedia']);
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
