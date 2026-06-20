@@ -328,6 +328,7 @@ const generateNewMessage = (form) => {
 	if (isMedia) {
 		file = form.value.file
 		const fileTypeCategory = getFileTypeCategory(file.type)
+		const caption = (form.value.message ?? '').trim()
 		metadata = {
 			type: fileTypeCategory,
 		}
@@ -335,10 +336,12 @@ const generateNewMessage = (form) => {
 		if (fileTypeCategory === 'image') {
 			metadata.image = {
 				mime_type: file.type,
+				...(caption ? { caption } : {}),
 			}
 		} else if (fileTypeCategory === 'video') {
 			metadata.video = {
 				mime_type: file.type,
+				...(caption ? { caption } : {}),
 			}
 		} else if (fileTypeCategory === 'audio') {
 			metadata.audio = {
@@ -347,6 +350,7 @@ const generateNewMessage = (form) => {
 		} else {
 			metadata.document = {
 				mime_type: file.type,
+				...(caption ? { caption } : {}),
 			}
 		}
 	}

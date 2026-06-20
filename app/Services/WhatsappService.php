@@ -724,7 +724,7 @@ class WhatsappService
             $requestData[$mediaType]['filename'] = $mediaFileName;
         }
 
-        if($caption != NULL && $mediaType != 'audio'){
+        if ($caption !== null && $caption !== '' && $mediaType != 'audio') {
             $requestData[$mediaType]['caption'] = $caption;
         }
 
@@ -737,7 +737,7 @@ class WhatsappService
             $wamId = $responseObject->data->messages[0]->id;
             $rawContentType = $this->getContentTypeFromUrl($mediaUrl);
             $contentType = whatsapp_acceptable_content_type($rawContentType ?? '', $mediaType);
-            $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription);
+            $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription, $caption);
             $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
 
             $chat = Chat::create([
@@ -821,7 +821,7 @@ class WhatsappService
         }
     }
 
-    function formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription = null){
+    function formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription = null, $caption = null){
         $response = [
             "id" => $wamId,
             "type" => $mediaType,
@@ -829,6 +829,10 @@ class WhatsappService
                 "mime_type" => $contentType,
             ]
         ];
+
+        if ($caption !== null && $caption !== '' && $mediaType !== 'audio') {
+            $response[$mediaType]['caption'] = $caption;
+        }
 
         if ($mediaType === 'audio' && $transcription) {
             $response['transcript'] = $transcription;

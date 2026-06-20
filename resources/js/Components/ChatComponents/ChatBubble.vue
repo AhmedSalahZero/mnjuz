@@ -462,6 +462,8 @@ const linkifyText = (text) => {
 						</a>
 					</div>
 				</div>
+				<div v-if="JSON.parse(content.metadata).document?.caption" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap mt-2" v-html="linkifyText(JSON.parse(content.metadata).document?.caption || '')"></div>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"

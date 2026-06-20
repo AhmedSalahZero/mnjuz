@@ -26,7 +26,8 @@ class SendMediaJob implements ShouldQueue
         public string $tempFilePath,
         public ?int $userId,
         public ?string $tempMessageId,
-		public ?string $messageUUID
+        public ?string $messageUUID,
+        public ?string $caption = null,
     ) {}
 
     public function handle(): void
@@ -91,6 +92,8 @@ class SendMediaJob implements ShouldQueue
             $this->organizationId
         );
 
+        $caption = $this->fileType === 'audio' ? null : $this->caption;
+
         $whatsappService->sendMedia(
             $this->uuid,
             $this->fileType,
@@ -98,11 +101,11 @@ class SendMediaJob implements ShouldQueue
             $mediaFilePath,
             $mediaUrl,
             $location,
-            null,
+            $caption,
             null,
             $this->userId,
             $this->tempMessageId,
-			$this->messageUUID
+            $this->messageUUID
         );
     }
 }

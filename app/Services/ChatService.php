@@ -499,6 +499,7 @@ class ChatService
 
         if ($request->file('file')) {
 			$fileType = $request->type;
+			$caption = $this->resolveMediaCaption($request, $fileType);
 			$organizationId = $this->organizationId;
 			$uuid = $contact->uuid;
 			$file = $request->file('file');
@@ -516,8 +517,8 @@ class ChatService
 					$tempFilePath,
 					auth()->id(),
 					$tempMessageId,
-					$messageUUID
-					
+					$messageUUID,
+					$caption
 				)->onQueue('high');
 
 				return null;
@@ -537,7 +538,7 @@ class ChatService
 				$mediaUrl = $mediaFilePath;
 			}
 
-			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId, $messageUUID);
+			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, $caption, null, auth()->id(), $tempMessageId, $messageUUID);
         }
 
         $message = trim((string) ($request->message ?? ''));
@@ -549,6 +550,22 @@ class ChatService
         }
 
         return $this->whatsappService->sendMessage($contact->uuid, $message, auth()->user()->id);
+    }
+
+    private function resolveMediaCaption(object $request, ?string $mediaType): ?string
+    {
+        if ($mediaType === 'audio') {
+            return null;
+        }
+
+        $caption = trim(strip_tags((string) ($request->caption ?? $request->message ?? '')));
+        if ($caption === '') {
+            return null;
+        }
+
+        $caption = trim((string) clean($caption));
+
+        return $caption !== '' ? mb_substr($caption, 0, 1024) : null;
     }
 
     public function sendTemplateMessage(object $request, $uuid)

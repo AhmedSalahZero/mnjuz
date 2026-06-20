@@ -1165,9 +1165,18 @@ class ApiController extends Controller
         }
 
         $this->initializeWhatsappService($organizationId);
-        $type = !isset($request->buttons) ? 'text' : 'interactive';
+        $caption = trim((string) ($request->caption ?? ''));
+        $caption = $caption !== '' ? mb_substr($caption, 0, 1024) : null;
 
-        $message = $this->whatsappService->sendMedia($contact->uuid, $request->media_type, $request->file_name, $request->media_url, $request->media_url, 'amazon');
+        $message = $this->whatsappService->sendMedia(
+            $contact->uuid,
+            $request->media_type,
+            $request->file_name,
+            $request->media_url,
+            $request->media_url,
+            'amazon',
+            $caption
+        );
         
         return response()->json([
             'statusCode' => 200,
