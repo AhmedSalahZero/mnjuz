@@ -61,7 +61,10 @@ class WhatsappService
     {
 		$tempMessageId = Request()->get('tempMessageId');
 		$messageUUID = Request()->get('msg_uuid');
-		$messageContent = $messageContent ?: '';
+		$messageContent = $this->normalizeOutboundText($messageContent);
+		if ($type === 'text' && $messageContent === '') {
+			return (object) ['success' => false, 'message' => __('Message cannot be empty.')];
+		}
 		if ($tempMessageId !== null && $tempMessageId !== '') {
 			\App\Jobs\SendTextMessageJob::dispatch(
 				$this->organizationId,
@@ -114,6 +117,11 @@ class WhatsappService
 			->first();
 		if (!$contact) {
 			return (object) ['success' => false];
+		}
+
+		$messageContent = $this->normalizeOutboundText($messageContent);
+		if ($type === 'text' && $messageContent === '') {
+			return (object) ['success' => false, 'message' => __('Message cannot be empty.')];
 		}
 
 		$url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
@@ -630,6 +638,17 @@ class WhatsappService
         }
 
         return (string) ($this->getParameters($contact, (string) ($parameter['text'] ?? $parameter['value'] ?? '')) ?? '');
+    }
+
+    private function normalizeOutboundText(mixed $messageContent): string
+    {
+        $messageContent = trim(strip_tags((string) ($messageContent ?? '')));
+
+        if ($messageContent === '') {
+            return '';
+        }
+
+        return trim((string) clean($messageContent));
     }
 
     private function getParameters($contact, $parameter){

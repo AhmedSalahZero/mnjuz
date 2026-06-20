@@ -421,6 +421,16 @@ class FlowExecutionService
 
         switch ($type) {
             case 'text':
+                if (trim($message) === '') {
+                    Log::error('Flow text node is missing body text', [
+                        'flow_id' => $flowData->flow_id,
+                        'contact_id' => $contactId,
+                        'node_id' => $metadataArray['id'] ?? null,
+                    ]);
+
+                    return false;
+                }
+
                 $response = $this->whatsappService->sendMessage($contact->uuid, $message, 0, $buttonType);
                 break;
     

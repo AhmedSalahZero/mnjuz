@@ -496,10 +496,8 @@ class ChatService
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
             return MessagingWindowHelper::closedWindowJsonResponse();
         }
-	
-        if ($request->type === 'text') {
-            return $this->whatsappService->sendMessage($contact->uuid, $request->message, auth()->user()->id,);
-        } elseif($request->file('file')) {
+
+        if ($request->file('file')) {
 			$fileType = $request->type;
 			$organizationId = $this->organizationId;
 			$uuid = $contact->uuid;
@@ -541,7 +539,16 @@ class ChatService
 
 			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, null, null, auth()->id(), $tempMessageId, $messageUUID);
         }
-       
+
+        $message = trim((string) ($request->message ?? ''));
+        if ($message === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('Message cannot be empty.'),
+            ], 422);
+        }
+
+        return $this->whatsappService->sendMessage($contact->uuid, $message, auth()->user()->id);
     }
 
     public function sendTemplateMessage(object $request, $uuid)

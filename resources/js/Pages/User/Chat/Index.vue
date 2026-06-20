@@ -314,7 +314,10 @@ const getFileTypeCategory = (mimeType) => {
 const generateNewMessage = (form) => {
 	const isText = form.value.type == 'text'
 	let file = null
-	const isMedia = !isText
+	const isMedia = !isText && !!form.value.file
+	if (isText && !(form.value.message ?? '').trim()) {
+		return
+	}
 	let metadata = {
 		text: {
 			body: form.value.message,

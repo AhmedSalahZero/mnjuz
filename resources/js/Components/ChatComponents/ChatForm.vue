@@ -92,9 +92,24 @@ const appendMessageIntoBody = (form) => {
 }
 const sendMessage = async () => {
 	if (!isInboundChatWithin24Hours.value) return
-	form.value.message = formTextInput.value
+	const messageText = (formTextInput.value ?? '').trim()
+	form.value.message = messageText || null
 	processingForm.value = true
-	if (form.value.message != null || form.value.file != null) {
+
+	if (form.value.file) {
+		if (form.value.type === 'text' || !form.value.type) {
+			const mime = form.value.file.type || ''
+			if (mime.startsWith('image/')) form.value.type = 'image'
+			else if (mime.startsWith('video/')) form.value.type = 'video'
+			else if (mime.startsWith('audio/')) form.value.type = 'audio'
+			else form.value.type = 'document'
+		}
+	} else if (!messageText) {
+		processingForm.value = false
+		return
+	}
+
+	if (messageText || form.value.file != null) {
 		const formData = new FormData()
 		const tempMessageId = crypto.randomUUID()
 		form.value.tempMessageId = tempMessageId

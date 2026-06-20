@@ -223,7 +223,7 @@
     "Or drag and drop": "or drag and drop",
     "CSV files only": "CSV files only",
     "Complete": "Complete",
-    "Import contacts": "Import Contacts",
+    "Message cannot be empty.": "Message cannot be empty.",
     "Import in progress...": "Import in progress...",
     "Your contacts are being imported in the background. You can close this window and continue working.": "Your contacts are being imported in the background. You can close this window and continue working.",
     "A contact import is already in progress. Please wait for it to finish.": "A contact import is already in progress. Please wait for it to finish.",

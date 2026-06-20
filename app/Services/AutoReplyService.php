@@ -324,7 +324,10 @@ class AutoReplyService
 
         if($replyType === 'text'){
 	//		logger('inside text');
-            $message = $this->replacePlaceholders($organization_id, $contact->uuid, $metadata->data->text);
+            $message = trim($this->replacePlaceholders($organization_id, $contact->uuid, $metadata->data->text ?? ''));
+            if ($message === '') {
+                return;
+            }
             $this->initializeWhatsappService($organization_id)->sendMessage($contact->uuid, $message);
         } else if($replyType === 'audio' || $replyType === 'image'){
 	//		logger('inside audio image');

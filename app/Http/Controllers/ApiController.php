@@ -824,7 +824,7 @@ class ApiController extends Controller
                     $fail('The phone number is not valid.');
                 }
             }],
-            'message' => 'required',
+            'message' => 'required|string|min:1',
         ];
 
         $validator = Validator::make($request->all(), $rules);

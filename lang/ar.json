@@ -404,7 +404,7 @@
 "Or drag and drop": "أو اسحب وأفلت",
 "CSV files only": "ملفات CSV فقط",
 "Complete": "اكتمل",
-"Import contacts": "استيراد جهات الاتصال",
+"Message cannot be empty.": "لا يمكن إرسال رسالة فارغة.",
 "Import in progress...": "جاري الاستيراد...",
 "Your contacts are being imported in the background. You can close this window and continue working.": "يتم استيراد جهات الاتصال في الخلفية. يمكنك إغلاق هذه النافذة ومتابعة العمل.",
 "A contact import is already in progress. Please wait for it to finish.": "يوجد استيراد جهات اتصال قيد التنفيذ. يرجى الانتظار حتى ينتهي.",

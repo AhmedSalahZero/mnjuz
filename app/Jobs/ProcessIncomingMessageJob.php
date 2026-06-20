@@ -263,7 +263,10 @@ class ProcessIncomingMessageJob implements ShouldQueue
             return;
         }
         $body = WorkingHoursService::resolveAwayNoticeBody($this->organizationId);
-        $body = ContactPlaceholderService::replace($this->organizationId, $contact->uuid, $body);
+        $body = trim(ContactPlaceholderService::replace($this->organizationId, $contact->uuid, $body));
+        if ($body === '') {
+            return;
+        }
         SendTextMessageJob::dispatch(
             $this->organizationId,
             $contact->uuid,
