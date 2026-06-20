@@ -8,8 +8,7 @@
 					:contactCategoriesEnabled="props.contactCategoriesEnabled"
 					:hasMoreContacts="hasMoreContacts"
 					:isLoadingMoreContacts="isLoadingMoreContacts"
-					@load-more-contacts="loadMoreContacts"
-					@category-filter-change="onCategoryFilterChange" />
+					@load-more-contacts="loadMoreContacts" />
 			</div>
 			<div class="min-w-0 bg-cover flex flex-col chat-bg"
 				:class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
@@ -116,7 +115,6 @@ const rows = ref(
 		: props.rows
 )
 const rowCount = ref(props.rowCount)
-const isCategoryFilterActive = ref(false)
 const scrollContainer2 = ref(null)
 const scrollResizeCleanup = ref(null)
 const loadingThread = ref(false)
@@ -135,6 +133,7 @@ const templates = ref(props.templates ?? [])
 const hasMoreContacts = ref(props.hasMoreContacts)
 const nextContactsPage = ref(props.nextContactsPage)
 const isLoadingMoreContacts = ref(false)
+let consecutiveEmptyContactLoads = 0
 
 async function loadMoreContacts() {
 	if (isLoadingMoreContacts.value || !hasMoreContacts.value || nextContactsPage.value === null) return
@@ -152,6 +151,16 @@ async function loadMoreContacts() {
 		rowCount.value = newData.rowCount ?? rowCount.value
 		hasMoreContacts.value = newData.hasMoreContacts ?? false
 		nextContactsPage.value = newData.nextContactsPage ?? null
+
+		if (uniqueNew.length === 0) {
+			consecutiveEmptyContactLoads++
+			if (consecutiveEmptyContactLoads >= 2) {
+				hasMoreContacts.value = false
+				nextContactsPage.value = null
+			}
+		} else {
+			consecutiveEmptyContactLoads = 0
+		}
 	} catch (e) {
 		console.error('loadMoreContacts error', e)
 	} finally {
@@ -164,8 +173,6 @@ async function loadMoreContacts() {
 watch(
 	() => props.rows,
 	(newRows) => {
-		if (isCategoryFilterActive.value) return
-
 		const incoming = newRows?.data ? deduplicateContacts(newRows.data) : []
 		const current = rows.value?.data ?? []
 		const currentLen = current.length
@@ -181,6 +188,7 @@ watch(
 			rows.value = newRows?.data ? { ...newRows, data: incoming } : newRows
 			hasMoreContacts.value = props.hasMoreContacts
 			nextContactsPage.value = props.nextContactsPage
+			consecutiveEmptyContactLoads = 0
 		}
 	},
 )
@@ -267,13 +275,6 @@ watch(
 		templates.value = newTemplates ?? []
 	},
 )
-
-function onCategoryFilterChange(active) {
-	isCategoryFilterActive.value = active
-	if (!active) {
-		rows.value = props.rows
-	}
-}
 
 function toggleContactView(value) {
 	displayContactInfo.value = value

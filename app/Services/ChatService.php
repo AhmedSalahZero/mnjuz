@@ -163,7 +163,9 @@ class ChatService
 		$allowAgentsToViewAllChats =true;
 		if($config->getTicketingActive()){
 			$ticketingActive = true;
-			$this->ensureChatTicketsExist();
+			if (!in_array($ticketState, ['open', 'closed', 'unassigned'], true)) {
+				$this->ensureChatTicketsExist();
+			}
 			$allowAgentsToViewAllChats = $config->getAllowAgentsToViewAllChats();
 		}
 
@@ -175,24 +177,22 @@ class ChatService
 		$nextContactsPage = null;
 	
 		if(!$skipRowsQuery){
-			// عند تفعيل التذاكر نحمّل كل الجهات مع ticket_status للفلترة من جهة العميل
-			$queryTicketState = $ticketingActive ? 'all' : $ticketState;
-			$clientSideFilter = $ticketingActive;
 			$contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
+			$categoryUuid = $request->query('category');
 
 			$contactPage = $request->input('contact_page', 1);
 			$contactsPaginated = $contact->contactsWithChatsOptimized(
 				$this->organizationId,
 				$searchTerm,
 				$ticketingActive,
-				$queryTicketState,
+				$ticketState,
 				$sortDirection,
 				$role,
 				$allowAgentsToViewAllChats,
-				$clientSideFilter,
 				$contactCategoriesEnabled,
 				50,
 				$contactPage,
+				$categoryUuid,
 			);
 
 			$contacts = $contactsPaginated;
@@ -366,10 +366,10 @@ class ChatService
         $config = Organization::find($this->organizationId);
         $ticketingActive = $config->getTicketingActive();
         $allowAgentsToViewAllChats = $ticketingActive ? $config->getAllowAgentsToViewAllChats() : true;
-        $clientSideFilter = $ticketingActive;
-        $queryTicketState = $ticketingActive ? 'all' : ($request->status == null ? 'all' : $request->status);
         $sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
         $searchTerm = $request->query('search');
+        $ticketState = $request->status == null ? 'all' : $request->status;
+        $categoryUuid = $request->query('category');
         $contactPage = $request->input('contact_page', 1);
         $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
 
@@ -377,14 +377,14 @@ class ChatService
             $this->organizationId,
             $searchTerm,
             $ticketingActive,
-            $queryTicketState,
+            $ticketState,
             $sortDirection,
             $role,
             $allowAgentsToViewAllChats,
-            $clientSideFilter,
             $contactCategoriesEnabled,
             50,
             $contactPage,
+            $categoryUuid,
         );
 
         return response()->json([
@@ -805,31 +805,36 @@ class ChatService
     {
         $contactsWithoutTickets = DB::table('contacts')
             ->select('contacts.id')
-            ->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
             ->where('contacts.organization_id', $this->organizationId)
             ->whereNull('contacts.deleted_at')
             ->whereNotNull('contacts.latest_chat_created_at')
-            ->whereNull('chat_tickets.id')
-            ->pluck('contacts.id');
+            ->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('chat_tickets')
+                    ->whereColumn('chat_tickets.contact_id', 'contacts.id');
+            })
+            ->limit(500)
+            ->pluck('id');
 
-        if (!$contactsWithoutTickets->isEmpty()) {
-            $now = now();
-            $ticketsData = $contactsWithoutTickets->map(function ($contactId) use ($now) {
-                return [
-                    'contact_id' => $contactId,
-                    'assigned_to' => null,
-                    'status' => 'open',
-                    'is_latest' => true,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-            })->toArray();
-
-            collect($ticketsData)->chunk(500)->each(function ($chunk) {
-                // INSERT IGNORE لتجنب إنشاء tickets مكررة عند race conditions
-                DB::table('chat_tickets')->insertOrIgnore($chunk->toArray());
-            });
+        if ($contactsWithoutTickets->isEmpty()) {
+            return;
         }
+
+        $now = now();
+        $ticketsData = $contactsWithoutTickets->map(function ($contactId) use ($now) {
+            return [
+                'contact_id' => $contactId,
+                'assigned_to' => null,
+                'status' => 'open',
+                'is_latest' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        })->toArray();
+
+        collect($ticketsData)->chunk(500)->each(function ($chunk) {
+            DB::table('chat_tickets')->insertOrIgnore($chunk->toArray());
+        });
     }
     public function blockContact(Organization $organization, Contact $contact)
     {

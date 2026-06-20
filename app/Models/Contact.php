@@ -139,10 +139,10 @@ class Contact extends Model
         $sortDirection = 'desc',
         $role = 'owner',
         $allowAgentsViewAllChats = true,
-        $clientSideFilter = false,
         $eagerLoadCategories = false,
         $perPage = null,
         $page = 1,
+        $categoryUuid = null,
     ) {
         $query = $this->newQuery()
             ->select([
@@ -164,6 +164,24 @@ class Contact extends Model
             ->whereNotNull('contacts.latest_chat_created_at')
             ->whereNull('contacts.deleted_at');
 
+        if ($categoryUuid) {
+            $categoryId = ContactCategory::query()
+                ->where('organization_id', $organizationId)
+                ->where('uuid', $categoryUuid)
+                ->value('id');
+
+            if ($categoryId) {
+                $query->whereExists(function ($sub) use ($categoryId) {
+                    $sub->selectRaw('1')
+                        ->from('contact_category_contact')
+                        ->whereColumn('contact_category_contact.contact_id', 'contacts.id')
+                        ->where('contact_category_contact.contact_category_id', $categoryId);
+                });
+            } else {
+                $query->whereRaw('0 = 1');
+            }
+        }
+
         // ✅ استخدام العمود الموجود بدلاً من Subquery!
         // بدلاً من: selectSub(function($subquery) { ... })
         // نستخدم: العمود latest_chat_created_at الموجود أصلاً!
@@ -178,40 +196,42 @@ class Contact extends Model
     	]);
     
         // ✅ Eager load lastChat فقط؛ last_inbound_chat نعتمد على العمود last_inbound_chat_created_at
-        // عند الفلترة من جهة العميل لا نطبق فلتر is_read هنا
         $with = ['lastChat'];
         if ($eagerLoadCategories) {
             $with[] = 'contactCategories:id,name,uuid,background_color,text_color';
         }
         $query->with($with)
-        ->when(!$clientSideFilter && Request()->has('is_read'), function ($q) {
-            $q->whereHas('lastInboundChat', function ($q) {
-                $q->where('is_read', 0);
+        ->when(Request()->has('is_read'), function ($q) {
+            $q->whereExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('chats')
+                    ->whereColumn('chats.contact_id', 'contacts.id')
+                    ->where('chats.type', 'inbound')
+                    ->where('chats.is_read', 0)
+                    ->whereNull('chats.deleted_at');
             });
         });
 
-        // ✅ شروط التذاكر — JOIN مباشر على is_latest لاستخدام الـ index (contact_id, is_latest)
-        // ملاحظة: migration 2026_06_06 يضمن صف واحد فقط بـ is_latest=true لكل contact
+        // ✅ شروط التذاكر — INNER JOIN عند الفلترة لبدء من chat_tickets المفهرسة
         if ($ticketingActive) {
-            $query->leftJoin('chat_tickets', function ($join) {
+            $isTicketFiltered = in_array($ticketState, ['open', 'closed', 'unassigned'], true);
+            $joinMethod = $isTicketFiltered ? 'join' : 'leftJoin';
+
+            $query->{$joinMethod}('chat_tickets', function ($join) use ($ticketState) {
                 $join->on('contacts.id', '=', 'chat_tickets.contact_id')
                     ->where('chat_tickets.is_latest', true);
+
+                if ($ticketState === 'unassigned') {
+                    $join->whereNull('chat_tickets.assigned_to');
+                } elseif (in_array($ticketState, ['open', 'closed'], true)) {
+                    $join->where('chat_tickets.status', $ticketState);
+                }
             });
 
-            // إضافة أعمدة التذكرة (للفلترة من جهة العميل)
             $query->addSelect([
                 'chat_tickets.status as ticket_status',
                 'chat_tickets.assigned_to as ticket_assigned_to',
             ]);
-
-            // فلترة حسب الحالة (عند الفلترة من جهة العميل نحمّل الكل ولا نفلتر هنا)
-            if (!$clientSideFilter) {
-                if ($ticketState === 'unassigned') {
-                    $query->whereNull('chat_tickets.assigned_to');
-                } elseif ($ticketState !== null && $ticketState !== 'all') {
-                    $query->where('chat_tickets.status', $ticketState);
-                }
-            }
 
             // صلاحيات الوكلاء
             if ($role === 'agent' && !$allowAgentsViewAllChats) {
@@ -234,9 +254,7 @@ class Contact extends Model
         }
 
         // ✅ الترتيب باستخدام العمود الموجود
-        $query
-		->with('organization')
-		->orderBy('contacts.latest_chat_created_at', $sortDirection)
+        $query->orderBy('contacts.latest_chat_created_at', $sortDirection)
 		->orderBy('contacts.id', 'desc');
 		/**
 		 * @var Builder $query 

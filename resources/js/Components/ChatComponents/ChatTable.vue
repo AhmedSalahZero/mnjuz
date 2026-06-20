@@ -54,11 +54,51 @@ const isSearching = ref(false)
 const selectedContact = ref(null)
 const scrollContainer = ref(null)
 const loadMoreSentinel = ref(null)
-const categoryFilterUuid = ref(null)
-const emit = defineEmits(['view', 'category-filter-change', 'load-more-contacts'])
+const categoryFilterUuid = ref(getCategoryFromUrl())
+const emit = defineEmits(['view', 'load-more-contacts'])
 
 let loadMoreObserver = null
 let loadMoreRequested = false
+
+function getCategoryFromUrl() {
+	return new URLSearchParams(window.location.search).get('category') || null
+}
+
+function buildChatsQuery(overrides = {}) {
+	const params = new URLSearchParams(window.location.search)
+	params.delete('contact_page')
+
+	if ('search' in overrides) {
+		if (overrides.search) params.set('search', overrides.search)
+		else params.delete('search')
+	}
+	if ('category' in overrides) {
+		if (overrides.category) params.set('category', overrides.category)
+		else params.delete('category')
+	}
+	if ('status' in overrides) {
+		params.delete('is_read')
+		if (overrides.status && overrides.status !== 'all' && overrides.status !== 'unread') {
+			params.set('status', overrides.status)
+		} else {
+			params.delete('status')
+		}
+		if (overrides.status === 'unread') {
+			params.set('is_read', '0')
+		}
+	}
+
+	return params.toString()
+}
+
+function visitChatsQuery(overrides = {}) {
+	const qs = buildChatsQuery(overrides)
+	router.visit(qs ? `/chats?${qs}` : '/chats', { preserveScroll: true })
+}
+
+function visitWithCategoryFilter(categoryUuid) {
+	visitChatsQuery({ category: categoryUuid || null })
+}
 
 function viewChat(contact) {
 	selectedContact.value = contact
@@ -70,13 +110,11 @@ function setCategoryFilter(event, uuid) {
 		event.preventDefault()
 		event.stopPropagation()
 	}
-	categoryFilterUuid.value = uuid
-	emit('category-filter-change', true)
+	visitWithCategoryFilter(uuid)
 }
 
 function clearCategoryFilter() {
-	categoryFilterUuid.value = null
-	emit('category-filter-change', false)
+	visitWithCategoryFilter(null)
 }
 
 const contentType = (metadata) => {
@@ -207,11 +245,7 @@ const search = debounce(() => {
 }, 1000)
 
 const runSearch = () => {
-	const url = window.location.pathname
-	router.visit(url, {
-		method: 'get',
-		data: params.value,
-	})
+	visitChatsQuery({ search: params.value.search || null })
 }
 
 const clearSearch = () => {
@@ -223,32 +257,21 @@ const sortChanged = (value) => {
 	currentSortDirection.value = value
 }
 
-// فلترة من جهة العميل عند تفعيل التذاكر
+// فلترة حالة التذكرة / is_read تتم على السيرفر؛ statusFilter للعرض في الـ UI فقط
 const statusFilter = ref(getInitialStatusFilter(props.status))
 watch(() => props.status, (newVal) => {
 	statusFilter.value = getInitialStatusFilter(newVal)
 }, { immediate: false })
 
-const filteredRows = computed(() => {
-	let data = props.rows?.data ?? []
-	if (props.contactCategoriesEnabled && categoryFilterUuid.value) {
-		data = data.filter((c) => {
-			const cats = c.contact_categories ?? []
-			return cats.some((cat) => (cat.uuid || cat.id) === categoryFilterUuid.value)
-		})
-	}
-	if (!props.ticketingIsEnabled) return data
-	const filter = statusFilter.value
-	if (filter === 'all') return data
-	if (filter === 'unread') return data.filter((c) => (c.unread_messages ?? 0) > 0)
-	if (filter === 'unassigned') return data.filter((c) => c.ticket_assigned_to == null)
-	if (filter === 'open') return data.filter((c) => c.ticket_status === 'open')
-	if (filter === 'closed') return data.filter((c) => c.ticket_status === 'closed')
-	return data
-})
+watch(
+	() => props.filters?.category,
+	(value) => {
+		categoryFilterUuid.value = value || getCategoryFromUrl()
+	},
+)
 
 const sortedContacts = computed(() => {
-	const list = (props.ticketingIsEnabled || categoryFilterUuid.value) ? filteredRows.value : (props.rows?.data ?? [])
+	const list = props.rows?.data ?? []
 	return [...list].sort((a, b) => {
 		if (currentSortDirection.value == 'asc') {
 			return new Date(a.latest_chat_created_at) - new Date(b.latest_chat_created_at)
@@ -257,15 +280,11 @@ const sortedContacts = computed(() => {
 	})
 })
 
-const displayedRowCount = computed(() => {
-	if (props.contactCategoriesEnabled && categoryFilterUuid.value) return filteredRows.value.length
-	return props.ticketingIsEnabled ? filteredRows.value.length : props.rowCount
-})
+const displayedRowCount = computed(() => props.rowCount)
 
 function onFilterChange(value) {
 	statusFilter.value = value
-	const url = value === 'all' ? '/chats' : value === 'unread' ? '/chats?is_read=0' : '/chats?status=' + value
-	window.history.replaceState(null, '', url)
+	visitChatsQuery({ status: value })
 }
 
 // Virtual list: نعرض فقط الصفوف المرئية لتسريع الـ render مع آلاف الـ contacts
