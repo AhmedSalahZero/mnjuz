@@ -388,7 +388,7 @@ const generateNewMessage = (form) => {
 					: null,
 				media_id: null,
 				metadata: JSON.stringify(metadata),
-				status: 'delivered',
+				status: 'sent',
 				type: 'outbound',
 				user: {
 					first_name: props.user.first_name,
