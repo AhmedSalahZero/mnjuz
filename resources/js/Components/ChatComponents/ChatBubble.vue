@@ -75,22 +75,43 @@ const getValueByKey = (key) => {
 }
 
 const chatStatus = (logs) => {
+	try {
+		const meta = JSON.parse(props.content?.metadata || '{}')
+		if (meta.transcode_retry_status === 'retrying') {
+			return 'retrying'
+		}
+	} catch (error) {
+		// ignore malformed metadata
+	}
+
+	if (!logs?.length) {
+		return props.content?.status || 'sent'
+	}
+
+	const sorted = [...logs].sort(
+		(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+	)
+
 	let status = 'sent'
 
-	logs.forEach((log) => {
-		const metadata = JSON.parse(log.metadata)
-		const logStatus = metadata.status
+	for (const log of sorted) {
+		try {
+			const metadata = JSON.parse(log.metadata)
+			const logStatus = metadata.status
 
-		if (logStatus === 'failed') {
-			status = 'failed'
-			return
-		} else if (logStatus === 'read') {
-			status = 'read' // If a log is marked as 'read', it's the highest priority
-		} else if (logStatus === 'delivered' && status !== 'read') {
-			status = 'delivered' // If 'read' hasn't been found yet, 'delivered' takes precedence over 'sent'
+			if (logStatus === 'failed') {
+				status = 'failed'
+			} else if (logStatus === 'read') {
+				status = 'read'
+			} else if (logStatus === 'delivered' && status !== 'read') {
+				status = 'delivered'
+			} else if (logStatus === 'sent' && status === 'failed') {
+				status = 'sent'
+			}
+		} catch (error) {
+			// ignore malformed log metadata
 		}
-		// If only 'sent', the status will remain as 'sent'
-	})
+	}
 
 	return status
 }
@@ -159,6 +180,54 @@ const linkifyText = (text) => {
 	}
 	result += escapeHtml(text.slice(lastIndex))
 	return result
+}
+
+const mediaCaption = (value) => {
+	if (value == null) return ''
+	const text = String(value).trim()
+	return text === '' || text.toLowerCase() === 'null' ? '' : text
+}
+
+const brokenMediaKeys = ref(new Set())
+
+function mediaStorageKey(content) {
+	return String(content?.id ?? content?.wam_id ?? content?.media?.path ?? '')
+}
+
+function isMediaUnavailable(content) {
+	const key = mediaStorageKey(content)
+	return !content?.media?.path || (key !== '' && brokenMediaKeys.value.has(key))
+}
+
+function markMediaUnavailable(content) {
+	const key = mediaStorageKey(content)
+	if (!key) return
+	const next = new Set(brokenMediaKeys.value)
+	next.add(key)
+	brokenMediaKeys.value = next
+}
+
+async function handleMediaDownload(event, content) {
+	if (isMediaUnavailable(content)) {
+		event.preventDefault()
+		return
+	}
+
+	const path = content?.media?.path
+	if (!path || !path.startsWith('/media/')) {
+		return
+	}
+
+	try {
+		const response = await fetch(path, { method: 'HEAD' })
+		if (!response.ok) {
+			event.preventDefault()
+			markMediaUnavailable(content)
+		}
+	} catch {
+		event.preventDefault()
+		markMediaUnavailable(content)
+	}
 }
 </script>
 <template>
@@ -248,7 +317,8 @@ const linkifyText = (text) => {
 			</div>
 			<!--Image formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'image'">
-				<img v-if="content.media != null" :src="content?.media?.path" alt="Image" class="mb-2 max-w-[320px]" />
+				<img v-if="content.media != null && !isMediaUnavailable(content)" :src="content?.media?.path"
+					alt="Image" class="mb-2 max-w-[320px]" @error="markMediaUnavailable(content)" />
 				<div v-else class="text-slate-500 flex justify-center items-center space-x-4">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 						<g fill="none">
@@ -260,8 +330,8 @@ const linkifyText = (text) => {
 					</svg>
 					{{ $t('Content not available') }}
 				</div>
-				<div v-if="JSON.parse(content.metadata).image?.caption" style="overflow-wrap: break-word"
-					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(JSON.parse(content.metadata).image?.caption || '')"></div>
+				<div v-if="mediaCaption(JSON.parse(content.metadata).image?.caption)" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(mediaCaption(JSON.parse(content.metadata).image?.caption))"></div>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -291,7 +361,7 @@ const linkifyText = (text) => {
 			</div>
 			<!--Document formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'document'">
-				<div class="relative w-[300px]">
+				<div v-if="content.media != null && !isMediaUnavailable(content)" class="relative w-[300px]">
 					<div class="flex space-x-2 w-full h-1/3 bg-white opacity-90 pt-2">
 						<div>
 							<svg v-if="getExtension(content?.media?.type) === 'PDF'" xmlns="http://www.w3.org/2000/svg"
@@ -429,8 +499,9 @@ const linkifyText = (text) => {
 								<span>{{ formatFileSize(content?.media?.size) }}</span>
 							</div>
 						</div>
-						<a :href="content?.media?.path" :download="content?.media?.name" target="_blank"
-							@click="downloadClicked" class="flex justify-end w-full">
+						<a v-if="!isMediaUnavailable(content)" :href="content?.media?.path"
+							:download="content?.media?.name" target="_blank"
+							@click="handleMediaDownload($event, content)" class="flex justify-end w-full">
 							<svg v-if="!downloading" xmlns="http://www.w3.org/2000/svg" width="30" height="30"
 								viewBox="0 0 24 24">
 								<path fill="currentColor"
@@ -462,8 +533,11 @@ const linkifyText = (text) => {
 						</a>
 					</div>
 				</div>
-				<div v-if="JSON.parse(content.metadata).document?.caption" style="overflow-wrap: break-word"
-					class="max-w-[320px] whitespace-pre-wrap mt-2" v-html="linkifyText(JSON.parse(content.metadata).document?.caption || '')"></div>
+				<div v-else class="text-slate-500 flex justify-center items-center space-x-4 py-2">
+					{{ $t('Content not available') }}
+				</div>
+				<div v-if="mediaCaption(JSON.parse(content.metadata).document?.caption)" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap mt-2" v-html="linkifyText(mediaCaption(JSON.parse(content.metadata).document?.caption))"></div>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -522,7 +596,8 @@ const linkifyText = (text) => {
 			</div>
 			<!--Sticker formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'sticker'">
-				<img v-if="content.media != null" :src="content?.media?.path" alt="Image" class="mb-2 max-w-[100px]" />
+				<img v-if="content.media != null && !isMediaUnavailable(content)" :src="content?.media?.path"
+					alt="Image" class="mb-2 max-w-[100px]" @error="markMediaUnavailable(content)" />
 				<div v-else class="text-slate-500 flex justify-center items-center space-x-4">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 						<g fill="none">
@@ -551,7 +626,8 @@ const linkifyText = (text) => {
 			</div>
 			<!--Audio formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'audio'">
-				<audio v-if="content.media != null" controls>
+				<audio v-if="content.media != null && !isMediaUnavailable(content)" controls
+					@error="markMediaUnavailable(content)">
 					<source :src="content?.media?.path" />
 					{{ $t('Your browser does not support the audio element') }}
 				</audio>
@@ -569,7 +645,8 @@ const linkifyText = (text) => {
 			</div>
 			<!--Video formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'video'">
-				<video v-if="content.media != null" controls width="300" class="max-h-[350px]">
+				<video v-if="content.media != null && !isMediaUnavailable(content)" controls width="300"
+					class="max-h-[350px]" @error="markMediaUnavailable(content)">
 					<source :src="content?.media?.path" type="video/mp4" />
 					{{ $t('Your browser does not support the video element') }}
 				</video>
@@ -584,8 +661,8 @@ const linkifyText = (text) => {
 					</svg>
 					{{ $t('Content not available') }}
 				</div>
-				<div v-if="JSON.parse(content.metadata).video?.caption" style="overflow-wrap: break-word"
-					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(JSON.parse(content.metadata).video?.caption || '')"></div>
+				<div v-if="mediaCaption(JSON.parse(content.metadata).video?.caption)" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(mediaCaption(JSON.parse(content.metadata).video?.caption))"></div>
 				<div v-if="JSON.parse(content.metadata)?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -649,6 +726,7 @@ const linkifyText = (text) => {
 								d="M12.5 16a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7m.5-5v1.5a.5.5 0 0 1-1 0V11a.5.5 0 0 1 1 0m0 3a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0" />
 						</g>
 					</svg>
+					<span v-if="chatStatus(content.logs) === 'retrying'" class="text-amber-600 text-xs" :title="$t('Retrying with compatible format')">↻</span>
 				</span>
 			</div>
 			<div v-if="JSON.parse(content.metadata).type === 'contacts'"
@@ -660,6 +738,9 @@ const linkifyText = (text) => {
 	<Modal :label="$t('Message status: ') + chatStatus(content.logs)" :isOpen="isModalOpen" :closeBtn="true"
 		@close="isModalOpen = false">
 		<div>
+			<div v-if="chatStatus(content.logs) === 'retrying'" class="bg-amber-50 rounded-md p-3 text-sm mt-4 text-amber-800">
+				{{ $t('WhatsApp rejected the video format. Retrying with a compatible version...') }}
+			</div>
 			<div v-if="errors.length" class="bg-red-100 rounded-md p-3 text-sm mt-4">
 				<div v-for="(error, index) in errors" :key="index">
 					<div class="flex">

@@ -159,8 +159,9 @@ Route::middleware(['auth:user'])->group(function () {
             Route::group(['middleware' => 'check.subscription'], function () {
                 Route::get('/chats/load-more', [App\Http\Controllers\User\ChatController::class, 'loadMoreContacts']);
                 Route::get('/chats-load-more', [App\Http\Controllers\User\ChatController::class, 'loadMoreContacts']);
+                Route::post('/chats/update-sort-direction', [App\Http\Controllers\User\ChatController::class, 'updateChatSortDirection']);
+                Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
-                Route::get('/chats/{id}/media', [App\Http\Controllers\User\ChatController::class, 'getMedia']);
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
@@ -169,9 +170,6 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chat/{uuid}/block', [App\Http\Controllers\User\ChatController::class, 'blockContact']);
                 Route::post('/chat/{uuid}/unblock', [App\Http\Controllers\User\ChatController::class, 'unblockContact']);
                 Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);
-                Route::post('/chats/update-sort-direction', [App\Http\Controllers\User\ChatController::class, 'updateChatSortDirection']);
-                Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
-                Route::get('/chats-load-more', [App\Http\Controllers\User\ChatController::class, 'loadMoreContacts']);
 
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);

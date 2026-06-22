@@ -6,12 +6,13 @@ use Illuminate\Http\Request;
 
 class FileController extends Controller
 {
-    public function show($filename)
+    public function show(Request $request, $filename)
     {
         $path = storage_path('app/' . $filename);
 
         if (!file_exists($path)) {
-            abort(404);
+            return response(__('File not found'), 404)
+                ->header('Content-Type', 'text/plain; charset=UTF-8');
         }
 
         return response()->file($path, [

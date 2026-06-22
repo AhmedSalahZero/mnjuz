@@ -149,7 +149,14 @@ class ChatController extends BaseController
     }
     public function deleteChats($uuid)
     {
-        $this->chatService()->clearContactChat($uuid);
+        if (!$this->chatService()->clearContactChat($uuid)) {
+            return Redirect::back()->with(
+                'status', [
+                    'type' => 'error',
+                    'message' => __('Contact not found'),
+                ]
+            );
+        }
 
         return Redirect::back()->with(
             'status', [

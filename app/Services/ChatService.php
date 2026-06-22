@@ -105,15 +105,32 @@ class ChatService
         }
     }
 
-    private function findAccessibleContactByUuid(string $uuid): Contact
+    private function findContactByUuidInOrganization(string $uuid): ?Contact
     {
-        $contact = Contact::where('uuid', $uuid)
+        return Contact::where('uuid', $uuid)
             ->where('organization_id', $this->organizationId)
-            ->firstOrFail();
+            ->first();
+    }
 
-        $this->assertConversationAccess($contact);
+    private function contactNotFoundResponse()
+    {
+        if (request()->expectsJson()) {
+            return response()->json(['message' => __('Contact not found')], 404);
+        }
 
-        return $contact;
+        return redirect('/chats')->with('status', [
+            'type' => 'error',
+            'message' => __('Contact not found'),
+        ]);
+    }
+
+    private function markInboundChatsAsRead(int $contactId): void
+    {
+        DB::table('chats')->where('contact_id', $contactId)
+            ->where('type', 'inbound')
+            ->whereNull('deleted_at')
+            ->where('is_read', 0)
+            ->update(['is_read' => 1]);
     }
 
     public function getChatList($request, $uuid = null, $searchTerm = null)
@@ -134,19 +151,6 @@ class ChatService
 			$role = OrganizationRole::OWNER;
 		}
 
-		$contact = null ;
-		if($uuid !== null){
-			$contact = $this->findAccessibleContactByUuid($uuid);
-			DB::table('chats')->where('contact_id', $contact->id)
-			->where('type', 'inbound')
-			->whereNull('deleted_at')
-			->where('is_read', 0)
-			->update(['is_read' => 1]);
-		}
-        $contact = new Contact;
-		/**
-		 * @var Organization $config
-		 */
         $config = Organization::find($this->organizationId);
         $ticketState = $request->status == null ? 'all' : $request->status;
 		$sortDirection = 'desc';
@@ -169,7 +173,7 @@ class ChatService
 			$allowAgentsToViewAllChats = $config->getAllowAgentsToViewAllChats();
 		}
 
-        $contact = new Contact;
+        $contactQuery = new Contact;
 		$rowCount = -1;
 		$pusherSettings = [];
 		$contacts = [];
@@ -181,7 +185,7 @@ class ChatService
 			$categoryUuid = $request->query('category');
 
 			$contactPage = $request->input('contact_page', 1);
-			$contactsPaginated = $contact->contactsWithChatsOptimized(
+			$contactsPaginated = $contactQuery->contactsWithChatsOptimized(
 				$this->organizationId,
 				$searchTerm,
 				$ticketingActive,
@@ -250,15 +254,31 @@ class ChatService
                 ])
                 ->with($contactWith)
                 ->where('uuid', $uuid)
+                ->where('organization_id', $this->organizationId)
                 ->first();
 
 			if ($contact === null) {
-				if (request()->expectsJson()) {
-					return response()->json(['message' => __('Contact not found')], 404);
-				}
-				return redirect('/chats')->with('status', ['type' => 'error', 'message' => __('Contact not found')]);
+				return $this->contactNotFoundResponse();
 			}
-                $this->assertConversationAccess($contact);
+
+			try {
+				$this->assertConversationAccess($contact);
+			} catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+				if ($e->getStatusCode() === 403) {
+					if (request()->expectsJson()) {
+						return response()->json(['message' => $e->getMessage()], 403);
+					}
+
+					return redirect('/chats')->with('status', [
+						'type' => 'error',
+						'message' => $e->getMessage(),
+					]);
+				}
+
+				throw $e;
+			}
+
+			$this->markInboundChatsAsRead($contact->id);
 
 				/**
 				 * @var Contact $contact
@@ -491,7 +511,15 @@ class ChatService
     public function sendMessage(object $request)
     {
 		$this->initializeWhatsappService();
-        $contact = $this->findAccessibleContactByUuid((string) $request->uuid);
+        $contact = $this->findContactByUuidInOrganization((string) $request->uuid);
+        if (!$contact) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Contact not found'),
+            ], 404);
+        }
+
+        $this->assertConversationAccess($contact);
 
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
             return MessagingWindowHelper::closedWindowJsonResponse();
@@ -559,7 +587,7 @@ class ChatService
         }
 
         $caption = trim(strip_tags((string) ($request->caption ?? $request->message ?? '')));
-        if ($caption === '') {
+        if ($caption === '' || strcasecmp($caption, 'null') === 0) {
             return null;
         }
 
@@ -573,7 +601,15 @@ class ChatService
 		$this->initializeWhatsappService();
 	
         $template = Template::where('uuid', $request->template)->first();
-        $contact = $this->findAccessibleContactByUuid((string) $uuid);
+        $contact = $this->findContactByUuidInOrganization((string) $uuid);
+        if (!$contact) {
+            return (object) [
+                'success' => false,
+                'message' => __('Contact not found'),
+            ];
+        }
+
+        $this->assertConversationAccess($contact);
         $mediaId = null;
 	
         if (in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
@@ -661,12 +697,17 @@ class ChatService
             ]);
     }
 
-    public function clearContactChat($uuid)
+    public function clearContactChat($uuid): bool
     {
         $contact = Contact::with('lastChat')
             ->where('uuid', $uuid)
             ->where('organization_id', $this->organizationId)
-            ->firstOrFail();
+            ->first();
+
+        if (!$contact) {
+            return false;
+        }
+
         $this->assertConversationAccess($contact);
         Chat::where('contact_id', $contact->id)->update([
             'deleted_by' => auth()->user()->id,
@@ -679,6 +720,8 @@ class ChatService
         ]);
 		
 		event(new ContactChatDeletedEvent($this->organizationId, $contact->id));
+
+        return true;
     }
 
     private function getContentTypeFromUrl($url)

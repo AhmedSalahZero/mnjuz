@@ -9,6 +9,7 @@ use App\Models\Campaign;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatMedia;
+use App\Models\ChatStatusLog;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
@@ -705,7 +706,7 @@ class WhatsappService
      * @param string $imageUrl The URL of the stored image.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null, $messageUUID = null)
+    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null, $messageUUID = null, $existingChatId = null)
     {
 
         $contact = Contact::where('uuid', $contactUuId)
@@ -724,7 +725,7 @@ class WhatsappService
             $requestData[$mediaType]['filename'] = $mediaFileName;
         }
 
-        if ($caption !== null && $caption !== '' && $mediaType != 'audio') {
+        if ($caption !== null && $caption !== '' && strcasecmp($caption, 'null') !== 0 && $mediaType != 'audio') {
             $requestData[$mediaType]['caption'] = $caption;
         }
 
@@ -740,53 +741,97 @@ class WhatsappService
             $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription, $caption);
             $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
 
-            $chat = Chat::create([
-                'organization_id' => $contact->organization_id,
-                'wam_id' => $wamId,
-                'contact_id' => $contact->id,
-                'type' => 'outbound',
-                'user_id' => $userId,
-                'metadata' => json_encode($mediaData),
-                'status' => 'sent',
-				'created_at'=>now()
-            ]);
+            if ($existingChatId) {
+                $chat = Chat::with('contact', 'media')->find($existingChatId);
+                if ($chat) {
+                    $chat->update([
+                        'wam_id' => $wamId,
+                        'status' => 'sent',
+                        'metadata' => json_encode($mediaData),
+                    ]);
 
-            $chatlogId = ChatLog::insertGetId([
-                'contact_id' => $contact->id,
-                'entity_type' => 'chat',
-                'entity_id' => $chat->id,
-                'created_at' => now()
-            ]);
+                    if ($chat->media) {
+                        $chat->media->update([
+                            'name' => $mediaFileName,
+                            'path' => $mediaUrl,
+                            'location' => $location,
+                            'type' => $contentType,
+                            'size' => $mediaSize,
+                        ]);
+                    }
 
-            $media = ChatMedia::create([
-                'name' => $mediaFileName,
-                'path' => $mediaUrl,
-                'location' => $location,
-                'type' => $contentType,
-                'size' => $mediaSize,
-				 'created_at' => now()
-            ]);
-			$updateData = [
-				'media_id' => $media->id,
-			];
-			if($messageUUID){ // when sending message from mobile api only
-				$updateData['uuid'] = $messageUUID;
-			}
-            Chat::where('id', $chat->id)->update($updateData);
+                    ChatStatusLog::create([
+                        'chat_id' => $chat->id,
+                        'metadata' => json_encode([
+                            'id' => $wamId,
+                            'status' => 'sent',
+                        ]),
+                        'created_at' => DateTimeHelper::convertToOrganizationTimezone(now(), null),
+                    ]);
 
-            $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
-            $responseObject->data->chat = $chat;
-			
-		
-			
-            $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
-            $chatArray = array([
-                'type' => 'chat',
-                'value' => $chatLogArray->relatedEntities,
-				'tempMessageId'=> $tempMessageId  // when sending message only
-            ]);
+                    $chat = Chat::with('contact', 'media', 'logs')->where('id', $chat->id)->first();
+                    $responseObject->data->chat = $chat;
 
-            event(new NewChatEvent($chatArray, $contact->organization_id));
+                    $chatLogArray = ChatLog::where('entity_id', $chat->id)
+                        ->where('entity_type', 'chat')
+                        ->whereNull('deleted_at')
+                        ->first();
+
+                    if ($chatLogArray) {
+                        $chatArray = [[
+                            'type' => 'chat',
+                            'value' => $chatLogArray->relatedEntities,
+                        ]];
+                        event(new NewChatEvent($chatArray, $contact->organization_id, false, true));
+                    }
+                }
+            } else {
+                $chat = Chat::create([
+                    'organization_id' => $contact->organization_id,
+                    'wam_id' => $wamId,
+                    'contact_id' => $contact->id,
+                    'type' => 'outbound',
+                    'user_id' => $userId,
+                    'metadata' => json_encode($mediaData),
+                    'status' => 'sent',
+                    'created_at'=>now()
+                ]);
+
+                $chatlogId = ChatLog::insertGetId([
+                    'contact_id' => $contact->id,
+                    'entity_type' => 'chat',
+                    'entity_id' => $chat->id,
+                    'created_at' => now()
+                ]);
+
+                $media = ChatMedia::create([
+                    'name' => $mediaFileName,
+                    'path' => $mediaUrl,
+                    'location' => $location,
+                    'type' => $contentType,
+                    'size' => $mediaSize,
+                     'created_at' => now()
+                ]);
+                $updateData = [
+                    'media_id' => $media->id,
+                ];
+                if($messageUUID){ // when sending message from mobile api only
+                    $updateData['uuid'] = $messageUUID;
+                }
+                Chat::where('id', $chat->id)->update($updateData);
+
+                $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
+                $responseObject->data->chat = $chat;
+
+                $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
+                $chatArray = array([
+                    'type' => 'chat',
+                    'value' => $chatLogArray->relatedEntities,
+                    'tempMessageId'=> $tempMessageId  // when sending message only
+                ]);
+
+                event(new NewChatEvent($chatArray, $contact->organization_id));
+            }
         }
 
         //\Log::info(json_encode($responseObject, true));
@@ -830,7 +875,7 @@ class WhatsappService
             ]
         ];
 
-        if ($caption !== null && $caption !== '' && $mediaType !== 'audio') {
+        if ($caption !== null && $caption !== '' && strcasecmp($caption, 'null') !== 0 && $mediaType !== 'audio') {
             $response[$mediaType]['caption'] = $caption;
         }
 

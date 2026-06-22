@@ -64,6 +64,14 @@ class ProcessMessageStatusJob implements ShouldQueue
                         event(new NewChatEvent($chatArray, $this->organizationId, false, true));
                     }
 
+                    if (
+                        $statusValue === 'failed'
+                        && RetryMediaWithTranscodeJob::shouldRetryForChat($chat, $status['errors'] ?? [])
+                    ) {
+                        RetryMediaWithTranscodeJob::dispatch($chat->id, $this->organizationId)
+                            ->onQueue('high');
+                    }
+
                     // Log::info("Message status updated", [
                     //     'chat_id' => $chat->id,
                     //     'status' => $statusValue,

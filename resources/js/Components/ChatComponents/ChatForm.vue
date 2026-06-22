@@ -114,7 +114,9 @@ const sendMessage = async () => {
 		const tempMessageId = crypto.randomUUID()
 		form.value.tempMessageId = tempMessageId
 		appendMessageIntoBody(form)
-		formData.append('message', form.value.message)
+		if (messageText) {
+			formData.append('message', messageText)
+		}
 		formData.append('type', form.value.type)
 		formData.append('uuid', form.value.uuid)
 		formData.append('tempMessageId', form.value.tempMessageId)
