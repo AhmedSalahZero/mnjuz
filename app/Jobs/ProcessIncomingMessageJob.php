@@ -269,7 +269,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
             $contact->uuid,
             $body
         )->onQueue('high');
-        Cache::put($cacheKey, 1, now()->addMinute());
+        Cache::put($cacheKey, 1, now()->addHour());
     }
 
     private function formatChatForEvent($chat, bool $isNewContact = false, $contactUuid = null)

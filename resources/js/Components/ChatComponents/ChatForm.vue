@@ -258,7 +258,7 @@ const handleFileUpload = (event) => {
 const getAcceptedFileTypes = () => {
 	switch (form.value.type) {
 		case 'image':
-			return '.jpg, .png'
+			return '.jpg, .jpeg, .png'
 		case 'document':
 			return '.txt, .pdf, .ppt, .doc, .xls, .docx, .pptx, .xlsx'
 		case 'audio':

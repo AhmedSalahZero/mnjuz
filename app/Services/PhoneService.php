@@ -7,6 +7,12 @@ use Propaganistas\LaravelPhone\PhoneNumber;
 
 class PhoneService
 {
+    /** @var array<string, string> */
+    private static array $displayFormatCache = [];
+
+    /** @var array<string, array{is_valid: bool, formatted: ?string, error: ?string, type: string}> */
+    private static array $validationCache = [];
+
     /**
      * Validate and format a phone number
      * 
@@ -15,26 +21,31 @@ class PhoneService
      */
     public static function validateAndFormat($phoneNumber)
     {
+        $cacheKey = (string) $phoneNumber;
+        if (isset(self::$validationCache[$cacheKey])) {
+            return self::$validationCache[$cacheKey];
+        }
+
         // Check if it's a Brazilian number
         if (BrazilPhoneHelper::isBrazilianNumber($phoneNumber)) {
             $validation = BrazilPhoneHelper::validateBrazilPhone($phoneNumber);
             
             if ($validation['is_valid']) {
                 $type = BrazilPhoneHelper::getPhoneType($phoneNumber);
-                return [
+                return self::$validationCache[$cacheKey] = [
                     'is_valid' => true,
                     'formatted' => $validation['formatted'],
                     'error' => null,
                     'type' => $type
                 ];
-            } else {
-                return [
-                    'is_valid' => false,
-                    'formatted' => null,
-                    'error' => $validation['error'],
-                    'type' => 'invalid'
-                ];
             }
+
+            return self::$validationCache[$cacheKey] = [
+                'is_valid' => false,
+                'formatted' => null,
+                'error' => $validation['error'],
+                'type' => 'invalid'
+            ];
         }
 
         // For non-Brazilian numbers, use libphonenumber
@@ -42,22 +53,22 @@ class PhoneService
             $phone = new PhoneNumber($phoneNumber);
             
             if ($phone->isValid()) {
-                return [
+                return self::$validationCache[$cacheKey] = [
                     'is_valid' => true,
                     'formatted' => $phone->formatE164(),
                     'error' => null,
                     'type' => 'international'
                 ];
-            } else {
-                return [
-                    'is_valid' => false,
-                    'formatted' => null,
-                    'error' => 'Invalid phone number format',
-                    'type' => 'invalid'
-                ];
             }
+
+            return self::$validationCache[$cacheKey] = [
+                'is_valid' => false,
+                'formatted' => null,
+                'error' => 'Invalid phone number format',
+                'type' => 'invalid'
+            ];
         } catch (\Exception $e) {
-            return [
+            return self::$validationCache[$cacheKey] = [
                 'is_valid' => false,
                 'formatted' => null,
                 'error' => 'Invalid phone number format',
@@ -74,15 +85,20 @@ class PhoneService
      */
     public static function formatForDisplay($phoneNumber)
     {
+        $cacheKey = (string) $phoneNumber;
+        if (isset(self::$displayFormatCache[$cacheKey])) {
+            return self::$displayFormatCache[$cacheKey];
+        }
+
         if (BrazilPhoneHelper::isBrazilianNumber($phoneNumber)) {
-            return BrazilPhoneHelper::formatBrazilPhone($phoneNumber);
+            return self::$displayFormatCache[$cacheKey] = BrazilPhoneHelper::formatBrazilPhone($phoneNumber);
         }
 
         try {
             $phone = new PhoneNumber($phoneNumber);
-            return $phone->formatInternational();
+            return self::$displayFormatCache[$cacheKey] = $phone->formatInternational();
         } catch (\Exception $e) {
-            return $phoneNumber;
+            return self::$displayFormatCache[$cacheKey] = $phoneNumber;
         }
     }
 

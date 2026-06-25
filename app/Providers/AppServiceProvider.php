@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\Chat;
+use App\Models\Contact;
+use App\Observers\ContactObserver;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +28,9 @@ class AppServiceProvider extends ServiceProvider
 		
 		
         Schema::defaultStringLength(191);
+
+        Contact::observe(ContactObserver::class);
+		
         include app_path('Helpers/Helpers.php');
 		Gate::define('viewApiDocs', function () {
 			return true;

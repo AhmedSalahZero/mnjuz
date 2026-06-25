@@ -1469,6 +1469,8 @@ class ApiController extends Controller
     // }
     public function listChatMessagesFromUuidToEnd(Request $request)
     {
+        set_time_limit(120);
+
         $organizationId = $request->organization;
         if ($request->is('api/v1/*')) {
             $organizationId = $request->user()->current_mobile_organization_id;
@@ -1567,6 +1569,16 @@ class ApiController extends Controller
                 continue;
             }
 
+            $formattedPhone = $contact->formatted_phone;
+            if ($formattedPhone === null || $formattedPhone === '') {
+                $formattedPhone = $contact->formatted_phone_number;
+            }
+
+            $fullName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
+            if (strlen($fullName) > 120) {
+                $fullName = mb_strcut($fullName, 0, 120, 'UTF-8');
+            }
+
             $messages = [];
             foreach ($logs as $chatLog) {
                 $value = null;
@@ -1577,7 +1589,7 @@ class ApiController extends Controller
                         $meta = is_string($chat->metadata) ? json_decode($chat->metadata, true) : $chat->metadata;
                         if (isset($meta['buttons']) || isset($meta['context'])) continue;
                     }
-                    $value = $this->formatChatValue($chat, $contact);
+                    $value = $this->formatChatValue($chat, $contact, $formattedPhone, $fullName);
                 } elseif ($chatLog->entity_type === 'ticket') {
                     $value = $ticketLogsMap->get($chatLog->entity_id);
                 } elseif ($chatLog->entity_type === 'notes') {
@@ -1619,7 +1631,7 @@ class ApiController extends Controller
      * Format a chat record for the mobile API using the already-loaded contact
      * instead of re-querying it from DB (replaces minimalChatValue N+1).
      */
-    private function formatChatValue($chat, $contact): array
+    private function formatChatValue($chat, $contact, ?string $formattedPhone = null, ?string $contactFullName = null): array
     {
         $arr = $chat instanceof \Illuminate\Database\Eloquent\Model ? $chat->toArray() : (array) $chat;
 
@@ -1664,9 +1676,12 @@ class ApiController extends Controller
             $metadata = json_encode($metadata);
         }
 
-        $fullName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
-        if (strlen($fullName) > 120) {
-            $fullName = mb_strcut($fullName, 0, 120, 'UTF-8');
+        $fullName = $contactFullName;
+        if ($fullName === null) {
+            $fullName = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
+            if (strlen($fullName) > 120) {
+                $fullName = mb_strcut($fullName, 0, 120, 'UTF-8');
+            }
         }
 
         return [
@@ -1676,7 +1691,7 @@ class ApiController extends Controller
             'contact_id' => $contact->id,
             'is_new_contact' => false,
             'phone' => $contact->phone,
-            'formatted_phone_number' => $contact->formatted_phone_number,
+            'formatted_phone_number' => $formattedPhone ?? $contact->formatted_phone_number,
             'organization_id' => $contact->organization_id,
             'latest_chat_created_at' => $contact->latest_chat_created_at,
             'is_blocked' => $contact->is_blocked,

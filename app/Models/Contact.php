@@ -3,6 +3,7 @@
 namespace App\Models;
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
+use App\Services\PhoneService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -302,20 +303,17 @@ class Contact extends Model
 
     public function getFormattedPhoneNumberAttribute($value)
     {
-        $phone = $this->phone;
-
-        // Only format if the phone number starts with '+'
-        if (strpos($phone, '+') === 0) {
-            try {
-                return phone($phone)->formatInternational();
-            } catch (\Exception $e) {
-                // Fallback: return the raw phone if formatting fails
-                return $phone;
-            }
+        $stored = $this->attributes['formatted_phone'] ?? null;
+        if ($stored !== null && $stored !== '') {
+            return $stored;
         }
 
-        // If not international, just return as-is
-        return $phone;
+        $phone = $this->phone;
+        if ($phone === null || $phone === '') {
+            return $phone;
+        }
+
+        return PhoneService::formatForDisplay($phone);
     }
 
     protected function decodeUnicodeBytes($value)
