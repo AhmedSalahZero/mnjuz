@@ -567,9 +567,17 @@ class SettingController extends BaseController
             }
         }
 
+        $normalizedSlots = array_map(function (array $slot) {
+            return [
+                'day' => (int) $slot['day'],
+                'open' => substr($slot['open'], 0, 5),
+                'close' => substr($slot['close'], 0, 5),
+            ];
+        }, $validated['slots'] ?? []);
+
         $organizationConfig = Organization::where('id', $organizationId)->firstOrFail();
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
-        $metadataArray['working_hours'] = $validated['slots'] ?? [];
+        $metadataArray['working_hours'] = $normalizedSlots;
         $metadataArray['working_hours_outside_message'] = $validated['working_hours_outside_message'] ?? '';
 
         $organizationConfig->metadata = json_encode($metadataArray);

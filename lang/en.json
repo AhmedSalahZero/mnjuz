@@ -860,6 +860,7 @@
     "working_hours_away_intro": "Sorry, we are not available right now. We will get back to you during business hours.",
     "working_hours_weekly_schedule_heading": "Business hours:",
     "working_hours_not_configured": "Business hours have not been set yet.",
+    "working_hours_timezone_hint": "Times follow your organization timezone (Settings → Organization profile). Set it to your local region so 8:00–16:00 matches your actual business day.",
     "working_hours_outside_message_hint": "Outside your hours, each contact gets at most one automatic reply per minute (to limit repeats). Leave empty to use the default notice with your weekly schedule. Use Add variable to insert contact fields; they are filled when the message is sent.",
     "working_hours_variable_modal_intro": "Pick a placeholder to insert. It is replaced with the contact's data when the message is sent.",
     "Each working hours row must have an end time after the start time.": "Each row must have an end time after the start time.",

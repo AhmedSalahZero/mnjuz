@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Helpers\CustomHelper;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\ChatLog;
@@ -85,7 +84,11 @@ class ProcessIncomingMessageJob implements ShouldQueue
                 }
 
                 // ✅ AutoReply في job منفصل (مع التحقق من حد الرسائل)
-                if (!$isMessageLimitReached && $this->shouldCheckAutoReply()) {
+                if (
+                    !$isMessageLimitReached
+                    && $this->shouldCheckAutoReply()
+                    && !WorkingHoursService::isOutsideConfiguredHours($this->organizationId)
+                ) {
                     ProcessAutoReplyJob::dispatch(
                         $chat->id,
                         $this->organizationId,
@@ -249,13 +252,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function maybeSendWorkingHoursAwayNotice(Chat $chat, Contact $contact): void
     {
-        if (!CustomHelper::isModuleEnabled('Working Hours', $this->organizationId)) {
-            return;
-        }
-        if (WorkingHoursService::slotsForOrganization($this->organizationId) === []) {
-            return;
-        }
-        if (WorkingHoursService::isOrganizationOpenNow($this->organizationId)) {
+        if (!WorkingHoursService::isOutsideConfiguredHours($this->organizationId)) {
             return;
         }
         $cacheKey = 'working_hours_away_' . $this->organizationId . '_' . $contact->id;

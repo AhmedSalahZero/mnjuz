@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Chat;
 use App\Services\AutoReplyService;
+use App\Services\WorkingHoursService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,10 +48,18 @@ class ProcessAutoReplyJob implements ShouldQueue
             );
 			// logger('inside process auto reply job: ');
 
-            if($isLimitReached) {
+            if ($isLimitReached) {
                 Log::info("AutoReply skipped - message limit reached", [
                     'organization_id' => $this->organizationId,
                     'chat_id' => $this->chatId
+                ]);
+                return;
+            }
+
+            if (WorkingHoursService::isOutsideConfiguredHours($this->organizationId)) {
+                Log::info('AutoReply skipped - outside organization working hours', [
+                    'organization_id' => $this->organizationId,
+                    'chat_id' => $this->chatId,
                 ]);
                 return;
             }

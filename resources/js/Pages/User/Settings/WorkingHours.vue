@@ -8,6 +8,7 @@
 							<h4 class="text-[16px]">{{ $t('Working hours') }}</h4>
 							<p class="text-slate-500 mt-1 mb-4">
 								{{ $t('Define one or more intervals per day. Outside these hours, WhatsApp contacts receive an automatic reply with your weekly schedule.') }}
+								<span class="block mt-1 text-xs">{{ $t('working_hours_timezone_hint') }}</span>
 							</p>
 							<div class="border border-slate-200 rounded-lg p-4 mb-4">
 								<label class="block text-sm leading-6 text-gray-900">{{ $t('Text response') }}</label>

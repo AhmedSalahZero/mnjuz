@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
 use App\Models\Organization;
 use Carbon\Carbon;
@@ -39,20 +40,70 @@ class WorkingHoursService
             return true;
         }
 
-        $now = DateTimeHelper::convertToOrganizationTimezone(now(), $organizationId);
-        $dow = (int) $now->format('w');
-        $time = $now->format('H:i');
+        $now = self::organizationNow($organizationId);
+        $dayOfWeek = (int) $now->dayOfWeek; // 0 = Sunday … 6 = Saturday (matches PHP date('w'))
+        $minutesNow = $now->hour * 60 + $now->minute;
 
         foreach ($slots as $slot) {
-            if ((int) $slot['day'] !== $dow) {
+            if ((int) $slot['day'] !== $dayOfWeek) {
                 continue;
             }
-            if (strcmp($time, $slot['open']) >= 0 && strcmp($time, $slot['close']) < 0) {
+
+            $openMinutes = self::timeToMinutes($slot['open']);
+            $closeMinutes = self::timeToMinutes($slot['close']);
+            if ($openMinutes === null || $closeMinutes === null) {
+                continue;
+            }
+
+            // Inclusive start/end: 08:00–16:00 means open through 16:00.
+            if ($minutesNow >= $openMinutes && $minutesNow <= $closeMinutes) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Outside configured weekly hours while the Working Hours addon is active.
+     */
+    public static function isOutsideConfiguredHours(int $organizationId): bool
+    {
+        if (!CustomHelper::isModuleEnabled('Working Hours', $organizationId)) {
+            return false;
+        }
+
+        if (self::slotsForOrganization($organizationId) === []) {
+            return false;
+        }
+
+        return !self::isOrganizationOpenNow($organizationId);
+    }
+
+    public static function organizationNow(int $organizationId): Carbon
+    {
+        $timezone = DateTimeHelper::getCurrentTimeZone($organizationId);
+
+        return Carbon::now($timezone);
+    }
+
+    /**
+     * @return int|null Minutes since midnight for HH:MM or H:MM.
+     */
+    public static function timeToMinutes(string $time): ?int
+    {
+        $time = trim($time);
+        if (!preg_match('/^(\d{1,2}):(\d{2})$/', $time, $matches)) {
+            return null;
+        }
+
+        $hours = (int) $matches[1];
+        $minutes = (int) $matches[2];
+        if ($hours > 23 || $minutes > 59) {
+            return null;
+        }
+
+        return ($hours * 60) + $minutes;
     }
 
     public static function buildAwayNoticeMessage(int $organizationId): string
