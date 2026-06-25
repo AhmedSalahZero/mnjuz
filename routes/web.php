@@ -194,6 +194,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/contact-categories/{uuid}', [App\Http\Controllers\User\ContactCategoryController::class, 'update']);
                 Route::delete('/contact-categories', [App\Http\Controllers\User\ContactCategoryController::class, 'delete']);
 
+                Route::get('/campaigns/media-history', [App\Http\Controllers\User\CampaignController::class, 'mediaHistory']);
+                Route::delete('/campaigns/media-history/{uuid}', [App\Http\Controllers\User\CampaignController::class, 'deleteMediaHistory']);
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);

@@ -56,6 +56,9 @@ const props = defineProps({
 	},
 })
 const isLoading = ref(false)
+const mediaHistory = ref([])
+const selectedHistoryUuid = ref(null)
+const isHistoryLoading = ref(false)
 const contactGroupOptions = ref([
 	{ value: 'all', label: trans('all contacts') },
 ])
@@ -178,10 +181,78 @@ const loadTemplate = async () => {
 				buttons: form.buttons,
 			})
 
+			await loadMediaHistory()
+
 		}
 	} catch (error) {
 		//console.error('Error fetching data:', error);
 	}
+}
+
+const loadMediaHistory = async () => {
+	const mediaType = form.header.parameters[0]?.type
+	if (!mediaType || !['IMAGE', 'DOCUMENT', 'VIDEO'].includes(mediaType)) {
+		mediaHistory.value = []
+		return
+	}
+
+	isHistoryLoading.value = true
+	try {
+		const response = await axios.get('/campaigns/media-history', {
+			params: { type: mediaType },
+		})
+		mediaHistory.value = response.data?.data ?? []
+	} catch (error) {
+		mediaHistory.value = []
+	} finally {
+		isHistoryLoading.value = false
+	}
+}
+
+const selectHistoryItem = (item) => {
+	if (!form.header.parameters[0]) {
+		return
+	}
+
+	selectedHistoryUuid.value = item.uuid
+	form.header.parameters[0].selection = 'history'
+	form.header.parameters[0].value = item.path
+	form.header.parameters[0].url = item.path
+}
+
+const deleteHistoryItem = async (item) => {
+	if (!window.confirm(trans('Remove this file from history?'))) {
+		return
+	}
+
+	try {
+		await axios.delete(`/campaigns/media-history/${item.uuid}`)
+		if (selectedHistoryUuid.value === item.uuid) {
+			selectedHistoryUuid.value = null
+			if (form.header.parameters[0]) {
+				form.header.parameters[0].value = null
+				form.header.parameters[0].selection = 'default'
+			}
+		}
+		await loadMediaHistory()
+	} catch (error) {
+		alert(trans('Something went wrong. Refresh the page and try again'))
+	}
+}
+
+const selectedMediaLabel = (index) => {
+	const param = form.header.parameters[index]
+	if (!param?.value) {
+		return null
+	}
+	if (param.selection === 'history') {
+		const item = mediaHistory.value.find((entry) => entry.uuid === selectedHistoryUuid.value)
+		return item?.name ?? param.value
+	}
+	if (param.selection === 'default') {
+		return param.value
+	}
+	return param.value?.name ?? null
 }
 
 const handleFileUpload = (event) => {
@@ -202,6 +273,7 @@ const handleFileUpload = (event) => {
 
 		form.header.parameters[0].selection = 'upload'
 		form.header.parameters[0].value = file
+		selectedHistoryUuid.value = null
 
 		// Start reading the file
 		reader.readAsDataURL(file)
@@ -211,7 +283,7 @@ const handleFileUpload = (event) => {
 const getFileAcceptAttribute = (fileType) => {
 	switch (fileType) {
 		case 'IMAGE':
-			return '.png, .jpg'
+			return '.png, .jpg, .jpeg'
 		case 'DOCUMENT':
 			return '.pdf, .txt, .ppt, .doc, .xls, .docx, .pptx, .xlsx'
 		case 'VIDEO':
@@ -441,13 +513,49 @@ watch(
 										:accept="getFileAcceptAttribute(form.header.parameters[index].type)"
 										ref="fileInput" id="file-upload" @change="handleFileUpload" />
 									<div v-if="form.header.parameters[index].value" class="w-[20em] truncate">
-										{{ form.header.parameters[index].selection === 'default' ? form.header.parameters[index].value : form.header.parameters[index].value.name }}
+										{{ selectedMediaLabel(index) }}
 									</div>
 									<span v-else>{{ $t('No file chosen') }}</span>
 								</div>
+								<div
+									v-if="isCampaignFlow && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(form.header.parameters[index].type)"
+									class="mt-3 border-t border-slate-200 pt-3"
+								>
+									<p class="text-xs font-medium text-gray-700 mb-2">
+										{{ $t('Previously used files') }}
+									</p>
+									<p v-if="isHistoryLoading" class="text-xs text-gray-500">{{ $t('Loading...') }}</p>
+									<p v-else-if="mediaHistory.length === 0" class="text-xs text-gray-500">
+										{{ $t('No previous files for this media type') }}
+									</p>
+									<ul v-else class="space-y-2 max-h-40 overflow-y-auto">
+										<li
+											v-for="item in mediaHistory"
+											:key="item.uuid"
+											class="flex items-center gap-2 rounded-md border bg-white px-2 py-1.5"
+											:class="selectedHistoryUuid === item.uuid ? 'border-primary ring-1 ring-primary' : 'border-slate-200'"
+										>
+											<button
+												type="button"
+												class="flex-1 text-left text-xs truncate hover:underline"
+												:title="item.name"
+												@click="selectHistoryItem(item)"
+											>
+												{{ item.name }}
+											</button>
+											<button
+												type="button"
+												class="text-xs text-red-600 hover:underline shrink-0"
+												@click="deleteHistoryItem(item)"
+											>
+												{{ $t('Delete') }}
+											</button>
+										</li>
+									</ul>
+								</div>
 								<p v-if="form.header.parameters[index].type === 'IMAGE'" class="text-left text-xs mt-2">
 									{{ $t('Max file upload size is') }} <b>5MB</b> <br>
-									{{ $t('Supported file extensions') }}: .png, jpg
+									{{ $t('Supported file extensions') }}: .png, .jpg, .jpeg
 								</p>
 								<p v-if="form.header.parameters[index].type === 'DOCUMENT'"
 									class="text-left text-xs mt-2">{{ $t('Max file upload size is') }} <b>100MB</b> <br>

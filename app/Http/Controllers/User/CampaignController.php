@@ -14,6 +14,7 @@ use App\Models\CampaignLog;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
+use App\Services\CampaignMediaHistoryService;
 use App\Services\CampaignService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -111,6 +112,34 @@ class CampaignController extends BaseController
                 'message' => __('Campaign created successfully!')
             ]
         );
+    }
+
+    public function mediaHistory(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|in:IMAGE,DOCUMENT,VIDEO',
+        ]);
+
+        $organizationId = (int) session()->get('current_organization');
+
+        return response()->json([
+            'data' => app(CampaignMediaHistoryService::class)->listForOrganization(
+                $organizationId,
+                $validated['type']
+            ),
+        ]);
+    }
+
+    public function deleteMediaHistory(string $uuid)
+    {
+        $organizationId = (int) session()->get('current_organization');
+        $deleted = app(CampaignMediaHistoryService::class)->deleteForOrganization($organizationId, $uuid);
+
+        if (!$deleted) {
+            return response()->json(['message' => __('Not found')], 404);
+        }
+
+        return response()->json(['success' => true]);
     }
 
     public function export($uuid = null){

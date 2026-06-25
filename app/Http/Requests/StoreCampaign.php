@@ -43,25 +43,23 @@ class StoreCampaign extends FormRequest
 
         if(!empty($headerParams)){
             $format = $this->input('header.format');
+            $selection = $this->input('header.parameters.0.selection');
 
             // Rules for image format
             if ($format === 'TEXT') {
                 $rules['header.parameters.0.value'] = 'required|max:60'; // Max 60 characters
             }
 
-            // Rules for image format
-            if ($format === 'IMAGE') {
-                $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg|max:5120'; // Max 5MB
-            }
-
-            // Rules for video format
-            if ($format === 'VIDEO') {
-                $rules['header.parameters.0.value'] = 'required|file|mimes:mp4|max:16384'; // Max 5MB
-            }
-
-            // Rules for document format
-            if ($format === 'DOCUMENT') {
-                $rules['header.parameters.0.value'] = 'required|file|mimes:pdf,txt,ppt,doc,xls,docx,pptx,xlsx|max:102400'; // Max 100MB
+            if (in_array($format, ['IMAGE', 'DOCUMENT', 'VIDEO'], true)) {
+                if (in_array($selection, ['history', 'default'], true)) {
+                    $rules['header.parameters.0.value'] = 'required|url|max:2048';
+                } elseif ($format === 'IMAGE') {
+                    $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg,jpeg|max:5120';
+                } elseif ($format === 'VIDEO') {
+                    $rules['header.parameters.0.value'] = 'required|file|mimes:mp4|max:16384';
+                } elseif ($format === 'DOCUMENT') {
+                    $rules['header.parameters.0.value'] = 'required|file|mimes:pdf,txt,ppt,doc,xls,docx,pptx,xlsx|max:102400';
+                }
             }
         }
 

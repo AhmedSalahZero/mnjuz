@@ -12,6 +12,7 @@ use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
+use App\Services\CampaignMediaHistoryService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Carbon\Carbon;
@@ -40,6 +41,7 @@ class CampaignService
 
         try {
             DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
+                $historyService = app(CampaignMediaHistoryService::class);
                 //Request metadata
                 $mediaId = null;
                 if(in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
@@ -51,12 +53,10 @@ class CampaignService
                 
                         foreach ($request->header['parameters'] as $key => $parameter) {
                             if ($parameter['selection'] === 'upload') {
-                                //$path = $parameter['value']->store('public');
-                                //$imageUrl = config('app.url') . '/media/' . $path;
-
                                 $storage = Setting::where('key', 'storage_system')->first()->value;
                                 $fileName = $parameter['value']->getClientOriginalName();
                                 $fileContent = $parameter['value'];
+                                $location = 'local';
 
                                 if($storage === 'local'){
                                     $file = Storage::disk('local')->put('public', $fileContent);
@@ -64,6 +64,7 @@ class CampaignService
                     
                                     $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
                                 } else if($storage === 'aws') {
+                                    $location = 'amazon';
                                     $file = $parameter['value'];
                                     $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
                                     
@@ -74,6 +75,8 @@ class CampaignService
                                     $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                     
                                     $mediaUrl = $mediaFilePath;
+                                } else {
+                                    throw new \Exception('Unsupported storage system');
                                 }
 
                                 if (!empty($mediaUrl)) {
@@ -84,16 +87,42 @@ class CampaignService
                                     $mediaSize = null;
                                 }
 
-                                //save media
                                 $chatMedia = new ChatMedia;
                                 $chatMedia->name = $fileName;
                                 $chatMedia->path = $mediaUrl;
+                                $chatMedia->location = $location;
                                 $chatMedia->type = $contentType;
                                 $chatMedia->size = $mediaSize;
-                                $chatMedia->created_at =now();
+                                $chatMedia->created_at = now();
                                 $chatMedia->save();
 
                                 $mediaId = $chatMedia->id;
+
+                                $historyService->record(
+                                    $organizationId,
+                                    auth()->id(),
+                                    $parameter['type'],
+                                    $fileName,
+                                    $mediaUrl,
+                                    $location,
+                                    $contentType,
+                                    $mediaSize !== null ? (string) $mediaSize : null,
+                                    $chatMedia->id,
+                                );
+                            } elseif ($parameter['selection'] === 'history') {
+                                $historyItem = $historyService->findForOrganization(
+                                    $organizationId,
+                                    (string) $parameter['value']
+                                );
+
+                                if (!$historyItem) {
+                                    throw ValidationException::withMessages([
+                                        'header.parameters.0.value' => __('The selected media file is no longer available.'),
+                                    ]);
+                                }
+
+                                $mediaUrl = $historyItem->path;
+                                $mediaId = $historyItem->chat_media_id;
                             } else {
                                 $mediaUrl = $parameter['value'];
                             }
@@ -130,8 +159,6 @@ class CampaignService
                 $campaign->save();
             });
         } catch (\Exception $e) {
-            // Handle the exception here if needed.
-            // The transaction has already been rolled back automatically.
             Log::error('Failed to store campaign', [
                 'error_message' => $e->getMessage(),
                 'organization_id' => $organizationId,
@@ -140,6 +167,8 @@ class CampaignService
                 'user_id' => auth()->user()->id,
                 'stack_trace' => $e->getTraceAsString(),
             ]);
+
+            throw $e;
         }
     }
 
