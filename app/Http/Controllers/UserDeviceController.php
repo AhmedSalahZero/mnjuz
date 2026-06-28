@@ -32,20 +32,34 @@ class UserDeviceController extends Controller
             ], 401);
         }
 
-        // حذف الجهاز الخاص بالـ category الحالي فقط (web أو mobile)
-        $deviceData = $this->deviceService->extractDeviceData($request);
-        $category   = $this->deviceService->getDeviceCategory($deviceData);
-        $device     = $user->deviceForCategory($category);
+        $deviceId = $request->input('device_id');
+        $device = $deviceId
+            ? $user->devices()->where('id', $deviceId)->first()
+            : null;
+
+        if (!$device) {
+            $deviceData = $this->deviceService->extractDeviceData($request);
+            $category   = $this->deviceService->resolveCategory($request, $deviceData);
+            $device     = $user->deviceForCategory($category);
+        }
+
+        $removedCategory = $device?->device_category;
+        $currentCategory = $this->deviceService->resolveCategory(
+            $request,
+            $this->deviceService->extractDeviceData($request)
+        );
 
         if ($device) {
             $device->delete();
         }
 
-        if ($request->user()->currentAccessToken()) {
+        $shouldLogout = $removedCategory === null || $removedCategory === $currentCategory;
+
+        if ($shouldLogout && $request->user()->currentAccessToken()) {
             $request->user()->currentAccessToken()->delete();
         }
 
-        if ($request->hasSession()) {
+        if ($shouldLogout && $request->hasSession()) {
             Auth::guard('user')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -53,6 +67,7 @@ class UserDeviceController extends Controller
 
         return response()->json([
             'success' => true,
+            'logged_out' => $shouldLogout,
             'message' => __('Device removed successfully'),
         ]);
     }

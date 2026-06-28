@@ -399,7 +399,8 @@ class AuthController extends BaseController
                         // Send Registration Email
                         Email::send('Registration', $user);
 
-                        if (isset($config->value) && $config->value == '1') {
+                        $verifyEmailConfig = Setting::where('key', 'verify_email')->first();
+                        if (isset($verifyEmailConfig->value) && $verifyEmailConfig->value == '1') {
                             $user->sendEmailVerificationNotification();
                         }
 
@@ -408,7 +409,7 @@ class AuthController extends BaseController
                     
                     // Register social-login device per category (web/mobile)
                     $deviceData = $this->userDeviceService->extractDeviceData($request);
-                    $category   = $this->userDeviceService->getDeviceCategory($deviceData);
+                    $category   = $this->userDeviceService->resolveCategory($request, $deviceData);
                     if (!$user->deviceForCategory($category)) {
                         $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
                     }
@@ -419,10 +420,11 @@ class AuthController extends BaseController
             
                 return redirect('dashboard');
             }
-        } catch (\Exception $e) {
-            // Handle exception, possibly log the error and redirect to an error page
-            Log::error('User registration failed: ' . $e->getMessage());
-        
+        } catch (\Throwable $e) {
+            $this->logRegistrationFailure('facebook', $e, [
+                'email' => isset($facebookUser) ? ($facebookUser->email ?? null) : null,
+            ]);
+
             return redirect()->back()->with('error', 'Registration failed, please try again.');
         }
     }
@@ -440,7 +442,17 @@ class AuthController extends BaseController
         try {
             $gUser = SocialLoginService::makeGoogleDriver()->user();
 
-            $user = User::where('email', $gUser->email)->where('status', '=', '1')->where('deleted_at', null)->first();
+            if (empty($gUser->email)) {
+                throw new \RuntimeException('Google account did not return an email address');
+            }
+
+            $user = User::where('email', $gUser->email)->whereNull('deleted_at')->first();
+
+            if ($user && $user->status !== '1') {
+                return Redirect::route('login')->withErrors([
+                    'email' => __('This account is disabled. Please contact support.'),
+                ]);
+            }
 
             if ($user) {
                 $deviceCheckResponse = $this->validateDeviceAndRegister($request, $user);
@@ -498,12 +510,13 @@ class AuthController extends BaseController
 
                 Email::send('Registration', $user);
 
-                if (isset($config->value) && $config->value == '1') {
+                $verifyEmailConfig = Setting::where('key', 'verify_email')->first();
+                if (isset($verifyEmailConfig->value) && $verifyEmailConfig->value == '1') {
                     $user->sendEmailVerificationNotification();
                 }
 
                 $deviceData = $this->userDeviceService->extractDeviceData($request);
-                $category   = $this->userDeviceService->getDeviceCategory($deviceData);
+                $category   = $this->userDeviceService->resolveCategory($request, $deviceData);
                 if (!$user->deviceForCategory($category)) {
                     $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
                 }
@@ -512,10 +525,11 @@ class AuthController extends BaseController
                 
                 return redirect('dashboard');
             }
-        } catch (\Exception $e) {
-            // Handle exception, possibly log the error and redirect to an error page
-            Log::error('User registration failed: ' . $e->getMessage());
-        
+        } catch (\Throwable $e) {
+            $this->logRegistrationFailure('google', $e, [
+                'email' => isset($gUser) ? ($gUser->email ?? null) : null,
+            ]);
+
             return redirect()->back()->with('error', 'Registration failed, please try again.');
         }
     }
@@ -891,7 +905,7 @@ class AuthController extends BaseController
     private function validateDeviceAndRegister(Request $request, User $user)
     {
         $deviceData = $this->userDeviceService->extractDeviceData($request);
-        $category   = $this->userDeviceService->getDeviceCategory($deviceData);
+        $category   = $this->userDeviceService->resolveCategory($request, $deviceData);
 
         // كل category (web / mobile) مستقلة — نجلب الجهاز المسجّل لهذا الـ category فقط
         $existingDevice = $user->deviceForCategory($category);
@@ -916,5 +930,21 @@ class AuthController extends BaseController
 
         $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
         return null;
+    }
+
+    private function logRegistrationFailure(string $provider, \Throwable $e, array $context = []): void
+    {
+        $message = trim($e->getMessage());
+        if ($message === '') {
+            $message = class_basename($e) . ' (no message)';
+        }
+
+        Log::error("User registration failed [{$provider}]: {$message}", array_merge($context, [
+            'exception' => get_class($e),
+            'code' => $e->getCode(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'previous' => $e->getPrevious()?->getMessage(),
+        ]));
     }
 }

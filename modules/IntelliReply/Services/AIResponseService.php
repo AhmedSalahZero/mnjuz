@@ -383,9 +383,31 @@ EOT;
             'allow_audio_response' => $aiMetadata['allow_audio_response'] ?? false,
             'model' => $enableModelSelection == 1 ? $aiMetadata['model'] ?? '' : $defaultOpenAiTextModel,
             'voice' => $aiMetadata['voice'] ?? '',
-            'api_key' => $enableApiKeyInput == 1 ? $aiMetadata['api_key'] ?? '' : $defaultOpenAiKey,
+            'api_key' => $enableApiKeyInput == 1 ? ($aiMetadata['api_key'] ?? '') : $defaultOpenAiKey,
             'chat_ticketing' => $metadata['tickets']['active'] ?? false,
         ];
+    }
+
+    /**
+     * Reject empty, placeholder, or obviously invalid OpenAI keys before calling the API.
+     */
+    private function hasUsableOpenAiKey(?string $apiKey): bool
+    {
+        $apiKey = trim((string) $apiKey);
+
+        if ($apiKey === '') {
+            return false;
+        }
+
+        if (preg_match('/^0+$/', $apiKey)) {
+            return false;
+        }
+
+        if (str_contains($apiKey, '****') || str_contains(strtolower($apiKey), 'your-api-key')) {
+            return false;
+        }
+
+        return str_starts_with($apiKey, 'sk-');
     }
 
     private function getWhatsappService(int $organizationId): WhatsappService
@@ -416,6 +438,14 @@ EOT;
     {
         try {
             $organizationConfig = $this->getAIConfiguration($organizationId);
+            if (!$this->hasUsableOpenAiKey($organizationConfig['api_key'] ?? null)) {
+                Log::warning('OpenAI chat skipped: invalid or missing API key', [
+                    'organization_id' => $organizationId,
+                ]);
+
+                return null;
+            }
+
             $response = $this->makeOpenAIRequest($organizationConfig, $context);
             return $this->parseOpenAIResponse($response->json());
         } catch (\Throwable $e) {
@@ -634,6 +664,10 @@ EOT;
         try {
             $config = $this->getAIConfiguration($organizationId);
 
+            if (!$this->hasUsableOpenAiKey($config['api_key'] ?? null)) {
+                return ['success' => false, 'text' => null];
+            }
+
             $response = \Http::withHeaders([
                 'Authorization' => 'Bearer ' . $config['api_key']
             ])->attach(
@@ -664,6 +698,10 @@ EOT;
     {
         try {
             $config = $this->getAIConfiguration($organizationId);
+
+            if (!$this->hasUsableOpenAiKey($config['api_key'] ?? null)) {
+                return ['success' => false, 'body' => null, 'error' => 'Invalid OpenAI API key'];
+            }
 
             $response = \Http::withHeaders([
                 'Authorization' => 'Bearer ' . $config['api_key'],
@@ -706,12 +744,23 @@ EOT;
 
         try {
             $config = $this->getAIConfiguration($organizationId);
+
+            if (!$this->hasUsableOpenAiKey($config['api_key'] ?? null)) {
+                Log::warning('Document search skipped: invalid or missing OpenAI API key', [
+                    'organization_id' => $organizationId,
+                ]);
+
+                return ['success' => false];
+            }
+
             $client = OpenAI::client($config['api_key']);
             
             $embedding = $this->generateEmbedding($client, $query);
             return $this->findClosestDocument($organizationId, $embedding);
         } catch (\Throwable $e) {
-            Log::error('Document Search Error: ' . $e->getMessage());
+            Log::error('Document Search Error: ' . $e->getMessage(), [
+                'organization_id' => $organizationId,
+            ]);
             return ['success' => false];
         }
     }

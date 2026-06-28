@@ -40,6 +40,8 @@ class UserDeviceService
             $browser = 'Chrome';
         } elseif (str_contains($ua, 'safari/') && !str_contains($ua, 'chrome/')) {
             $browser = 'Safari';
+        } elseif ($this->isMobileAppRequest($request)) {
+            $browser = 'Mobile App';
         }
 
         $deviceType = 'desktop';
@@ -48,13 +50,14 @@ class UserDeviceService
         } elseif (
             str_contains($ua, 'iphone') ||
             str_contains($ua, 'android') ||
-            str_contains($ua, 'mobile')
+            str_contains($ua, 'mobile') ||
+            $this->isMobileAppRequest($request)
         ) {
             $deviceType = 'mobile';
         }
 
         $deviceName = match ($deviceType) {
-            'mobile' => "{$platform} Phone",
+            'mobile' => $request->input('device_name') ?: "{$platform} Phone",
             'tablet' => "{$platform} Tablet",
             default => "{$platform} PC",
         };
@@ -68,6 +71,56 @@ class UserDeviceService
             'ip_address' => $request->ip(),
             'last_used_at' => now(),
         ];
+    }
+
+    /**
+     * Web and mobile each get one linked device slot (see migration user_devices_user_category_unique).
+     */
+    public function resolveCategory(Request $request, array $deviceData): string
+    {
+        $explicit = strtolower(trim((string) $request->input('device_category', '')));
+        if (in_array($explicit, ['web', 'mobile'], true)) {
+            return $explicit;
+        }
+
+        if ($this->isMobileAppRequest($request)) {
+            return 'mobile';
+        }
+
+        return $this->getDeviceCategory($deviceData);
+    }
+
+    /**
+     * Native mobile apps often send Dart/okhttp UA without "mobile" — treat API login as mobile.
+     */
+    public function isMobileAppRequest(Request $request): bool
+    {
+        if (!$request->is('api/*') && !$request->expectsJson()) {
+            return false;
+        }
+
+        if ($request->filled('device_token')) {
+            return true;
+        }
+
+        $deviceType = strtolower(trim((string) $request->input('device_type', '')));
+        if (in_array($deviceType, ['ios', 'android', 'mobile'], true)) {
+            return true;
+        }
+
+        $ua = strtolower((string) $request->userAgent());
+        if ($ua === '') {
+            return false;
+        }
+
+        $mobileAppMarkers = ['dart/', 'okhttp', 'cfnetwork', 'mnjzchat', 'flutter', 'reactnative'];
+        foreach ($mobileAppMarkers as $marker) {
+            if (str_contains($ua, $marker)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function getDeviceCategory(array $deviceData): string

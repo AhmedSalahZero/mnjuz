@@ -25,8 +25,8 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     
     public $timeout = 120;
-    public $tries = 1;
-    public $backoff = [10, 30, 60];
+    public $tries = 3;
+    public $backoff = [1, 3, 5];
     protected $message;
     protected $contactData;
     protected $organizationId;

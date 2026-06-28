@@ -82,6 +82,12 @@ class Email
 
         if($smtpQuery->value == 1){
             $emailTemplate = EmailTemplate::where('name', $template)->first();
+            if (!$emailTemplate) {
+                Log::warning('Email template not found', ['template' => $template, 'recipient' => $recipient->email ?? null]);
+
+                return;
+            }
+
             $subject = self::replacePlaceholders($emailTemplate->subject, $recipient);
             $body = self::replacePlaceholders($emailTemplate->body, $recipient);
 

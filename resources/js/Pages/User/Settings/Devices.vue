@@ -122,13 +122,17 @@ const fetchDevices = async () => {
 const removeDevice = async () => {
     isRemoving.value = true
     try {
-        await axios.delete('/settings/device', {
+        const response = await axios.delete('/settings/device', {
             data: { device_id: deviceToRemove.value?.id }
         })
-        window.location.href = '/login'
+        if (response?.data?.logged_out) {
+            window.location.href = '/login'
+            return
+        }
+        closeModal()
+        await fetchDevices()
     } finally {
         isRemoving.value = false
-        isOpenRemoveModal.value = false
     }
 }
 

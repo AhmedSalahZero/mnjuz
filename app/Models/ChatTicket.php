@@ -146,31 +146,40 @@ class ChatTicket extends Model {
 
     protected static function booted(): void
     {
-        // عند إنشاء تذكرة جديدة: هذه تكون الأحدث (is_latest = true) والباقي لنفس الـ contact = false
         static::created(function (ChatTicket $ticket) {
-            DB::table('chat_tickets')
-                ->where('contact_id', $ticket->contact_id)
-                ->where('id', '!=', $ticket->id)
-                ->update(['is_latest' => false]);
-            DB::table('chat_tickets')
-                ->where('id', $ticket->id)
-                ->update(['is_latest' => true]);
+            static::syncLatestFlag((int) $ticket->contact_id, (int) $ticket->id);
         });
 
-        // عند حذف تذكرة كانت الأحدث: جعل التذكرة التالية (أعلى id المتبقية) هي الأحدث
         static::deleting(function (ChatTicket $ticket) {
             if (!$ticket->is_latest) {
                 return;
             }
+
             $nextId = DB::table('chat_tickets')
                 ->where('contact_id', $ticket->contact_id)
                 ->where('id', '!=', $ticket->id)
                 ->orderByDesc('id')
                 ->value('id');
+
             if ($nextId !== null) {
-                DB::table('chat_tickets')->where('id', $nextId)->update(['is_latest' => true]);
+                static::syncLatestFlag((int) $ticket->contact_id, (int) $nextId);
             }
         });
+    }
+
+    /**
+     * One row per contact should have is_latest = true.
+     * Single UPDATE + deadlock retries to avoid 1213 under concurrent inbound messages.
+     */
+    public static function syncLatestFlag(int $contactId, int $latestTicketId): void
+    {
+        DB::transaction(function () use ($contactId, $latestTicketId) {
+            DB::table('chat_tickets')
+                ->where('contact_id', $contactId)
+                ->update([
+                    'is_latest' => DB::raw('CASE WHEN id = ' . $latestTicketId . ' THEN 1 ELSE 0 END'),
+                ]);
+        }, 3);
     }
 
     public function getCreatedAtAttribute($value)

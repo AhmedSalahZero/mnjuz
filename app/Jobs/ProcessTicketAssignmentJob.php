@@ -18,13 +18,14 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class ProcessTicketAssignmentJob implements ShouldQueue
+class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 60;
-    public $tries = 2;
-    public $backoff = [10, 30];
+    public $tries = 5;
+    public $backoff = [1, 3, 5, 10, 15];
+    public $uniqueFor = 120;
 
     protected $contactId;
     protected $organizationId;
@@ -37,38 +38,46 @@ class ProcessTicketAssignmentJob implements ShouldQueue
         $this->isNewChat = $isNewChat;
     }
 
+    public function uniqueId(): string
+    {
+        return 'ticket-assignment:' . $this->contactId;
+    }
+
     public function handle():?int
     {
         try {
-            // ✅ Cache للإعدادات
             $settings = $this->getOrganizationSettings();
 
-            // ✅ التحقق من تفعيل نظام التذاكر
-            if(!isset($settings->tickets) || !$settings->tickets->active) {
-                return null ;
+            if (!isset($settings->tickets) || !$settings->tickets->active) {
+                return null;
             }
 
-            // ✅ البحث عن التذكرة الموجودة
-            $ticket = ChatTicket::where('contact_id', $this->contactId)->first();
+            return DB::transaction(function () use ($settings) {
+                $ticket = ChatTicket::where('contact_id', $this->contactId)
+                    ->orderByDesc('id')
+                    ->lockForUpdate()
+                    ->first();
 
-            // ✅ إنشاء تذكرة جديدة أو إعادة فتح
-            return DB::transaction(function() use ($ticket, $settings) {
-                if(!$ticket && $this->isNewChat) {
-					$ticket = $this->createTicket($settings);
-                    return $ticket->assigned_to ;
-                } 
-                else if($ticket && $ticket->status === 'closed') {
-                    $ticket = $this->reopenTicket($ticket, $settings);
-                    return $ticket->assigned_to ;
+                if (!$ticket && $this->isNewChat) {
+                    $ticket = $this->createTicket($settings);
+
+                    return $ticket->assigned_to;
                 }
-				return null;
-            });
 
-        } catch (\Exception $e) {
+                if ($ticket && $ticket->status === 'closed') {
+                    $ticket = $this->reopenTicket($ticket, $settings);
+
+                    return $ticket->assigned_to;
+                }
+
+                return null;
+            }, 3);
+        } catch (\Throwable $e) {
             Log::error('ProcessTicketAssignmentJob failed', [
                 'organization_id' => $this->organizationId,
                 'contact_id' => $this->contactId,
-                'error' => $e->getMessage()
+                'attempt' => $this->attempts(),
+                'error' => $e->getMessage(),
             ]);
 
             throw $e;
@@ -103,13 +112,18 @@ class ProcessTicketAssignmentJob implements ShouldQueue
         }
 
         // ✅ إنشاء التذكرة
-        $ticket = ChatTicket::create([
-            'contact_id' => $this->contactId,
-            'assigned_to' => $assignedTo,
-            'status' => 'open',
-            'created_at' =>  now(),
-            'updated_at' =>  now(),
-        ]);
+        $ticket = ChatTicket::withoutEvents(function () use ($assignedTo) {
+            return ChatTicket::create([
+                'contact_id' => $this->contactId,
+                'assigned_to' => $assignedTo,
+                'status' => 'open',
+                'is_latest' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        ChatTicket::syncLatestFlag($this->contactId, (int) $ticket->id);
 
         // ✅ Log التذكرة
         $ticketLogId = ChatTicketLog::insertGetId([

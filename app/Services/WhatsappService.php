@@ -1175,7 +1175,20 @@ class WhatsappService
 
     public function updateTemplate(Request $request, $uuid)
     {
-        $template = Template::where('uuid', $uuid)->first();
+        $responseObject = new \stdClass();
+
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$template || empty($template->meta_id)) {
+            $responseObject->success = false;
+            $responseObject->message = __('Template not found');
+
+            return $responseObject;
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
         
         $requestData = [
@@ -1491,17 +1504,39 @@ class WhatsappService
      */
     public function deleteTemplate($uuid)
     {
+        $responseObject = new \stdClass();
+
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$template) {
+            $responseObject->success = false;
+            $responseObject->message = __('Template not found');
+
+            return $responseObject;
+        }
+
+        // Local-only template (never synced to Meta) — soft delete without API call.
+        if (empty($template->meta_id)) {
+            $template->deleted_at = now();
+            $template->save();
+
+            $responseObject->success = true;
+
+            return $responseObject;
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
         $headers = $this->setHeaders();
-
-        $template = Template::where('uuid', $uuid)->first();
 
         $requestData['hsm_id'] = $template->meta_id;
         $requestData['name'] = $template->name;
 
         $responseObject = $this->sendHttpRequest('DELETE', $url, $requestData, $headers);
 
-        if($responseObject->success){
+        if ($responseObject->success) {
             $template->deleted_at = now();
             $template->save();
         }

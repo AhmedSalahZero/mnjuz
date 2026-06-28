@@ -149,7 +149,7 @@ class TemplateService
         } else {
             return response()->json([
                 'success' => false,
-                'message'=> __('something went wrong. Refresh the page and try again')
+                'message'=> $query->message ?? __('something went wrong. Refresh the page and try again')
             ]);
         }
     }
