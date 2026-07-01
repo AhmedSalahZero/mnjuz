@@ -1161,5 +1161,6 @@
 "Are you sure you want to delete your account? This cannot be undone from the app; you will be signed out immediately.":"هل أنت متأكد من حذف حسابك؟ لا يمكن التراجع عن ذلك من التطبيق؛ سيتم تسجيل خروجك فوراً.",
 "Your account has been deleted.":"تم حذف حسابك.",
 "You cannot delete your account while you are the owner of an organization. Transfer ownership first.":"لا يمكنك حذف حسابك بصفتك مالك منظمة. انقل الملكية أولاً.",
-"This action is not available for this account type.":"هذا الإجراء غير متاح لهذا النوع من الحساب."
+"This action is not available for this account type.":"هذا الإجراء غير متاح لهذا النوع من الحساب.",
+"Image is too large to send. Please use a smaller image.":"الصورة كبيرة جداً ولا يمكن إرسالها. الرجاء استخدام صورة أصغر."
 }

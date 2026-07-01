@@ -58,7 +58,7 @@ watch(
 	},
 )
 
-const emit = defineEmits(['response', 'viewTemplate', 'newMessage'])
+const emit = defineEmits(['response', 'viewTemplate', 'newMessage', 'removeMessage'])
 const isLoading = ref(false)
 const sendingAuthTemplate = ref(false)
 
@@ -139,10 +139,14 @@ const sendMessage = async () => {
 			processingForm.value = false
 		} catch (error) {
 			processingForm.value = false
+			const failedTempId = form.value.tempMessageId
 			form.value.file = null
 			const msg = error.response?.data?.message
 			if (msg) {
 				toast.error(trans(msg))
+			}
+			if (failedTempId) {
+				emit('removeMessage', failedTempId)
 			}
 		}
 	} else {

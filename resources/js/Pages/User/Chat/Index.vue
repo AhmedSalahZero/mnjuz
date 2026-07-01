@@ -39,7 +39,8 @@
 					!displayTemplate
 				" class="w-full py-4">
 					<ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
-						@viewTemplate="displayTemplate = true" @newMessage="generateNewMessage" />
+						@viewTemplate="displayTemplate = true" @newMessage="generateNewMessage"
+						@removeMessage="removeOptimisticMessage" />
 				</div>
 				<div v-if="displayTemplate && contact" class="flex-1 overflow-y-hidden">
 					<CampaignForm v-if="displayTemplate && contact" class="bg-white h-full" :contact="contact.uuid"
@@ -429,6 +430,16 @@ const updateChatThread = (chat) => {
 			chatThread.value[tempChatIndex] = chat
 		} else {
 		}
+	}
+}
+
+const removeOptimisticMessage = (tempMessageId) => {
+	if (!tempMessageId) return
+	const idx = chatThread.value.findIndex(
+		(item) => item[0]?.value?.wam_id === tempMessageId,
+	)
+	if (idx !== -1) {
+		chatThread.value.splice(idx, 1)
 	}
 }
 

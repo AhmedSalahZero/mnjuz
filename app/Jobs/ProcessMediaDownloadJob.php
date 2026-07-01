@@ -79,10 +79,18 @@ class ProcessMediaDownloadJob implements ShouldQueue
             return;
         }
 
+        // getMedia() throws a RuntimeException with the WhatsApp error details when the API
+        // returns an error response (expired media, invalid token response, etc.), which
+        // triggers a retry. It returns null only when the access token is missing (no retry needed).
         $media = $this->getMedia($mediaId, $organization);
         if (!is_array($media) || empty($media['url'])) {
-            // Throw so the job retries with a fresh media URL (WhatsApp URLs expire quickly).
-            throw new \RuntimeException('Unable to fetch media metadata for media_id ' . $mediaId);
+            Log::warning('ProcessMediaDownloadJob: getMedia returned no URL (missing access token?)', [
+                'chat_id'         => $this->chatId,
+                'media_id'        => $mediaId,
+                'organization_id' => $this->organizationId,
+            ]);
+
+            return;
         }
 
         $downloadedFile = $this->downloadMedia($media, $organization);
@@ -257,13 +265,35 @@ class ProcessMediaDownloadJob implements ShouldQueue
             ],
             'connect_timeout' => 15,
             'timeout' => 30,
+            // Don't throw on 4xx/5xx — we inspect the body ourselves below.
+            'http_errors' => false,
         ];
 
-        // Let HTTP errors bubble up so the job retries instead of silently dropping the media.
         $response = $client->request('GET', "https://graph.facebook.com/v18.0/{$mediaId}", $requestOptions);
-        $media = json_decode($response->getBody()->getContents(), true);
+        $body     = $response->getBody()->getContents();
+        $media    = json_decode($body, true);
 
-        return is_array($media) ? $media : null;
+        if (!is_array($media)) {
+            return null;
+        }
+
+        // When WhatsApp returns an error (e.g. expired/deleted media, invalid token),
+        // the response has no "url" field but has an "error" object.
+        // Surface the actual WhatsApp reason in the exception message for easier diagnosis.
+        if (isset($media['error'])) {
+            $waMessage = $media['error']['message']   ?? 'unknown WhatsApp error';
+            $waCode    = $media['error']['code']      ?? null;
+            $waSubcode = $media['error']['error_subcode'] ?? null;
+            throw new \RuntimeException(sprintf(
+                'Unable to fetch media metadata for media_id %s — WhatsApp error %s%s: %s',
+                $mediaId,
+                $waCode,
+                $waSubcode ? "/{$waSubcode}" : '',
+                $waMessage
+            ));
+        }
+
+        return $media;
     }
 	private function formatChatForEvent($chat, bool $isNewContact = false, $contactUuid = null)
     {

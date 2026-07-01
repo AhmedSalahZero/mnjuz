@@ -22,6 +22,7 @@ use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
+use App\Services\ImageCompressionService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Support\OrganizationRole;
@@ -534,9 +535,25 @@ class ChatService
 			$messageUUID = $request->messageUUID;
 			$tempMessageId = Request()->get('tempMessageId');
 			$fileName = $file->getClientOriginalName();
+
+			// Compress oversized images before upload so they pass WhatsApp's 5MB limit.
+			$uploadBytes = file_get_contents($file->getRealPath());
+			if ($fileType === 'image' && $file->getSize() > ImageCompressionService::IMAGE_MAX_BYTES) {
+				$compressed = ImageCompressionService::compressToLimit($file->getRealPath(), $file->getMimeType());
+				if ($compressed === null) {
+					return response()->json([
+						'success' => false,
+						'message' => __('Image is too large to send. Please use a smaller image.'),
+					], 422);
+				}
+				$uploadBytes = $compressed['contents'];
+				$fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.' . $compressed['extension'];
+			}
+
 			if ($tempMessageId) {
-				$tempFilePath = 'temp/send-media/' . uniqid() . '_' . Str::slug(pathinfo($fileName, PATHINFO_FILENAME)) . '.' . pathinfo($fileName, PATHINFO_EXTENSION);
-				Storage::disk('local')->put($tempFilePath, file_get_contents($file->getRealPath()));
+				$ext = pathinfo($fileName, PATHINFO_EXTENSION);
+				$tempFilePath = 'temp/send-media/' . uniqid() . '_' . Str::slug(pathinfo($fileName, PATHINFO_FILENAME)) . '.' . $ext;
+				Storage::disk('local')->put($tempFilePath, $uploadBytes);
 				SendMediaJob::dispatch(
 					$organizationId,
 					$uuid,
@@ -555,13 +572,13 @@ class ChatService
 			$storage = Setting::where('key', 'storage_system')->first()->value;
 			if ($storage === 'local') {
 				$location = 'local';
-				$mediaFilePath = Storage::disk('local')->put('public/' . uniqid() . '_' . sanitize_filename_for_storage($fileName), file_get_contents($file->getRealPath()));
+				$mediaFilePath = Storage::disk('local')->put('public/' . uniqid() . '_' . sanitize_filename_for_storage($fileName), $uploadBytes);
 				$mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
 			} elseif ($storage === 'aws') {
 				$location = 'amazon';
 				$s3Path = 'uploads/media/sent/' . $organizationId . '/' . uniqid() . '_' . sanitize_filename_for_storage($fileName);
 				$contentType = whatsapp_media_content_type($fileType, $fileName);
-				Storage::disk('s3')->put($s3Path, file_get_contents($file->getRealPath()), ['ContentType' => $contentType]);
+				Storage::disk('s3')->put($s3Path, $uploadBytes, ['ContentType' => $contentType]);
 				$mediaFilePath = Storage::disk('s3')->url($s3Path);
 				$mediaUrl = $mediaFilePath;
 			}

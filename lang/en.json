@@ -875,5 +875,6 @@
     "Are you sure you want to delete your account? This cannot be undone from the app; you will be signed out immediately.": "Are you sure you want to delete your account? This cannot be undone from the app; you will be signed out immediately.",
     "Your account has been deleted.": "Your account has been deleted.",
     "You cannot delete your account while you are the owner of an organization. Transfer ownership first.": "You cannot delete your account while you are the owner of an organization. Transfer ownership first.",
-    "This action is not available for this account type.": "This action is not available for this account type."
+    "This action is not available for this account type.": "This action is not available for this account type.",
+    "Image is too large to send. Please use a smaller image.": "Image is too large to send. Please use a smaller image."
 }

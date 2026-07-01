@@ -353,6 +353,18 @@ class FlowExecutionService
      */
     private function processMessageNode($metadataArray, $contact, $flowData, $contactId)
     {
+        // WhatsApp requires a valid phone number in the "to" field.
+        // A missing/empty phone produces error_code 100 "The parameter to is required".
+        if (empty($contact->phone)) {
+            Log::error('Flow message skipped: contact has no phone number', [
+                'flow_id'    => $flowData->flow_id,
+                'contact_id' => $contactId,
+                'node_id'    => $metadataArray['id'] ?? null,
+            ]);
+
+            return false;
+        }
+
         $fieldsArray = \Arr::get($metadataArray, "data.metadata.fields", null);
         $type = $fieldsArray['type'] ?? null;
 
