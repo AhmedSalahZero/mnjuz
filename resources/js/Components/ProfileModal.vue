@@ -4,6 +4,7 @@ import FormPhoneInput from '@/Components/FormPhoneInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import { Dialog, DialogPanel, Tab, TabGroup, TabList, TabPanel, TabPanels, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { router, useForm, usePage } from "@inertiajs/vue3"
+import axios from 'axios'
 import { computed, defineProps, ref } from "vue"
 
 const props = defineProps({
@@ -58,14 +59,33 @@ const form3 = useForm({
 const form4 = useForm({
 	status: usePage().props.tfa.enabled,
 	token: null,
-	secret: usePage().props.tfa.secret,
+	secret: null,
 })
+
+const tfa = usePage().props.tfa
+const tfaSetupData = ref({ secret: null, qrcode: null })
+const tfaSetupLoading = ref(false)
+
+const loadTfaSetup = async () => {
+	if (tfaSetupData.value.secret || tfaSetupLoading.value) {
+		return
+	}
+
+	tfaSetupLoading.value = true
+	try {
+		const { data } = await axios.get('/profile/tfa-setup')
+		tfaSetupData.value = data
+		form4.secret = data.secret
+	} catch (error) {
+		console.error('Failed to load TFA setup data', error)
+	} finally {
+		tfaSetupLoading.value = false
+	}
+}
 
 const form5 = useForm({
 	verification_enabled: props.user.verification_enabled ? 1 : 0,
 })
-
-const tfa = usePage().props.tfa
 
 // Create language options for the select dropdown from database
 const languageOptions = computed(() => {
@@ -171,7 +191,7 @@ function closeModal() {
 											</button>
 										</Tab>
 										<Tab as="template" v-slot="{ selected }">
-											<button :class="[
+											<button type="button" @click="loadTfaSetup" :class="[
 												'w-full rounded-lg py-2.5 text-sm leading-5 text-[#ffffffcc]',
 												'ring-white focus:outline-none',
 												selected
@@ -248,7 +268,7 @@ function closeModal() {
 												</form>
 											</div>
 										</TabPanel>
-										<TabPanel v-if="tfa.status">
+										<TabPanel v-if="tfa.status" @vue:mounted="loadTfaSetup">
 											<form @submit.prevent="submitForm4()">
 												<FormSelect name="Two-factor authentication" v-model="form4.status"
 													:options="[
@@ -266,14 +286,15 @@ function closeModal() {
 														following QR Code with your camera. </p>
 													<div class="flex items-center text-sm">
 														<div class="mb-6 md:mb-0 md:mr-2">
-															<img :src="tfa.qrcode" alt="qrcode" width="200" />
+															<img v-if="tfaSetupData.qrcode" :src="tfaSetupData.qrcode" alt="qrcode" width="200" />
+															<p v-else-if="tfaSetupLoading" class="text-sm text-gray-500">{{ $t('Loading...') }}</p>
 														</div>
 														<div>
 															<label>Can't scan the QR Code?</label>
 															<p class="text-gray-600 text-sm"> Try inserting the
 																following secret code into your app if you can't scan
 																the QR Code. </p>
-															<p class="h5 text-sm mt-3">{{ tfa.secret }}</p>
+															<p class="h5 text-sm mt-3">{{ tfaSetupData.secret }}</p>
 														</div>
 													</div>
 													<h3 class="font-semibold"> 2. Enter Token from Authenticator App

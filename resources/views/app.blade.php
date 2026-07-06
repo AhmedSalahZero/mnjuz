@@ -8,10 +8,26 @@
         @endif
         <meta name="csrf-token" content="{{ csrf_token() }}">
         @php
-            $config = collect($page['props']['config']);
-            $google_analytics = $config->firstWhere('key', 'google_analytics_tracking_id')['value'] ?? null;
-            $favicon = $config->firstWhere('key', 'favicon')['value'] ?? null;
+            use App\Models\Setting;
+
+            $bladeConfig = file_exists(storage_path('installed'))
+                ? Setting::whereIn('key', [
+                    'head_scripts',
+                    'head_styles',
+                    'body_scripts',
+                    'meta_tags',
+                    'google_analytics_tracking_id',
+                    'favicon',
+                ])->pluck('value', 'key')
+                : collect();
+
+            $google_analytics = $bladeConfig->get('google_analytics_tracking_id');
+            $favicon = $bladeConfig->get('favicon');
             $favicon = $favicon ? '/media/' . $favicon : '/images/favicon.png';
+            $head_scripts = $bladeConfig->get('head_scripts');
+            $head_styles = $bladeConfig->get('head_styles');
+            $meta_tags = $bladeConfig->get('meta_tags');
+            $body_scripts = $bladeConfig->get('body_scripts');
         @endphp
         <!-- Dynamic Favicon -->
         @if($favicon)
@@ -30,19 +46,12 @@
             gtag('config', '{{ $google_analytics }}');
         </script>
         @endif
-        
-        @php
-            $head_scripts = $config->firstWhere('key', 'head_scripts')['value'] ?? null;
-            $head_styles = $config->firstWhere('key', 'head_styles')['value'] ?? null;
-            $meta_tags = $config->firstWhere('key', 'meta_tags')['value'] ?? null;
-            $body_scripts = $config->firstWhere('key', 'body_scripts')['value'] ?? null;
-        @endphp
-        
+
         @if (!empty($meta_tags))
         <!-- Custom Meta Tags -->
         {!! $meta_tags !!}
         @endif
-        
+
         @if (!empty($head_styles))
         <!-- Custom Head Styles -->
         @if(str_contains($head_styles, '<style>'))
@@ -53,7 +62,7 @@
             </style>
         @endif
         @endif
-        
+
         @if (!empty($head_scripts))
         <!-- Custom Head Scripts -->
         @if(str_contains($head_scripts, '<script>'))
@@ -67,7 +76,7 @@
     </head>
     <body>
         @inertia
-        
+
         @if (!empty($body_scripts))
         <!-- Custom Body Scripts -->
         @if(str_contains($body_scripts, '<script>'))

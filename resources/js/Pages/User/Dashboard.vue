@@ -298,9 +298,7 @@ const trans = useTrans();
     
     const displayTeamNotification = () => {
         try {
-            teamNotification.value = props.organization?.metadata
-                ? JSON.parse(props.organization.metadata)?.notification?.team ?? true
-                : true;
+            teamNotification.value = props.organization?.notification?.team ?? true
         } catch (error) {
             teamNotification.value = true;
         }

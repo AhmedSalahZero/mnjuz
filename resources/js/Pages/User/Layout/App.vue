@@ -89,8 +89,7 @@ const getValueByKey = (key) => {
 
 const setupSound = () => {
 	if (!organization.value) return
-	const settings = organization.value.metadata ? JSON.parse(organization.value.metadata) : {}
-	const notifications = settings.notifications || {}
+	const notifications = organization.value.notifications || {}
 
 	if (notifications?.enable_sound && audioPlayer.value) {
 		audioPlayer.value.src = notifications?.tone

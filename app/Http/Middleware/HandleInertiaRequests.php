@@ -9,14 +9,11 @@ use App\Models\Language;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
-use App\Models\User;
 use App\Services\SubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
 use Inertia\Middleware;
-use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
-use RobThree\Auth\TwoFactorAuth;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -64,29 +61,11 @@ class HandleInertiaRequests extends Middleware
         
         $language = app()->getLocale();
         $unreadMessages = 0;
-        $secret = '';
-        $qrcode = '';
         $tfaActive = false;
 
-        // two-factor stuff
         if ($user) {
             $googleAuth = Addon::where('name', 'Google Authenticator')->first()->is_active;
             $tfaActive = $googleAuth == 1 ? true : false;
-
-            if($googleAuth == 1){
-                $secret = $user->tfa_secret;
-                $tfa = new TwoFactorAuth(new BaconQrCodeProvider());
-        
-                if (!$secret) {
-                    $secret = $tfa->createSecret();
-            
-                    User::where('id', $user->id)->update([
-                        'tfa_secret' => $secret,
-                    ]);
-                }
-        
-                $qrcode = $tfa->getQRCodeImageAsDataUri(preg_replace('#^https?://#', '', config('app.url')), $secret);
-            }
         }
 
         if ($user && $user->role === 'user') {
@@ -103,11 +82,17 @@ class HandleInertiaRequests extends Middleware
                 ->first(['id', 'uuid', 'name', 'metadata', 'address']);
             $organizationArray = $organization ? $organization->toArray() : null;
             if ($organizationArray) {
+                $meta = json_decode($organization->metadata ?? '{}', true) ?: [];
+
+                $organizationArray['notifications'] = $meta['notifications'] ?? null;
+                $organizationArray['notification'] = $meta['notification'] ?? null;
                 $organizationArray['plan'] = [
                     'features' => [
                         'ice_breakers' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'ice_breakers'),
                     ],
                 ];
+
+                unset($organizationArray['metadata']);
                 $organization = $organizationArray;
             }
             $unreadMessages = Chat::where('organization_id', $organizationId)
@@ -118,7 +103,12 @@ class HandleInertiaRequests extends Middleware
         }
 
         if($this->isInstalled()){
-            $keys = ['favicon', 'logo', 'company_name', 'address', 'currency' , 'email', 'phone', 'socials', 'trial_period', 'recaptcha_site_key', 'recaptcha_active', 'google_analytics_tracking_id', 'google_maps_api_key','pusher_app_key','pusher_app_cluster', 'google_auth_active', 'enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model', 'head_scripts', 'head_styles', 'body_scripts', 'meta_tags'];
+            $keys = [
+                'favicon', 'logo', 'company_name', 'address', 'currency', 'email', 'phone', 'socials',
+                'trial_period', 'recaptcha_site_key', 'recaptcha_active', 'google_maps_api_key',
+                'pusher_app_key', 'pusher_app_cluster', 'google_auth_active',
+                'allow_facebook_login', 'allow_google_login',
+            ];
             $config = Setting::whereIn('key', $keys)->get();
             // Only columns used in shared UI: LangToggle/ProfileModal (code, name), dropdowns (id for key)
             $languages = Language::where('deleted_at', null)
@@ -192,8 +182,6 @@ class HandleInertiaRequests extends Middleware
             'currentLanguage' => $language,
             'tfa' => [
                 'status' => $tfaActive,
-                'secret' => $secret,
-                'qrcode' => $qrcode,
                 'enabled' => $user ? $user->tfa : false,
             ],
             'isRtl' => $isRtl,

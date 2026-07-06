@@ -15,6 +15,8 @@ use Hash;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Redirect;
+use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
+use RobThree\Auth\TwoFactorAuth;
 
 class ProfileController extends BaseController
 {
@@ -82,8 +84,29 @@ class ProfileController extends BaseController
         );
     }
 
-    public function updateTfa(StoreProfileTfa $request)
+    public function tfaSetup(): \Illuminate\Http\JsonResponse
     {
+        $user = auth()->user();
+        $tfa = new TwoFactorAuth(new BaconQrCodeProvider());
+
+        $secret = $user->tfa_secret;
+        if (!$secret) {
+            $secret = $tfa->createSecret();
+            User::where('id', $user->id)->update(['tfa_secret' => $secret]);
+        }
+
+        $qrcode = $tfa->getQRCodeImageAsDataUri(
+            preg_replace('#^https?://#', '', config('app.url')),
+            $secret
+        );
+
+        return response()->json([
+            'secret' => $secret,
+            'qrcode' => $qrcode,
+        ]);
+    }
+
+    public function updateTfa(StoreProfileTfa $request){
         $status = $request->status;
         $token = $request->token;
         $userId = auth()->user()->id;

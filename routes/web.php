@@ -121,6 +121,7 @@ Route::get('/auth/reset-devices/{user}', [App\Http\Controllers\AuthController::c
     ->name('auth.reset-devices');
 
 Route::middleware(['auth:user,admin'])->group(function () {
+    Route::get('/profile/tfa-setup', [App\Http\Controllers\ProfileController::class, 'tfaSetup']);
     Route::put('/profile', [App\Http\Controllers\ProfileController::class, 'update']);
     Route::put('/profile/password', [App\Http\Controllers\ProfileController::class, 'updatePassword']);
     Route::put('/profile/tfa', [App\Http\Controllers\ProfileController::class, 'updateTfa']);
