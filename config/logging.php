@@ -54,8 +54,13 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['single'],
+            'channels' => ['single', 'sentry_logs'],
             'ignore_exceptions' => false,
+        ],
+
+        'sentry_logs' => [
+            'driver' => 'sentry_logs',
+            'level' => env('LOG_LEVEL', 'warning'),
         ],
 
         'single' => [

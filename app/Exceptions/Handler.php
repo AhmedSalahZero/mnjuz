@@ -35,6 +35,18 @@ class Handler extends ExceptionHandler
     }
 
     /**
+     * Report or log an exception.
+     */
+    public function report(Throwable $exception)
+    {
+        if ($this->shouldReport($exception) && app()->bound('sentry') && config('app.env') != 'local') {
+            app('sentry')->captureException($exception);
+        }
+
+        parent::report($exception);
+    }
+
+    /**
      * Convert an authentication exception into a response.
      */
     protected function unauthenticated($request, AuthenticationException $exception)
