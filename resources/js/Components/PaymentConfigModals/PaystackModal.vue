@@ -17,6 +17,7 @@
     });
 
     const isLoading = ref(false);
+    const secretSet = ref({});
 
     const statusOptions = ref([
         { value: '1', label: 'Active' },
@@ -41,7 +42,8 @@
 
             // Assign values to the form fields based on the keys
             form.public_key = metadata.public_key || null;
-            form.secret_key = metadata.secret_key || null;
+            form.secret_key = null;
+            secretSet.value = { secret_key: metadata.secret_key_is_set };
             form.status = data.is_active ? '1' : '0';
         })
         .catch((error) => {
@@ -64,7 +66,7 @@
 
                 <div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6 sm:col-span-4 pb-8 border-b">
                     <FormInput v-model="form.public_key" :name="'Public Key'" :type="'text'" :error="form.errors.public_key" :class="'sm:col-span-6'"/>
-                    <FormInput v-model="form.secret_key" :name="'Secret Key'" :type="'text'" :error="form.errors.secret_key" :class="'sm:col-span-6'"/>
+                    <FormInput v-model="form.secret_key" :name="'Secret Key'" :type="'text'" :placeholder="secretSet.secret_key ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.secret_key" :class="'sm:col-span-6'"/>
                     <FormSelect v-model="form.status" :name="'Status'" :type="'text'"  :options="statusOptions" :error="form.errors.status" :class="'sm:col-span-6'"/>
                 </div>
 

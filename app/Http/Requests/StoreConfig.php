@@ -2,10 +2,31 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Setting;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreConfig extends FormRequest
 {
+    /**
+     * Secret fields are no longer sent to the browser, so an empty submission
+     * means "keep the stored value". Require them only when nothing is stored yet.
+     */
+    private function secretRule(string $settingKey, ?string $jsonField = null): string
+    {
+        $row = Setting::where('key', $settingKey)->first();
+
+        if (!$row) {
+            return 'required';
+        }
+
+        if ($jsonField === null) {
+            return filled($row->value) ? 'nullable' : 'required';
+        }
+
+        $decoded = json_decode((string) $row->value, true);
+
+        return filled($decoded[$jsonField] ?? null) ? 'nullable' : 'required';
+    }
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -39,7 +60,7 @@ class StoreConfig extends FormRequest
 
             if($this->recaptcha_active == 1){
                 $rules['recaptcha_site_key'] = 'required';
-                $rules['recaptcha_secret_key'] = 'required';
+                $rules['recaptcha_secret_key'] = $this->secretRule('recaptcha_secret_key');
             }
 
             $rules['support_ticket_form_url'] = 'nullable|url|max:2048';
@@ -55,20 +76,20 @@ class StoreConfig extends FormRequest
         if ($this->type == 'broadcast') {
             $rules['broadcast_driver'] = 'required';
             $rules['pusher_app_key'] = 'required';
-            $rules['pusher_app_id'] = 'required';
-            $rules['pusher_app_secret'] = 'required';
+            $rules['pusher_app_id'] = $this->secretRule('pusher_app_id');
+            $rules['pusher_app_secret'] = $this->secretRule('pusher_app_secret');
             $rules['pusher_app_cluster'] = 'required';
         }
 
         if ($this->type == 'socials') {
             if($this->allow_facebook_login){
                 $rules['facebook_login.client_id'] = 'required';
-                $rules['facebook_login.client_secret'] = 'required';
+                $rules['facebook_login.client_secret'] = $this->secretRule('facebook_login', 'client_secret');
             }
 
             if($this->allow_google_login){
                 $rules['google_login.client_id'] = 'required';
-                $rules['google_login.client_secret'] = 'required';
+                $rules['google_login.client_secret'] = $this->secretRule('google_login', 'client_secret');
             }
         }
 
@@ -92,21 +113,21 @@ class StoreConfig extends FormRequest
                 $rules['mail_config.host'] = 'required';
                 $rules['mail_config.port'] = 'required';
                 $rules['mail_config.username'] = 'required';
-                $rules['mail_config.password'] = 'required';
+                $rules['mail_config.password'] = $this->secretRule('mail_config', 'password');
             } else if($this->mail_config['driver'] === 'mailgun'){
                 $rules['mail_config.mg_domain'] = 'required';
-                $rules['mail_config.mg_secret'] = 'required';
+                $rules['mail_config.mg_secret'] = $this->secretRule('mail_config', 'mg_secret');
             } else if($this->mail_config['driver'] === 'ses'){
                 $rules['mail_config.ses_key'] = 'required';
-                $rules['mail_config.ses_secret'] = 'required';
+                $rules['mail_config.ses_secret'] = $this->secretRule('mail_config', 'ses_secret');
                 $rules['mail_config.ses_region'] = 'required';
             }
         }
 
         if ($this->type == 'storage') {
             if($this->storage_system === 'aws'){
-                $rules['aws.access_key'] = 'required';
-                $rules['aws.secret_key'] = 'required';
+                $rules['aws.access_key'] = $this->secretRule('aws', 'access_key');
+                $rules['aws.secret_key'] = $this->secretRule('aws', 'secret_key');
                 $rules['aws.default_region'] = 'required';
                 $rules['aws.bucket'] = 'required';
             }

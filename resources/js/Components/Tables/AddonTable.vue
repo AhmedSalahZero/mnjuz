@@ -24,6 +24,10 @@ const trans = useTrans();
         },
         config: {
             type: Array
+        },
+        whatsappCallbackToken: {
+            type: String,
+            default: ''
         }
     });
 
@@ -204,7 +208,7 @@ const trans = useTrans();
             <form @submit.prevent="submitForm()">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                     <div v-for="input in modalInputs" :class="input.class">
-                        <FormInput v-if="input.element == 'input'" v-model="form2.settings[input.name]" :error="form2.errors[`settings.${input.name}`]" :name="$t(input.label)" :type="input.type" :class="input.class" />
+                        <FormInput v-if="input.element == 'input'" v-model="form2.settings[input.name]" :error="form2.errors[`settings.${input.name}`]" :name="$t(input.label)" :type="input.type" :placeholder="getValueByKey(input.name + '_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="input.class" />
                         <div v-if="input.element == 'toggle'">
                             <div class="text-sm mb-2">{{ $t(input.label) }}</div>
                             <FormToggleSwitch v-if="input.element == 'toggle'" v-model="form2.settings[input.name]"/>
@@ -226,7 +230,7 @@ const trans = useTrans();
                         </div>
                         <span>
                             <p class="text-sm leading-6 break-all">{{ $t('Callback URL') }}: {{ currentURL + '/webhook/waba' }}</p>
-                            <p class="text-sm leading-6 break-all">{{ $t('Verify token') }}: {{ getValueByKey('whatsapp_callback_token') }}</p>
+                            <p class="text-sm leading-6 break-all">{{ $t('Verify token') }}: {{ props.whatsappCallbackToken }}</p>
                         </span>
                     </div>
                 </div>

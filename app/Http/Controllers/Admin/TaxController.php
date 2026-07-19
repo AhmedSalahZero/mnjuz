@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\TaxRate;
 use App\Http\Requests\StoreTax;
 use App\Http\Resources\TaxRateResource;
+use App\Services\SettingService;
 use App\Services\TaxService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -27,7 +28,7 @@ class TaxController extends BaseController
     public function index(Request $request, $id = null){
         return Inertia::render('Admin/Setting/Tax', [
             'rows' => $this->taxService->get($request),
-            'config' => Setting::get()
+            'config' => SettingService::redactForClient(Setting::get())
         ]);
     }
 

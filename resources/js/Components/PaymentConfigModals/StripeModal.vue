@@ -18,6 +18,7 @@
     });
 
     const isLoading = ref(false);
+    const secretSet = ref({});
 
     const statusOptions = ref([
         { value: '1', label: 'Active' },
@@ -42,8 +43,12 @@
 
             // Assign values to the form fields based on the keys
             form.publishable_key = metadata.publishable_key || null;
-            form.secret_key = metadata.secret_key || null;
-            form.webhook_secret = metadata.webhook_secret || null;
+            form.secret_key = null;
+            form.webhook_secret = null;
+            secretSet.value = {
+                secret_key: metadata.secret_key_is_set,
+                webhook_secret: metadata.webhook_secret_is_set,
+            };
             form.status = data.is_active ? '1' : '0';
         })
         .catch((error) => {
@@ -66,8 +71,8 @@
 
                 <div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6 sm:col-span-4 pb-8 border-b">
                     <FormInput v-model="form.publishable_key" :name="$t('Publishable key')" :type="'text'" :error="form.errors.publishable_key" :class="'sm:col-span-3'"/>
-                    <FormInput v-model="form.secret_key" :name="$t('Secret key')" :type="'text'" :error="form.errors.secret_key" :class="'sm:col-span-3'"/>
-                    <FormInput v-model="form.webhook_secret" :name="$t('Webhook secret')" :type="'text'" :error="form.errors.webhook_secret" :class="'sm:col-span-6'"/>
+                    <FormInput v-model="form.secret_key" :name="$t('Secret key')" :type="'text'" :placeholder="secretSet.secret_key ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.secret_key" :class="'sm:col-span-3'"/>
+                    <FormInput v-model="form.webhook_secret" :name="$t('Webhook secret')" :type="'text'" :placeholder="secretSet.webhook_secret ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.webhook_secret" :class="'sm:col-span-6'"/>
                     <FormSelect v-model="form.status" :name="$t('Status')" :type="'text'"  :options="statusOptions" :error="form.errors.status" :class="'sm:col-span-6'"/>
                 </div>
 

@@ -15,6 +15,37 @@ class Organization extends Model {
     protected $guarded = [];
     public $timestamps = true;
 
+    /**
+     * Serialize the model for the frontend with sensitive metadata secrets
+     * redacted. Server-side code that reads the raw `$organization->metadata`
+     * attribute is unaffected; only array/JSON serialization (e.g. Inertia
+     * props, API responses) is sanitized.
+     */
+    public function toArray()
+    {
+        $array = parent::toArray();
+
+        if (array_key_exists('metadata', $array) && filled($array['metadata'])) {
+            $decoded = is_string($array['metadata']) ? json_decode($array['metadata'], true) : $array['metadata'];
+
+            if (is_array($decoded)) {
+                if (isset($decoded['whatsapp']) && is_array($decoded['whatsapp'])) {
+                    $decoded['whatsapp']['access_token_is_set'] = filled($decoded['whatsapp']['access_token'] ?? null);
+                    unset($decoded['whatsapp']['access_token']);
+                }
+
+                if (isset($decoded['ai']) && is_array($decoded['ai'])) {
+                    $decoded['ai']['api_key_is_set'] = filled($decoded['ai']['api_key'] ?? null);
+                    unset($decoded['ai']['api_key']);
+                }
+
+                $array['metadata'] = json_encode($decoded);
+            }
+        }
+
+        return $array;
+    }
+
     public function listAll($searchTerm, $userId = null)
     {
         $query = $this->with(['teams.user', 'owner.user', 'subscription.plan'])

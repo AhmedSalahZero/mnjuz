@@ -34,7 +34,7 @@ class UpdateController extends BaseController
     }
 
     public function index(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         $addons = Addon::where('update_available', 1)->paginate(6);
         $data['rows'] = AddonResource::collection($addons);
 

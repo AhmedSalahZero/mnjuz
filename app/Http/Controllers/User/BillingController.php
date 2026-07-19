@@ -43,9 +43,7 @@ class BillingController extends BaseController
         $data['title'] = __('Billing');
         $data['isPaymentLoading'] = false;
         $data['pusherSettings'] = Setting::whereIn('key', [
-            'pusher_app_id',
             'pusher_app_key',
-            'pusher_app_secret',
             'pusher_app_cluster',
         ])->pluck('value', 'key')->toArray();
         $data['setting'] = Setting::whereIn('key', ['enable_custom_payment'])->pluck('value', 'key')->toArray();

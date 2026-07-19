@@ -1,7 +1,7 @@
 <script setup>
     import axios from "axios";
     import { useForm } from '@inertiajs/vue3';
-    import { onMounted } from 'vue';
+    import { onMounted, ref } from 'vue';
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
@@ -19,6 +19,8 @@
         language: 'ar',
         status: null,
     });
+
+    const secretSet = ref({});
 
     const statusOptions = [
         { value: '1', label: 'Active' },
@@ -49,8 +51,12 @@
                 ? JSON.parse(data.metadata || '{}')
                 : (data.metadata || {});
 
-            form.api_key = metadata.api_key || null;
-            form.webhook_secret = metadata.webhook_secret || null;
+            form.api_key = null;
+            form.webhook_secret = null;
+            secretSet.value = {
+                api_key: metadata.api_key_is_set,
+                webhook_secret: metadata.webhook_secret_is_set,
+            };
             form.mode = metadata.mode || 'sandbox';
             form.country_code = metadata.country_code || 'SAU';
             form.currency = metadata.currency || 'SAR';
@@ -73,8 +79,8 @@
         <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
             <form @submit.prevent="submitForm()">
                 <div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6 sm:col-span-4 pb-8 border-b">
-                    <FormInput v-model="form.api_key" :name="$t('API key')" type="password" :error="form.errors.api_key" class="sm:col-span-6" />
-                    <FormInput v-model="form.webhook_secret" :name="$t('Webhook secret')" type="password" :error="form.errors.webhook_secret" class="sm:col-span-6" />
+                    <FormInput v-model="form.api_key" :name="$t('API key')" type="password" :placeholder="secretSet.api_key ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.api_key" class="sm:col-span-6" />
+                    <FormInput v-model="form.webhook_secret" :name="$t('Webhook secret')" type="password" :placeholder="secretSet.webhook_secret ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.webhook_secret" class="sm:col-span-6" />
                     <FormSelect v-model="form.mode" :name="$t('Environment mode')" :options="modeOptions" :error="form.errors.mode" class="sm:col-span-6" />
                     <FormInput v-model="form.country_code" :name="$t('Country code')" type="text" :error="form.errors.country_code" class="sm:col-span-3" />
                     <FormInput v-model="form.currency" :name="$t('Currency')" type="text" :error="form.errors.currency" class="sm:col-span-3" />

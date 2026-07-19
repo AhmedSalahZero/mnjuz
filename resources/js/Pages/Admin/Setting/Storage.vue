@@ -15,8 +15,8 @@
                     </div>
 
                     <div v-if="form.storage_system === 'aws'" class="grid gap-6 grid-cols-2 pb-10 border-b md:w-2/3">
-                        <FormInput v-model="form.aws.access_key" :name="$t('S3 AWS access key')" :type="'text'" :error="form.errors['aws.access_key']" :class="'col-span-1'"/>
-                        <FormInput v-model="form.aws.secret_key" :name="$t('S3 AWS secret access key')" :type="'password'" :error="form.errors['aws.secret_key']" :class="'col-span-1'"/>
+                        <FormInput v-model="form.aws.access_key" :name="$t('S3 AWS access key')" :type="'text'" :placeholder="getValueByKey('aws_access_key_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors['aws.access_key']" :class="'col-span-1'"/>
+                        <FormInput v-model="form.aws.secret_key" :name="$t('S3 AWS secret access key')" :type="'password'" :placeholder="getValueByKey('aws_secret_key_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors['aws.secret_key']" :class="'col-span-1'"/>
                         <FormInput v-model="form.aws.default_region" :name="$t('S3 AWS default region')" :type="'text'" :error="form.errors['aws.default_region']" :class="'col-span-1'"/>
                         <FormInput v-model="form.aws.bucket" :name="$t('S3 AWS bucket')" :type="'text'" :error="form.errors['aws.bucket']" :class="'col-span-1'"/>
                     </div>

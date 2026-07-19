@@ -59,22 +59,22 @@ class SettingController extends BaseController
 
     public function general(Request $request)
     {
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         return Inertia::render('Admin/Setting/General', $data);
     }
 
     public function email(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         return Inertia::render('Admin/Setting/Email', $data);
     }
 
     public function billing(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         return Inertia::render('Admin/Setting/Billing', $data);
     }
 
     public function broadcast_driver(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         return Inertia::render('Admin/Setting/Broadcast', $data);
     }
 
@@ -83,7 +83,7 @@ class SettingController extends BaseController
     }
 
     public function subscription(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
 
         return Inertia::render('Admin/Setting/Subscription', $data);
     }
@@ -93,18 +93,18 @@ class SettingController extends BaseController
         $data['date_formats'] = config('formats.date_formats');
         $data['time_formats'] = config('formats.time_formats');
         $data['currencies'] = config('currencies');
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
 
         return Inertia::render('Admin/Setting/Timezone', $data);
     }
 
     public function storage(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         return Inertia::render('Admin/Setting/Storage', $data);
     }
 
     public function socials(Request $request){
-        $data['config'] = Setting::get();
+        $data['config'] = SettingService::redactForClient(Setting::get());
         return Inertia::render('Admin/Setting/Socials', $data);
     }
 }

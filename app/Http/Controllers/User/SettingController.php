@@ -428,6 +428,14 @@ class SettingController extends BaseController
     private function saveWhatsappSettings($accessToken, $appId, $phoneNumberId, $wabaId, $subscribeToWebhook = false) {
         $organizationId = session()->get('current_organization');
         $apiVersion = config('graph.api_version');
+
+        // The access token is no longer sent to the browser, so a blank submission
+        // means "keep the currently stored token" instead of erasing it.
+        if (blank($accessToken)) {
+            $existingOrg = Organization::where('id', $organizationId)->first();
+            $existingMeta = $existingOrg && $existingOrg->metadata ? json_decode($existingOrg->metadata, true) : [];
+            $accessToken = $existingMeta['whatsapp']['access_token'] ?? $accessToken;
+        }
     
         $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
 

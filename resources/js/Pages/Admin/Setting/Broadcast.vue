@@ -12,9 +12,9 @@
                 <div class="pb-12">
                     <div v-if="form.broadcast_driver === 'pusher'" class="grid gap-6 grid-cols-2 pb-10 border-b md:w-2/3">
                         <FormSelect v-model="form.broadcast_driver" :name="$t('Broadcast driver')" :type="'text'"  :options="methods" :error="form.errors.broadcast_driver" :class="'col-span-2'"/>
-                        <FormInput v-model="form.pusher_app_id" :name="$t('Pusher app id')" :type="'text'" :error="form.errors.pusher_app_id" :class="'col-span-1'"/>
+                        <FormInput v-model="form.pusher_app_id" :name="$t('Pusher app id')" :type="'text'" :placeholder="getValueByKey('pusher_app_id_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.pusher_app_id" :class="'col-span-1'"/>
                         <FormInput v-model="form.pusher_app_key" :name="$t('Pusher app key')" :type="'text'" :error="form.errors.pusher_app_key" :class="'col-span-1'"/>
-                        <FormInput v-model="form.pusher_app_secret" :name="$t('Pusher app secret')" :type="'password'" :error="form.errors.pusher_app_secret" :class="'col-span-1'"/>
+                        <FormInput v-model="form.pusher_app_secret" :name="$t('Pusher app secret')" :type="'password'" :placeholder="getValueByKey('pusher_app_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.pusher_app_secret" :class="'col-span-1'"/>
                         <FormInput v-model="form.pusher_app_cluster" :name="$t('Pusher app cluster')" :type="'text'" :error="form.errors.pusher_app_cluster" :class="'col-span-1'"/>
                     </div>
 

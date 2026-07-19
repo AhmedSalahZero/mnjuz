@@ -234,9 +234,7 @@ class ChatService
 			$hasMoreContacts = $contactsPaginated->hasMorePages();
 			$nextContactsPage = $hasMoreContacts ? (int)$contactPage + 1 : null;
 			$pusherSettings = Setting::whereIn('key', [
-				'pusher_app_id',
 				'pusher_app_key',
-				'pusher_app_secret',
 				'pusher_app_cluster',
 			])->pluck('value', 'key')->toArray();
 			

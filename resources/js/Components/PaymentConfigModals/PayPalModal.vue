@@ -19,6 +19,7 @@
     });
 
     const isLoading = ref(false);
+    const secretSet = ref({});
 
     const modeOptions = ref([
         { value: 'sandbox', label: 'Sandbox' },
@@ -48,7 +49,8 @@
 
             // Assign values to the form fields based on the keys
             form.client_id = metadata.client_id || null;
-            form.secret = metadata.secret || null;
+            form.secret = null;
+            secretSet.value = { secret: metadata.secret_is_set };
             form.mode = metadata.mode || null;
             form.webhook_id = metadata.webhook_id || null;
             form.status = data.is_active ? '1' : '0';
@@ -73,7 +75,7 @@
 
                 <div class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-6 sm:col-span-4 pb-8 border-b">
                     <FormInput v-model="form.client_id" :name="$t('Client id')" :type="'text'" :error="form.errors.client_id" :class="'sm:col-span-3'"/>
-                    <FormInput v-model="form.secret" :name="$t('Secret')" :type="'text'" :error="form.errors.secret" :class="'sm:col-span-3'"/>
+                    <FormInput v-model="form.secret" :name="$t('Secret')" :type="'text'" :placeholder="secretSet.secret ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.secret" :class="'sm:col-span-3'"/>
                     <FormSelect v-model="form.mode" :name="$t('Mode')" :type="'text'"  :options="modeOptions" :error="form.errors.mode" :class="'sm:col-span-3'"/>
                     <FormInput v-model="form.webhook_id" :name="$t('Webhook')" :type="'text'" :error="form.errors.webhook_id" :class="'sm:col-span-3'"/>
                     <FormSelect v-model="form.status" :name="$t('Status')" :type="'text'"  :options="statusOptions" :error="form.errors.status" :class="'sm:col-span-6'"/>

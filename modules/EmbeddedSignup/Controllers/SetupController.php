@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller as BaseController;
 
 use App\Models\Addon;
 use App\Models\Setting;
+use App\Services\SettingService;
 use Modules\EmbeddedSignup\Requests\StoreEmbeddedSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,12 @@ class SetupController extends BaseController
         $settings = $request->settings;
 
         foreach ($settings as $key => $value) {
+            // Secret values are no longer sent to the browser, so a blank submission
+            // means "keep the stored value" instead of overwriting it.
+            if (in_array($key, SettingService::SECRET_KEYS, true) && blank($value)) {
+                continue;
+            }
+
             DB::table('settings')->updateOrInsert([
                 'key' => $key
             ],[

@@ -12,9 +12,9 @@
                 <div class="">
                     <div class="grid gap-6 grid-cols-2 pb-10 border-b md:w-2/3">
                         <FormInput v-model="form.google_login.client_id" :name="$t('Google client id')" :error="form.errors['google_login.client_id']" :type="'text'" :class="'col-span-1'"/>
-                        <FormInput v-model="form.google_login.client_secret" :name="$t('Google client secret')" :error="form.errors['google_login.client_secret']" :type="'password'" :class="'col-span-1'"/>
+                        <FormInput v-model="form.google_login.client_secret" :name="$t('Google client secret')" :error="form.errors['google_login.client_secret']" :type="'password'" :placeholder="getValueByKey('google_login_client_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'col-span-1'"/>
                         <FormInput v-model="form.facebook_login.client_id" :name="$t('Facebook client id')" :error="form.errors['facebook_login.client_id']" :type="'text'" :class="'col-span-1'"/>
-                        <FormInput v-model="form.facebook_login.client_secret" :name="$t('Facebook client secret')" :error="form.errors['facebook_login.client_secret']" :type="'password'" :class="'col-span-1'"/>
+                        <FormInput v-model="form.facebook_login.client_secret" :name="$t('Facebook client secret')" :error="form.errors['facebook_login.client_secret']" :type="'password'" :placeholder="getValueByKey('facebook_login_client_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'col-span-1'"/>
                         <div class="relative flex gap-x-3 col-span-2">
                             <div class="flex items-center">
                                 <label @click="toggleGoogleLoginActive()" for="myCheckbox" class="cursor-pointer">

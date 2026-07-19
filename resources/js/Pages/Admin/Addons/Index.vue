@@ -12,7 +12,7 @@
             </div>
             
             <!-- Table Component-->
-            <AddonTable :rows="props.rows" :filters="props.filters" :config="config" />
+            <AddonTable :rows="props.rows" :filters="props.filters" :config="config" :whatsapp-callback-token="props.whatsappCallbackToken" />
         </div>
     </AppLayout>
 </template>
@@ -23,5 +23,5 @@
     import { Link, useForm } from "@inertiajs/vue3";
     import AddonTable from '@/Components/Tables/AddonTable.vue';
 
-    const props = defineProps({ title: String, rows: Object, filters: Object, config: Array });
+    const props = defineProps({ title: String, rows: Object, filters: Object, config: Array, whatsappCallbackToken: String });
 </script>

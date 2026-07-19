@@ -28,6 +28,11 @@ class PaymentGatewayController extends BaseController
     {
         $gateway = PaymentGateway::whereRaw('LOWER(name) = ?', [strtolower($type)])->first();
 
+        if ($gateway) {
+            // Never expose secret metadata (secret keys, webhook secrets, tokens) to the browser.
+            $gateway->metadata = PaymentGatewayResource::redactMetadata($gateway->name, $gateway->metadata);
+        }
+
         return response()->json(['success' => true, 'data'=> $gateway]);
     }
 
@@ -94,6 +99,15 @@ class PaymentGatewayController extends BaseController
                     'message' => __('Payment gateway not found.'),
                 ]
             );
+        }
+
+        // Secret fields are no longer sent to the browser, so a blank submission
+        // means "keep the currently stored secret" instead of erasing it.
+        $existingMetadata = $gateway->metadata ? (json_decode($gateway->metadata, true) ?: []) : [];
+        foreach (PaymentGatewayResource::secretFields($type) as $field) {
+            if (blank($metadata[$field] ?? null) && filled($existingMetadata[$field] ?? null)) {
+                $metadata[$field] = $existingMetadata[$field];
+            }
         }
 
         PaymentGateway::where('id', $gateway->id)->update([

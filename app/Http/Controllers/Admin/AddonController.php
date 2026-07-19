@@ -8,6 +8,7 @@ use App\Http\Resources\AddonResource;
 use App\Models\Addon;
 use App\Models\Setting;
 use App\Services\ModuleService;
+use App\Services\SettingService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -21,7 +22,8 @@ class AddonController extends BaseController
             'title' => __('Addons'),
             'rows' => AddonResource::collection($rows), 
             'filters' => $request->all(),
-            'config' => Setting::get()
+            'config' => SettingService::redactForClient(Setting::get()),
+            'whatsappCallbackToken' => Setting::where('key', 'whatsapp_callback_token')->value('value'),
         ]);
     }
 
@@ -30,6 +32,12 @@ class AddonController extends BaseController
         $settings = $request->settings;
 
         foreach ($settings as $key => $value) {
+            // Secret values are no longer sent to the browser, so a blank submission
+            // means "keep the stored value" instead of overwriting it.
+            if (in_array($key, SettingService::SECRET_KEYS, true) && blank($value)) {
+                continue;
+            }
+
             DB::table('settings')->updateOrInsert(['key' => $key],['value' => $value]);
         }
 

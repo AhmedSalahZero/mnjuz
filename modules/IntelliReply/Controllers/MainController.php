@@ -121,7 +121,11 @@ class MainController extends BaseController
         $metadataArray['ai']['model'] = $request->model;
         $metadataArray['ai']['max_tokens'] = $request->max_tokens;
         $metadataArray['ai']['temperature'] = $request->temperature;
-        $metadataArray['ai']['api_key'] = $request->api_key;
+        // The API key is no longer sent to the browser, so a blank submission
+        // means "keep the currently stored key" instead of erasing it.
+        if (filled($request->api_key)) {
+            $metadataArray['ai']['api_key'] = $request->api_key;
+        }
         $metadataArray['ai']['allow_audio_response'] = $request->allow_audio_response;
         $metadataArray['ai']['voice'] = $request->voice;
         $metadataArray['ai']['ai_chat_form_active'] = $request->ai_chat_form_active;

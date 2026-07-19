@@ -210,7 +210,7 @@
                 <form @submit.prevent="submitForm()" class="grid gap-x-6 gap-y-4 sm:grid-cols-6">
 
                     <FormInput v-model="form.app_id" :error="form.errors.app_id" :name="$t('App ID')" :type="'text'" :class="'sm:col-span-6'"/>
-                    <FormInput v-model="form.access_token" :error="form.errors.access_token" :name="$t('Access token')" :type="'text'" :class="'sm:col-span-6'"/>
+                    <FormInput v-model="form.access_token" :error="form.errors.access_token" :name="$t('Access token')" :type="'text'" :placeholder="settings?.whatsapp?.access_token_is_set ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'sm:col-span-6'"/>
                     <FormInput v-model="form.phone_number_id" :error="form.errors.phone_number_id" :name="$t('Phone number ID')" :type="'text'" :class="'sm:col-span-6'"/>
                     <FormInput v-model="form.waba_id" :error="form.errors.waba_id" :name="$t('Whatsapp business account ID')" :type="'text'" :class="'sm:col-span-6'"/>
 
@@ -231,7 +231,7 @@
         <Modal v-if="settings?.whatsapp && settings?.whatsapp?.is_embedded_signup === 0" :label="$t('Whatsapp API config')" :isOpen=isOpenForm2Modal>
             <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
                 <form @submit.prevent="submitForm3()" class="grid gap-x-6 gap-y-4 sm:grid-cols-6">
-                    <FormInput v-model="form3.access_token" :error="form3.errors.access_token" :name="$t('Access token')" :type="'text'" :class="'sm:col-span-6'"/>
+                    <FormInput v-model="form3.access_token" :error="form3.errors.access_token" :name="$t('Access token')" :type="'text'" :placeholder="settings?.whatsapp?.access_token_is_set ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'sm:col-span-6'"/>
 
                     <div class="mt-4 flex">
                         <button type="button" @click.self="isOpenForm2Modal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>

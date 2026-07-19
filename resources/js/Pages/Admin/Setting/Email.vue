@@ -17,12 +17,12 @@
 
                         <div v-if="form.mail_config.driver === 'mailgun'" class="grid gap-6 grid-cols-2 pb-10 md:w-2/3">
                             <FormInput v-model="form.mail_config.mg_domain" :error="form.errors['mail_config.mg_domain']" :name="$t('Mailgun domain')" :type="'text'" :class="'col-span-1'"/>
-                            <FormInput v-model="form.mail_config.mg_secret" :error="form.errors['mail_config.mg_secret']" :name="$t('Mailgun secret')" :type="'text'" :class="'col-span-1'"/>
+                            <FormInput v-model="form.mail_config.mg_secret" :error="form.errors['mail_config.mg_secret']" :name="$t('Mailgun secret')" :type="'text'" :placeholder="getValueByKey('mail_config_mg_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'col-span-1'"/>
                         </div>
 
                         <div v-else-if="form.mail_config.driver === 'ses'" class="grid gap-6 grid-cols-2 pb-6 md:w-2/3">
-                            <FormInput v-model="form.mail_config.ses_key" :error="form.errors['mail_config.ses_key']" :name="$t('AWS access key id')" :type="'text'" :class="'col-span-1'"/>
-                            <FormInput v-model="form.mail_config.ses_secret" :error="form.errors['mail_config.ses_secret']" :name="$t('AWS secret access key')" :type="'text'" :class="'col-span-1'"/>
+                            <FormInput v-model="form.mail_config.ses_key" :error="form.errors['mail_config.ses_key']" :name="$t('AWS access key id')" :type="'text'" :placeholder="getValueByKey('mail_config_ses_key_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'col-span-1'"/>
+                            <FormInput v-model="form.mail_config.ses_secret" :error="form.errors['mail_config.ses_secret']" :name="$t('AWS secret access key')" :type="'text'" :placeholder="getValueByKey('mail_config_ses_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'col-span-1'"/>
                             <FormInput v-model="form.mail_config.ses_region" :error="form.errors['mail_config.ses_region']" :name="$t('AWS default region')" :type="'text'" :class="'col-span-2'"/>
                         </div>
 
@@ -30,7 +30,7 @@
                             <FormInput v-model="form.mail_config.host" :error="form.errors['mail_config.host']" :name="$t('Host')" :type="'text'" :class="'col-span-1'"/>
                             <FormInput v-model="form.mail_config.port" :error="form.errors['mail_config.port']" :name="$t('Port')" :type="'text'" :class="'col-span-1'"/>
                             <FormInput v-model="form.mail_config.username" :error="form.errors['mail_config.username']" :name="$t('Username')" :type="'text'" :class="'col-span-1'"/>
-                            <FormInput v-model="form.mail_config.password" :error="form.errors['mail_config.password']" :name="$t('Password')" :type="'password'" :class="'col-span-1'"/>
+                            <FormInput v-model="form.mail_config.password" :error="form.errors['mail_config.password']" :name="$t('Password')" :type="'password'" :placeholder="getValueByKey('mail_config_password_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :class="'col-span-1'"/>
                         </div>
 
                         <div class="grid gap-6 grid-cols-2 pb-3 md:w-2/3">
