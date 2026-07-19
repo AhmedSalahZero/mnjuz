@@ -42,86 +42,38 @@
                 </div>
               </div>
               <div class="w-5/5">
-                <div class="grid grid-cols-2 gap-x-4">
-                  <div class="border rounded-xl p-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div
+                    v-for="mode in assignmentModes"
+                    :key="mode.value"
+                    class="border rounded-xl p-4 cursor-pointer"
+                    :class="form.assignment_mode === mode.value ? 'border-black' : ''"
+                    @click="selectAssignmentMode(mode.value)">
                     <div class="flex space-x-2">
                       <div>
                         <div class="flex mt-[1px]">
-                          <label
-                            @click="toggleAutoAssignment(false)"
-                            for="myCheckbox"
-                            class="cursor-pointer">
-                            <div
-                              class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                              :class="form.auto_assignment === false ? 'bg-[#000]' : ''">
-                              <svg
-                                v-if="form.auto_assignment === false"
-                                class="w-4 h-4"
-                                :class="form.auto_assignment === false ? 'text-white' : ''"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <path
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M5 13l4 4L19 7"></path>
-                              </svg>
-                            </div>
-                          </label>
+                          <div
+                            class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
+                            :class="form.assignment_mode === mode.value ? 'bg-[#000]' : ''">
+                            <svg
+                              v-if="form.assignment_mode === mode.value"
+                              class="w-4 h-4 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M5 13l4 4L19 7"></path>
+                            </svg>
+                          </div>
                         </div>
                       </div>
-                      <div
-                        @click="toggleAutoAssignment(false)"
-                        class="cursor-pointer">
-                        <div>{{ $t('Off') }}</div>
-                        <div>
-                          {{
-                            $t('Team members pick conversations manually from Unassigned folder.')
-                          }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="border rounded-xl p-4">
-                    <div class="flex space-x-2">
                       <div>
-                        <div class="flex mt-[1px]">
-                          <label
-                            @click="toggleAutoAssignment(true)"
-                            for="myCheckbox"
-                            class="cursor-pointer">
-                            <div
-                              class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                              :class="form.auto_assignment === true ? 'bg-[#000]' : ''">
-                              <svg
-                                v-if="form.auto_assignment === true"
-                                class="w-4 h-4"
-                                :class="form.auto_assignment === true ? 'text-white' : ''"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                xmlns="http://www.w3.org/2000/svg">
-                                <path
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M5 13l4 4L19 7"></path>
-                              </svg>
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-                      <div
-                        @click="toggleAutoAssignment(true)"
-                        class="cursor-pointer">
-                        <div>{{ $t('Auto') }}</div>
-                        <div>
-                          {{
-                            $t('Distribute conversations among all your available team members.')
-                          }}
-                        </div>
+                        <div>{{ $t(mode.label) }}</div>
+                        <div class="text-slate-500">{{ $t(mode.description) }}</div>
                       </div>
                     </div>
                   </div>
@@ -233,9 +185,34 @@ const props = defineProps(['rows', 'filters', 'settings', 'modules'])
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 
+// وضع الإسناد: يدوي | تلقائي (توزيع على موظف واحد) | مشترك (يظهر للجميع)
+// نستنتج القيمة الافتراضية من الإعداد القديم auto_assignment لضمان التوافق.
+const initialMode =
+  settings.value?.tickets?.assignment_mode ??
+  (settings.value?.tickets?.auto_assignment ? 'auto' : 'manual')
+
+const assignmentModes = [
+  {
+    value: 'manual',
+    label: 'Off',
+    description: 'Team members pick conversations manually from Unassigned folder.',
+  },
+  {
+    value: 'auto',
+    label: 'Auto',
+    description: 'Distribute conversations among all your available team members.',
+  },
+  {
+    value: 'shared',
+    label: 'All employees',
+    description: 'Show every conversation to all employees so anyone can reply.',
+  },
+]
+
 const form = useForm({
   active: settings.value?.tickets?.active ?? false,
-  auto_assignment: settings.value?.tickets?.auto_assignment ?? false,
+  assignment_mode: initialMode,
+  auto_assignment: initialMode === 'auto',
   reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
   allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
   encrypt_contacts_for_agents: settings.value?.tickets?.encrypt_contacts_for_agents ?? false,
@@ -260,8 +237,10 @@ const toggleState4 = () => {
   submitForm()
 }
 
-const toggleAutoAssignment = (el) => {
-  form.auto_assignment = el
+const selectAssignmentMode = (mode) => {
+  form.assignment_mode = mode
+  // نبقي auto_assignment متزامناً مع الوضع لضمان التوافق مع منطق الإسناد الحالي.
+  form.auto_assignment = mode === 'auto'
   submitForm()
 }
 

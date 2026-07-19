@@ -22,6 +22,7 @@ use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
+use App\Services\Chat\ChatReadService;
 use App\Services\ImageCompressionService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
@@ -127,11 +128,39 @@ class ChatService
 
     private function markInboundChatsAsRead(int $contactId): void
     {
-        DB::table('chats')->where('contact_id', $contactId)
-            ->where('type', 'inbound')
-            ->whereNull('deleted_at')
-            ->where('is_read', 0)
-            ->update(['is_read' => 1]);
+        ChatReadService::markInboundAsRead($contactId, (int) $this->organizationId);
+    }
+
+    /**
+     * Mark a contact's inbound messages as read from its uuid, enforcing the
+     * same access rules as opening the conversation. Used by the lightweight
+     * POST /chats/{uuid}/read endpoint so an open thread reliably clears its
+     * unread state even when new messages arrive over websockets.
+     */
+    public function markContactAsReadByUuid(string $uuid): bool
+    {
+        $contact = $this->findContactByUuidInOrganization($uuid);
+        if ($contact === null) {
+            return false;
+        }
+
+        $this->assertConversationAccess($contact);
+        $this->markInboundChatsAsRead($contact->id);
+        $this->markTicketAssignmentSeen($contact->id);
+
+        return true;
+    }
+
+    /**
+     * Clear the "new assignment" indicator for a contact's latest ticket once
+     * the current agent has opened the conversation.
+     */
+    private function markTicketAssignmentSeen(int $contactId): void
+    {
+        ChatTicket::where('contact_id', $contactId)
+            ->where('is_latest', true)
+            ->where('assigned_seen', 0)
+            ->update(['assigned_seen' => 1]);
     }
 
     public function getChatList($request, $uuid = null, $searchTerm = null)
@@ -280,6 +309,7 @@ class ChatService
 			}
 
 			$this->markInboundChatsAsRead($contact->id);
+			$this->markTicketAssignmentSeen($contact->id);
 
 				/**
 				 * @var Contact $contact

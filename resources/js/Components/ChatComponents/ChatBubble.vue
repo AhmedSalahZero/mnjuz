@@ -3,6 +3,8 @@ import Modal from '@/Components/Modal.vue'
 import { usePage } from '@inertiajs/vue3'
 import { computed, ref } from 'vue'
 import { GoogleMap, Marker } from 'vue3-google-map'
+import ImageLightbox from './ImageLightbox.vue'
+import ContactCardBubble from './ContactCardBubble.vue'
 
 const props = defineProps({
 	content: Object,
@@ -10,6 +12,15 @@ const props = defineProps({
 })
 
 const downloading = ref(false)
+
+// معاينة الصور بشكل مكبّر (lightbox) عند الضغط عليها
+const lightboxOpen = ref(false)
+const lightboxSrc = ref('')
+function openLightbox(src) {
+	if (!src) return
+	lightboxSrc.value = src
+	lightboxOpen.value = true
+}
 
 const openInGoogleMaps = (metadata) => {
 	const loc = location(metadata)
@@ -318,7 +329,8 @@ async function handleMediaDownload(event, content) {
 			<!--Image formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'image'">
 				<img v-if="content.media != null && !isMediaUnavailable(content)" :src="content?.media?.path"
-					alt="Image" class="mb-2 max-w-[320px]" @error="markMediaUnavailable(content)" />
+					alt="Image" class="mb-2 max-w-[320px] cursor-pointer" @click="openLightbox(content?.media?.path)"
+					@error="markMediaUnavailable(content)" />
 				<div v-else class="text-slate-500 flex justify-center items-center space-x-4">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 						<g fill="none">
@@ -597,7 +609,8 @@ async function handleMediaDownload(event, content) {
 			<!--Sticker formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'sticker'">
 				<img v-if="content.media != null && !isMediaUnavailable(content)" :src="content?.media?.path"
-					alt="Image" class="mb-2 max-w-[100px]" @error="markMediaUnavailable(content)" />
+					alt="Image" class="mb-2 max-w-[100px] cursor-pointer" @click="openLightbox(content?.media?.path)"
+					@error="markMediaUnavailable(content)" />
 				<div v-else class="text-slate-500 flex justify-center items-center space-x-4">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 						<g fill="none">
@@ -612,17 +625,7 @@ async function handleMediaDownload(event, content) {
 			</div>
 			<!--Contacts formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'contacts'">
-				<div class="flex space-x-3 w-[300px] items-center">
-					<div class="rounded-full p-3 bg-slate-200">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 512 512">
-							<path fill="currentColor"
-								d="M332.64 64.58C313.18 43.57 286 32 256 32c-30.16 0-57.43 11.5-76.8 32.38c-19.58 21.11-29.12 49.8-26.88 80.78C156.76 206.28 203.27 256 256 256s99.16-49.71 103.67-110.82c2.27-30.7-7.33-59.33-27.03-80.6ZM432 480H80a31 31 0 0 1-24.2-11.13c-6.5-7.77-9.12-18.38-7.18-29.11C57.06 392.94 83.4 353.61 124.8 326c36.78-24.51 83.37-38 131.2-38s94.42 13.5 131.2 38c41.4 27.6 67.74 66.93 76.18 113.75c1.94 10.73-.68 21.34-7.18 29.11A31 31 0 0 1 432 480Z" />
-						</svg>
-					</div>
-					<div>
-						{{ getContactDisplayName(content.metadata) }}
-					</div>
-				</div>
+				<ContactCardBubble :contacts="JSON.parse(content.metadata).contacts || []" />
 			</div>
 			<!--Audio formatting-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'audio'">
@@ -692,7 +695,7 @@ async function handleMediaDownload(event, content) {
 			</div>
 			<!--Timestamp-->
 			<div v-if="props.type === 'outbound' && content.user" class="mt-2 mb--2">
-				<span class="text-gray-500 text-xs text-right leading-none">Sent By:
+				<span class="text-gray-500 text-xs text-right leading-none">{{ $t('Sent By:') }}
 					<u>{{ content.user?.first_name + ' ' + content.user?.last_name }}</u></span>
 			</div>
 			<div class="flex items-center justify-between space-x-4"
@@ -729,10 +732,6 @@ async function handleMediaDownload(event, content) {
 					<span v-if="chatStatus(content.logs) === 'retrying'" class="text-amber-600 text-xs" :title="$t('Retrying with compatible format')">↻</span>
 				</span>
 			</div>
-			<div v-if="JSON.parse(content.metadata).type === 'contacts'"
-				class="cursor-pointer text-center border-t mt-2 pt-2">
-				{{ $t('View') }}
-			</div>
 		</div>
 	</div>
 	<Modal :label="$t('Message status: ') + chatStatus(content.logs)" :isOpen="isModalOpen" :closeBtn="true"
@@ -744,7 +743,7 @@ async function handleMediaDownload(event, content) {
 			<div v-if="errors.length" class="bg-red-100 rounded-md p-3 text-sm mt-4">
 				<div v-for="(error, index) in errors" :key="index">
 					<div class="flex">
-						<p class="truncate">Chat ID: {{ JSON.parse(content.logs[0].metadata).id }}</p>
+						<p class="truncate">{{ $t('Chat ID:') }} {{ JSON.parse(content.logs[0].metadata).id }}</p>
 						<button @click="copyItem(JSON.parse(content.logs[0].metadata).id)"
 							class="text-gray-600 hover:text-black transition">
 							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
@@ -757,10 +756,10 @@ async function handleMediaDownload(event, content) {
 							</svg>
 						</button>
 					</div>
-					<p>Error Code: {{ error.code }}</p>
-					<p>Title: {{ error.title }}</p>
-					<p>Message: {{ error.message }}</p>
-					<p>Error Details: {{ error.error_data.details }}</p>
+					<p>{{ $t('Error Code:') }} {{ error.code }}</p>
+					<p>{{ $t('Title:') }} {{ error.title }}</p>
+					<p>{{ $t('Message:') }} {{ error.message }}</p>
+					<p>{{ $t('Error Details:') }} {{ error.error_data.details }}</p>
 				</div>
 			</div>
 			<div class="mt-4 flex w-full">
@@ -771,4 +770,5 @@ async function handleMediaDownload(event, content) {
 			</div>
 		</div>
 	</Modal>
+	<ImageLightbox :isOpen="lightboxOpen" :src="lightboxSrc" @close="lightboxOpen = false" />
 </template>

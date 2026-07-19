@@ -4,6 +4,7 @@ import axios from 'axios'
 import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourComposeBanner.vue'
+import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
@@ -197,8 +198,92 @@ const adjustTextareaHeight = () => {
 }
 
 const handleEnterKey = (event) => {
+	// عند فتح قائمة الاختصارات نطبّق العنصر المُحدد بدل إرسال النص المكتوب
+	if (shortcutsOpen.value) {
+		applyActiveShortcut()
+		return
+	}
 	if (formTextInput.value != null && formTextInput.value.trim() != '') {
 		sendMessage()
+	}
+}
+
+// ==== نظام الاختصارات (Quick replies) ====
+const shortcuts = ref([])
+const activeShortcutIndex = ref(0)
+const shortcutsDismissed = ref(false)
+
+const loadShortcuts = async () => {
+	try {
+		const res = await axios.get('/shortcuts/available')
+		shortcuts.value = res?.data?.shortcuts ?? []
+	} catch {
+		shortcuts.value = []
+	}
+}
+
+const filteredShortcuts = computed(() => {
+	const value = formTextInput.value
+	if (!value || value[0] !== '/') return []
+	const query = value.slice(1).trim().toLowerCase()
+	if (query === '') return shortcuts.value
+	return shortcuts.value.filter(
+		(s) => (s.command || '').toLowerCase().includes(query)
+			|| (s.message || '').toLowerCase().includes(query),
+	)
+})
+
+const shortcutsOpen = computed(() =>
+	!shortcutsDismissed.value
+	&& filteredShortcuts.value.length > 0
+	&& (formTextInput.value || '')[0] === '/'
+)
+
+watch(filteredShortcuts, () => {
+	activeShortcutIndex.value = 0
+})
+
+// إعادة إظهار القائمة عند تعديل النص بعد إغلاقها يدوياً
+watch(formTextInput, () => {
+	if ((formTextInput.value || '')[0] !== '/') {
+		shortcutsDismissed.value = false
+	}
+})
+
+const moveShortcut = (delta) => {
+	const len = filteredShortcuts.value.length
+	if (len === 0) return
+	activeShortcutIndex.value = (activeShortcutIndex.value + delta + len) % len
+}
+
+const setActiveShortcut = (index) => {
+	activeShortcutIndex.value = index
+}
+
+const applyShortcut = (shortcut) => {
+	if (!shortcut) return
+	formTextInput.value = shortcut.message
+	nextTick(() => {
+		sendMessage()
+	})
+}
+
+const applyActiveShortcut = () => {
+	applyShortcut(filteredShortcuts.value[activeShortcutIndex.value])
+}
+
+// معالجة مفاتيح التنقل عندما تكون قائمة الاختصارات مفتوحة
+const onComposeKeydown = (event) => {
+	if (!shortcutsOpen.value) return
+	if (event.key === 'ArrowDown') {
+		event.preventDefault()
+		moveShortcut(1)
+	} else if (event.key === 'ArrowUp') {
+		event.preventDefault()
+		moveShortcut(-1)
+	} else if (event.key === 'Escape') {
+		event.preventDefault()
+		shortcutsDismissed.value = true
 	}
 }
 
@@ -437,6 +522,7 @@ const getSuggestion = async () => {
 
 onMounted(() => {
 	document.addEventListener('click', handleClickOutside)
+	loadShortcuts()
 	recorder.value = new MicRecorder({
 		bitRate: 128,
 	})
@@ -489,7 +575,9 @@ onBeforeUnmount(() => {
 		simpleForm &&
 		!props.chatLimitReached &&
 		!props.contact.is_blocked
-	" @submit.prevent="sendMessage()" class="flex w-full flex-col px-2 md:px-10">
+	" @submit.prevent="sendMessage()" class="relative flex w-full flex-col px-2 md:px-10">
+		<ShortcutsDropdown v-if="shortcutsOpen" :items="filteredShortcuts" :activeIndex="activeShortcutIndex"
+			@hover="setActiveShortcut" @select="(i) => applyShortcut(filteredShortcuts[i])" />
 		<div class="w-full overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
 			<Chat24HourComposeBanner
 				v-if="!isInboundChatWithin24Hours"
@@ -509,7 +597,7 @@ onBeforeUnmount(() => {
 						<EmojiPicker :native="true" @select="addEmoji" />
 					</div>
 				</div>
-				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown.enter.exact.prevent="handleEnterKey"
+				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown="onComposeKeydown" @keydown.enter.exact.prevent="handleEnterKey"
 					class="w-full ml-3 outline-none resize-none text-sm md:text-base pl-6"
 					:class="processingForm ? 'bg-gray-200' : 'bg-white'" v-model="formTextInput"
 					@input="adjustTextareaHeight" type="text" rows="1" :autofocus="isInboundChatWithin24Hours"
@@ -613,7 +701,9 @@ onBeforeUnmount(() => {
 		!simpleForm &&
 		!props.chatLimitReached &&
 		!props.contact.is_blocked
-	" @submit.prevent="sendMessage()" class="flex items-center px-2 md:px-10 space-x-2">
+	" @submit.prevent="sendMessage()" class="relative flex items-center px-2 md:px-10 space-x-2">
+		<ShortcutsDropdown v-if="shortcutsOpen" :items="filteredShortcuts" :activeIndex="activeShortcutIndex"
+			@hover="setActiveShortcut" @select="(i) => applyShortcut(filteredShortcuts[i])" />
 		<div class="w-full overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
 			<Chat24HourComposeBanner
 				v-if="!isInboundChatWithin24Hours"
@@ -623,7 +713,7 @@ onBeforeUnmount(() => {
 			/>
 			<div class="p-4" :class="!isInboundChatWithin24Hours ? 'pointer-events-none opacity-40' : ''">
 			<div>
-				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown.enter.exact.prevent="handleEnterKey"
+				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown="onComposeKeydown" @keydown.enter.exact.prevent="handleEnterKey"
 					class="w-full outline-none resize-none text-sm rounded-md p-2"
 					:class="processingForm ? 'bg-gray-100' : 'bg-white'" v-model="formTextInput"
 					@input="adjustTextareaHeight" type="text" rows="3" :autofocus="isInboundChatWithin24Hours"
@@ -808,7 +898,7 @@ onBeforeUnmount(() => {
 						<span :class="((formTextInput === null || formTextInput.trim() === '') && !form2.file) || !isInboundChatWithin24Hours
 							? 'text-slate-300'
 							: 'text-black'
-							">Send</span>
+							">{{ $t('Send') }}</span>
 						<div>
 							<svg v-if="!processingForm" :class="((formTextInput === null || formTextInput.trim() === '') && !form2.file) || !isInboundChatWithin24Hours
 								? 'text-slate-300'

@@ -139,6 +139,7 @@ class UserDeviceService
     {
         $category = $category ?? $this->getDeviceCategory($deviceData);
         $deviceData['device_category'] = $category;
+        $deviceData['device_identifier'] = (string) \Illuminate\Support\Str::uuid();
 
         $device = $user->deviceForCategory($category);
 

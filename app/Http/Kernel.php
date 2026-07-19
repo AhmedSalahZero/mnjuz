@@ -46,6 +46,7 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\EnsureCurrentOrganization::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\SetOrganizationFromSession::class,
+            \App\Http\Middleware\EnsureDeviceIsCurrent::class,
         ],
 
         'api' => [

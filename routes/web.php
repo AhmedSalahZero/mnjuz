@@ -164,6 +164,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
+                Route::post('/chats/{uuid}/read', [App\Http\Controllers\User\ChatController::class, 'markAsRead']);
+                Route::get('/shortcuts/available', [App\Http\Controllers\User\ShortcutController::class, 'available']);
+                Route::get('/performance', [App\Http\Controllers\User\AgentPerformanceController::class, 'index']);
+                Route::post('/performance/heartbeat', [App\Http\Controllers\User\AgentPerformanceController::class, 'heartbeat']);
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
@@ -237,6 +241,8 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index']);
                     Route::match(['get', 'post'], '/settings/working-hours', [App\Http\Controllers\User\SettingController::class, 'workingHours']);
+                    Route::get('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'index']);
+                    Route::post('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'sync']);
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
                     Route::post('/settings/whatsapp/token', [App\Http\Controllers\User\SettingController::class, 'updateToken']);

@@ -259,7 +259,10 @@ class SettingController extends BaseController
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
             $metadataArray['tickets']['active'] = $request->active;
-            $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment;
+            $metadataArray['tickets']['assignment_mode'] = in_array($request->assignment_mode, ['manual', 'auto', 'shared'], true)
+                ? $request->assignment_mode
+                : ($request->auto_assignment ? 'auto' : 'manual');
+            $metadataArray['tickets']['auto_assignment'] = $metadataArray['tickets']['assignment_mode'] === 'auto';
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
             $metadataArray['tickets']['encrypt_contacts_for_agents'] = $request->encrypt_contacts_for_agents;
@@ -268,6 +271,11 @@ class SettingController extends BaseController
 
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
+
+            // إبطال الكاش فوراً حتى تُطبَّق إعدادات التذاكر الجديدة على التعيين
+            // التلقائي بدون انتظار انتهاء صلاحية الكاش (30 دقيقة / 5 دقائق).
+            \Illuminate\Support\Facades\Cache::forget("org_settings_{$currentOrganizationId}");
+            \Illuminate\Support\Facades\Cache::forget("least_busy_agent_{$currentOrganizationId}");
 
             /*return back()->with(
                 'status', [

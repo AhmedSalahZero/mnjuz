@@ -30,6 +30,13 @@ class ChatController extends BaseController
         return $this->chatService()->getChatList($request, $uuid, $request->query('search'));
     }
 
+    public function markAsRead(Request $request, $uuid)
+    {
+        $marked = $this->chatService()->markContactAsReadByUuid($uuid);
+
+        return response()->json(['success' => $marked]);
+    }
+
     public function updateChatSortDirection(Request $request)
     {
 		

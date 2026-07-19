@@ -232,6 +232,7 @@ class Contact extends Model
             $query->addSelect([
                 'chat_tickets.status as ticket_status',
                 'chat_tickets.assigned_to as ticket_assigned_to',
+                'chat_tickets.assigned_seen as ticket_assigned_seen',
             ]);
 
             // صلاحيات الوكلاء
@@ -241,16 +242,30 @@ class Contact extends Model
         }
 
         // ✅ البحث - محسّن
+        // نميّز بين البحث برقم الهاتف والبحث بالاسم/البريد لتفادي النتائج غير الدقيقة:
+        // - إذا كان النص أرقاماً (مع رموز الهاتف + ( ) - ومسافات فقط) نبحث في أعمدة
+        //   الهاتف بعد تجريد الرموز من الطرفين، فلا تظهر أسماء/إيميلات لا علاقة لها.
+        // - غير ذلك نبحث في الاسم والبريد فقط.
         if ($searchTerm) {
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('contacts.first_name', 'like', "%{$searchTerm}%")
-                  ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
-                  ->orWhere('contacts.phone', 'like', "%{$searchTerm}%")
-                  ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
-                  ->orWhereRaw(
-                      "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
-                      ["%{$searchTerm}%"]
-                  );
+            $searchTerm = trim($searchTerm);
+            $digits = preg_replace('/\D+/', '', $searchTerm);
+            $isPhoneSearch = $digits !== '' && preg_replace('/[\s()+\-]/', '', $searchTerm) === $digits;
+
+            $query->where(function ($q) use ($searchTerm, $digits, $isPhoneSearch) {
+                if ($isPhoneSearch) {
+                    $stripPhone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(%s, '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')";
+                    $like = "%{$digits}%";
+                    $q->whereRaw(sprintf($stripPhone, 'contacts.phone') . ' LIKE ?', [$like])
+                      ->orWhereRaw(sprintf($stripPhone, "COALESCE(contacts.formatted_phone, '')") . ' LIKE ?', [$like]);
+                } else {
+                    $q->where('contacts.first_name', 'like', "%{$searchTerm}%")
+                      ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
+                      ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
+                      ->orWhereRaw(
+                          "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
+                          ["%{$searchTerm}%"]
+                      );
+                }
             });
         }
 
@@ -392,10 +407,20 @@ class Contact extends Model
 	
     public function toggleTicketStatus(string $status)
     {
-		ChatTicket::where('contact_id', $this->id)->update([
-            'status' => $status,
-            'assigned_to' => auth()->user()->id
-        ]);
+		ChatTicket::where('contact_id', $this->id)
+            ->where('is_latest', true)
+            ->update([
+                'status' => $status,
+                'assigned_to' => auth()->user()->id,
+                // الموظف الذي غيّر الحالة قد شاهد المحادثة بالفعل.
+                'assigned_seen' => true,
+            ]);
+
+        // عند الإغلاق نعلّم الرسائل الواردة كمقروءة حتى لا تظهر محادثات قديمة
+        // كغير مقروءة عند إعادة فتحها لاحقاً (تظهر فقط الرسالة الجديدة).
+        if ($status === 'closed') {
+            \App\Services\Chat\ChatReadService::markInboundAsRead((int) $this->id, (int) $this->organization_id);
+        }
         $statusDescription = $status == 'closed' ? 'opened to closed' : 'closed to open';
 
         $ticketId = ChatTicketLog::insertGetId([
@@ -419,9 +444,13 @@ class Contact extends Model
 	
 	public function assignToUserThroughTicket(User $user):void
 	{
-		ChatTicket::where('contact_id', $this->id)->update([
-			'assigned_to' => $user->id
-		]);
+		ChatTicket::where('contact_id', $this->id)
+			->where('is_latest', true)
+			->update([
+				'assigned_to' => $user->id,
+				// إسناد جديد لهذا الموظف: يظهر كمحادثة جديدة حتى يفتحها.
+				'assigned_seen' => false,
+			]);
 		$ticketId = ChatTicketLog::insertGetId([
 			'contact_id' => $this->id,
 			'description' => 'Conversation was assigned to ' . $user->first_name . ' ' . $user->last_name,

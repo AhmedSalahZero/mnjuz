@@ -65,7 +65,7 @@ import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
 import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
 import AppLayout from './../Layout/App.vue'
 const props = defineProps({
@@ -98,6 +98,14 @@ const props = defineProps({
 
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
 const unsubscribeChatChannel = ref(null)
+const updateTotalUnreadMessages = inject('updateTotalUnreadMessages', null)
+
+// عند وصول رسالة جديدة والمحادثة مفتوحة بالفعل: علّمها كمقروءة على الخادم مباشرة
+// حتى لا تبقى غير مقروءة في قاعدة البيانات رغم أن الموظف يشاهدها الآن.
+const markCurrentConversationRead = debounce((uuid) => {
+	if (!uuid) return
+	axios.post('/chats/' + uuid + '/read').catch(() => { })
+}, 600)
 
 // deduplication helper: يزيل جهات الاتصال المكررة بنفس id (قد تنتج عن JOIN مع tickets)
 function deduplicateContacts(data) {
@@ -493,7 +501,14 @@ const updateSidePanel = async (chat, statusChanged) => {
 				created_at: inboundIso,
 				created_at_iso: inboundIso,
 			}
-			currentContact.unread_messages = currentContact.unread_messages + 1
+			// إذا كانت المحادثة مفتوحة الآن فالرسالة تُقرأ مباشرة: لا نزيد العداد
+			// ونعلّمها كمقروءة على الخادم، ونعوّض العدّاد العام (App.vue يزيده تلقائياً).
+			if (isChatFormOpen) {
+				markCurrentConversationRead(contact.value.uuid)
+				if (updateTotalUnreadMessages) updateTotalUnreadMessages(1)
+			} else {
+				currentContact.unread_messages = currentContact.unread_messages + 1
+			}
 			currentContact.last_inbound_chat_created_at = inboundIso
 			currentContact.last_inbound_chat_created_at_iso = inboundIso
 			currentContact.is_messaging_window_open = true

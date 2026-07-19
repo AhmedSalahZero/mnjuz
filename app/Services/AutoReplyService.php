@@ -10,6 +10,7 @@ use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\Chat\ChatReadService;
 use App\Services\ContactPlaceholderService;
 use App\Services\MediaService;
 use App\Services\WhatsappService;
@@ -169,6 +170,13 @@ class AutoReplyService
                     break;
                 }
             }
+        }
+
+        // An automated reply was sent to the customer, so treat the inbound
+        // messages as read — the agent no longer needs to open the thread just
+        // to clear its unread state.
+        if ($response) {
+            ChatReadService::markInboundAsRead((int) $chat->contact_id, (int) $organizationId);
         }
 
         return $response;

@@ -60,6 +60,8 @@ class SubscriptionPlanService
                 'addons' => $request->input('addons', []),
                 'contact_categories_enabled' => $request->input('contact_categories_enabled', 0),
                 'ice_breakers' => $request->input('ice_breakers', 0),
+                'shortcuts' => $request->input('shortcuts', 0),
+                'agent_performance' => $request->input('agent_performance', 0),
             ]),
         ]);
 
@@ -98,6 +100,8 @@ class SubscriptionPlanService
         $metadata['addons'] = $request->input('addons', []);
         $metadata['contact_categories_enabled'] = $request->input('contact_categories_enabled', 0);
         $metadata['ice_breakers'] = $request->input('ice_breakers', 0);
+        $metadata['shortcuts'] = $request->input('shortcuts', 0);
+        $metadata['agent_performance'] = $request->input('agent_performance', 0);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');

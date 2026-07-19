@@ -41,7 +41,8 @@
 <script setup>
 import { useRtl } from '@/Composables/useRtl'
 import { useForm, usePage } from "@inertiajs/vue3"
-import { computed, onMounted, provide, ref, watch } from 'vue'
+import { default as axios } from 'axios'
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 import { getOrJoinChatChannel } from '../../../echo'
@@ -65,6 +66,17 @@ const submitExitPreview = () => {
 const currentPageTitle = computed(() => usePage().props.title)
 const displayCreateBtn = computed(() => usePage().props.allowCreate)
 const unreadMessages = ref(usePage().props.unreadMessages)
+
+// إعادة مزامنة العدّاد العام من الخادم عند أي إعادة تحميل جزئية للصفحة،
+// لتجنّب انحراف العدّاد بسبب التحديثات المتفائلة عبر الويب سوكِت.
+watch(
+	() => usePage().props.unreadMessages,
+	(val) => {
+		if (val !== undefined && val !== null) {
+			unreadMessages.value = val
+		}
+	}
+)
 
 const audioPlayer = ref(null)
 
@@ -107,6 +119,26 @@ const playSound = () => {
 provide('updateTotalUnreadMessages', (val) => {
 	unreadMessages.value -= val
 })
+
+// نبضة نشاط لقياس أداء الموظفين (مفعّلة فقط عند اشتراك المنظمة في الميزة).
+// نرسل نبضة فقط عندما تكون النافذة مرئية لتمثيل الوقت النشط الفعلي.
+let heartbeatTimer = null
+const sendHeartbeat = () => {
+	if (document.visibilityState !== 'visible') return
+	axios.post('/performance/heartbeat').catch(() => { })
+}
+const setupActivityHeartbeat = () => {
+	if (!organization.value?.plan?.features?.agent_performance) return
+	sendHeartbeat()
+	heartbeatTimer = setInterval(sendHeartbeat, 60000)
+	document.addEventListener('visibilitychange', sendHeartbeat)
+}
+
+onUnmounted(() => {
+	if (heartbeatTimer) clearInterval(heartbeatTimer)
+	document.removeEventListener('visibilitychange', sendHeartbeat)
+})
+
 onMounted(() => {
 	setupSound()
 
@@ -127,6 +159,8 @@ onMounted(() => {
 			unreadMessages.value += 1
 		}
 	})
+
+	setupActivityHeartbeat()
 
 	// const SB_BASE = 'https://business.waz.com.sa/support'
 	// const loadExternalScript = (src, id) =>

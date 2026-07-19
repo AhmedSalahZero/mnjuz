@@ -135,6 +135,15 @@
 				<hr>
 			</div>
 			<ul class="pb-4 space-y-1 text-sm mt-2">
+				<li v-if="!isOrgAgent && organization?.plan?.features?.agent_performance" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					:class="$page.url.startsWith('/performance') ? 'bg-slate-50 text-black' : ''">
+					<Link rel="noopener noreferrer" href="/performance" class="flex items-center p-2 space-x-3 rounded-md">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>
+						</svg>
+						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Agent Performance') }}</span>
+					</Link>
+				</li>
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/team" class="flex items-center p-2 space-x-3 rounded-md">

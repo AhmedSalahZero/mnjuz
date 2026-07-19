@@ -89,6 +89,8 @@ class HandleInertiaRequests extends Middleware
                 $organizationArray['plan'] = [
                     'features' => [
                         'ice_breakers' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'ice_breakers'),
+                        'shortcuts' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts'),
+                        'agent_performance' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance'),
                     ],
                 ];
 

@@ -65,6 +65,15 @@
                     <svg class="float-right" xmlns="http://www.w3.org/2000/svg" width="1.5em" height="1.5em" viewBox="0 0 256 256"><path fill="currentColor" d="m180.24 132.24l-80 80a6 6 0 0 1-8.48-8.48L167.51 128L91.76 52.24a6 6 0 0 1 8.48-8.48l80 80a6 6 0 0 1 0 8.48"/></svg>
                 </div>
             </Link>
+            <Link v-if="$page.props.organization?.plan?.features?.shortcuts" href="/settings/shortcuts" class="flex justify-between border-b py-3">
+                <div class="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6l-6-6"/><path d="M12 19h8"/></svg>
+                    <span>{{ $t('Shortcuts') }}</span>
+                </div>
+                <div>
+                    <svg class="float-right" xmlns="http://www.w3.org/2000/svg" width="1.5em" height="1.5em" viewBox="0 0 256 256"><path fill="currentColor" d="m180.24 132.24l-80 80a6 6 0 0 1-8.48-8.48L167.51 128L91.76 52.24a6 6 0 0 1 8.48-8.48l80 80a6 6 0 0 1 0 8.48"/></svg>
+                </div>
+            </Link>
         </div>
     </AppLayout>
 </template>

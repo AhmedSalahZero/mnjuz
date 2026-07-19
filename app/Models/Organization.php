@@ -69,8 +69,31 @@ class Organization extends Model {
 		$ticketingActive = $this->getTicketingActive();
 		if($ticketingActive){
 			$allowAgentsToViewAllChats =  $settings->tickets->allow_agents_to_view_all_chats;
+			// في الوضع "المشترك" تظهر كل المحادثات لجميع الموظفين.
+			if ($this->getTicketAssignmentMode() === 'shared') {
+				$allowAgentsToViewAllChats = true;
+			}
 		}
 		return $allowAgentsToViewAllChats;
 		
+	}
+
+	/**
+	 * وضع إسناد التذاكر: manual | auto | shared.
+	 * نستنتج القيمة من الإعداد القديم auto_assignment عند غياب assignment_mode
+	 * لضمان التوافق مع البيانات الحالية.
+	 */
+	public function getTicketAssignmentMode(): string
+	{
+		$settings = $this->metadata ? json_decode($this->metadata) : null;
+		if (!is_object($settings) || !isset($settings->tickets)) {
+			return 'manual';
+		}
+		$mode = $settings->tickets->assignment_mode ?? null;
+		if (in_array($mode, ['manual', 'auto', 'shared'], true)) {
+			return $mode;
+		}
+		$autoAssignment = $settings->tickets->auto_assignment ?? false;
+		return $autoAssignment ? 'auto' : 'manual';
 	}
 }

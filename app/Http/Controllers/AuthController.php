@@ -232,8 +232,10 @@ class AuthController extends BaseController
 				$user->syncDeviceTokens($request->get('device_token'),$request->get('device_name'),$request->get('device_type'));
 			}
 			
-            // Revoke all existing tokens (optional - for security)
-            // $user->tokens()->delete();
+            // Log out other mobile devices: all Sanctum tokens belong to the
+            // mobile category, so removing them before issuing a fresh one evicts
+            // any previously logged-in mobile device.
+            $user->tokens()->delete();
             
             // Create API token for mobile
             $tokenName = $request->device_name ?? 'mobile-app-' . now()->timestamp;
@@ -410,8 +412,9 @@ class AuthController extends BaseController
                     // Register social-login device per category (web/mobile)
                     $deviceData = $this->userDeviceService->extractDeviceData($request);
                     $category   = $this->userDeviceService->resolveCategory($request, $deviceData);
-                    if (!$user->deviceForCategory($category)) {
-                        $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
+                    $device     = $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
+                    if ($request->hasSession()) {
+                        $request->session()->put('device_identifier', $device->device_identifier);
                     }
 
                     // Log the user in
@@ -517,8 +520,9 @@ class AuthController extends BaseController
 
                 $deviceData = $this->userDeviceService->extractDeviceData($request);
                 $category   = $this->userDeviceService->resolveCategory($request, $deviceData);
-                if (!$user->deviceForCategory($category)) {
-                    $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
+                $device     = $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
+                if ($request->hasSession()) {
+                    $request->session()->put('device_identifier', $device->device_identifier);
                 }
 
                 Auth::guard('user')->login($user, true);
@@ -907,28 +911,14 @@ class AuthController extends BaseController
         $deviceData = $this->userDeviceService->extractDeviceData($request);
         $category   = $this->userDeviceService->resolveCategory($request, $deviceData);
 
-        // كل category (web / mobile) مستقلة — نجلب الجهاز المسجّل لهذا الـ category فقط
-        $existingDevice = $user->deviceForCategory($category);
+        // نسجّل (أو نستبدل) جهاز هذا الـ category بمعرّف جديد — أي جلسة أخرى في نفس
+        // الـ category سيتم تسجيل خروجها لاحقاً عبر middleware (web) أو حذف التوكن (mobile).
+        $device = $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
 
-        if (!$existingDevice) {
-            $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
-            return null;
+        if ($request->hasSession()) {
+            $request->session()->put('device_identifier', $device->device_identifier);
         }
 
-        if (!$this->userDeviceService->matches($existingDevice, $deviceData)) {
-            if ($request->expectsJson() || $request->is('api/*')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('This account is already linked to another device. Please remove it first from settings.'),
-                ], 403);
-            }
-
-            return redirect()->back()->withErrors([
-                'email' => __('This account is already linked to another device. Please remove it first from settings.', [], $user->language ?? 'en'),
-            ])->withInput()->with('show_reset_devices_link', true);
-        }
-
-        $this->userDeviceService->registerOrTouch($user, $deviceData, $category);
         return null;
     }
 

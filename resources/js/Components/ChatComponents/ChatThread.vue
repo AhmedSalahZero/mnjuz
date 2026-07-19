@@ -72,7 +72,7 @@ const loadMoreMessages = async () => {
 					<path class="opacity-75" fill="currentColor"
 						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
 					</path>
-				</svg> Loading...
+				</svg> {{ $t('Loading...') }}
 			</div>
 			<button v-else @click="loadMoreMessages"
 				class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150">
@@ -80,7 +80,7 @@ const loadMoreMessages = async () => {
 					stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
 						d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-				</svg> Load More Messages </button>
+				</svg> {{ $t('Load More Messages') }} </button>
 		</div>
 		<div v-for="(chat, index) in messages" :key="index" class="flex flex-grow flex-col"
 			:class="chat[0].type === 'ticket' ? 'justify-center' : 'justify-end'">

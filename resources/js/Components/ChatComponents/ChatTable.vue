@@ -2,7 +2,7 @@
 import Pagination from '@/Components/Pagination.vue'
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
-import { Link, router } from '@inertiajs/vue3'
+import { Link, router, usePage } from '@inertiajs/vue3'
 import debounce from 'lodash/debounce'
 import { ref, watch, inject, computed, onMounted, onUnmounted, nextTick } from 'vue'
 
@@ -93,7 +93,17 @@ function buildChatsQuery(overrides = {}) {
 
 function visitChatsQuery(overrides = {}) {
 	const qs = buildChatsQuery(overrides)
-	router.visit(qs ? `/chats?${qs}` : '/chats', { preserveScroll: true })
+	// الإبقاء على المحادثة المفتوحة حالياً (/chats/{uuid}) عند البحث أو تغيير
+	// الفلاتر حتى لا يُطرد المستخدم من المحادثة. نعيد تحميل قائمة المحادثات فقط
+	// (rows) مع الحفاظ على حالة المكوّن، فتبقى المحادثة والرسائل كما هي.
+	const path = window.location.pathname
+	const base = path.startsWith('/chats/') ? path : '/chats'
+	const url = qs ? `${base}?${qs}` : base
+	router.visit(url, {
+		only: ['rows', 'rowCount', 'filters', 'flash'],
+		preserveState: true,
+		preserveScroll: true,
+	})
 }
 
 function visitWithCategoryFilter(categoryUuid) {
@@ -169,10 +179,22 @@ const getContactDisplayName = (metadata) => {
 }
 const updateTotalUnreadMessages = inject('updateTotalUnreadMessages')
 
+const currentUserId = usePage().props.auth?.user?.id
+
+// محادثة مُسندة حديثاً لهذا الموظف ولم يفتحها بعد: نعرض إشارة "جديدة"
+// حتى لو كان عدد الرسائل غير المقروءة صفر.
+function isNewAssignment(contact) {
+	return contact
+		&& contact.ticket_assigned_seen === false
+		&& contact.ticket_assigned_to != null
+		&& Number(contact.ticket_assigned_to) === Number(currentUserId)
+}
+
 function openChat(contact) {
 	let currentUnreadMessages = contact.unread_messages
 	updateTotalUnreadMessages(currentUnreadMessages)
 	contact.unread_messages = 0
+	contact.ticket_assigned_seen = true
 	router.visit('/chats/' + contact.uuid, {
 		only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash'],
 		preserveState: true,
@@ -617,6 +639,8 @@ watch(
 								</div>
 								<span v-if="item.contact.unread_messages > 0"
 									class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{ item.contact.unread_messages }}</span>
+								<span v-else-if="isNewAssignment(item.contact)" :title="$t('New assignment')"
+									class="bg-green-600 rounded-full h-2.5 w-2.5 flex-shrink-0"></span>
 							</div>
 						</div>
 					</div>

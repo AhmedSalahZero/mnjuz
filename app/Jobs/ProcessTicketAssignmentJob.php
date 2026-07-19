@@ -112,12 +112,16 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
         }
 
         // ✅ إنشاء التذكرة
-        $ticket = ChatTicket::withoutEvents(function () use ($assignedTo) {
+        // عند الإسناد التلقائي لوكيل محدد نضع assigned_seen = false حتى تظهر
+        // للوكيل كمحادثة جديدة تحتاج فتحها.
+        $assignedSeen = $assignedTo === null;
+        $ticket = ChatTicket::withoutEvents(function () use ($assignedTo, $assignedSeen) {
             return ChatTicket::create([
                 'contact_id' => $this->contactId,
                 'assigned_to' => $assignedTo,
                 'status' => 'open',
                 'is_latest' => true,
+                'assigned_seen' => $assignedSeen,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -161,8 +165,11 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
         if($reassignOnReopen) {
             if($autoAssignment) {
                 $ticket->assigned_to = $this->getLeastBusyAgent();
+                // إسناد جديد لوكيل عند إعادة الفتح: يظهر كمحادثة جديدة له.
+                $ticket->assigned_seen = $ticket->assigned_to === null;
             } else {
                 $ticket->assigned_to = null;
+                $ticket->assigned_seen = true;
             }
         }
 
@@ -203,8 +210,10 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             function() {
                 $agent = Team::where('organization_id', $this->organizationId)
                     ->whereNull('deleted_at')
+                    ->where('status', 'active')
                     ->withCount(['tickets' => function($query) {
-                        $query->where('status', 'open');
+                        $query->where('status', 'open')
+                              ->where('is_latest', true);
                     }])
                     ->orderBy('tickets_count', 'asc')
                     ->first();

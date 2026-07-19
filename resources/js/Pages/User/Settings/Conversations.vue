@@ -9,7 +9,7 @@
                 <div class="w-full max-w-[60em]">
                     <div class="bg-white border border-slate-200 rounded-lg text-sm mb-4 overflow-hidden">
                         <div class="px-4 pt-4 pb-2 border-b">
-                            <h2 class="text-[17px]">{{ $t('Conversation components') }}</h2>
+                            <h2 class="text-[17px]">{{ $t('Ice Breakers') }}</h2>
                             <p class="text-slate-500 mt-1 text-xs">
                                 {{ $t('Configure WhatsApp conversation starters that appear when a user opens a chat for the first time.') }}
                             </p>

@@ -26,6 +26,7 @@ class ContactListResource extends JsonResource
             'is_blocked' => $this->is_blocked,
             'ticket_status' => $this->ticket_status ?? null,
             'ticket_assigned_to' => $this->ticket_assigned_to ?? null,
+            'ticket_assigned_seen' => isset($this->ticket_assigned_seen) ? (bool) $this->ticket_assigned_seen : true,
             'unread_messages' => $this->unread_messages_count ?? 0,
             'last_chat' => $this->whenLoaded('lastChat', function () {
                 $chat = $this->lastChat;
