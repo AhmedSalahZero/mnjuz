@@ -23,6 +23,9 @@ class RegisterController extends BaseController
     public function handleSignup(Request $request){
         $organizationId = session()->get('current_organization');
 
+        // Coexistence: onboard an existing WhatsApp Business App number (do NOT migrate it off the app)
+        $isCoexistence = (bool) $request->input('coexistence');
+
         $accessTokenResponse = $this->getAccessToken($request->token);
 
         if(!$accessTokenResponse->success){
@@ -85,16 +88,19 @@ class RegisterController extends BaseController
             );
         }
 
-        //Register Number
-        $registerNumber = $this->registerNumber($accessToken, $phoneNumberResponse->data->id);
+        //Register Number — skipped for coexistence: the number is already registered on the
+        //WhatsApp Business App, and calling /register would migrate it off the app.
+        if(!$isCoexistence){
+            $registerNumber = $this->registerNumber($accessToken, $phoneNumberResponse->data->id);
 
-        if(!$registerNumber->success){
-            return back()->with(
-                'status', [
-                    'type' => 'error', 
-                    'message' => $registerNumber->data->error->message
-                ]
-            );
+            if(!$registerNumber->success){
+                return back()->with(
+                    'status', [
+                        'type' => 'error', 
+                        'message' => $registerNumber->data->error->message
+                    ]
+                );
+            }
         }
 
         //Get business profile
@@ -151,6 +157,7 @@ class RegisterController extends BaseController
 
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $metadataArray['whatsapp']['is_embedded_signup'] = 1;
+        $metadataArray['whatsapp']['is_coexistence'] = $isCoexistence ? 1 : 0;
         $metadataArray['whatsapp']['access_token'] = $accessToken;
         $metadataArray['whatsapp']['app_id'] = $debugTokenResponse->data->app_id;
         $metadataArray['whatsapp']['waba_id'] = $debugTokenResponse->data->waba_id;
@@ -180,12 +187,46 @@ class RegisterController extends BaseController
         //Sync templates
         $this->syncTemplates($accessToken, $debugTokenResponse->data->waba_id);
 
+        //Coexistence: initiate contacts synchronization (must happen within 24h of onboarding,
+        //and can only be triggered once). Failure here should not block onboarding.
+        if($isCoexistence){
+            $this->initiateContactsSync($accessToken, $phoneNumberResponse->data->id);
+        }
+
         return back()->with(
             'status', [
                 'type' => 'success', 
                 'message' => __('You\'ve successfully connected your account to whatsapp!')
             ]
         );
+    }
+
+    /**
+     * Coexistence: request contacts sync from the WhatsApp Business App.
+     * Triggers a series of smb_app_state_sync webhooks.
+     */
+    function initiateContactsSync($accessToken, $phoneNumberID)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken,
+            ])->post("https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberID}/smb_app_data", [
+                'messaging_product' => 'whatsapp',
+                'sync_type' => 'smb_app_state_sync',
+            ]);
+
+            if (!$response->successful()) {
+                Log::warning('Coexistence contacts sync request failed', [
+                    'phone_number_id' => $phoneNumberID,
+                    'response' => $response->body(),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Coexistence contacts sync request threw', [
+                'phone_number_id' => $phoneNumberID,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function getAccessToken($token){

@@ -1758,6 +1758,33 @@ class WhatsappService
         return $responseObject;
     }
 
+    /**
+     * Coexistence: request a data sync from the WhatsApp Business App.
+     * $syncType is either 'smb_app_state_sync' (contacts) or 'history' (past messages).
+     * Triggers the corresponding webhooks; can only be performed once per onboarding.
+     */
+    public function initiateSmbAppDataSync(string $syncType){
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/smb_app_data";
+        $headers = $this->setHeaders();
+        $body = [
+            'messaging_product' => 'whatsapp',
+            'sync_type' => $syncType,
+        ];
+
+        return $this->sendHttpRequest('POST', $url, json_encode($body), $headers);
+    }
+
+    /**
+     * Coexistence: check whether the number is registered for both Cloud API and the
+     * WhatsApp Business App (is_on_biz_app = true, platform_type = CLOUD_API).
+     */
+    public function getCoexistenceStatus(){
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}?fields=is_on_biz_app,platform_type";
+        $headers = $this->setHeaders();
+
+        return $this->sendHttpRequest('GET', $url, [], $headers);
+    }
+
     public function getPhoneNumberId(){
         $responseObject = new \stdClass();
 

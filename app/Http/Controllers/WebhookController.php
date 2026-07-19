@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Jobs\ProcessAccountUpdateJob;
+use App\Jobs\ProcessContactSyncJob;
 use App\Jobs\ProcessIncomingMessageJob;
+use App\Jobs\ProcessMessageEchoJob;
 use App\Jobs\ProcessMessageStatusJob;
 use App\Jobs\ProcessTemplateStatusJob;
 
@@ -178,6 +180,32 @@ class WebhookController extends BaseController
             $res['value'],
             $organization->id
         )->onQueue('low');
+    }
+    // Coexistence: messages the business sent from the WhatsApp Business App
+    else if($res['field'] === 'smb_message_echoes'){
+        $echoes = $res['value']['message_echoes'] ?? null;
+        if($echoes){
+            foreach($echoes as $echo){
+                ProcessMessageEchoJob::dispatch(
+                    $echo,
+                    $res['value'],
+                    $organization->id
+                )->onQueue('high');
+            }
+        }
+    }
+    // Coexistence: contacts synced from the WhatsApp Business App
+    else if($res['field'] === 'smb_app_state_sync'){
+        ProcessContactSyncJob::dispatch(
+            $res['value']['state_sync'] ?? [],
+            $organization->id
+        )->onQueue('low');
+    }
+    // Coexistence: bulk chat history (Phase 1 — acknowledged but not imported yet)
+    else if($res['field'] === 'history'){
+        Log::info('Coexistence history webhook received (not processed in Phase 1)', [
+            'organization_id' => $organization->id,
+        ]);
     }
     else {
         ProcessAccountUpdateJob::dispatch(

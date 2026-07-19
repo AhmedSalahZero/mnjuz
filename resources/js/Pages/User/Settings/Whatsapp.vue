@@ -12,7 +12,11 @@
                                 </span>
                             </div>
                             <div class="ml-auto">
-                                <EmbeddedSignupBtn v-if="embeddedSignupActive == 1" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
+                                <template v-if="embeddedSignupActive == 1">
+                                    <EmbeddedSignupBtn :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion" :label="$t('Create a new WhatsApp number')"/>
+                                    <EmbeddedSignupBtn :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion" :coexistence="true" :label="$t('Connect existing WhatsApp Business App number')"/>
+                                    <p class="text-xs text-slate-500 mt-2 max-w-[16rem]">{{ $t('Coexistence lets you keep using the WhatsApp Business App on the same number.') }}</p>
+                                </template>
                                 <button v-else  @click="openModal()" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
                                     {{ $t('Setup whatsapp') }}
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><g opacity=".2"><path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/><path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/><path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/></g><path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/><path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/><path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h20a.5.5 0 0 1 .5.5Z"/></g></svg>
@@ -22,6 +26,10 @@
                     </div>
 
                     <div v-if="settings?.whatsapp" class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
+                        <div v-if="settings.whatsapp?.is_coexistence == 1" class="mx-4 mt-2 mb-1 inline-flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 rounded-md px-2 py-1 text-xs w-fit">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19L21 7l-1.41-1.41z"/></svg>
+                            {{ $t('Coexistence (WhatsApp Business App + API)') }}
+                        </div>
                         <div class="grid grid-cols-4 items-center px-4 gap-x-4 py-2 border-b relative">
                             <div class="border-r">
                                 <div>{{ $t('Display name') }}</div>

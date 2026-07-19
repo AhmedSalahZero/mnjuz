@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Organization;
+use App\Models\Template;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,6 +42,17 @@ class ProcessAccountUpdateJob implements ShouldQueue
             $metadata = $organization->metadata 
                 ? json_decode($organization->metadata, true) 
                 : [];
+
+            // Coexistence: the business disconnected/offboarded from the WhatsApp Business App.
+            // Tear down the integration locally (do NOT call the Deregister API — unsupported
+            // for coexistence numbers).
+            $event = $value['event'] ?? null;
+            if (in_array($event, ['PARTNER_REMOVED', 'ACCOUNT_OFFBOARDED'], true)) {
+                $this->teardownIntegration($organization, $metadata, $value);
+                Cache::forget("org_settings_{$this->organizationId}");
+                Cache::forget("org_config_{$this->organizationId}");
+                return;
+            }
 
             // ✅ تحديث حسب النوع
             switch($field) {
@@ -85,5 +97,26 @@ class ProcessAccountUpdateJob implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    private function teardownIntegration(Organization $organization, array $metadata, array $value): void
+    {
+        if (isset($metadata['whatsapp'])) {
+            unset($metadata['whatsapp']);
+        }
+
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        Template::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->update(['deleted_at' => now()]);
+
+        Log::info('WhatsApp integration disconnected via webhook', [
+            'organization_id' => $this->organizationId,
+            'event' => $value['event'] ?? null,
+            'reason' => $value['disconnection_info']['reason'] ?? null,
+            'initiated_by' => $value['disconnection_info']['initiated_by'] ?? null,
+        ]);
     }
 }

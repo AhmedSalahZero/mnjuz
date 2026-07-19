@@ -2,7 +2,13 @@
 import { ref, onMounted } from 'vue'
 import { router } from "@inertiajs/vue3"
 
-const props = defineProps(['appId', 'configId', 'graphAPIVersion'])
+const props = defineProps({
+	appId: {},
+	configId: {},
+	graphAPIVersion: {},
+	coexistence: { type: Boolean, default: false },
+	label: { type: String, default: '' },
+})
 
 const isSetupLoading = ref(false)
 
@@ -36,8 +42,8 @@ const sessionInfoListener = (event) => {
 	try {
 		const data = JSON.parse(event.data)
 		if (data.type === 'WA_EMBEDDED_SIGNUP') {
-			// if user finishes the Embedded Signup flow
-			if (data.event === 'FINISH') {
+			// if user finishes the Embedded Signup flow (standard or coexistence/business-app onboarding)
+			if (data.event === 'FINISH' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
 				const { phone_number_id, waba_id } = data.data
 			}
 			// if user cancels the Embedded Signup flow
@@ -68,6 +74,7 @@ function launchWhatsAppSignup() {
 
 			router.post(`/whatsapp/exchange-code`, {
 				token: response.authResponse.code,
+				coexistence: props.coexistence ? 1 : 0,
 			}, {
 				preserveState: true,
 				onSuccess: () => {
@@ -84,6 +91,8 @@ function launchWhatsAppSignup() {
 		override_default_response_type: true, // when true, any response types passed in the "response_type" will take precedence over the default types
 		extras: {
 			sessionInfoVersion: 2,
+			// Coexistence: onboard an existing WhatsApp Business App number instead of creating a new Cloud API number
+			...(props.coexistence ? { featureType: 'whatsapp_business_app_onboarding' } : {}),
 			setup: {
 				// Prefilled data can go here
 			}
@@ -135,7 +144,7 @@ function launchWhatsAppSignup() {
 		</div>
 	</div>
 	<button @click="launchWhatsAppSignup" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
-		{{ $t('Setup whatsapp') }}
+		{{ label ? label : $t('Setup whatsapp') }}
 		<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
 			<g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd">
 				<g opacity=".2">
