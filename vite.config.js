@@ -6,6 +6,15 @@ import { defineConfig } from 'vite'
 export default defineConfig({
     server: {
         cors: true,
+        watch: {
+            ignored: [
+                '**/vendor/**',
+                '**/node_modules/**',
+                '**/storage/**',
+                '**/public/build/**',
+                '**/.git/**',
+            ],
+        },
         proxy: {
             '/fonts': {
                 target: 'http://127.0.0.1:8000',

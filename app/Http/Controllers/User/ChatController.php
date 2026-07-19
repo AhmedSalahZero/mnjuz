@@ -10,6 +10,8 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\ChatService;
+use App\Services\ContactService;
+use App\Services\PhoneService;
 use App\Services\WhatsappService;
 use DateTime;
 use Illuminate\Http\Request;
@@ -35,6 +37,37 @@ class ChatController extends BaseController
         $marked = $this->chatService()->markContactAsReadByUuid($uuid);
 
         return response()->json(['success' => $marked]);
+    }
+
+    /**
+     * يفتح محادثة داخلية اعتمادًا على رقم الهاتف (من بطاقة جهة اتصال واردة مثلاً).
+     * يبحث عن جهة الاتصال داخل المؤسسة الحالية أو ينشئها ثم يعيد الـ uuid لفتح /chats/{uuid}.
+     */
+    public function openByPhone(Request $request)
+    {
+        $request->validate([
+            'phone' => ['required', 'string', 'max:255'],
+        ]);
+
+        if (!PhoneService::isValid($request->input('phone'))) {
+            return response()->json([
+                'success' => false,
+                'message' => __('The phone number is not valid.'),
+            ], 422);
+        }
+
+        $organizationId = session()->get('current_organization');
+        $contactService = new ContactService($organizationId);
+
+        $contact = $contactService->findOrCreateByPhone($request->input('phone'), array_filter([
+            'first_name' => $request->input('first_name'),
+            'last_name' => $request->input('last_name'),
+        ]));
+
+        return response()->json([
+            'success' => true,
+            'uuid' => $contact->uuid,
+        ]);
     }
 
     public function updateChatSortDirection(Request $request)

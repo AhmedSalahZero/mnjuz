@@ -164,6 +164,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
+                Route::post('/chats/open-by-phone', [App\Http\Controllers\User\ChatController::class, 'openByPhone']);
                 Route::post('/chats/{uuid}/read', [App\Http\Controllers\User\ChatController::class, 'markAsRead']);
                 Route::get('/shortcuts/available', [App\Http\Controllers\User\ShortcutController::class, 'available']);
                 Route::get('/performance', [App\Http\Controllers\User\AgentPerformanceController::class, 'index']);
