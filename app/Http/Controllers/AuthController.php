@@ -451,7 +451,7 @@ class AuthController extends BaseController
 
             $user = User::where('email', $gUser->email)->whereNull('deleted_at')->first();
 
-            if ($user && $user->status !== '1') {
+            if ($user && (int) $user->status !== 1) {
                 return Redirect::route('login')->withErrors([
                     'email' => __('This account is disabled. Please contact support.'),
                 ]);
@@ -478,6 +478,7 @@ class AuthController extends BaseController
                 $user->password = NULL;
                 $user->email_verified_at = now();
                 $user->role = 'user';
+                $user->status = 1;
                 $user->save();
 
                 $timestamp = now()->format('YmdHis');
