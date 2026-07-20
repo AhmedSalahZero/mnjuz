@@ -260,11 +260,19 @@ class SubscriptionService
         // Calculate tax rates
         $taxCalculationResult = self::calculateTaxRates($grossAmount);
 
-        // Calculate net amount after considering taxes
-        $netAmount = $grossAmount + $taxCalculationResult['totalTaxAmount'];
+        // One-time setup fee: charged only on the organization's first ever paid subscription.
+        // The signup subscription row never creates a BillingInvoice, so its absence is a reliable signal.
+        $isFirstSubscription = !BillingInvoice::where('organization_id', $organizationId)->exists();
+        $planMetadata = $selectedSubscriptionPlan ? (json_decode($selectedSubscriptionPlan->metadata, true) ?: []) : [];
+        $setupFee = $isFirstSubscription ? (float) ($planMetadata['setup_fee'] ?? 0) : 0.0;
 
-        // Calculate amount due considering credits, debits, and taxes
-        $amountDue = $grossAmount + $taxCalculationResult['totalTaxAmount'] - $proratedCreditAmount - $accountBalance;
+        // Calculate net amount after considering taxes (setup fee is a flat, untaxed one-time charge)
+        $netAmount = $grossAmount + $taxCalculationResult['totalTaxAmount'] + $setupFee;
+
+        // Calculate amount due considering credits, debits, taxes and the one-time setup fee.
+        // Setup fee is added before subtracting the account balance so that, after payment is
+        // recorded as a credit, the recomputed amountDue nets to 0 and the invoice is created.
+        $amountDue = $grossAmount + $taxCalculationResult['totalTaxAmount'] + $setupFee - $proratedCreditAmount - $accountBalance;
 
         // Ensure that amount due is not negative
         $amountDue = max(0, $amountDue);
@@ -313,6 +321,8 @@ class SubscriptionService
                 'total' => number_format($availableDebits, 2)
             ],
             'coupon' => $coupon,
+            'setupFee' => number_format($setupFee, 2),
+            'isFirstSubscription' => $isFirstSubscription,
             'amountDue' => number_format($amountDue, 2)
         ];
 

@@ -24,6 +24,7 @@ class StoreSubscriptionPlan extends FormRequest
         $rules = [
             'name' => 'required',
             'price' => 'required|numeric|gte:0',
+            'setup_fee' => 'nullable|numeric|gte:0',
             'period' => 'required',
             'campaign_limit' => 'required|numeric|gte:-1',
             'message_limit' => 'required|numeric|gte:-1',

@@ -39,8 +39,12 @@
 								</div>
 							</div>
 							<h2 class="text-2xl">{{ item.price }}</h2>
-							<h3 v-if="item.period === 'monthly'" class="text-sm mb-4">{{ $t('Per month') }}</h3>
-							<h3 v-if="item.period === 'yearly'" class="text-sm mb-4">{{ $t('Per year') }}</h3>
+							<h3 v-if="item.period === 'monthly'" class="text-sm">{{ $t('Per month') }}</h3>
+							<h3 v-if="item.period === 'yearly'" class="text-sm">{{ $t('Per year') }}</h3>
+							<h3 v-if="parseFloat(getDetail(item?.metadata, 'setup_fee')) > 0" class="text-xs text-slate-500 mb-4">
+								+ {{ getDetail(item?.metadata, 'setup_fee') }} {{ $t('Setup fee') }} ({{ $t('Paid once') }})
+							</h3>
+							<div v-else class="mb-4"></div>
 							<h3 class="mb-1">{{ $t('Features') }}</h3>
 							<div class="flex justify-between text-sm">
 								<div class="flex space-x-1">
@@ -252,6 +256,10 @@
 								<h3>{{ $t('Gross total') }}</h3>
 								<h3>{{ grossAmount }}</h3>
 							</div>
+							<div v-if="parseFloat(setupFee) > 0" class="flex justify-between mt-2 text-sm">
+								<h3>{{ $t('Setup fee') }} <span class="text-xs text-slate-500">({{ $t('Paid once') }})</span></h3>
+								<h3>{{ setupFee }}</h3>
+							</div>
 							<div v-if="taxRates.length > 0"
 								class="bg-slate-100 px-2 py-2 space-y-2 rounded-md mt-2 mb-2">
 								<h3 class="text-sm border-b border-dashed">{{ $t('Tax') }}</h3>
@@ -412,6 +420,7 @@ const credit = ref(subscriptionDetails.value?.credit)
 const debit = ref(subscriptionDetails.value?.debit)
 const basePrice = ref(subscriptionDetails.value?.basePrice)
 const coupon = ref(subscriptionDetails.value?.coupon)
+const setupFee = ref(subscriptionDetails.value?.setupFee)
 
 const selectPlan = (plan, name, period, amount) => {
 	form.plan = plan
@@ -459,6 +468,7 @@ const getPlanDetails = (planId) => {
 			basePrice.value = res.basePrice
 			amountDue.value = res.amountDue
 			coupon.value = res.coupon
+			setupFee.value = res.setupFee
 		},
 	})
 }
@@ -481,6 +491,7 @@ const removeCoupon = () => {
 			basePrice.value = res.basePrice
 			amountDue.value = res.amountDue
 			coupon.value = res.coupon
+			setupFee.value = res.setupFee
 		},
 	})
 }
@@ -502,6 +513,7 @@ const applyCoupon = () => {
 			basePrice.value = res.basePrice
 			amountDue.value = res.amountDue
 			coupon.value = res.coupon
+			setupFee.value = res.setupFee
 		},
 	})
 }

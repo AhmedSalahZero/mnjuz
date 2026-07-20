@@ -44,6 +44,7 @@
                         <div class="sm:w-[80%] grid gap-x-6 gap-y-4 sm:grid-cols-6">
                             <FormInput v-model="form.price" :name="$t('Price')" :error="form.errors.price" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormSelect v-model="form.period" :options="periodOptions" :error="form.errors.period" :name="$t('Period')" :class="'sm:col-span-3'" :placeholder="$t('Select period')"/>
+                            <FormInput v-model="form.setup_fee" :name="$t('Setup fee (one-time)')" :error="form.errors.setup_fee" :type="'number'" :class="'sm:col-span-6'"/>
                         </div>
                     </div>
                 </div>
@@ -200,6 +201,7 @@ const trans = useTrans();
     const form = useForm({
         name: props.plan?.name,
         price: props.plan?.price,
+        setup_fee: getDetail(props.plan?.metadata, 'setup_fee') ?? '0',
         period: props.plan?.period,
         status: props.plan?.status,
         campaign_limit: getDetail(props.plan?.metadata, 'campaign_limit') ?? '-1',

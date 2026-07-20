@@ -62,6 +62,7 @@ class SubscriptionPlanService
                 'ice_breakers' => $request->input('ice_breakers', 0),
                 'shortcuts' => $request->input('shortcuts', 0),
                 'agent_performance' => $request->input('agent_performance', 0),
+                'setup_fee' => $request->input('setup_fee', 0),
             ]),
         ]);
 
@@ -102,6 +103,7 @@ class SubscriptionPlanService
         $metadata['ice_breakers'] = $request->input('ice_breakers', 0);
         $metadata['shortcuts'] = $request->input('shortcuts', 0);
         $metadata['agent_performance'] = $request->input('agent_performance', 0);
+        $metadata['setup_fee'] = $request->input('setup_fee', 0);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');
