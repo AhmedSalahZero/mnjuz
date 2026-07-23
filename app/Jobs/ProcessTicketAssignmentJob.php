@@ -203,31 +203,18 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
     }
  private function getLeastBusyAgent()
     {
-        // ✅ Cache لمدة 5 دقائق
-        return Cache::remember(
-            "least_busy_agent_{$this->organizationId}",
-            300,
-            function() {
-                $agent = Team::where('organization_id', $this->organizationId)
-                    ->whereNull('deleted_at')
-                    ->where('status', 'active')
-                    ->withCount(['tickets' => function($query) {
-                        $query->where('status', 'open')
-                              ->where('is_latest', true);
-                    }])
-                    ->orderBy('tickets_count', 'asc')
-                    ->first();
+        // Always recompute so each new ticket is assigned to the currently least-busy agent.
+        $agent = Team::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->withCount(['tickets' => function ($query) {
+                $query->where('status', 'open')
+                    ->where('is_latest', true);
+            }])
+            ->orderBy('tickets_count', 'asc')
+            ->first();
 
-                if($agent) {
-                    // Log::info('Least busy agent found', [
-                    //     'agent_id' => $agent->user_id,
-                    //     'tickets_count' => $agent->tickets_count
-                    // ]);
-                }
-
-                return $agent->user_id ?? null;
-            }
-        );
+        return $agent->user_id ?? null;
     }
 	public function failed(\Throwable $exception)
     {

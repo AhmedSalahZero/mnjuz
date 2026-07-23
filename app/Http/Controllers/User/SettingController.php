@@ -272,11 +272,9 @@ class SettingController extends BaseController
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
 
-            // إبطال الكاش فوراً حتى تُطبَّق إعدادات التذاكر الجديدة على التعيين
-            // التلقائي بدون انتظار انتهاء صلاحية الكاش (30 دقيقة / 5 دقائق).
+            // إبطال كاش إعدادات المنظمة فورًا حتى تُطبَّق إعدادات التذاكر الجديدة
+            // على التعيين التلقائي بدون انتظار انتهاء صلاحية الكاش (30 دقيقة).
             \Illuminate\Support\Facades\Cache::forget("org_settings_{$currentOrganizationId}");
-            \Illuminate\Support\Facades\Cache::forget("least_busy_agent_{$currentOrganizationId}");
-
             /*return back()->with(
                 'status', [
                     'type' => 'success', 
