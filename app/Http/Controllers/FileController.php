@@ -15,8 +15,11 @@ class FileController extends Controller
                 ->header('Content-Type', 'text/plain; charset=UTF-8');
         }
 
+        $mime = @mime_content_type($path) ?: 'application/octet-stream';
+
         return response()->file($path, [
             'Cache-Control' => 'public, max-age=86400',
+            'Content-Type' => $mime,
         ]);
     }
 }

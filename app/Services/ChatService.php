@@ -597,6 +597,21 @@ class ChatService
 				return null;
 			}
 
+			// Proactively normalize video to a standard WhatsApp-compatible MP4 (remux + faststart)
+			// so Meta accepts it on the first send and never returns error 131053 to the customer.
+			$transcodedPath = null;
+			if ($fileType === 'video') {
+				$transcoder = new VideoTranscodeService();
+				if ($transcoder->isAvailable()) {
+					$normalized = $transcoder->transcodeForWhatsapp($file->getRealPath());
+					if ($normalized !== null) {
+						$uploadBytes = file_get_contents($normalized);
+						$fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.mp4';
+						$transcodedPath = $normalized;
+					}
+				}
+			}
+
 			$storage = Setting::where('key', 'storage_system')->first()->value;
 			if ($storage === 'local') {
 				$location = 'local';
@@ -605,13 +620,21 @@ class ChatService
 			} elseif ($storage === 'aws') {
 				$location = 'amazon';
 				$s3Path = 'uploads/media/sent/' . $organizationId . '/' . uniqid() . '_' . sanitize_filename_for_storage($fileName);
-				$contentType = whatsapp_media_content_type($fileType, $fileName);
+				$contentType = $fileType === 'video' && $transcodedPath !== null
+					? 'video/mp4'
+					: whatsapp_media_content_type($fileType, $fileName);
 				Storage::disk('s3')->put($s3Path, $uploadBytes, ['ContentType' => $contentType]);
 				$mediaFilePath = Storage::disk('s3')->url($s3Path);
 				$mediaUrl = $mediaFilePath;
 			}
 
-			return $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, $caption, null, auth()->id(), $tempMessageId, $messageUUID);
+			$response = $this->whatsappService->sendMedia($uuid, $fileType, $fileName, $mediaFilePath, $mediaUrl, $location, $caption, null, auth()->id(), $tempMessageId, $messageUUID);
+
+			if ($transcodedPath !== null && is_file($transcodedPath)) {
+				@unlink($transcodedPath);
+			}
+
+			return $response;
         }
 
         $message = trim((string) ($request->message ?? ''));

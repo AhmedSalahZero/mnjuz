@@ -6,6 +6,7 @@ use App\Helpers\MessagingWindowHelper;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\VideoTranscodeService;
 use App\Services\WhatsappService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Storage;
 class SendMediaJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public $timeout = 300;
 
     public function __construct(
         public int $organizationId,
@@ -37,10 +40,28 @@ class SendMediaJob implements ShouldQueue
             return;
         }
 
-        $fileContent = file_get_contents($tempFullPath);
+        // Proactively normalize video to a standard WhatsApp-compatible MP4 (remux + faststart)
+        // so Meta accepts it on the first send and never returns error 131053 to the customer.
+        $sendPath = $tempFullPath;
+        $transcodedPath = null;
+        $fileName = $this->fileName;
+
+        if ($this->fileType === 'video') {
+            $transcoder = new VideoTranscodeService();
+            if ($transcoder->isAvailable()) {
+                $normalized = $transcoder->transcodeForWhatsapp($tempFullPath);
+                if ($normalized !== null) {
+                    $sendPath = $normalized;
+                    $transcodedPath = $normalized;
+                    $fileName = pathinfo($this->fileName, PATHINFO_FILENAME) . '.mp4';
+                }
+            }
+        }
+
+        $fileContent = file_get_contents($sendPath);
 
         $storage = Setting::where('key', 'storage_system')->first()->value;
-        $safeFileName = sanitize_filename_for_storage($this->fileName);
+        $safeFileName = sanitize_filename_for_storage($fileName);
 
         if ($storage === 'local') {
             $location = 'local';
@@ -51,16 +72,24 @@ class SendMediaJob implements ShouldQueue
         } elseif ($storage === 'aws') {
             $location = 'amazon';
             $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . uniqid() . '_' . $safeFileName;
-            $contentType = whatsapp_media_content_type($this->fileType, $this->fileName);
+            $contentType = $this->fileType === 'video' && $transcodedPath !== null
+                ? 'video/mp4'
+                : whatsapp_media_content_type($this->fileType, $fileName);
             Storage::disk('s3')->put($s3Path, $fileContent, ['ContentType' => $contentType]);
             $mediaFilePath = Storage::disk('s3')->url($s3Path);
             $mediaUrl = $mediaFilePath;
         } else {
             Storage::disk('local')->delete($this->tempFilePath);
+            if ($transcodedPath !== null && is_file($transcodedPath)) {
+                @unlink($transcodedPath);
+            }
             return;
         }
 
         Storage::disk('local')->delete($this->tempFilePath);
+        if ($transcodedPath !== null && is_file($transcodedPath)) {
+            @unlink($transcodedPath);
+        }
 
         $organization = Organization::find($this->organizationId);
         if (!$organization) {
@@ -97,7 +126,7 @@ class SendMediaJob implements ShouldQueue
         $whatsappService->sendMedia(
             $this->uuid,
             $this->fileType,
-            $this->fileName,
+            $fileName,
             $mediaFilePath,
             $mediaUrl,
             $location,

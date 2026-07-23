@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Models\Contact;
+use App\Models\ContactCategory;
 use App\Models\ContactField;
 use App\Models\ContactGroup;
 use App\Models\Setting;
@@ -166,6 +167,10 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                     $this->syncContactGroups($existingContact, $row['group_name'], $this->organizationId);
                 }
 
+                if ($this->rowHasCategory($row)) {
+                    $this->syncContactCategories($existingContact, $row['category'], $this->organizationId);
+                }
+
                 $this->successfulImports++;
                 $this->updatedImports++;
 
@@ -203,6 +208,10 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
                 if ($this->rowHasGroupName($row)) {
                     $this->syncContactGroups($contact, $row['group_name'], $this->organizationId);
+                }
+
+                if ($this->rowHasCategory($row)) {
+                    $this->syncContactCategories($contact, $row['category'], $this->organizationId);
                 }
 
                 return $contact;
@@ -254,6 +263,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             'phone'      => ['phone', 'mobile', 'phone_number', 'phonenumber', 'tel', 'telephone'],
             'email'      => ['email', 'e_mail', 'mail'],
             'group_name' => ['group_name', 'groupname', 'group', 'groups', 'contact_group'],
+            'category'   => ['category', 'category_name', 'categories', 'contact_category'],
             'street'     => ['street', 'address', 'address_street'],
             'city'       => ['city'],
             'state'      => ['state', 'province', 'region'],
@@ -337,6 +347,11 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     private function rowHasGroupName(array $row): bool
     {
         return array_key_exists('group_name', $row);
+    }
+
+    private function rowHasCategory(array $row): bool
+    {
+        return array_key_exists('category', $row);
     }
 
     private function nullableString(mixed $value): ?string
@@ -423,6 +438,42 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         }
 
         return array_values(array_unique($groupIds));
+    }
+
+    /**
+     * Sync contact categories to match the import row (add missing, remove extras).
+     * Category names are pipe-separated in the category column.
+     */
+    private function syncContactCategories(Contact $contact, mixed $categoryValue, int $organizationId): void
+    {
+        $categoryIds = $this->resolveCategoryIdsFromImport($categoryValue, $organizationId);
+        $contact->contactCategories()->sync($categoryIds);
+    }
+
+    private function resolveCategoryIdsFromImport(mixed $categoryValue, int $organizationId): array
+    {
+        $categoryNames = array_filter(array_map('trim', explode('|', (string) $categoryValue)));
+
+        $categoryIds = [];
+
+        foreach ($categoryNames as $categoryName) {
+            $category = ContactCategory::where('organization_id', $organizationId)
+                ->where('name', $categoryName)
+                ->first();
+
+            if (!$category) {
+                $category = ContactCategory::create([
+                    'organization_id'  => $organizationId,
+                    'name'             => $categoryName,
+                    'background_color' => '#22c55e',
+                    'text_color'       => '#ffffff',
+                ]);
+            }
+
+            $categoryIds[] = $category->id;
+        }
+
+        return array_values(array_unique($categoryIds));
     }
 
     public function getUpdatedImports()

@@ -15,7 +15,7 @@ class ContactsExport implements FromCollection, WithHeadings
     */
     public function collection()
     {
-        $contacts = Contact::with('contactGroups')
+        $contacts = Contact::with(['contactGroups', 'contactCategories'])
             ->where('organization_id', session()->get('current_organization'))
             ->whereNull('deleted_at')
             ->get();
@@ -41,6 +41,7 @@ $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
                 'phone' => $contact->formatted_phone_number, // Assuming formatted_phone_number is defined
                 'email' => $contact->email,
                 'group_name' => $contact->contactGroups->pluck('name')->implode('|'),
+                'category' => $contact->contactCategories->pluck('name')->implode('|'),
                 'street' => $address['street'] ?? null,
                 'city' => $address['city'] ?? null,
                 'state' => $address['state'] ?? null,
@@ -77,6 +78,7 @@ $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
             'Phone',
             'Email',
             'Group name',
+            'Category',
             'Street',
             'City',
             'State',
