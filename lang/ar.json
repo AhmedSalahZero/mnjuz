@@ -1184,6 +1184,8 @@
 "Team members pick conversations manually from Unassigned folder.": "يختار أعضاء الفريق المحادثات يدويًا من مجلد غير المسندة.",
 "Auto": "تلقائي",
 "Distribute conversations among all your available team members.": "وزّع المحادثات بين أعضاء الفريق المتاحين.",
+"Round robin": "توزيع دوري",
+"Assign conversations in order: agent 1, then 2, then 3, then back to 1.": "أسند المحادثات بالترتيب: الموظف 1 ثم 2 ثم 3 ثم العودة للأول.",
 "Reassign chats that have been reopened": "إعادة إسناد المحادثات المعاد فتحها",
 "Enable this option to reassign chats when a contact re-opens a closed conversation. If disabled, reopened chats will either return to the previous agent or remain unassigned, based on auto-assignment settings.": "فعّل هذا الخيار لإعادة إسناد المحادثات عند إعادة فتحها. إن تم تعطيله ستعود للمندوب السابق أو تبقى غير مسندة حسب الإعدادات.",
 "Grant agents access to view all chats not assigned to them": "منح الوكلاء صلاحية عرض المحادثات غير المسندة لهم",

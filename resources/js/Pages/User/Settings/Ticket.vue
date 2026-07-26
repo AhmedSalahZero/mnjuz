@@ -42,7 +42,7 @@
                 </div>
               </div>
               <div class="w-5/5">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div
                     v-for="mode in assignmentModes"
                     :key="mode.value"
@@ -203,6 +203,11 @@ const assignmentModes = [
     description: 'Distribute conversations among all your available team members.',
   },
   {
+    value: 'round_robin',
+    label: 'Round robin',
+    description: 'Assign conversations in order: agent 1, then 2, then 3, then back to 1.',
+  },
+  {
     value: 'shared',
     label: 'All employees',
     description: 'Show every conversation to all employees so anyone can reply.',
@@ -212,7 +217,7 @@ const assignmentModes = [
 const form = useForm({
   active: settings.value?.tickets?.active ?? false,
   assignment_mode: initialMode,
-  auto_assignment: initialMode === 'auto',
+  auto_assignment: ['auto', 'round_robin'].includes(initialMode),
   reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
   allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
   encrypt_contacts_for_agents: settings.value?.tickets?.encrypt_contacts_for_agents ?? false,
@@ -239,8 +244,8 @@ const toggleState4 = () => {
 
 const selectAssignmentMode = (mode) => {
   form.assignment_mode = mode
-  // نبقي auto_assignment متزامناً مع الوضع لضمان التوافق مع منطق الإسناد الحالي.
-  form.auto_assignment = mode === 'auto'
+  // نبقي auto_assignment متزامناً مع أوضاع الإسناد التلقائي (auto + round_robin).
+  form.auto_assignment = ['auto', 'round_robin'].includes(mode)
   submitForm()
 }
 

@@ -160,11 +160,14 @@ class SubscriptionService
             $netAmount = (float)$netAmount;
             $totalTaxAmount = str_replace(',', '', $billingDetails['totalTaxAmount']);
             $totalTaxAmount = (float)$totalTaxAmount;
+            $setupFee = str_replace(',', '', (string) ($billingDetails['setupFee'] ?? 0));
+            $setupFee = (float) $setupFee;
 
             $invoice = BillingInvoice::create([
                 'organization_id' => $organizationId,
                 'plan_id' => $planId,
                 'subtotal' => $netAmount,
+                'setup_fee' => $setupFee,
                 'tax' => $totalTaxAmount,
                 'tax_type' => $billingDetails['isTaxInclusive'] === true ? 'inclusive' : 'exclusive',
                 'total' => $netAmount,
@@ -243,9 +246,12 @@ class SubscriptionService
         $proratedCreditAmount = 0;
 
         if ($subscriptionStatus != 'trial') {
-            // Calculate the unused amount for the current invoiced period as a credit to the user's account
+            // Calculate the unused amount for the current invoiced period as a credit to the user's account.
+            // Setup fees are one-time and are not consumed by days, so exclude them from proration.
             $lastInvoice = BillingInvoice::where('organization_id', $organizationId)->orderBy('id', 'desc')->first();
-            $lastInvoiceTotal = $lastInvoice ? $lastInvoice->total : 0;
+            $lastInvoiceTotal = $lastInvoice
+                ? max(0, (float) $lastInvoice->total - (float) $lastInvoice->setup_fee)
+                : 0;
             $proratedAmount = self::calculateProratedAmount($organizationId, $lastInvoiceTotal);
 
             //Calculate unutilized amount for current invoiced period

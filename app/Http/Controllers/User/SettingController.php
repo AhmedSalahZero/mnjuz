@@ -259,10 +259,10 @@ class SettingController extends BaseController
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
             $metadataArray['tickets']['active'] = $request->active;
-            $metadataArray['tickets']['assignment_mode'] = in_array($request->assignment_mode, ['manual', 'auto', 'shared'], true)
+            $metadataArray['tickets']['assignment_mode'] = in_array($request->assignment_mode, ['manual', 'auto', 'shared', 'round_robin'], true)
                 ? $request->assignment_mode
                 : ($request->auto_assignment ? 'auto' : 'manual');
-            $metadataArray['tickets']['auto_assignment'] = $metadataArray['tickets']['assignment_mode'] === 'auto';
+            $metadataArray['tickets']['auto_assignment'] = in_array($metadataArray['tickets']['assignment_mode'], ['auto', 'round_robin'], true);
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
             $metadataArray['tickets']['encrypt_contacts_for_agents'] = $request->encrypt_contacts_for_agents;

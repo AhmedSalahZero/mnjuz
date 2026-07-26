@@ -104,12 +104,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
      */
     private function createTicket($settings)
     {
-        $assignedTo = null;
-
-        // ✅ التعيين التلقائي
-        if($settings->tickets->auto_assignment) {
-            $assignedTo = $this->getLeastBusyAgent();
-        }
+        $assignedTo = $this->resolveAssignedAgent($settings);
 
         // ✅ إنشاء التذكرة
         // عند الإسناد التلقائي لوكيل محدد نضع assigned_seen = false حتى تظهر
@@ -144,12 +139,6 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             'created_at' =>  now()
         ]);
 
-        // Log::info('Ticket created successfully', [
-        //     'ticket_id' => $ticket->id,
-        //     'contact_id' => $this->contactId,
-        //     'assigned_to' => $assignedTo
-        // ]);
-
         return $ticket;
     }
 
@@ -162,9 +151,9 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
         $autoAssignment = $settings->tickets->auto_assignment ?? false;
 
         // ✅ إعادة التعيين إذا كانت مفعلة
-        if($reassignOnReopen) {
-            if($autoAssignment) {
-                $ticket->assigned_to = $this->getLeastBusyAgent();
+        if ($reassignOnReopen) {
+            if ($autoAssignment) {
+                $ticket->assigned_to = $this->resolveAssignedAgent($settings);
                 // إسناد جديد لوكيل عند إعادة الفتح: يظهر كمحادثة جديدة له.
                 $ticket->assigned_seen = $ticket->assigned_to === null;
             } else {
@@ -175,14 +164,14 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
 
         // ✅ تحديث الحالة
         $ticket->status = 'open';
-        $ticket->updated_at =  now();
+        $ticket->updated_at = now();
         $ticket->save();
 
         // ✅ Log إعادة الفتح
         $ticketLogId = ChatTicketLog::insertGetId([
             'contact_id' => $this->contactId,
             'description' => 'Conversation was moved from closed to open',
-            'created_at' =>  now()
+            'created_at' => now()
         ]);
 
         // ✅ Chat Log
@@ -190,7 +179,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             'contact_id' => $this->contactId,
             'entity_type' => 'ticket',
             'entity_id' => $ticketLogId,
-            'created_at' =>  now()
+            'created_at' => now()
         ]);
 
         Log::info('Ticket reopened successfully', [
@@ -201,7 +190,23 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
 
         return $ticket;
     }
- private function getLeastBusyAgent()
+
+    /**
+     * Resolve assignee based on assignment_mode (auto / round_robin).
+     */
+    private function resolveAssignedAgent($settings): ?int
+    {
+        $mode = $settings->tickets->assignment_mode
+            ?? (($settings->tickets->auto_assignment ?? false) ? 'auto' : 'manual');
+
+        return match ($mode) {
+            'auto' => $this->getLeastBusyAgent(),
+            'round_robin' => $this->getNextRoundRobinAgent(),
+            default => null,
+        };
+    }
+
+    private function getLeastBusyAgent()
     {
         // Always recompute so each new ticket is assigned to the currently least-busy agent.
         $agent = Team::where('organization_id', $this->organizationId)
@@ -216,6 +221,60 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
 
         return $agent->user_id ?? null;
     }
+
+    /**
+     * Assign the next active team member in stable order (teams.id ASC), wrapping around.
+     * Persists tickets.round_robin_last_user_id on the organization under a row lock.
+     */
+    private function getNextRoundRobinAgent(): ?int
+    {
+        $agentIds = Team::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->orderBy('id', 'asc')
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+
+        if ($agentIds === []) {
+            return null;
+        }
+
+        $organization = Organization::where('id', $this->organizationId)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$organization) {
+            return $agentIds[0];
+        }
+
+        $metadata = $organization->metadata
+            ? (json_decode($organization->metadata, true) ?: [])
+            : [];
+
+        $lastUserId = isset($metadata['tickets']['round_robin_last_user_id'])
+            ? (int) $metadata['tickets']['round_robin_last_user_id']
+            : null;
+
+        $nextUserId = $agentIds[0];
+        if ($lastUserId !== null) {
+            $index = array_search($lastUserId, $agentIds, true);
+            if ($index !== false) {
+                $nextUserId = $agentIds[($index + 1) % count($agentIds)];
+            }
+        }
+
+        $metadata['tickets'] = $metadata['tickets'] ?? [];
+        $metadata['tickets']['round_robin_last_user_id'] = $nextUserId;
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        Cache::forget("org_settings_{$this->organizationId}");
+
+        return $nextUserId;
+    }
+
 	public function failed(\Throwable $exception)
     {
         Log::error('ProcessTicketAssignmentJob permanently failed', [

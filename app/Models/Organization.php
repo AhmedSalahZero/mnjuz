@@ -110,7 +110,7 @@ class Organization extends Model {
 	}
 
 	/**
-	 * وضع إسناد التذاكر: manual | auto | shared.
+	 * وضع إسناد التذاكر: manual | auto | round_robin | shared.
 	 * نستنتج القيمة من الإعداد القديم auto_assignment عند غياب assignment_mode
 	 * لضمان التوافق مع البيانات الحالية.
 	 */
@@ -121,7 +121,7 @@ class Organization extends Model {
 			return 'manual';
 		}
 		$mode = $settings->tickets->assignment_mode ?? null;
-		if (in_array($mode, ['manual', 'auto', 'shared'], true)) {
+		if (in_array($mode, ['manual', 'auto', 'round_robin', 'shared'], true)) {
 			return $mode;
 		}
 		$autoAssignment = $settings->tickets->auto_assignment ?? false;

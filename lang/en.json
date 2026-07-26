@@ -1101,6 +1101,8 @@
     "Team members pick conversations manually from Unassigned folder.": "Team members pick conversations manually from Unassigned folder.",
     "Auto": "Auto",
     "Distribute conversations among all your available team members.": "Distribute conversations among all your available team members.",
+    "Round robin": "Round robin",
+    "Assign conversations in order: agent 1, then 2, then 3, then back to 1.": "Assign conversations in order: agent 1, then 2, then 3, then back to 1.",
     "Reassign chats that have been reopened": "Reassign chats that have been reopened",
     "Enable this option to reassign chats when a contact re-opens a closed conversation. If disabled, reopened chats will either return to the previous agent or remain unassigned, based on auto-assignment settings.": "Enable this option to reassign chats when a contact re-opens a closed conversation. If disabled, reopened chats will either return to the previous agent or remain unassigned, based on auto-assignment settings.",
     "Grant agents access to view all chats not assigned to them": "Grant agents access to view all chats not assigned to them",
