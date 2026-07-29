@@ -31,9 +31,11 @@ use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Support\OrganizationRole;
 use App\Traits\TemplateTrait;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -48,7 +50,14 @@ class ApiController extends Controller
     private $whatsappService;
 
     /**
-     * List all contacts.
+     * List contacts for the organization (mobile + API).
+     *
+     * Search (`?search=`) runs server-side over ALL non-deleted contacts in the
+     * current organization (name, phone, email) — not over a limited "last N" slice.
+     * `per_page` (default 10, max 100) and `page` only paginate matching rows.
+     *
+     * Mobile clients must call this endpoint with `search` on each keystroke/submit
+     * instead of filtering a locally loaded infinite-scroll cache.
      *
      * @return \Illuminate\Http\Response
      */
@@ -56,7 +65,8 @@ class ApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'page' => 'integer|min:1',
-            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
+            // Page size only — does NOT limit which contacts are searchable.
+            'per_page' => 'integer|min:1|max:100',
             'search' => 'sometimes|string|max:255',
         ]);
         if ($validator->fails()) {
@@ -85,6 +95,7 @@ class ApiController extends Controller
                         );
                 });
             })
+            ->orderByDesc('id')
             ->paginate($perPage, ['*'], 'page', $page);
         return ContactResource::collection($contacts);
     }
@@ -136,7 +147,32 @@ class ApiController extends Controller
                 'id' => $contact->uuid,
                 'message' => __('Request processed successfully', [], getApiLang())
             ], 200);
+        } catch (QueryException $e) {
+            if ($this->isDuplicateContactPhoneException($e)) {
+                return $this->duplicateContactPhoneResponse($request);
+            }
+            Log::error('storeContact failed', [
+                'organization_id' => $organizationId,
+                'error' => $e->getMessage(),
+            ]);
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 500,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Request unable to be processed', [], getApiLang())
+                ], 500);
+            }
+            return response()->json([
+                'statusCode' => 500,
+                'success' => false,
+                'message' => __('Request unable to be processed', [], getApiLang())
+            ], 500);
         } catch (\Exception $e) {
+            Log::error('storeContact failed', [
+                'organization_id' => $organizationId,
+                'error' => $e->getMessage(),
+            ]);
             if ($request->is('api/v1/*')) {
                 return response()->json([
                     'statusCode' => 500,
@@ -200,8 +236,33 @@ class ApiController extends Controller
                 'id' => $contact->uuid,
                 'message' => __('Request processed successfully', [], getApiLang())
             ], 200);
+        } catch (QueryException $e) {
+            if ($this->isDuplicateContactPhoneException($e)) {
+                return $this->duplicateContactPhoneResponse($request);
+            }
+            Log::error('updateContact failed', [
+                'organization_id' => $organizationId,
+                'uuid' => $uuid,
+                'error' => $e->getMessage(),
+            ]);
+            if ($request->is('api/v1/*')) {
+                return response()->json([
+                    'statusCode' => 500,
+                    'success' => false,
+                    'data' => [],
+                    'message' => __('Request unable to be processed', [], getApiLang())
+                ], 500);
+            }
+            return response()->json([
+                'statusCode' => 500,
+                'message' => __('Request unable to be processed', [], getApiLang())
+            ], 500);
         } catch (\Exception $e) {
-            
+            Log::error('updateContact failed', [
+                'organization_id' => $organizationId,
+                'uuid' => $uuid,
+                'error' => $e->getMessage(),
+            ]);
             if ($request->is('api/v1/*')) {
                 return response()->json([
                     'statusCode' => 500,
@@ -215,6 +276,43 @@ class ApiController extends Controller
                 'message' => __('Request unable to be processed', [], getApiLang())
             ], 500);
         }
+    }
+
+    /**
+     * MySQL duplicate key on contacts phone unique index.
+     */
+    private function isDuplicateContactPhoneException(QueryException $e): bool
+    {
+        return ($e->errorInfo[1] ?? null) === 1062;
+    }
+
+    /**
+     * Map a contacts unique-phone DB violation to the same 400 clients expect from UniquePhone.
+     */
+    private function duplicateContactPhoneResponse(Request $request)
+    {
+        $message = __('This phone number already exists', [], getApiLang());
+
+        if ($request->is('api/v1/*')) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'data' => [],
+                'message' => $message,
+                'errors' => [
+                    'phone' => [$message],
+                ],
+            ], 400);
+        }
+
+        return response()->json([
+            'statusCode' => 400,
+            'success' => false,
+            'message' => $message,
+            'errors' => [
+                'phone' => [$message],
+            ],
+        ], 400);
     }
     public function getContactDetail(Request $request, $id)
     {

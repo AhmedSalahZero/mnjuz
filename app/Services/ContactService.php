@@ -126,7 +126,7 @@ class ContactService
 			$contact->email = $request->email;
 		}
 		if($request->has('phone')){
-			$contact->phone = PhoneService::getE164Format($request->phone);
+			$contact->phone = PhoneService::getE164Format(PhoneService::normalize($request->phone));
 		}
 
         if($request->hasFile('file')){

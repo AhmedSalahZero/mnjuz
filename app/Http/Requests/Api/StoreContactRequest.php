@@ -1,11 +1,13 @@
 <?php
 
 namespace App\Http\Requests\Api;
+
+use App\Models\Contact;
 use App\Rules\UniquePhone;
 use App\Rules\ValidPhone;
+use App\Services\PhoneService;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Client\Request;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
 class StoreContactRequest extends FormRequest
@@ -19,15 +21,27 @@ class StoreContactRequest extends FormRequest
     }
 
     /**
+     * Normalize phone before validation so UniquePhone/ValidPhone see E.164-ready input.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('phone')) {
+            $this->merge(['phone' => PhoneService::normalize($this->phone)]);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
      */
-   
     public function rules()
     {
-        $organizationId = $this->get('organization');
-        $uuid = $this->route('uuid');
+        $organizationId = $this->get('organization')
+            ?? $this->user()?->current_mobile_organization_id;
+
+        $uuid = $this->resolveContactUuidForUniqueness($organizationId);
+
         return [
             'first_name' => $this->isMethod('post') ? 'required' : 'sometimes',
             'phone' => [
@@ -37,18 +51,18 @@ class StoreContactRequest extends FormRequest
                 new ValidPhone(),
                 new UniquePhone($organizationId, $uuid),
             ],
-			 'file' => 'nullable|file',
-			  'street' => 'nullable|string|max:255',
+            'file' => 'nullable|file',
+            'street' => 'nullable|string|max:255',
             'city' => 'nullable|string|max:255',
             'state' => 'nullable|string|max:255',
             'zip' => 'nullable|string|max:20',
             'country' => 'nullable|string|max:255',
-			'metadata' => 'nullable|array',
-			'is_blocked' => 'nullable|boolean',
+            'metadata' => 'nullable|array',
+            'is_blocked' => 'nullable|boolean',
         ];
     }
-	
-	 public function messages(): array 
+
+    public function messages(): array
     {
         return [
             'first_name.required' => __('The first name field is required.', [], getApiLang()),
@@ -67,7 +81,7 @@ class StoreContactRequest extends FormRequest
             'is_blocked.boolean' => __('The is blocked field must be true or false.', [], getApiLang()),
         ];
     }
-	
+
     /**
      * Handle a failed validation attempt.
      *
@@ -76,8 +90,7 @@ class StoreContactRequest extends FormRequest
      *
      * @throws \Illuminate\Http\Exceptions\HttpResponseException
      */
-	
-	 protected function failedValidation(Validator $validator)
+    protected function failedValidation(Validator $validator)
     {
         throw new HttpResponseException(
             response()->json([
@@ -87,8 +100,25 @@ class StoreContactRequest extends FormRequest
             ], 400)
         );
     }
-	
-	
-	
-	
+
+    /**
+     * Resolve the contact uuid used to exclude the current row on update.
+     * Mobile may pass a numeric id in the {uuid} route parameter.
+     */
+    private function resolveContactUuidForUniqueness($organizationId): ?string
+    {
+        $routeUuid = $this->route('uuid');
+        if ($routeUuid === null || $routeUuid === '' || $organizationId === null) {
+            return null;
+        }
+
+        if (!is_numeric($routeUuid)) {
+            return (string) $routeUuid;
+        }
+
+        return Contact::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->where('id', (int) $routeUuid)
+            ->value('uuid');
+    }
 }

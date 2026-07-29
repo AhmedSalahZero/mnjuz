@@ -48,6 +48,6 @@ class UniquePhone implements Rule
 
     public function message()
     {
-        return __('this phone number already exists');
+        return __('This phone number already exists');
     }
 }

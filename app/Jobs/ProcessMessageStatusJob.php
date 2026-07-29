@@ -19,8 +19,10 @@ class ProcessMessageStatusJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $timeout = 30;
-    public $tries = 1;
+    // Keep below the queue retry_after (360s) so the job is never re-queued mid-run.
+    public $timeout = 60;
+    // One retry with backoff helps ride out short table locks without stacking status jobs.
+    public $tries = 2;
     public $backoff = [5, 10, 20];
 
     protected $statuses;
@@ -41,12 +43,18 @@ class ProcessMessageStatusJob implements ShouldQueue
                 $chatWamId = $status['id'];
                 $statusValue = $status['status'];
 
+                // Avoid loading the full row (metadata can be large) unless failed status
+                // needs type/media_id/metadata for transcode retry.
+                $columns = $statusValue === 'failed'
+                    ? ['id', 'type', 'media_id', 'metadata']
+                    : ['id'];
+
                 $chat = Chat::where('wam_id', $chatWamId)
                     ->where('organization_id', $this->organizationId)
-                    ->first();
+                    ->first($columns);
 
                 if ($chat) {
-                    $chat->update(['status' => $statusValue]);
+                    Chat::whereKey($chat->id)->update(['status' => $statusValue]);
 
                     ChatStatusLog::create([
                         'chat_id' => $chat->id,
@@ -71,17 +79,6 @@ class ProcessMessageStatusJob implements ShouldQueue
                         RetryMediaWithTranscodeJob::dispatch($chat->id, $this->organizationId)
                             ->onQueue('high');
                     }
-
-                    // Log::info("Message status updated", [
-                    //     'chat_id' => $chat->id,
-                    //     'status' => $statusValue,
-                    //     'wam_id' => $chatWamId
-                    // ]);
-                } else {
-                    // Log::warning("Chat not found for status update", [
-                    //     'wam_id' => $chatWamId,
-                    //     'organization_id' => $this->organizationId
-                    // ]);
                 }
             }
 
