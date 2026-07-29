@@ -20,6 +20,7 @@ use App\Models\Contact;
 use App\Models\ContactCategory;
 use App\Models\ContactGroup;
 use App\Models\Organization;
+use App\Models\Shortcut;
 use App\Models\Template;
 use App\Models\User;
 use App\Services\ChatService;
@@ -28,6 +29,7 @@ use App\Services\MediaService;
 use App\Services\PhoneService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
+use App\Support\OrganizationRole;
 use App\Traits\TemplateTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -1404,6 +1406,292 @@ class ApiController extends Controller
 		]);
 		
     }
+
+    /**
+     * Shortcuts available for use in the chat composer (company + current user's personal).
+     * Returns empty data when the plan feature is disabled (same as web /shortcuts/available).
+     */
+    public function listShortcutsAvailable(Request $request)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+        $userId = (int) $request->user()->id;
+
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts')) {
+            return response()->json([
+                'statusCode' => 200,
+                'success' => true,
+                'message' => __('Request processed successfully', [], getApiLang()),
+                'data' => [],
+            ], 200);
+        }
+
+        $shortcuts = Shortcut::availableFor($organizationId, $userId)
+            ->orderBy('command')
+            ->get(['uuid', 'command', 'message', 'scope']);
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Request processed successfully', [], getApiLang()),
+            'data' => $shortcuts,
+        ], 200);
+    }
+
+    /**
+     * Manageable shortcuts for settings: personal (current user) + company (if privileged).
+     */
+    public function listShortcuts(Request $request)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+        $userId = (int) $request->user()->id;
+
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts')) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('This feature is not available in your plan.', [], getApiLang()),
+            ], 403);
+        }
+
+        $canManageCompany = $this->canManageCompanyShortcuts($organizationId, $request->user());
+
+        $shortcuts = Shortcut::query()
+            ->where('organization_id', $organizationId)
+            ->where(function ($q) use ($userId, $canManageCompany) {
+                $q->where(function ($p) use ($userId) {
+                    $p->where('scope', 'personal')->where('user_id', $userId);
+                });
+                if ($canManageCompany) {
+                    $q->orWhere('scope', 'company');
+                }
+            })
+            ->orderBy('id')
+            ->get(['uuid', 'command', 'message', 'scope']);
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Request processed successfully', [], getApiLang()),
+            'data' => $shortcuts,
+            'can_manage_company' => $canManageCompany,
+        ], 200);
+    }
+
+    public function storeShortcut(Request $request)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+        $userId = (int) $request->user()->id;
+
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts')) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('This feature is not available in your plan.', [], getApiLang()),
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'command' => 'required|string|max:120',
+            'message' => 'required|string|max:5000',
+            'scope' => 'required|in:personal,company',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The given data was invalid.', [], getApiLang()),
+                'errors' => $validator->errors(),
+            ], 400);
+        }
+
+        $canManageCompany = $this->canManageCompanyShortcuts($organizationId, $request->user());
+        $scope = ($request->input('scope') === 'company' && $canManageCompany) ? 'company' : 'personal';
+        $command = ltrim(trim((string) $request->input('command')), '/');
+
+        if ($command === '') {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The given data was invalid.', [], getApiLang()),
+                'errors' => ['command' => [__('Command name is required.', [], getApiLang())]],
+            ], 400);
+        }
+
+        $shortcut = Shortcut::create([
+            'organization_id' => $organizationId,
+            'user_id' => $userId,
+            'scope' => $scope,
+            'command' => $command,
+            'message' => $request->input('message'),
+            'created_by' => $userId,
+        ]);
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Request processed successfully', [], getApiLang()),
+            'data' => [
+                'uuid' => $shortcut->uuid,
+                'command' => $shortcut->command,
+                'message' => $shortcut->message,
+                'scope' => $shortcut->scope,
+            ],
+        ], 200);
+    }
+
+    public function updateShortcut(Request $request, string $uuid)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+        $userId = (int) $request->user()->id;
+
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts')) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('This feature is not available in your plan.', [], getApiLang()),
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'command' => 'required|string|max:120',
+            'message' => 'required|string|max:5000',
+            'scope' => 'required|in:personal,company',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The given data was invalid.', [], getApiLang()),
+                'errors' => $validator->errors(),
+            ], 400);
+        }
+
+        $shortcut = Shortcut::where('organization_id', $organizationId)
+            ->where('uuid', $uuid)
+            ->first();
+
+        if (!$shortcut) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Not found.', [], getApiLang()),
+            ], 404);
+        }
+
+        $canManageCompany = $this->canManageCompanyShortcuts($organizationId, $request->user());
+
+        if ($shortcut->scope === 'company' && !$canManageCompany) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('You are not allowed to manage company shortcuts.', [], getApiLang()),
+            ], 403);
+        }
+
+        if ($shortcut->scope === 'personal' && (int) $shortcut->user_id !== $userId) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('You are not allowed to manage this shortcut.', [], getApiLang()),
+            ], 403);
+        }
+
+        $scope = ($request->input('scope') === 'company' && $canManageCompany) ? 'company' : 'personal';
+        $command = ltrim(trim((string) $request->input('command')), '/');
+
+        if ($command === '') {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The given data was invalid.', [], getApiLang()),
+                'errors' => ['command' => [__('Command name is required.', [], getApiLang())]],
+            ], 400);
+        }
+
+        $shortcut->update([
+            'command' => $command,
+            'message' => $request->input('message'),
+            'scope' => $scope,
+        ]);
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Request processed successfully', [], getApiLang()),
+            'data' => [
+                'uuid' => $shortcut->uuid,
+                'command' => $shortcut->command,
+                'message' => $shortcut->message,
+                'scope' => $shortcut->scope,
+            ],
+        ], 200);
+    }
+
+    public function destroyShortcut(Request $request, string $uuid)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+        $userId = (int) $request->user()->id;
+
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts')) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('This feature is not available in your plan.', [], getApiLang()),
+            ], 403);
+        }
+
+        $shortcut = Shortcut::where('organization_id', $organizationId)
+            ->where('uuid', $uuid)
+            ->first();
+
+        if (!$shortcut) {
+            return response()->json([
+                'statusCode' => 404,
+                'success' => false,
+                'message' => __('Not found.', [], getApiLang()),
+            ], 404);
+        }
+
+        $canManageCompany = $this->canManageCompanyShortcuts($organizationId, $request->user());
+
+        if ($shortcut->scope === 'company' && !$canManageCompany) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('You are not allowed to manage company shortcuts.', [], getApiLang()),
+            ], 403);
+        }
+
+        if ($shortcut->scope === 'personal' && (int) $shortcut->user_id !== $userId) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('You are not allowed to manage this shortcut.', [], getApiLang()),
+            ], 403);
+        }
+
+        $shortcut->delete();
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'message' => __('Request processed successfully', [], getApiLang()),
+            'data' => [],
+        ], 200);
+    }
+
+    private function canManageCompanyShortcuts(int $organizationId, $user): bool
+    {
+        $role = $user->getRoleNameForOrganization($organizationId);
+        if ($role === '') {
+            $role = OrganizationRole::OWNER;
+        }
+
+        return OrganizationRole::isPrivileged($role);
+    }
+
     /**
      * * دي اخر الكونتاكتس اللي بعتت رسايل
      * * بحيث اول ما بتدخل علي صفحه الشات دي اول ناس بتظهرلك
@@ -1535,28 +1823,39 @@ class ApiController extends Controller
         $contactIds = $contacts->pluck('id')->all();
         $contactsById = $contacts->keyBy('id');
 
-        // Step 2: Load ALL chat_logs in one query (instead of N separate queries)
-        $allChatLogs = ChatLog::whereIn('contact_id', $contactIds)
-            ->whereNull('deleted_at')
-            ->when($createdAt, fn ($q) => $q->where('created_at', '>=', $createdAt))
-            ->when(!empty($entityTypes), fn ($q) => $q->whereIn('entity_type', $entityTypes))
-            ->orderBy('created_at', 'asc')
-            ->get();
+        // Step 2: Load chat_logs in chunks (avoid MySQL "too many placeholders" on large orgs)
+        $allChatLogs = $this->getModelsByIdsInChunks(
+            ChatLog::query()
+                ->whereNull('deleted_at')
+                ->when($createdAt, fn ($q) => $q->where('created_at', '>=', $createdAt))
+                ->when(!empty($entityTypes), fn ($q) => $q->whereIn('entity_type', $entityTypes))
+                ->orderBy('created_at', 'asc'),
+            'contact_id',
+            $contactIds
+        );
 
-        // Step 3: Batch-load all related entities (3 queries total instead of 3×N)
+        // Step 3: Batch-load related entities in chunks (MySQL placeholder limit is ~65535)
         $chatIds    = $allChatLogs->where('entity_type', 'chat')->pluck('entity_id')->unique()->filter()->values()->all();
         $ticketIds  = $allChatLogs->where('entity_type', 'ticket')->pluck('entity_id')->unique()->filter()->values()->all();
         $noteIds    = $allChatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
 
-        $chatsMap = !empty($chatIds)
-            ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
-            : collect();
-        $ticketLogsMap = !empty($ticketIds)
-            ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
-            : collect();
-        $notesMap = !empty($noteIds)
-            ? ChatNote::whereIn('id', $noteIds)->get()->keyBy('id')
-            : collect();
+        $chatsMap = $this->getModelsByIdsInChunks(
+            Chat::query()->with('media', 'user', 'logs'),
+            'id',
+            $chatIds
+        )->keyBy('id');
+
+        $ticketLogsMap = $this->getModelsByIdsInChunks(
+            ChatTicketLog::query(),
+            'id',
+            $ticketIds
+        )->keyBy('id');
+
+        $notesMap = $this->getModelsByIdsInChunks(
+            ChatNote::query(),
+            'id',
+            $noteIds
+        )->keyBy('id');
 
         // Step 4: Group by contact and build response (zero additional DB queries)
         $chatLogsByContact = $allChatLogs->groupBy('contact_id');
@@ -1627,6 +1926,35 @@ class ApiController extends Controller
             'data' => $results,
         ], 200);
     }
+    /**
+     * Load models with whereIn in chunks to stay under MySQL's prepared-statement
+     * placeholder limit (~65535). Preserves the base query's with()/where()/orderBy.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $baseQuery
+     * @param  string  $column
+     * @param  array<int, mixed>  $ids
+     * @param  int  $chunkSize
+     * @return \Illuminate\Support\Collection
+     */
+    private function getModelsByIdsInChunks($baseQuery, string $column, array $ids, int $chunkSize = 1000)
+    {
+        $ids = array_values(array_unique(array_filter($ids, static fn ($id) => $id !== null && $id !== '')));
+
+        if ($ids === []) {
+            return collect();
+        }
+
+        $results = collect();
+
+        foreach (array_chunk($ids, $chunkSize) as $chunk) {
+            $results = $results->merge(
+                (clone $baseQuery)->whereIn($column, $chunk)->get()
+            );
+        }
+
+        return $results;
+    }
+
     /**
      * Format a chat record for the mobile API using the already-loaded contact
      * instead of re-querying it from DB (replaces minimalChatValue N+1).

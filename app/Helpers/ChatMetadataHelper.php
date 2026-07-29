@@ -74,7 +74,18 @@ class ChatMetadataHelper
                 break;
 
             case 'contacts':
-                $out['contacts'] = $message['contacts'] ?? [];
+                // Strip base64 vcard blobs — UI rebuilds vCards from name/phones/emails.
+                // Keeping them easily exceeds MySQL TEXT (65KB) when many contacts are shared.
+                $out['contacts'] = array_map(
+                    static function ($contact) {
+                        if (!is_array($contact)) {
+                            return $contact;
+                        }
+                        unset($contact['vcard']);
+                        return $contact;
+                    },
+                    $message['contacts'] ?? []
+                );
                 break;
 
             case 'template':

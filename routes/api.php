@@ -127,6 +127,12 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	
 	Route::get('/list-teams', [App\Http\Controllers\ApiController::class, 'listTeamMembers']);
 
+	Route::get('/shortcuts/available', [App\Http\Controllers\ApiController::class, 'listShortcutsAvailable']);
+	Route::get('/shortcuts', [App\Http\Controllers\ApiController::class, 'listShortcuts']);
+	Route::post('/shortcuts', [App\Http\Controllers\ApiController::class, 'storeShortcut']);
+	Route::put('/shortcuts/{uuid}', [App\Http\Controllers\ApiController::class, 'updateShortcut']);
+	Route::delete('/shortcuts/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyShortcut']);
+
 	
 });
 
