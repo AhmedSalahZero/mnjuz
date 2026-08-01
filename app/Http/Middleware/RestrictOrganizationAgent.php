@@ -63,6 +63,8 @@ class RestrictOrganizationAgent
             'resend-all-failed-campaigns',
             'templates',
             'support',
+            'shortcuts',
+            'settings/shortcuts',
             'settings/devices',
             'settings/device',
         ];

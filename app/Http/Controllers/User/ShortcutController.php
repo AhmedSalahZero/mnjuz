@@ -112,6 +112,10 @@ class ShortcutController extends BaseController
             }
 
             $id = $row['id'] ?? null;
+            // اختصار شركة (أو غيره) لا يملك المستخدم صلاحية تعديله — نتخطاه حتى لا يُنسخ كشخصي.
+            if ($id && !$manageable->has($id)) {
+                continue;
+            }
             if ($id && $manageable->has($id)) {
                 $shortcut = $manageable->get($id);
                 $shortcut->update([

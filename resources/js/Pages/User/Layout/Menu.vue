@@ -188,6 +188,16 @@
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Linked Devices') }}</span>
 					</Link>
 				</li>
+				<li v-if="isOrgAgent && organization?.plan?.features?.shortcuts" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+					:class="$page.url.startsWith('/settings/shortcuts') ? 'bg-slate-50 text-black' : ''">
+					<Link rel="noopener noreferrer" href="/settings/shortcuts"
+						class="flex items-center p-2 space-x-3 rounded-md">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M4 17l6-6l-6-6"/><path d="M12 19h8"/>
+						</svg>
+						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Shortcuts') }}</span>
+					</Link>
+				</li>
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-x-3 rounded-md">
