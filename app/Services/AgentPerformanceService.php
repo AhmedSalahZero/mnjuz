@@ -37,13 +37,16 @@ class AgentPerformanceService
                 'users.email',
             ]);
 
+        // ملاحظة: الأعمدة المجمّعة تحتاج alias صريحاً مع select() قبل pluck()؛
+        // pluck() يقصّ التعبير الخام عند آخر نقطة فيبحث عن عمود غير موجود.
         $messagesSent = DB::table('chats')
             ->where('organization_id', $org)
             ->where('type', 'outbound')
             ->whereNotNull('user_id')
             ->whereBetween('created_at', [$from, $to])
             ->groupBy('user_id')
-            ->pluck(DB::raw('count(*)'), 'user_id');
+            ->select(['user_id', DB::raw('COUNT(*) as total')])
+            ->pluck('total', 'user_id');
 
         $ticketsAssigned = DB::table('chat_tickets')
             ->join('contacts', 'contacts.id', '=', 'chat_tickets.contact_id')
@@ -51,7 +54,8 @@ class AgentPerformanceService
             ->whereNotNull('chat_tickets.assigned_to')
             ->whereBetween('chat_tickets.created_at', [$from, $to])
             ->groupBy('chat_tickets.assigned_to')
-            ->pluck(DB::raw('count(*)'), 'chat_tickets.assigned_to');
+            ->select(['chat_tickets.assigned_to as user_id', DB::raw('COUNT(*) as total')])
+            ->pluck('total', 'user_id');
 
         $ticketsClosed = DB::table('chat_tickets')
             ->join('contacts', 'contacts.id', '=', 'chat_tickets.contact_id')
@@ -60,7 +64,8 @@ class AgentPerformanceService
             ->whereNotNull('chat_tickets.assigned_to')
             ->whereBetween('chat_tickets.updated_at', [$from, $to])
             ->groupBy('chat_tickets.assigned_to')
-            ->pluck(DB::raw('count(*)'), 'chat_tickets.assigned_to');
+            ->select(['chat_tickets.assigned_to as user_id', DB::raw('COUNT(*) as total')])
+            ->pluck('total', 'user_id');
 
         $resolution = DB::table('chat_tickets')
             ->join('contacts', 'contacts.id', '=', 'chat_tickets.contact_id')
@@ -69,7 +74,11 @@ class AgentPerformanceService
             ->whereNotNull('chat_tickets.assigned_to')
             ->whereBetween('chat_tickets.updated_at', [$from, $to])
             ->groupBy('chat_tickets.assigned_to')
-            ->pluck(DB::raw('AVG(TIMESTAMPDIFF(SECOND, chat_tickets.created_at, chat_tickets.updated_at))'), 'chat_tickets.assigned_to');
+            ->select([
+                'chat_tickets.assigned_to as user_id',
+                DB::raw('AVG(TIMESTAMPDIFF(SECOND, chat_tickets.created_at, chat_tickets.updated_at)) as avg_seconds'),
+            ])
+            ->pluck('avg_seconds', 'user_id');
 
         $activity = DB::table('agent_activity')
             ->where('organization_id', $org)
@@ -84,7 +93,8 @@ class AgentPerformanceService
         $lastActivity = DB::table('agent_activity')
             ->where('organization_id', $org)
             ->groupBy('user_id')
-            ->pluck(DB::raw('MAX(last_ping_at)'), 'user_id');
+            ->select(['user_id', DB::raw('MAX(last_ping_at) as last_ping_at')])
+            ->pluck('last_ping_at', 'user_id');
 
         $firstResponse = $this->firstResponseAverages($from, $to);
 
@@ -127,6 +137,7 @@ class AgentPerformanceService
      */
     private function firstResponseAverages(Carbon $from, Carbon $to): array
     {
+        // cursor() بدل get() حتى لا تُحمَّل رسائل المنظمة كاملةً في الذاكرة دفعةً واحدة.
         $chats = DB::table('chats')
             ->where('organization_id', $this->organizationId)
             ->whereIn('type', ['inbound', 'outbound'])
@@ -134,7 +145,8 @@ class AgentPerformanceService
             ->whereBetween('created_at', [$from, $to])
             ->orderBy('contact_id')
             ->orderBy('created_at')
-            ->get(['contact_id', 'type', 'user_id', 'created_at']);
+            ->select(['contact_id', 'type', 'user_id', 'created_at'])
+            ->cursor();
 
         $sums = [];
         $counts = [];

@@ -1315,6 +1315,10 @@
 "Please select Auth Template in Settings → General Settings first":"يرجى اختيار قالب المصادقة أولاً من الإعدادات ← الإعدادات العامة",
 "Failed to send auth template":"فشل إرسال قالب المصادقة",
 "Something went wrong":"حدث خطأ ما",
+"Oops! Something went wrong":"عذراً! حدث خطأ غير متوقع",
+"We are sorry, an unexpected error occurred. Please try again later.":"نأسف، حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.",
+"Oops! Page not found":"عذراً! الصفحة غير موجودة",
+"we are sorry, but the page you requested was not found":"نأسف، الصفحة المطلوبة غير موجودة",
 "Auth template is not set. Please go to Settings → General Settings to select the auth template.":"قالب المصادقة غير مضبوط. يرجى الذهاب إلى الإعدادات ← الإعدادات العامة لاختيار قالب المصادقة.",
 
 "Categories":"التصنيفات",

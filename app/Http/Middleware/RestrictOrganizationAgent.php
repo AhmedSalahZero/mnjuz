@@ -64,6 +64,8 @@ class RestrictOrganizationAgent
             'templates',
             'support',
             'shortcuts',
+            // نبضة النشاط فقط — صفحة تقرير /performance تبقى محجوبة عن الموظف.
+            'performance/heartbeat',
             'settings/shortcuts',
             'settings/devices',
             'settings/device',

@@ -16,10 +16,10 @@
     <div id="notfound">
         <div class="notfound">
             <div class="notfound-404">
-                <h3>{{ __('Oops! Page not found') }}</h3>
+                <h3>{{ __('Oops! Something went wrong') }}</h3>
                 <h1><span>5</span><span>0</span><span>0</span></h1>
             </div>
-            <h2>{{ __('we are sorry, but the page you requested was not found') }}</h2>
+            <h2>{{ __('We are sorry, an unexpected error occurred. Please try again later.') }}</h2>
         </div>
     </div>
 </body>
