@@ -53,6 +53,15 @@
                         <div class="sm:w-[80%] grid gap-x-6 gap-y-4 sm:grid-cols-6">
                             <FormInput v-model="form.name" :name="$t('Name')" :error="form.errors.name" :type="'text'" :class="'sm:col-span-6'"/>
                             <FormSelect v-model="form.plan" :name="$t('Subscription plan')" :error="form.errors.plan" :options="roleOptions()" :type="'text'" :class="'sm:col-span-6'"/>
+                            <!-- ربط يدوي للعملاء الذين أُنشئت حساباتهم في واز
+                                 قبل التكامل؛ الجدد يُربطون تلقائياً بالتسجيل. -->
+                            <div v-if="props.organization !== null" class="sm:col-span-6">
+                                <FormInput v-model="form.waz_company_id" :name="$t('Waz Business company ID')"
+                                    :error="form.errors.waz_company_id" :type="'number'" :min="1"/>
+                                <p class="mt-1 text-xs text-slate-500">
+                                    {{ $t('Links this organization to its customer record on the billing platform. Leave empty to unlink.') }}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -174,6 +183,7 @@ const trans = useTrans();
     const form = useForm({
         name: props.organization?.name,
         plan: props.organization?.subscription?.plan?.uuid,
+        waz_company_id: props.organization?.waz_company_id ?? null,
         create_user: 1,
         first_name: null,
         last_name: null,

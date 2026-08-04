@@ -191,6 +191,16 @@ class UserService
             ]),
         ]);
 
+        // ربط يدوي بجهة الاتصال في واز أعمال — للمستخدمين الذين أُنشئت
+        // حساباتهم هناك قبل التكامل. forceFill لأن الحقل خارج fillable عمداً
+        // فلا يُضبط من نموذج عادي. الفراغ يعني «فكّ الربط».
+        if ($request->has('waz_contact_id')) {
+            $wazId = $request->input('waz_contact_id');
+            $user->forceFill([
+                'waz_contact_id' => ($wazId === null || $wazId === '') ? null : (int) $wazId,
+            ])->save();
+        }
+
         return $user;
     }
 

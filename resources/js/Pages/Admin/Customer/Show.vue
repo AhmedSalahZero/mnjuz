@@ -51,6 +51,15 @@
                             <FormPhoneInput v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'" :class="'sm:col-span-3'"/>
                             <FormInput v-if="!props.user" v-model="form.password" :name="$t('Password')" :error="form.errors.password" :type="'password'" :class="'sm:col-span-3'"/>
                             <FormInput v-if="!props.user" v-model="form.password_confirmation" :name="$t('Confirm password')" :error="form.errors.password_confirmation" :type="'password'" :class="'sm:col-span-3'"/>
+                            <!-- ربط يدوي بجهة الاتصال في واز أعمال — تلزم لفتح
+                                 تذاكر الدعم باسم هذا المستخدم. -->
+                            <div v-if="props.user" class="sm:col-span-6">
+                                <FormInput v-model="form.waz_contact_id" :name="$t('Waz Business contact ID')"
+                                    :error="form.errors.waz_contact_id" :type="'number'" :min="1"/>
+                                <p class="mt-1 text-xs text-slate-500">
+                                    {{ $t('Links this user to their contact on the billing platform. Leave empty to unlink.') }}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -125,6 +134,7 @@
         email: props.user?.email,
         phone: props.user?.phone,
         role: props.user?.role?.uuid,
+        waz_contact_id: props.user?.waz_contact_id ?? null,
         avatar: undefined,
         street: getAddressDetail(props.user?.address, 'street'),
         city: getAddressDetail(props.user?.address, 'city'),

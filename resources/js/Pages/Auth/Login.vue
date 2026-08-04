@@ -1,5 +1,9 @@
 <template>
     <div :class="rtlClass">
+        <!-- تبديل اللغة قبل الدخول — لم يكن متاحاً في صفحات المصادقة إطلاقاً -->
+        <div class="absolute top-4 end-5 z-10">
+            <LangToggle :languages="$page.props.languages" :currentLanguage="$page.props.currentLanguage" />
+        </div>
         <div class="flex h-screen justify-center">
             <div class="flex justify-center">
                 <div class="w-[20em] mt-40">
@@ -63,6 +67,7 @@
 </template>
 <script setup>
     import FormInput from '@/Components/FormInput.vue';
+import LangToggle from '@/Components/LangToggle.vue';
 import { useRtl } from '@/Composables/useRtl';
 import { Link, useForm, usePage } from "@inertiajs/vue3";
 import { defineProps, onMounted, onUnmounted, ref, watch } from 'vue';

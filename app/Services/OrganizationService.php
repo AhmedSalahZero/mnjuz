@@ -150,7 +150,7 @@ class OrganizationService
     {
         $organization = Organization::where('uuid', $uuid)->firstOrFail();
 
-        $organization->update([
+        $attributes = [
             'name' => $request->input('name'),
             'address' => json_encode([
                 'street' => $request->street,
@@ -159,7 +159,17 @@ class OrganizationService
                 'zip' => $request->zip,
                 'country' => $request->country,
             ]),
-        ]);
+        ];
+
+        // ربط يدوي بمنصة واز أعمال للعملاء الذين أُنشئت حساباتهم هناك قبل
+        // التكامل. الحقل يظهر للمشرف فقط؛ العملاء الجدد يُربطون تلقائياً
+        // عند التسجيل. الفراغ يعني «فكّ الربط».
+        if ($request->has('waz_company_id')) {
+            $wazId = $request->input('waz_company_id');
+            $attributes['waz_company_id'] = ($wazId === null || $wazId === '') ? null : (int) $wazId;
+        }
+
+        $organization->update($attributes);
 
         $subscription = Subscription::where('organization_id', $organization->id)->first();
         $plan = SubscriptionPlan::where('uuid', $request->plan)->first();

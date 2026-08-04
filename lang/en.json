@@ -1336,5 +1336,9 @@
     "Answered": "Answered",
     "On hold": "On hold",
     "Search for your country": "Search for your country",
-    "No results": "No results"
+    "No results": "No results",
+    "Waz Business company ID": "Waz Business company ID",
+    "Links this organization to its customer record on the billing platform. Leave empty to unlink.": "Links this organization to its customer record on the billing platform. Leave empty to unlink.",
+    "Waz Business contact ID": "Waz Business contact ID",
+    "Links this user to their contact on the billing platform. Leave empty to unlink.": "Links this user to their contact on the billing platform. Leave empty to unlink."
 }

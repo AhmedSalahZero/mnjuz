@@ -28,6 +28,8 @@ class StoreOrganization extends FormRequest
         $rules = [
             'name' => 'required',
             'plan' => 'required',
+            // معرّف الشركة في واز أعمال — يضبطه المشرف يدوياً للعملاء القدامى.
+            'waz_company_id' => 'nullable|integer|min:1',
         ];
 
         if ($this->isMethod('post')) {

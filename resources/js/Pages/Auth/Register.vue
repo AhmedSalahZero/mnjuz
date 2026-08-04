@@ -7,9 +7,14 @@
                     :src="'/media/' + props.companyConfig.logo" :alt="props.companyConfig.company_name">
                 <span v-else class="text-lg font-bold text-primary">{{ props.companyConfig.company_name }}</span>
             </Link>
-            <div class="text-xs text-slate-500">
-                {{ $t('Already have an account?') }}
-                <Link href="login" class="text-primary font-bold hover:underline">{{ $t('Login') }}</Link>
+            <div class="flex items-center gap-5">
+                <div class="text-xs text-slate-500">
+                    {{ $t('Already have an account?') }}
+                    <Link href="login" class="text-primary font-bold hover:underline">{{ $t('Login') }}</Link>
+                </div>
+                <!-- اللغة تُحدَّد قبل التسجيل: هي لغة الواجهة ولغة العميل في
+                     منصة الفوترة (default_language) معاً. -->
+                <LangToggle :languages="$page.props.languages" :currentLanguage="$page.props.currentLanguage" />
             </div>
         </header>
 
@@ -133,6 +138,7 @@
 import FormInput from '@/Components/FormInput.vue';
 import FormPhoneInput from '@/Components/FormPhoneInput.vue';
 import FormCountrySelect from '@/Components/FormCountrySelect.vue';
+import LangToggle from '@/Components/LangToggle.vue';
 import { useRtl } from '@/Composables/useRtl';
 import { useTrans } from '@/Composables/useTrans';
 import { Link, useForm } from "@inertiajs/vue3";

@@ -320,6 +320,16 @@ class WazBusinessService
             return;
         }
 
+        // الرقم الضريبي لا يُحفظ عندنا، وحقله المخصّص يُمحى إن لم يُرسَل — فإن
+        // لم يكن ضمن التعديل نقرأ قيمته الحالية من المنصة ونُعيدها كما هي.
+        if (!array_key_exists('vat', $changes)) {
+            $current = $this->get('/api/customers/' . $companyId);
+            $vat = $current[0]['vat'] ?? null;
+            if ($vat !== null && $vat !== '') {
+                $changes['vat'] = $vat;
+            }
+        }
+
         $payload = $this->companyChangesPayload($changes);
 
         if (!$this->isConfigured()) {
@@ -379,6 +389,10 @@ class WazBusinessService
         // «منجز شات»، وكل شركة عُدِّلت فقدتها لأن groups_in[] لم يُرسَل.
         $payload['default_currency'] = (string) $defaults['currency'];
         $payload['groups_in'] = [$defaults['group_id']];
+
+        // مصدر العميل ثابت ولا يتغيّر، فنُعيد إرساله مع كل تحديث لئلا يُمحى
+        // مثل المجموعة. (الحقلان معرّفان على الإنتاج لا على demo.)
+        $payload['custom_fields[customers][' . $defaults['source_custom_field'] . ']'] = $defaults['source'];
 
         if (isset($changes['country_id'])) {
             foreach (['country', 'billing_country', 'shipping_country'] as $field) {

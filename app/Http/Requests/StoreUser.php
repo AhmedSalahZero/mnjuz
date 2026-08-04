@@ -26,6 +26,8 @@ class StoreUser extends FormRequest
         $rules = [
             'first_name' => 'required',
             'last_name' => 'required',
+            // معرّف جهة الاتصال في واز أعمال — يضبطه المشرف يدوياً للقدامى.
+            'waz_contact_id' => 'nullable|integer|min:1',
         ];
 
         if ($this->isMethod('put')) {

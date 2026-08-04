@@ -1502,5 +1502,9 @@
     "Answered": "تم الرد",
     "On hold": "معلّقة",
     "Search for your country": "ابحث عن دولتك",
-    "No results": "لا توجد نتائج"
+    "No results": "لا توجد نتائج",
+    "Waz Business company ID": "معرّف الشركة في واز أعمال",
+    "Links this organization to its customer record on the billing platform. Leave empty to unlink.": "يربط هذه المنشأة بسجل عميلها في منصة الفوترة. اتركه فارغاً لفكّ الربط.",
+    "Waz Business contact ID": "معرّف جهة الاتصال في واز أعمال",
+    "Links this user to their contact on the billing platform. Leave empty to unlink.": "يربط هذا المستخدم بجهة اتصاله في منصة الفوترة. اتركه فارغاً لفكّ الربط."
 }
