@@ -29,6 +29,7 @@ use App\Services\MediaService;
 use App\Services\PhoneService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
+use App\Support\ChatStatus;
 use App\Support\OrganizationRole;
 use App\Traits\TemplateTrait;
 use Illuminate\Database\QueryException;
@@ -2077,6 +2078,7 @@ class ApiController extends Controller
                     $decoded = [];
                 }
                 $minimal = array_intersect_key($decoded, array_flip(['status', 'errors', 'id']));
+                $minimal = ChatStatus::normalizeLogMetadata($minimal);
                 $logs[] = ['metadata' => json_encode($minimal)];
             }
         }
@@ -2118,7 +2120,8 @@ class ApiController extends Controller
             'metadata' => $metadata,
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
-            'status' => $arr['status'] ?? null,
+            // نُخرج فقط الحالات التي يفهمها التطبيق؛ `played` تُترجم إلى `read`.
+            'status' => ChatStatus::forApi($arr['status'] ?? null),
             'media' => $media,
             'logs' => $logs,
             'user' => $user,

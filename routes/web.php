@@ -221,6 +221,12 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::put('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'update'])->name('cannedReply.update');
                 Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'delete'])->name('cannedReply.destroy');
 
+                // بوابة واز أعمال داخل التطبيق: الفواتير الرسمية وحجز مواعيد الدعم.
+                // تُعرَّف قبل /support/{uuid?} وإلا التقط المسار الديناميكي "meetings".
+                Route::get('/support/meetings', [App\Http\Controllers\User\WazPortalController::class, 'meetings'])->name('waz.meetings');
+                Route::post('/support/meetings', [App\Http\Controllers\User\WazPortalController::class, 'bookMeeting']);
+                Route::get('/billing/invoices', [App\Http\Controllers\User\WazPortalController::class, 'invoices'])->name('waz.invoices');
+
                 Route::get('/support/{uuid?}', [App\Http\Controllers\User\TicketController::class, 'index'])->name('support');
                 Route::post('/support', [App\Http\Controllers\User\TicketController::class, 'store']);
                 Route::post('/support/{uuid}/comment', [App\Http\Controllers\User\TicketController::class, 'comment']);

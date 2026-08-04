@@ -11,8 +11,9 @@ use Validator;
 
 class TicketService
 {
-    public function store(object $request){
-        Ticket::create([
+    public function store(object $request): Ticket
+    {
+        return Ticket::create([
             'reference' => 'SUP-' . sprintf('%06d', Ticket::count() + 1) . '-' . now()->format('ymd'),
             'user_id' => auth()->user()->role === 'user' ? auth()->user()->id : $request->user,
             'category_id' => $request->category,

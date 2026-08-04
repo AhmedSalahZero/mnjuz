@@ -3,6 +3,7 @@
 namespace App\Services\Chat;
 
 use App\Models\Contact;
+use App\Support\ChatStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -117,7 +118,8 @@ class ChatBroadcastPayloadBuilder
             'metadata'                => $metadata,
             'type'                    => $arr['type'] ?? 'outbound',
             'wam_id'                  => $arr['wam_id'] ?? null,
-            'status'                  => $arr['status'] ?? null,
+            // نفس ترجمة الـAPI: التطبيق يرفض أي حالة خارج قائمته.
+            'status'                  => ChatStatus::forApi($arr['status'] ?? null),
             'media'                   => $media,
             'logs'                    => $logs,
             'user'                    => $user,
@@ -255,6 +257,7 @@ class ChatBroadcastPayloadBuilder
                 $decoded = [];
             }
             $minimal = array_intersect_key($decoded, array_flip(self::LOG_METADATA_KEYS));
+            $minimal = ChatStatus::normalizeLogMetadata($minimal);
             $out[] = ['metadata' => json_encode($minimal)];
         }
 

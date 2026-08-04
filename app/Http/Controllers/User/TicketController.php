@@ -14,7 +14,10 @@ use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Services\TicketService;
+use App\Services\WazSyncService;
+use App\Exceptions\WazBusinessException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 
@@ -69,14 +72,30 @@ class TicketController extends BaseController
         }
     }
 
-    public function store(StoreTicket $request){
-        $this->ticketService->store($request);
+    public function store(StoreTicket $request, WazSyncService $waz){
+        $ticket = $this->ticketService->store($request);
+
+        // نفتح التذكرة في واز أعمال أيضاً ليراها فريق الدعم في نظامهم.
+        // فشل المزامنة لا يُلغي التذكرة المحلية — العميل أرسل طلبه فعلاً —
+        // لكننا ننبّهه أن الدعم قد يتأخر في رؤيتها.
+        $synced = true;
+        if ($waz->enabled()) {
+            try {
+                // false = الحساب غير مربوط، فلن يراها الدعم — ننبّه أيضاً.
+                $synced = $waz->syncTicket($ticket, (int) session('current_organization'));
+            } catch (WazBusinessException $e) {
+                $synced = false;
+                Log::error('Waz: failed to open support ticket', [
+                    'ticket_id' => $ticket->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         return Redirect::route('support')->with(
-            'status', [
-                'type' => 'success', 
-                'message' => __('Ticket created successfully')
-            ]
+            'status', $synced
+                ? ['type' => 'success', 'message' => __('Ticket created successfully')]
+                : ['type' => 'warning', 'message' => __('Your ticket was saved, but syncing it with support is delayed.')]
         );
     }
 

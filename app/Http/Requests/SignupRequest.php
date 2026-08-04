@@ -8,6 +8,7 @@ use App\Rules\Recaptcha;
 use App\Rules\UniqueEmail;
 use App\Rules\BrazilPhoneValidation;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SignupRequest extends FormRequest
 {
@@ -38,6 +39,17 @@ class SignupRequest extends FormRequest
 
             if ($this->has('organization_name')) {
                 $rules['organization_name'] = 'required';
+
+                // بيانات المنشأة والعنوان مطلوبة لإنشاء الشركة في منصة واز أعمال.
+                // vat و website اختياريان هناك، والباقي إجباري.
+                $rules['vat'] = 'nullable|string|max:50';
+                $rules['website'] = 'nullable|url|max:255';
+                $rules['street'] = 'required|string|max:255';
+                $rules['city'] = 'required|string|max:255';
+                $rules['state'] = 'required|string|max:255';
+                $rules['zip'] = 'required|string|max:20';
+                // معرّف الدولة الرقمي كما تقبله واز — لا الاسم ولا مفتاح الاتصال.
+                $rules['country'] = ['required', Rule::in(array_values(config('waz_countries', [])))];
             }
 
             if ($this->has('phone')) {

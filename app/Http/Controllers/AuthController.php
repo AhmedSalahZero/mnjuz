@@ -33,6 +33,8 @@ use App\Services\OrganizationContextService;
 use App\Services\UserAccountDeletionService;
 use App\Services\UserVerificationService;
 use App\Services\UserService;
+use App\Services\WazBusinessService;
+use App\Exceptions\WazBusinessException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
@@ -574,17 +576,43 @@ class AuthController extends BaseController
         return $organization;
     }
 
-    public function showRegistrationForm()
+    public function showRegistrationForm(WazBusinessService $waz)
     {
         $keys = ['logo', 'company_name', 'address', 'email', 'phone', 'socials', 'trial_period', 'allow_facebook_login', 'allow_google_login'];
         $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
 
+        // القيمة هي معرّف الدولة الرقمي في واز أعمال، فما يختاره المستخدم هو
+        // بالضبط ما تقبله المنصة دون مطابقة أسماء.
+        $data['countries'] = $waz->countryOptions();
+
         return Inertia::render('Auth/Register', $data);
     }
 
-    public function handleRegistration(SignupRequest $request)
+    public function handleRegistration(SignupRequest $request, WazBusinessService $waz)
     {
-        $user = $this->userService->store($request);
+        // نُنشئ الشركة وجهة الاتصال في واز أعمال أولاً: التسجيل ذرّي، فلا يُنشأ
+        // حساب محلي (ولا يُرسل بريد ترحيب) إلا بعد نجاح الربط بالكامل.
+        [$companyId, $contactId] = $this->createWazCustomer($request, $waz);
+
+        if ($companyId === null) {
+            return Redirect::back()->withInput()->with('status', [
+                'type' => 'error',
+                'message' => __('We could not complete your registration right now. Please try again shortly.'),
+            ]);
+        }
+
+        try {
+            $user = $this->userService->store($request);
+        } catch (\Throwable $e) {
+            // الحساب المحلي لم يُنشأ — نحذف الشركة حتى لا تبقى يتيمة في واز.
+            $waz->deleteCompany($companyId);
+            throw $e;
+        }
+
+        $user->forceFill(['waz_contact_id' => $contactId])->save();
+        Organization::whereIn('id', $user->teams()->pluck('organization_id'))
+            ->update(['waz_company_id' => $companyId]);
+
         $authService = (new AuthService($user))->authenticateSession($request);
         $config = Setting::where('key', 'verify_email')->first();
 
@@ -593,6 +621,58 @@ class AuthController extends BaseController
         }
 
         return redirect('/dashboard');
+    }
+
+    /**
+     * إنشاء Company ثم Contact في واز أعمال.
+     *
+     * @return array{0: ?int, 1: ?int} معرّف الشركة وجهة الاتصال، أو [null, null] عند الفشل
+     */
+    private function createWazCustomer(SignupRequest $request, WazBusinessService $waz): array
+    {
+        $phone = $request->input('phone')
+            ? phone($request->input('phone'))->formatE164()
+            : '';
+
+        $companyId = null;
+
+        try {
+            $companyId = $waz->createCompany([
+                'company' => $request->input('organization_name'),
+                'phone' => $phone,
+                'vat' => $request->input('vat'),
+                'website' => $request->input('website'),
+                'street' => $request->input('street'),
+                'city' => $request->input('city'),
+                'state' => $request->input('state'),
+                'zip' => $request->input('zip'),
+                'country_id' => (int) $request->input('country'),
+                'language' => app()->getLocale(),
+            ]);
+
+            $contactId = $waz->createContact($companyId, [
+                'first_name' => $request->input('first_name'),
+                'last_name' => $request->input('last_name'),
+                'email' => $request->input('email'),
+                'phone' => $phone,
+                'password' => $request->input('password'),
+            ]);
+
+            return [$companyId, $contactId];
+        } catch (WazBusinessException $e) {
+            Log::error('Signup aborted: Waz Business integration failed', [
+                'email' => $request->input('email'),
+                'company_id' => $companyId,
+                'error' => $e->getMessage(),
+            ]);
+
+            // نجحت الشركة وفشلت جهة الاتصال: نتراجع عن الشركة أيضاً.
+            if ($companyId !== null) {
+                $waz->deleteCompany($companyId);
+            }
+
+            return [null, null];
+        }
     }
 
     public function viewInvite($uuid)

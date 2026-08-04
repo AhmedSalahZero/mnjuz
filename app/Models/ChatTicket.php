@@ -165,6 +165,8 @@ class ChatTicket extends Model {
                 static::syncLatestFlag((int) $ticket->contact_id, (int) $nextId);
             }
         });
+		
+		
     }
 
     /**
