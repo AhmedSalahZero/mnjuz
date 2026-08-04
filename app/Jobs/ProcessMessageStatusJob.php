@@ -7,6 +7,7 @@ use App\Helpers\DateTimeHelper;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\ChatStatusLog;
+use App\Services\CampaignRetryService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,6 +25,18 @@ class ProcessMessageStatusJob implements ShouldQueue
     // One retry with backoff helps ride out short table locks without stacking status jobs.
     public $tries = 2;
     public $backoff = [5, 10, 20];
+
+    /**
+     * ترتيب دورة حياة الرسالة في واتساب. الـ webhooks لا تصل مرتّبة والوظائف
+     * تُعالَج بالتوازي، فبدون حارس قد يكتب بلاغ delivered متأخّر فوق read
+     * ويُنقص عدّاد «تمت القراءة» في الحملات.
+     */
+    private const STATUS_LADDER = ['accepted', 'sent', 'delivered', 'read', 'played'];
+
+    private const LADDER_SQL = "FIELD(status, 'accepted', 'sent', 'delivered', 'read', 'played')";
+
+    /** حالات تعني أن الرسالة وصلت فعلاً، فلا يصحّ أن يكتب فوقها بلاغ فشل متأخّر. */
+    private const DELIVERED_SQL = "FIELD(status, 'delivered', 'read', 'played')";
 
     protected $statuses;
     protected $organizationId;
@@ -54,15 +67,17 @@ class ProcessMessageStatusJob implements ShouldQueue
                     ->first($columns);
 
                 if ($chat) {
-                    Chat::whereKey($chat->id)->update(['status' => $statusValue]);
+                    $applied = $this->applyStatus($chat->id, $statusValue);
 
+                    // نسجّل كل بلاغ يصل حتى لو لم نطبّقه، فالسجل هو مرجع التدقيق.
                     ChatStatusLog::create([
                         'chat_id' => $chat->id,
                         'metadata' => json_encode($status),
                         'created_at' => $now,
                     ]);
 
-                    $chatLog = $chat->chatLog;
+                    // لا نبثّ حالة أقدم من المخزّنة حتى لا تتراجع الواجهة أيضاً.
+                    $chatLog = $applied ? $chat->chatLog : null;
                     if ($chatLog) {
                         $chatArray = [[
                             'type' => 'chat',
@@ -70,6 +85,14 @@ class ProcessMessageStatusJob implements ShouldQueue
                             'tempMessageId' => $status['id'],
                         ]];
                         event(new NewChatEvent($chatArray, $this->organizationId, false, true));
+                    }
+
+                    if ($applied && $statusValue === 'failed') {
+                        // بلاغ الفشل المتأخّر هو مصدر ٩٩٪ من فشل الحملات؛ بدون هذا
+                        // النداء يبقى campaign_logs على "success" فلا يراه زر إعادة
+                        // الإرسال ولا تُجدوَل له إعادة محاولة تلقائية.
+                        app(CampaignRetryService::class)
+                            ->handleWebhookFailure($chat->id, $status['errors'] ?? []);
                     }
 
                     if (
@@ -96,5 +119,27 @@ class ProcessMessageStatusJob implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    /**
+     * تحديث حالة الرسالة دون التراجع للخلف. الشرط داخل جملة UPDATE نفسها
+     * ليكون ذرّياً بين العمّال المتوازين لا مجرد فحص قبل الكتابة.
+     *
+     * @return bool هل تغيّرت الحالة فعلاً
+     */
+    private function applyStatus(int $chatId, string $statusValue): bool
+    {
+        $query = Chat::whereKey($chatId);
+
+        $rank = array_search($statusValue, self::STATUS_LADDER, true);
+        if ($rank !== false) {
+            // نتقدّم للأمام فقط. الرسالة الفاشلة تُستثنى (FIELD ترجع 0) لأن
+            // إعادة إرسال الوسائط تعيد استخدام نفس الصف وتستحق حالة جديدة.
+            $query->whereRaw(self::LADDER_SQL . ' < ?', [$rank + 1]);
+        } elseif ($statusValue === 'failed') {
+            $query->whereRaw(self::DELIVERED_SQL . ' = 0');
+        }
+
+        return $query->update(['status' => $statusValue]) > 0;
     }
 }

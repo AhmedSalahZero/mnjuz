@@ -34,28 +34,94 @@ class Contact extends Model
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 
+    /**
+     * توحيد نص البحث قبل استخدامه في أي واجهة (ويب أو موبايل):
+     * حذف محارف التحكم بالاتجاه التي تلتصق بالنص عند النسخ في واجهة عربية،
+     * وتحويل الأرقام العربية/الفارسية إلى لاتينية، وقصّ المسافات الطرفية.
+     */
+    public static function normalizeSearchTerm(?string $term): string
+    {
+        if ($term === null) {
+            return '';
+        }
+
+        $stripped = preg_replace(
+            '/[\x{200B}-\x{200F}\x{061C}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{00A0}]/u',
+            '',
+            $term
+        );
+        $term = $stripped ?? $term;
+
+        return trim(str_replace(
+            ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'],
+            ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+            $term
+        ));
+    }
+
+    /**
+     * بحث موحّد لجهات الاتصال يستخدمه الويب والموبايل معاً.
+     * نميّز بين البحث برقم الهاتف والبحث بالاسم/البريد لتفادي النتائج غير الدقيقة:
+     * - إذا كان النص أرقاماً (مع رموز الهاتف + ( ) - ومسافات فقط) نبحث في phone
+     *   و formatted_phone بعد تجريد الرموز من الطرفين، فلا تظهر أسماء لا علاقة لها.
+     * - غير ذلك نبحث في الاسم والبريد فقط.
+     */
+    public function scopeSearchTerm(Builder $query, ?string $searchTerm): Builder
+    {
+        $searchTerm = self::normalizeSearchTerm($searchTerm);
+        if ($searchTerm === '') {
+            return $query;
+        }
+
+        $digits = preg_replace('/\D+/', '', $searchTerm);
+        $isPhoneSearch = $digits !== '' && preg_replace('/[\s()+\-]/', '', $searchTerm) === $digits;
+
+        return $query->where(function ($q) use ($searchTerm, $digits, $isPhoneSearch) {
+            if ($isPhoneSearch) {
+                $stripPhone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(%s, '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')";
+                foreach (self::phoneSearchNeedles($digits) as $needle) {
+                    $like = "%{$needle}%";
+                    $q->orWhereRaw(sprintf($stripPhone, 'contacts.phone') . ' LIKE ?', [$like])
+                      ->orWhereRaw(sprintf($stripPhone, "COALESCE(contacts.formatted_phone, '')") . ' LIKE ?', [$like]);
+                }
+
+                return;
+            }
+
+            $q->where('contacts.first_name', 'like', "%{$searchTerm}%")
+              ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
+              ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
+              ->orWhereRaw(
+                  "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
+                  ["%{$searchTerm}%"]
+              );
+        });
+    }
+
+    /**
+     * صيغ الرقم التي نجرّبها: الرقم كما أُدخل، وبدونه الأصفار البادئة — لأن
+     * المستخدم قد يكتب 0535959959 أو 00966535959959 بينما المخزَّن +966535959959.
+     *
+     * @return array<int, string>
+     */
+    private static function phoneSearchNeedles(string $digits): array
+    {
+        $needles = [$digits];
+
+        $withoutLeadingZeros = ltrim($digits, '0');
+        if ($withoutLeadingZeros !== $digits && strlen($withoutLeadingZeros) >= 5) {
+            $needles[] = $withoutLeadingZeros;
+        }
+
+        return $needles;
+    }
+
     public function getAllContacts($organizationId, $searchTerm)
     {
         return $this->with('contactGroups')
             ->where('organization_id', $organizationId)
             ->where('deleted_at', null)
-            ->where(function ($query) use ($searchTerm) {
-                $query->where('contacts.first_name', 'like', '%' . $searchTerm . '%')
-                ->orWhere('contacts.last_name', 'like', '%' . $searchTerm . '%')
-                
-                // Split the search term into parts and check for matches in both columns
-                ->orWhere(function ($subQuery) use ($searchTerm) {
-                    $searchParts = explode(' ', $searchTerm);
-                    if (count($searchParts) > 1) {
-                        $subQuery->where('contacts.first_name', 'like', '%' . $searchParts[0] . '%')
-                                ->where('contacts.last_name', 'like', '%' . $searchParts[1] . '%');
-                    }
-                })
-                
-                // Match phone or email
-                ->orWhere('contacts.phone', 'like', '%' . $searchTerm . '%')
-                ->orWhere('contacts.email', 'like', '%' . $searchTerm . '%');
-            })
+            ->searchTerm($searchTerm)
             ->orderByDesc('is_favorite')
             ->latest()
             ->orderBy('id')
@@ -241,33 +307,8 @@ class Contact extends Model
             }
         }
 
-        // ✅ البحث - محسّن
-        // نميّز بين البحث برقم الهاتف والبحث بالاسم/البريد لتفادي النتائج غير الدقيقة:
-        // - إذا كان النص أرقاماً (مع رموز الهاتف + ( ) - ومسافات فقط) نبحث في أعمدة
-        //   الهاتف بعد تجريد الرموز من الطرفين، فلا تظهر أسماء/إيميلات لا علاقة لها.
-        // - غير ذلك نبحث في الاسم والبريد فقط.
-        if ($searchTerm) {
-            $searchTerm = trim($searchTerm);
-            $digits = preg_replace('/\D+/', '', $searchTerm);
-            $isPhoneSearch = $digits !== '' && preg_replace('/[\s()+\-]/', '', $searchTerm) === $digits;
-
-            $query->where(function ($q) use ($searchTerm, $digits, $isPhoneSearch) {
-                if ($isPhoneSearch) {
-                    $stripPhone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(%s, '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')";
-                    $like = "%{$digits}%";
-                    $q->whereRaw(sprintf($stripPhone, 'contacts.phone') . ' LIKE ?', [$like])
-                      ->orWhereRaw(sprintf($stripPhone, "COALESCE(contacts.formatted_phone, '')") . ' LIKE ?', [$like]);
-                } else {
-                    $q->where('contacts.first_name', 'like', "%{$searchTerm}%")
-                      ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
-                      ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
-                      ->orWhereRaw(
-                          "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
-                          ["%{$searchTerm}%"]
-                      );
-                }
-            });
-        }
+        // ✅ البحث - محسّن (نفس المنطق المستخدم في الموبايل عبر scopeSearchTerm)
+        $query->searchTerm($searchTerm);
 
         // ✅ الترتيب باستخدام العمود الموجود
         $query->orderBy('contacts.latest_chat_created_at', $sortDirection)

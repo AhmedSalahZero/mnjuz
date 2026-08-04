@@ -259,8 +259,10 @@
 							<div class="w-[40%] justify-end">
 								<div class="flex space-x-2">
 									<FormInput v-for="(interval, index) in form2.resend_intervals"
-										v-model.number="form2.resend_intervals[index]" :error="''" :name="''"
-										:type="'number'" :min="'1'" :class="'w-24'" />
+										:key="index"
+										v-model.number="form2.resend_intervals[index]"
+										:error="form2.errors[`resend_intervals.${index}`]" :name="''"
+										:type="'number'" :min="'1'" :max="'168'" :class="'w-24'" />
 								</div>
 							</div>
 						</div>

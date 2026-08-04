@@ -39,7 +39,9 @@ class StoreProfileAddress extends FormRequest
             'enable_campaign_resend' => 'boolean',
             'move_failed_contacts_to_group' => 'boolean',
             'resend_intervals' => 'nullable|array',
-            'resend_intervals.*' => 'integer|min:1|max:24',
+            // حتى أسبوع لكل فترة: أشهر أسباب الفشل (131042 مشكلة الدفع) قد تستغرق
+            // أياماً حتى تُحل، فحدّ الـ24 ساعة السابق كان يرفض قيماً مشروعة مثل 48.
+            'resend_intervals.*' => 'integer|min:1|max:168',
             'failed_campaign_group' => 'required_if:move_failed_contacts_to_group,true|nullable|exists:contact_groups,uuid',
             'support_ticket_form_url' => 'nullable|url|max:2048',
         ];

@@ -8,6 +8,7 @@
         placeholder: String,
         type: String,
         min: Number,
+        max: Number,
         className: String,
         labelClass: String,
         required: Boolean,
@@ -68,6 +69,7 @@
                 @input="updateValue"
                 :step="'any'"
                 :min="min"
+                :max="max"
                 :placeholder="placeholder"
                 :disabled="disabled"
                 :required="required"

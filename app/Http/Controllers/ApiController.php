@@ -83,18 +83,7 @@ class ApiController extends Controller
 
         $contacts = Contact::where('organization_id', $organizationId)
             ->with(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color'])
-            ->when($searchTerm !== null && $searchTerm !== '', function ($q) use ($searchTerm) {
-                $q->where(function ($sub) use ($searchTerm) {
-                    $sub->where('contacts.first_name', 'like', "%{$searchTerm}%")
-                        ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
-                        ->orWhere('contacts.phone', 'like', "%{$searchTerm}%")
-                        ->orWhere('contacts.email', 'like', "%{$searchTerm}%")
-                        ->orWhereRaw(
-                            "CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?",
-                            ["%{$searchTerm}%"]
-                        );
-                });
-            })
+            ->searchTerm($searchTerm)
             ->orderByDesc('id')
             ->paginate($perPage, ['*'], 'page', $page);
         return ContactResource::collection($contacts);

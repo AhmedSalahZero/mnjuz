@@ -13,6 +13,22 @@ use Throwable;
 
 class CampaignRetryService
 {
+    /**
+     * أكواد فشل واتساب النهائية على مستوى المستلم: إعادة إرسال نفس القالب لنفس
+     * الرقم لن تنجح أبداً، فإعادة المحاولة تهدر رصيد الإرسال وتضرّ تقييم الجودة.
+     * أكواد الحساب المؤقتة (131042 مشكلة الدفع، 131048، 131049، 131053) تبقى
+     * قابلة لإعادة المحاولة لأنها تُحل مع الوقت — وهي سبب وجود الميزة أصلاً.
+     */
+    private const NON_RETRYABLE_ERROR_CODES = [
+        131026, // Message undeliverable — الرقم ليس على واتساب
+        131050, // المستلم اختار عدم استقبال الرسائل من هذا الحساب
+        131047, // Re-engagement message — خارج نافذة الـ24 ساعة
+        130472, // User's number is part of an experiment
+    ];
+
+    /** نافذة نشر إعادة المحاولات (ثوانٍ) لتفادي انطلاقها كلها في نفس اللحظة. */
+    private const RETRY_SPREAD_SECONDS = 900;
+
     public function getCampaignRetrySettings(Campaign $campaign): array
     {
         $campaign = Campaign::with('organization')->find($campaign->id);
@@ -68,6 +84,77 @@ class CampaignRetryService
     }
 
     /**
+     * هل هذا الفشل مؤقت ويستحق إعادة المحاولة؟
+     *
+     * @param  array<int, array<string, mixed>>  $errors  مصفوفة errors كما تصل من webhook واتساب
+     */
+    public function isRetryableFailure(array $errors): bool
+    {
+        foreach ($errors as $error) {
+            $code = (int) ($error['code'] ?? 0);
+            if (in_array($code, self::NON_RETRYABLE_ERROR_CODES, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * يعالج بلاغ الفشل الذي يصل من webhook واتساب بعد قبول الطلب بنجاح.
+     *
+     * هذا هو المسار الذي يمثّل ٩٩٪ من فشل الحملات فعلياً: الطلب يُقبل فيُسجَّل
+     * campaign_logs.status = success، ثم يصل بلاغ الفشل لاحقاً فيُحدَّث chats.status
+     * وحده. بدون هذه الدالة يبقى السجل "success" فلا يراه زر إعادة الإرسال ولا
+     * تُجدوَل له إعادة محاولة تلقائية.
+     *
+     * الفشل النهائي (رقم غير مسجّل، مستلم رافض) لا يُعلَّم كـ failed: يبقى ظاهراً
+     * للعميل ضمن عدّاد الفاشل عبر chats.status، لكنه لا يدخل دورة إعادة الإرسال.
+     *
+     * @param  array<int, array<string, mixed>>  $errors
+     */
+    public function handleWebhookFailure(int $chatId, array $errors = []): void
+    {
+        if (!$this->isRetryableFailure($errors)) {
+            return;
+        }
+
+        $log = CampaignLog::with('campaign.organization')
+            ->where('chat_id', $chatId)
+            ->first();
+
+        // ليست رسالة حملة، أو عولجت بالفعل، أو الحملة محذوفة.
+        // Campaign لا يستخدم SoftDeletes فلا يوجد scope يحجب المحذوفة تلقائياً.
+        if (!$log || !$log->campaign || $log->status === 'failed') {
+            return;
+        }
+
+        if ($log->campaign->getRawOriginal('deleted_at') !== null) {
+            return;
+        }
+
+        $log->status = 'failed';
+        $log->save();
+
+        $settings = $this->getCampaignRetrySettings($log->campaign);
+        if (!$settings['enabled'] || $settings['max_retries'] <= 0) {
+            return;
+        }
+
+        // بلاغ الفشل يصل غالباً بعد أن تُغلق الحملة، و scheduleNextRetry يشترط
+        // أن تكون الحملة ongoing — فنعيد فتحها كما يفعل زر إعادة الإرسال اليدوي.
+        if ($log->campaign->status === 'completed') {
+            $log->campaign->status = 'ongoing';
+            $log->campaign->save();
+            $log->setRelation('campaign', $log->campaign->fresh());
+        }
+
+        if (!$this->scheduleNextRetry($log)) {
+            $this->moveContactToFailedGroup($log);
+        }
+    }
+
+    /**
      * Schedule the next retry attempt for a failed campaign log.
      *
      * Uses ->afterCommit() because the queue connection is non-transactional
@@ -100,9 +187,14 @@ class CampaignRetryService
             return false;
         }
 
+        // حملة فيها آلاف الرسائل الفاشلة تُجدول آلاف الإعادات على نفس اللحظة،
+        // فتنطلق دفعة واحدة وتضرّ تقييم جودة الرقم. ننشرها على نافذة قصيرة
+        // بمعرّف السجل (موزّع بالتساوي وثابت، فلا يتغيّر عند إعادة الجدولة).
+        $spreadSeconds = $log->id % self::RETRY_SPREAD_SECONDS;
+
         RetryCampaignLogJob::dispatch($log->campaign->organization_id, $log->id, $retryCount)
             ->onQueue('campaign-messages')
-            ->delay(now()->addHours($delayHours))
+            ->delay(now()->addHours($delayHours)->addSeconds($spreadSeconds))
             ->afterCommit();
 
         return true;

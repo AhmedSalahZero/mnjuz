@@ -92,11 +92,18 @@ class StoreContactRequest extends FormRequest
      */
     protected function failedValidation(Validator $validator)
     {
+        // نعرض سبب الرفض الفعلي (مثل «رقم الهاتف موجود مسبقًا») بدل رسالة عامة،
+        // لأن الموبايل يعرض حقل message وحده. نفس شكل duplicateContactPhoneResponse.
+        $errors = $validator->errors();
+        $message = $errors->first() ?: __('The given data was invalid.', [], getApiLang());
+
         throw new HttpResponseException(
             response()->json([
                 'statusCode' => 400,
-                'message' => __('The given data was invalid.', [], getApiLang()),
-                'errors' => $validator->errors()
+                'success' => false,
+                'data' => [],
+                'message' => $message,
+                'errors' => $errors,
             ], 400)
         );
     }

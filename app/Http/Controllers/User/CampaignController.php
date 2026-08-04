@@ -160,8 +160,12 @@ class CampaignController extends BaseController
     {
         $organizationId = session()->get('current_organization');
 
+        // نقتصر على الحملات التي يمكن أن تُستأنف فعلاً. الحملة المجدولة مثلاً لا
+        // يلتقطها ProcessCampaignMessagesJob (يشترط ongoing)، فإعادة سجلّاتها إلى
+        // pending كانت تتركها عالقة بلا إرسال ولا رسالة فشل.
         $campaignIds = Campaign::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
+            ->whereIn('status', ['completed', 'ongoing'])
             ->pluck('id');
 
         if ($campaignIds->isEmpty()) {
