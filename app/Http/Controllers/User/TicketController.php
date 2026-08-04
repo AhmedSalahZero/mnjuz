@@ -12,6 +12,7 @@ use App\Http\Requests\StoreTicketPriority;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Ticket;
+use App\Models\TicketCategory;
 use App\Models\TicketComment;
 use App\Services\TicketService;
 use App\Services\WazSyncService;
@@ -30,7 +31,7 @@ class TicketController extends BaseController
         $this->ticketService = $ticketService;
     }
 
-    public function index(Request $request, $uuid = null){
+    public function index(Request $request, WazSyncService $waz, $uuid = null){
         if($uuid === null){
             $defaultUrl = 'https://business.waz.com.sa/forms/ticket?col=col-md-8+col-md-offset-2';
             $ticketFormUrl = null;
@@ -52,10 +53,30 @@ class TicketController extends BaseController
                     : $defaultUrl;
             }
 
+            // تذاكر واز هي المعروضة: هناك يعمل فريق الدعم فعلاً، فهي مصدر
+            // الحقيقة للحالة والردود. النموذج الخارجي (iframe) لم يعد لازماً
+            // لأن الإنشاء صار من داخل التطبيق.
+            $wazTickets = [];
+            $wazAvailable = $waz->enabled() && $waz->companyId((int) $organizationId) !== null;
+            if ($wazAvailable) {
+                try {
+                    $wazTickets = $waz->ticketsFor((int) $organizationId);
+                } catch (WazBusinessException $e) {
+                    $wazAvailable = false;
+                    Log::error('Waz: failed to load support tickets', [
+                        'organization_id' => $organizationId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             return Inertia::render('User/Support/Index', [
                 'title' => __('Support'),
                 'allowCreate' => true,
                 'ticketFormUrl' => $ticketFormUrl,
+                'wazTickets' => $wazTickets,
+                'wazAvailable' => $wazAvailable,
+                'categories' => TicketCategory::orderBy('name')->get(['id', 'name']),
                 'rows' => TicketResource::collection(
                     Ticket::where('user_id', auth()->user()->id)
                         ->latest()->paginate(10)

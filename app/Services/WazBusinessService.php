@@ -254,27 +254,46 @@ class WazBusinessService
      *
      * @throws WazBusinessException
      */
-    public function updateCompany(int $companyId, array $data): void
+    public function updateCompany(int $companyId, array $changes): void
     {
-        // تحذير مهم: توثيق Postman يوثّق التحديث كـ POST على /api/customers/:id،
-        // لكن المنصة تتجاهل :id وتُمرّر الطلب لمعالج الإنشاء فتُنشئ عميلاً
-        // مكرّراً وترد "Client add successful". لذلك لا نستخدم POST هنا إطلاقاً:
-        // عميل مكرّر في نظام الفوترة أسوأ بكثير من ميزة غير متاحة.
-        //
-        // نستعمل PUT وهو الدلالة الصحيحة؛ المنصة حالياً ترد عليه 406
-        // "Data Not Acceptable OR Not Provided" مهما كانت الحمولة (جرّبنا body
-        // خام و_method override وquery string). فور إصلاحه لديهم يعمل هذا
-        // الكود بلا تعديل.
-        $response = $this->request()->put($this->url('/api/customers/' . $companyId), $this->companyPayload($data));
+        // التعديل يختلف عن الإنشاء في أمرين تفرضهما المنصة:
+        //  1. الجسم RAW JSON لا form-data (الأخير يردّ 406).
+        //  2. تُرسَل الحقول المتغيّرة فقط — ما لا يُرسَل يبقى كما هو.
+        // ولا نستخدم POST على /api/customers/:id إطلاقاً: المنصة تتجاهل :id
+        // وتُمرّره لمعالج الإنشاء فتُنتج عميلاً مكرّراً وتقول "add successful".
+        $payload = $this->companyChangesPayload($changes);
+
+        if (!$payload) {
+            return;
+        }
+
+        if (!$this->isConfigured()) {
+            throw new WazBusinessException('Waz Business API token is not configured.');
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'authtoken' => (string) config('waz.token'),
+                'Content-Type' => 'application/json',
+            ])
+                ->timeout((int) config('waz.timeout', 15))
+                ->withBody(json_encode($payload, JSON_UNESCAPED_UNICODE), 'application/json')
+                ->put($this->url('/api/customers/' . $companyId));
+        } catch (Throwable $e) {
+            Log::error('Waz: company update request failed', [
+                'company_id' => $companyId,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw new WazBusinessException('Could not reach Waz Business: ' . $e->getMessage(), 0, $e);
+        }
 
         $body = $response->json();
-        $rejected = !$response->successful()
-            || (is_array($body) && array_key_exists('status', $body)
-                && !filter_var($body['status'], FILTER_VALIDATE_BOOLEAN));
 
-        if ($rejected) {
+        if (!$response->successful() || (is_array($body) && ($body['status'] ?? null) === false)) {
             Log::error('Waz: company update rejected', [
                 'company_id' => $companyId,
+                'fields' => array_keys($payload),
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
@@ -284,6 +303,59 @@ class WazBusinessService
                     ?? ('Waz Business rejected the company update (HTTP ' . $response->status() . ').')
             );
         }
+    }
+
+    /**
+     * تحويل الحقول المتغيّرة إلى أسماء المنصة — بلا أي حقل لم يُمرَّر.
+     *
+     * العنوان يُرسَل معه عنوانا الفوترة والشحن لأنهما مرآته عندنا؛ ولو لم
+     * نُحدّثهما لبقيت الفاتورة تحمل العنوان القديم.
+     *
+     * @param  array<string, mixed>  $changes
+     * @return array<string, string>
+     */
+    private function companyChangesPayload(array $changes): array
+    {
+        $defaults = config('waz.defaults');
+        $payload = [];
+
+        $direct = [
+            'company' => 'company',
+            'phone' => 'phonenumber',
+            'website' => 'website',
+        ];
+        foreach ($direct as $key => $field) {
+            if (array_key_exists($key, $changes)) {
+                $payload[$field] = (string) $changes[$key];
+            }
+        }
+
+        // كل جزء من العنوان ينعكس على الحقل الرئيسي والفوترة والشحن.
+        $address = [
+            'street' => ['address', 'billing_street', 'shipping_street'],
+            'city' => ['city', 'billing_city', 'shipping_city'],
+            'state' => ['state', 'billing_state', 'shipping_state'],
+            'zip' => ['zip', 'billing_zip', 'shipping_zip'],
+            'country_id' => ['country', 'billing_country', 'shipping_country'],
+        ];
+        foreach ($address as $key => $fields) {
+            if (array_key_exists($key, $changes)) {
+                foreach ($fields as $field) {
+                    $payload[$field] = (string) $changes[$key];
+                }
+            }
+        }
+
+        if (array_key_exists('vat', $changes)) {
+            $payload['vat'] = (string) $changes['vat'];
+            $payload['custom_fields[customers][' . $defaults['vat_custom_field'] . ']'] = (string) $changes['vat'];
+        }
+
+        if (array_key_exists('language', $changes)) {
+            $payload['default_language'] = $this->language($changes['language']);
+        }
+
+        return $payload;
     }
 
     /**

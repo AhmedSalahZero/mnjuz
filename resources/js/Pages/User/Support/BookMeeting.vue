@@ -41,6 +41,30 @@
                         {{ form.processing ? $t('Please wait') : $t('Send request') }}
                     </button>
                 </form>
+
+                <!-- المواعيد المحجوزة لهذه المنشأة وحدها -->
+                <div v-if="props.available" class="mt-8">
+                    <h2 class="text-sm font-bold text-gray-900 mb-3">{{ $t('Your meetings') }}</h2>
+                    <div class="bg-white border border-slate-200 rounded-lg divide-y">
+                        <div v-for="meeting in props.rows" :key="meeting.id"
+                            class="flex items-start gap-3 px-4 py-3">
+                            <span class="mt-1.5 h-2.5 w-2.5 rounded-full flex-shrink-0"
+                                :style="{ backgroundColor: meeting.color }"></span>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-gray-900 truncate">{{ meeting.title }}</div>
+                                <div class="text-xs text-slate-500">{{ meeting.start }}</div>
+                            </div>
+                            <button type="button" @click="cancel(meeting)"
+                                class="text-xs font-bold text-red-700 hover:underline flex-shrink-0">
+                                {{ $t('Cancel') }}
+                            </button>
+                        </div>
+                        <div v-if="!props.rows || props.rows.length === 0"
+                            class="px-4 py-8 text-center text-slate-400 text-sm">
+                            {{ $t('No data available.') }}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </AppLayout>
@@ -50,12 +74,16 @@
 import AppLayout from '../Layout/App.vue'
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
-import { useForm } from '@inertiajs/vue3'
+import { router, useForm } from '@inertiajs/vue3'
 import { computed } from 'vue'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 
 const props = defineProps({
     reasons: { type: Array, default: () => [] },
     available: { type: Boolean, default: false },
+    rows: { type: Array, default: () => [] },
 })
 
 const form = useForm({
@@ -74,4 +102,11 @@ const minStart = computed(() => {
 })
 
 const submit = () => form.post('/support/meetings', { preserveScroll: true })
+
+const cancel = (meeting) => {
+    if (!confirm(trans('Are you sure you want to cancel this meeting?'))) {
+        return
+    }
+    router.delete(`/support/meetings/${meeting.id}`, { preserveScroll: true })
+}
 </script>

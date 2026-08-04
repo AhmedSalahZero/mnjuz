@@ -46,11 +46,39 @@ class WazPortalController extends BaseController
 
     public function meetings(WazSyncService $waz)
     {
+        $organizationId = (int) session('current_organization');
+        $available = $waz->enabled() && $waz->companyId($organizationId) !== null;
+
+        $rows = [];
+        if ($available) {
+            try {
+                $rows = $waz->meetingsFor($organizationId);
+            } catch (WazBusinessException $e) {
+                Log::error('Waz: failed to load meetings', [
+                    'organization_id' => $organizationId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return Inertia::render('User/Support/BookMeeting', [
             'title' => __('Book a meeting'),
             'reasons' => $this->meetingReasons(),
-            'available' => $waz->enabled() && $waz->companyId((int) session('current_organization')) !== null,
+            'available' => $available,
+            'rows' => $rows,
         ]);
+    }
+
+    /**
+     * إلغاء موعد. الخدمة تتحقق من ملكيته للمنشأة قبل الحذف.
+     */
+    public function cancelMeeting(int $meetingId, WazSyncService $waz)
+    {
+        $cancelled = $waz->cancelMeeting((int) session('current_organization'), $meetingId);
+
+        return Redirect::back()->with('status', $cancelled
+            ? ['type' => 'success', 'message' => __('The meeting was cancelled.')]
+            : ['type' => 'error', 'message' => __('We could not cancel this meeting.')]);
     }
 
     public function bookMeeting(BookMeetingRequest $request, WazSyncService $sync, WazBusinessService $waz)

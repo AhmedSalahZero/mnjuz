@@ -1323,5 +1323,16 @@
     "Your meeting request was sent successfully.": "Your meeting request was sent successfully.",
     "We could not load your invoices right now.": "We could not load your invoices right now.",
     "Your ticket was saved, but syncing it with support is delayed.": "Your ticket was saved, but syncing it with support is delayed.",
-    "Select option": "Select option"
+    "Select option": "Select option",
+    "Your changes were saved, but updating them on the billing platform is delayed.": "Your changes were saved, but updating them on the billing platform is delayed.",
+    "Your meetings": "Your meetings",
+    "Are you sure you want to cancel this meeting?": "Are you sure you want to cancel this meeting?",
+    "The meeting was cancelled.": "The meeting was cancelled.",
+    "We could not cancel this meeting.": "We could not cancel this meeting.",
+    "Department": "Department",
+    "Accounting": "Accounting",
+    "Sales": "Sales",
+    "In progress": "In progress",
+    "Answered": "Answered",
+    "On hold": "On hold"
 }

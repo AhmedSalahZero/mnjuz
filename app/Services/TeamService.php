@@ -6,6 +6,7 @@ use App\Helpers\Email;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Services\WazSyncService;
 use Auth;
 use DB;
 use Illuminate\Support\Carbon;
@@ -119,6 +120,26 @@ class TeamService
             ]);
     }
 
+    /**
+     * هل ما زال المستخدم عضواً في منظمة أخرى مربوطة بواز؟
+     *
+     * جهة الاتصال واحدة لكل مستخدم في واز، فحذفها لمجرد مغادرته منظمة يقطع
+     * وصوله عن بقية منظماته.
+     */
+    private function belongsToOtherLinkedOrganization(User $user, $excludeOrganizationId): bool
+    {
+        return Team::where('user_id', $user->id)
+            ->where('organization_id', '!=', $excludeOrganizationId)
+            ->whereNull('deleted_at')
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('organizations')
+                    ->whereColumn('organizations.id', 'teams.organization_id')
+                    ->whereNotNull('organizations.waz_company_id');
+            })
+            ->exists();
+    }
+
     public function destroy($uuid)
     {
         $team = Team::where('uuid', $uuid)->first();
@@ -131,11 +152,20 @@ class TeamService
                 ]
             );
         } else {
+            $user = User::find($team->user_id);
+
             Team::where('uuid', $uuid)->where('role', '!=', 'owner')->delete();
+
+            // نحذف جهة اتصاله في واز أعمال أيضاً حتى لا يبقى لمن غادر وصول
+            // لفواتير المنشأة وتذاكرها هناك. لا نحذفها إن كان لا يزال عضواً
+            // في منظمة أخرى مربوطة، فجهة الاتصال واحدة لكل مستخدم.
+            if ($user && $user->waz_contact_id && !$this->belongsToOtherLinkedOrganization($user, $team->organization_id)) {
+                app(WazSyncService::class)->removeContact($user);
+            }
 
             return Redirect::back()->with(
                 'status', [
-                    'type' => 'success', 
+                    'type' => 'success',
                     'message' => __('Row deleted successfully!')
                 ]
             );

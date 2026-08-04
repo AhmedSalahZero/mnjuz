@@ -262,6 +262,88 @@ class WazSyncService
     }
 
     /**
+     * مواعيد المنشأة وحدها.
+     *
+     * تنبيه أمني: `GET /api/calendar/` يرجع مواعيد **كل** العملاء بلا تصفية،
+     * فلا يجوز عرض ناتجه كما هو. نصفّي بـ userid قبل أي عرض.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function meetingsFor(int $organizationId): array
+    {
+        $companyId = $this->companyId($organizationId);
+        if (!$companyId) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($this->waz->listMeetings() as $meeting) {
+            if (!is_array($meeting) || (int) ($meeting['userid'] ?? 0) !== $companyId) {
+                continue;
+            }
+
+            $rows[] = [
+                'id' => $meeting['eventid'] ?? null,
+                'title' => $meeting['title'] ?? null,
+                'description' => $meeting['description'] ?? null,
+                'start' => $meeting['start'] ?? null,
+                'color' => $meeting['color'] ?? null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * إلغاء موعد بعد التأكد أنه يخصّ هذه المنشأة.
+     *
+     * المنصة تحذف بالمعرّف بلا فحص ملكية، فالتحقق مسؤوليتنا — وإلا أمكن
+     * لعميل إلغاء موعد عميل آخر بتخمين الرقم.
+     */
+    public function cancelMeeting(int $organizationId, int $meetingId): bool
+    {
+        $owned = false;
+        foreach ($this->meetingsFor($organizationId) as $meeting) {
+            if ((int) $meeting['id'] === $meetingId) {
+                $owned = true;
+                break;
+            }
+        }
+
+        if (!$owned) {
+            Log::warning('Waz sync: refused to cancel a meeting that does not belong to the organization', [
+                'organization_id' => $organizationId,
+                'meeting_id' => $meetingId,
+            ]);
+
+            return false;
+        }
+
+        return $this->waz->deleteMeeting($meetingId);
+    }
+
+    /**
+     * حذف جهة اتصال المستخدم من واز عند مغادرته المنشأة أو حذف حسابه.
+     *
+     * لا يرمي: إزالة العضو نجحت عندنا فعلاً، وفشل التنظيف في منصة خارجية
+     * لا يصحّ أن يُبطلها.
+     */
+    public function removeContact(User $user): bool
+    {
+        if (!$user->waz_contact_id || !$this->enabled()) {
+            return false;
+        }
+
+        $deleted = $this->waz->deleteContact((int) $user->waz_contact_id);
+
+        if ($deleted) {
+            $user->forceFill(['waz_contact_id' => null])->save();
+        }
+
+        return $deleted;
+    }
+
+    /**
      * عنوان الفوترة المحفوظ للمنشأة، بالشكل الذي تتوقعه المنصة.
      *
      * @return array<string, string>

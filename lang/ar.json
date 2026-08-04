@@ -1489,5 +1489,16 @@
     "We could not book your meeting right now. Please try again shortly.": "تعذّر حجز موعدك الآن. يرجى المحاولة بعد قليل.",
     "Your meeting request was sent successfully.": "تم إرسال طلب الاجتماع بنجاح.",
     "We could not load your invoices right now.": "تعذّر تحميل فواتيرك الآن.",
-    "Your ticket was saved, but syncing it with support is delayed.": "حُفظت تذكرتك، لكن مزامنتها مع الدعم متأخرة."
+    "Your ticket was saved, but syncing it with support is delayed.": "حُفظت تذكرتك، لكن مزامنتها مع الدعم متأخرة.",
+    "Your changes were saved, but updating them on the billing platform is delayed.": "حُفظت تعديلاتك، لكن تحديثها في منصة الفوترة متأخر.",
+    "Your meetings": "مواعيدك",
+    "Are you sure you want to cancel this meeting?": "هل أنت متأكد من إلغاء هذا الموعد؟",
+    "The meeting was cancelled.": "تم إلغاء الموعد.",
+    "We could not cancel this meeting.": "تعذّر إلغاء هذا الموعد.",
+    "Department": "القسم",
+    "Accounting": "المحاسبة",
+    "Sales": "المبيعات",
+    "In progress": "قيد المعالجة",
+    "Answered": "تم الرد",
+    "On hold": "معلّقة"
 }

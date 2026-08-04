@@ -8,8 +8,11 @@ use App\Http\Requests\StoreProfileAddress;
 use App\Http\Requests\StoreProfilePassword;
 use App\Http\Requests\StoreProfileTfa;
 use App\Http\Requests\Verification\UpdateVerificationSettingRequest;
+use App\Exceptions\WazBusinessException;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\WazBusinessService;
+use Illuminate\Support\Facades\Log;
 use DB;
 use Hash;
 use Illuminate\Http\Request;
@@ -171,16 +174,23 @@ class ProfileController extends BaseController
         $addressArray['zip'] = $request->input('zip');
         $addressArray['country'] = $request->input('country');
 
+        // نلتقط الحالة قبل الحفظ لنعرف ما تغيّر فعلاً — واز تقبل التعديل
+        // الجزئي، فلا نرسل حقولاً لم يمسّها المستخدم.
+        $wazChanges = $this->wazCompanyChanges($organizationConfig, $request->input('organization_name'), $addressArray);
+
         $organizationConfig->name = $request->input('organization_name');
         $organizationConfig->address = json_encode($addressArray);
         $organizationConfig->metadata = json_encode($metadataArray);
 
         if($organizationConfig->save()){
+            // المزامنة بعد الحفظ المحلي: بياناتنا هي المصدر، وتعذّر الوصول
+            // لواز لا يمنع العميل من تعديل إعداداته.
+            $synced = $this->syncCompanyChanges($organizationConfig, $wazChanges);
+
             return Redirect::back()->with(
-                'status', [
-                    'type' => 'success', 
-                    'message' => __('Organization updated successfully!')
-                ]
+                'status', $synced
+                    ? ['type' => 'success', 'message' => __('Organization updated successfully!')]
+                    : ['type' => 'warning', 'message' => __('Your changes were saved, but updating them on the billing platform is delayed.')]
             );
         } else {
             return Redirect::back()->with(
@@ -190,5 +200,69 @@ class ProfileController extends BaseController
                 ]
             );
         }
+    }
+
+    /**
+     * الفروق بين بيانات المنشأة المحفوظة وما أُرسل — بمفاتيح WazBusinessService.
+     *
+     * @param  array<string, mixed>  $newAddress
+     * @return array<string, mixed>
+     */
+    private function wazCompanyChanges(Organization $organization, ?string $newName, array $newAddress): array
+    {
+        $old = json_decode((string) $organization->address, true) ?: [];
+        $changes = [];
+
+        if ((string) $organization->name !== (string) $newName) {
+            $changes['company'] = $newName;
+        }
+
+        foreach (['street', 'city', 'state', 'zip'] as $field) {
+            if ((string) ($old[$field] ?? '') !== (string) ($newAddress[$field] ?? '')) {
+                $changes[$field] = $newAddress[$field];
+            }
+        }
+
+        // نموذج الإعدادات يحمل اسم الدولة، وواز تقبل المعرّف الرقمي فقط.
+        if ((string) ($old['country'] ?? '') !== (string) ($newAddress['country'] ?? '')) {
+            $countryId = app(WazBusinessService::class)->countryId($newAddress['country'] ?? null);
+            if ($countryId !== null) {
+                $changes['country_id'] = $countryId;
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * دفع التعديلات إلى واز أعمال. يرجع false عند تعذّر ذلك ليُنبَّه المستخدم.
+     *
+     * @param  array<string, mixed>  $changes
+     */
+    private function syncCompanyChanges(Organization $organization, array $changes): bool
+    {
+        if (!$changes || !$organization->waz_company_id) {
+            return true;
+        }
+
+        $waz = app(WazBusinessService::class);
+        if (!$waz->isConfigured()) {
+            return true;
+        }
+
+        try {
+            $waz->updateCompany((int) $organization->waz_company_id, $changes);
+        } catch (WazBusinessException $e) {
+            Log::error('Waz: failed to sync organization changes', [
+                'organization_id' => $organization->id,
+                'waz_company_id' => $organization->waz_company_id,
+                'fields' => array_keys($changes),
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        return true;
     }
 }

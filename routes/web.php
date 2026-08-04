@@ -225,6 +225,7 @@ Route::middleware(['auth:user'])->group(function () {
                 // تُعرَّف قبل /support/{uuid?} وإلا التقط المسار الديناميكي "meetings".
                 Route::get('/support/meetings', [App\Http\Controllers\User\WazPortalController::class, 'meetings'])->name('waz.meetings');
                 Route::post('/support/meetings', [App\Http\Controllers\User\WazPortalController::class, 'bookMeeting']);
+                Route::delete('/support/meetings/{meetingId}', [App\Http\Controllers\User\WazPortalController::class, 'cancelMeeting'])->whereNumber('meetingId');
                 Route::get('/billing/invoices', [App\Http\Controllers\User\WazPortalController::class, 'invoices'])->name('waz.invoices');
 
                 Route::get('/support/{uuid?}', [App\Http\Controllers\User\TicketController::class, 'index'])->name('support');
