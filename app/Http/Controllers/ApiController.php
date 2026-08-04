@@ -937,12 +937,8 @@ class ApiController extends Controller
         }
 
         //Check if the whatsapp connection exists
-        if (!$this->isWhatsAppConnected($organizationId)) {
-            return response()->json([
-                'statusCode' => 403,
-                'success' => false,
-                'message' => __('Please setup your whatsapp account!'),
-            ], 403);
+        if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
+            return $whatsappError;
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
@@ -1023,12 +1019,8 @@ class ApiController extends Controller
         }
         
         //Check if the whatsapp connection exists
-        if (!$this->isWhatsAppConnected($organizationId)) {
-            return response()->json([
-                'statusCode' => 403,
-                'success' => false,
-                'message' => __('Please setup your whatsapp account!'),
-            ], 403);
+        if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
+            return $whatsappError;
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
@@ -1105,12 +1097,8 @@ class ApiController extends Controller
         }
         
         //Check if the whatsapp connection exists
-        if (!$this->isWhatsAppConnected($organizationId)) {
-            return response()->json([
-                'statusCode' => 403,
-                'success' => false,
-                'message' => __('Please setup your whatsapp account!'),
-            ], 403);
+        if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
+            return $whatsappError;
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
@@ -1240,12 +1228,8 @@ class ApiController extends Controller
         }
 
         //Check if the whatsapp connection exists
-        if (!$this->isWhatsAppConnected($organizationId)) {
-            return response()->json([
-                'statusCode' => 403,
-                'success' => false,
-                'message' => __('Please setup your whatsapp account!'),
-            ], 403);
+        if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
+            return $whatsappError;
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
@@ -1311,12 +1295,8 @@ class ApiController extends Controller
         }
 
         //Check if the whatsapp connection exists
-        if (!$this->isWhatsAppConnected($organizationId)) {
-            return response()->json([
-                'statusCode' => 403,
-                'success' => false,
-                'message' => __('Please setup your whatsapp account!'),
-            ], 403);
+        if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
+            return $whatsappError;
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
@@ -1411,10 +1391,68 @@ class ApiController extends Controller
 
     private function isWhatsAppConnected($organizationId)
     {
-        $settings = Organization::where('id', $organizationId)->first();
-        $metadata = $settings->metadata ? json_decode($settings->metadata, true) : [];
+        return $this->whatsappConnectionError($organizationId) === null;
+    }
 
-        return isset($metadata['whatsapp']);
+    /**
+     * سبب تعذّر الإرسال عبر واتساب، أو null إن كان الربط سليماً.
+     *
+     * كانت الحالات الثلاث ترجع نصاً واحداً «Please setup your whatsapp
+     * account!» فلا يعرف العميل أين الخلل: أهي منشأة خاطئة، أم حساب غير
+     * مربوط، أم ربط ناقص البيانات؟ نُميّزها هنا.
+     *
+     * والفحص السابق كان يكتفي بوجود مفتاح whatsapp، فيمرّ ربط فارغ من
+     * access_token ثم يفشل الإرسال لاحقاً برسالة أغمض من هذه.
+     */
+    private function whatsappConnectionError($organizationId): ?string
+    {
+        $organization = $organizationId ? Organization::find($organizationId) : null;
+
+        if (!$organization) {
+            return __('No active organization was found for your account. Please select an organization and try again.');
+        }
+
+        $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
+        $whatsapp = $metadata['whatsapp'] ?? null;
+
+        if (!is_array($whatsapp) || !$whatsapp) {
+            return __('WhatsApp is not connected for :organization. Connect your WhatsApp Business account from Settings → WhatsApp, then try again.', [
+                'organization' => $organization->name,
+            ]);
+        }
+
+        // بيانات الاعتماد الدنيا لأي نداء إلى واجهة واتساب.
+        $missing = array_values(array_filter(
+            ['access_token', 'phone_number_id', 'waba_id'],
+            fn ($key) => empty($whatsapp[$key])
+        ));
+
+        if ($missing) {
+            return __('The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.', [
+                'organization' => $organization->name,
+                'fields' => implode(', ', $missing),
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
+     * ردّ جاهز عند تعذّر الإرسال، أو null إن كان الربط سليماً.
+     */
+    private function whatsappNotConnectedResponse($organizationId)
+    {
+        $error = $this->whatsappConnectionError($organizationId);
+
+        if ($error === null) {
+            return null;
+        }
+
+        return response()->json([
+            'statusCode' => 403,
+            'success' => false,
+            'message' => $error,
+        ], 403);
     }
 
     private function initializeWhatsappService($organizationId)
