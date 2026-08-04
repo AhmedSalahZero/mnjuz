@@ -9,4 +9,20 @@ use Exception;
  */
 class WazBusinessException extends Exception
 {
+    /**
+     * هل سبب الفشل تعذّر الوصول (مهلة/شبكة) لا رفضاً منطقياً؟
+     *
+     * الفرق جوهري: المنصة بطيئة أحياناً فتُنفّذ الطلب ثم تتأخر الاستجابة عن
+     * المهلة. عندها يكون السجل قد أُنشئ فعلاً، فيصحّ البحث عنه بدل اعتبار
+     * العملية فاشلة وإعادة إنشائه لاحقاً مكرّراً.
+     */
+    public bool $connectionFailed = false;
+
+    public static function connection(string $message, ?\Throwable $previous = null): self
+    {
+        $e = new self($message, 0, $previous);
+        $e->connectionFailed = true;
+
+        return $e;
+    }
 }

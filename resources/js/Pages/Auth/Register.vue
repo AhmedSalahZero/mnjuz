@@ -75,10 +75,11 @@
 
                     <!-- ٣: العنوان -->
                     <template v-else>
-                        <!-- FormSelect يعرض placeholder كما هو دون ترجمة، فنمرّره مترجماً -->
-                        <FormSelect v-model="form.country" :name="$t('Country')" :type="'text'"
-                            :placeholder="$t('Select option')"
-                            :optionClassName="'h-40'" :options="props.countries" :error="form.errors.country"/>
+                        <!-- قائمة بحث مع علم الدولة — 250 دولة يصعب تصفّحها بلا بحث -->
+                        <FormCountrySelect v-model="form.country" :name="$t('Country')"
+                            :placeholder="$t('Search for your country')"
+                            :emptyText="$t('No results')"
+                            :options="props.countries" :error="form.errors.country"/>
                         <div class="mt-4 grid gap-x-4 gap-y-4 grid-cols-2">
                             <FormInput v-model="form.state" :name="$t('State')" :error="form.errors.state" :type="'text'"/>
                             <FormInput v-model="form.city" :name="$t('City')" :error="form.errors.city" :type="'text'"/>
@@ -131,7 +132,7 @@
 <script setup>
 import FormInput from '@/Components/FormInput.vue';
 import FormPhoneInput from '@/Components/FormPhoneInput.vue';
-import FormSelect from '@/Components/FormSelect.vue';
+import FormCountrySelect from '@/Components/FormCountrySelect.vue';
 import { useRtl } from '@/Composables/useRtl';
 import { useTrans } from '@/Composables/useTrans';
 import { Link, useForm } from "@inertiajs/vue3";

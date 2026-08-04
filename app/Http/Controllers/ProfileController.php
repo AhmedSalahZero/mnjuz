@@ -223,12 +223,16 @@ class ProfileController extends BaseController
             }
         }
 
+        if (!$changes && (string) ($old['country'] ?? '') === (string) ($newAddress['country'] ?? '')) {
+            return [];
+        }
+
         // نموذج الإعدادات يحمل اسم الدولة، وواز تقبل المعرّف الرقمي فقط.
-        if ((string) ($old['country'] ?? '') !== (string) ($newAddress['country'] ?? '')) {
-            $countryId = app(WazBusinessService::class)->countryId($newAddress['country'] ?? null);
-            if ($countryId !== null) {
-                $changes['country_id'] = $countryId;
-            }
+        // نُرسل الدولة مع **كل** تحديث لا عند تغيّرها فقط: المنصة تُصفّر الحقول
+        // الرقمية غير المُرسَلة، فإغفالها يمحو دولة العميل من نظام الفوترة.
+        $countryId = app(WazBusinessService::class)->countryId($newAddress['country'] ?? null);
+        if ($countryId !== null) {
+            $changes['country_id'] = $countryId;
         }
 
         return $changes;

@@ -1334,5 +1334,7 @@
     "Sales": "Sales",
     "In progress": "In progress",
     "Answered": "Answered",
-    "On hold": "On hold"
+    "On hold": "On hold",
+    "Search for your country": "Search for your country",
+    "No results": "No results"
 }

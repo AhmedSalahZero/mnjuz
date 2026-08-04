@@ -42,15 +42,22 @@ class WazBusinessService
     }
 
     /**
-     * قائمة الدول للعرض في نموذج التسجيل: القيمة هي المعرّف الذي ترسله المنصة.
+     * قائمة الدول للعرض في نموذج التسجيل: القيمة هي المعرّف الذي ترسله المنصة،
+     * و flag هو رمز ISO الذي يختار العلم من الـsprite في الواجهة.
      *
-     * @return array<int, array{value: int, label: string}>
+     * @return array<int, array{value: int, label: string, flag: ?string}>
      */
     public function countryOptions(): array
     {
+        $flags = config('waz_country_flags', []);
+
         $options = [];
         foreach (config('waz_countries', []) as $name => $id) {
-            $options[] = ['value' => $id, 'label' => $name];
+            $options[] = [
+                'value' => $id,
+                'label' => $name,
+                'flag' => $flags[$name] ?? null,
+            ];
         }
 
         return $options;
@@ -65,7 +72,30 @@ class WazBusinessService
      */
     public function createCompany(array $data): int
     {
-        $response = $this->post('/api/customers/', $this->companyPayload($data));
+        $response = [];
+
+        try {
+            $response = $this->post('/api/customers/', $this->companyPayload($data));
+        } catch (WazBusinessException $e) {
+            // المنصة بطيئة أحياناً فتُنفّذ الطلب ثم تتأخر استجابتها عن المهلة.
+            // اعتبار ذلك فشلاً يجعل التسجيل يتراجع ثم يُعيد المحاولة فتتكرّر
+            // الشركة. فعند انقطاع الاتصال نبحث عمّا إذا كانت قد أُنشئت فعلاً.
+            if (!$e->connectionFailed) {
+                throw $e;
+            }
+
+            $id = $this->findCompanyIdByName($data['company']);
+            if ($id !== null) {
+                Log::warning('Waz: company creation timed out but the record exists', [
+                    'company' => $data['company'],
+                    'company_id' => $id,
+                ]);
+
+                return $id;
+            }
+
+            throw $e;
+        }
 
         // المنصة ترجع {"status":true,"message":"Client add successful."} بلا معرّف،
         // فنبحث عن الشركة التي أنشأناها للتوّ. نحتفظ بمحاولة القراءة المباشرة
@@ -191,7 +221,7 @@ class WazBusinessService
             'title' => $defaults['contact_title'],
             'phonenumber' => $data['phone'],
             'password' => $data['password'],
-            'is_primary' => 'on',
+            'is_primary' => $defaults['contact_is_primary'],
         ];
 
         foreach ($defaults['contact_permissions'] as $index => $permission) {
@@ -203,7 +233,28 @@ class WazBusinessService
             $payload[$field] = $data['email'];
         }
 
-        $response = $this->post('/api/contacts/', $payload);
+        $response = [];
+
+        try {
+            $response = $this->post('/api/contacts/', $payload);
+        } catch (WazBusinessException $e) {
+            // نفس معالجة الشركة: مهلة منتهية لا تعني بالضرورة فشلاً.
+            if (!$e->connectionFailed) {
+                throw $e;
+            }
+
+            $id = $this->findContactIdByEmail($companyId, $data['email']);
+            if ($id !== null) {
+                Log::warning('Waz: contact creation timed out but the record exists', [
+                    'company_id' => $companyId,
+                    'contact_id' => $id,
+                ]);
+
+                return $id;
+            }
+
+            throw $e;
+        }
 
         // كذلك جهة الاتصال ترجع رسالة بلا معرّف، فنقرأ جهات اتصال الشركة
         // ونطابق بالبريد الذي أنشأناه به.
@@ -250,22 +301,26 @@ class WazBusinessService
      * الإعدادات؛ بدونه تتباعد البيانات بين المنصتين، والعنوان والرقم الضريبي
      * يظهران في الفاتورة الضريبية فالتباعد هنا خلل نظامي لا تجميلي.
      *
-     * @param  array<string, mixed>  $data  نفس مفاتيح createCompany
+     * @param  array<string, mixed>  $changes  الحقول المتغيّرة فقط، ويجب أن
+     *   تتضمّن دائماً country_id (المتغيّرة أو الحالية) — انظر التحذير أدناه.
      *
      * @throws WazBusinessException
      */
     public function updateCompany(int $companyId, array $changes): void
     {
-        // التعديل يختلف عن الإنشاء في أمرين تفرضهما المنصة:
+        // التعديل يختلف عن الإنشاء في ثلاثة أمور تفرضها المنصة:
         //  1. الجسم RAW JSON لا form-data (الأخير يردّ 406).
-        //  2. تُرسَل الحقول المتغيّرة فقط — ما لا يُرسَل يبقى كما هو.
+        //  2. تُرسَل الحقول المتغيّرة فقط.
+        //  3. لكن «الجزئي» ليس جزئياً بالكامل: الحقول الرقمية غير المُرسَلة
+        //     تُصفَّر إلى 0 بصمت (country و default_currency وعنوانا الفوترة
+        //     والشحن)، بينما النصّية تبقى. لذلك نُرسل الرقمية دائماً.
         // ولا نستخدم POST على /api/customers/:id إطلاقاً: المنصة تتجاهل :id
         // وتُمرّره لمعالج الإنشاء فتُنتج عميلاً مكرّراً وتقول "add successful".
-        $payload = $this->companyChangesPayload($changes);
-
-        if (!$payload) {
+        if (!$changes) {
             return;
         }
+
+        $payload = $this->companyChangesPayload($changes);
 
         if (!$this->isConfigured()) {
             throw new WazBusinessException('Waz Business API token is not configured.');
@@ -285,7 +340,7 @@ class WazBusinessService
                 'error' => $e->getMessage(),
             ]);
 
-            throw new WazBusinessException('Could not reach Waz Business: ' . $e->getMessage(), 0, $e);
+            throw WazBusinessException::connection('Could not reach Waz Business: ' . $e->getMessage(), $e);
         }
 
         $body = $response->json();
@@ -319,6 +374,18 @@ class WazBusinessService
         $defaults = config('waz.defaults');
         $payload = [];
 
+        // الحقول الرقمية والعلاقات تُرسَل دائماً — غيابها يمحوها لا يُبقيها.
+        // أُثبِت على المجموعة: الشركات التي أُنشئت ولم تُعدَّل احتفظت بمجموعة
+        // «منجز شات»، وكل شركة عُدِّلت فقدتها لأن groups_in[] لم يُرسَل.
+        $payload['default_currency'] = (string) $defaults['currency'];
+        $payload['groups_in'] = [$defaults['group_id']];
+
+        if (isset($changes['country_id'])) {
+            foreach (['country', 'billing_country', 'shipping_country'] as $field) {
+                $payload[$field] = (string) $changes['country_id'];
+            }
+        }
+
         $direct = [
             'company' => 'company',
             'phone' => 'phonenumber',
@@ -336,7 +403,6 @@ class WazBusinessService
             'city' => ['city', 'billing_city', 'shipping_city'],
             'state' => ['state', 'billing_state', 'shipping_state'],
             'zip' => ['zip', 'billing_zip', 'shipping_zip'],
-            'country_id' => ['country', 'billing_country', 'shipping_country'],
         ];
         foreach ($address as $key => $fields) {
             if (array_key_exists($key, $changes)) {
@@ -688,7 +754,7 @@ class WazBusinessService
         } catch (Throwable $e) {
             Log::error('Waz: request failed', ['path' => $path, 'error' => $e->getMessage()]);
 
-            throw new WazBusinessException('Could not reach Waz Business: ' . $e->getMessage(), 0, $e);
+            throw WazBusinessException::connection('Could not reach Waz Business: ' . $e->getMessage(), $e);
         }
 
         $body = $response->json();
