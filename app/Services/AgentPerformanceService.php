@@ -198,7 +198,11 @@ class AgentPerformanceService
             ->first();
 
         if (!$existing) {
-            DB::table('agent_activity')->insert([
+            // القراءة ثم الإدراج سباق: الموظف يفتح المنصة في تبويبين — أو ينبض
+            // تبويب بينما آخر لم ينتهِ — فيرى كلاهما «لا صفّ» ويُدرج، فيسقط
+            // الثاني على القيد الفريد (organization_id, user_id, activity_date).
+            // insertOrIgnore يبتلع التصادم، ثم نُكمل كتحديث للصفّ الذي سبقنا.
+            $inserted = DB::table('agent_activity')->insertOrIgnore([
                 'organization_id' => $organizationId,
                 'user_id' => $userId,
                 'activity_date' => $today,
@@ -207,7 +211,20 @@ class AgentPerformanceService
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
-            return;
+
+            if ($inserted) {
+                return;
+            }
+
+            $existing = DB::table('agent_activity')
+                ->where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->where('activity_date', $today)
+                ->first();
+
+            if (!$existing) {
+                return;
+            }
         }
 
         $increment = 0;
