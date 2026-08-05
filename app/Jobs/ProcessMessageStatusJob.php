@@ -8,6 +8,7 @@ use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\ChatStatusLog;
 use App\Services\CampaignRetryService;
+use App\Support\ChatStatus;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -54,7 +55,10 @@ class ProcessMessageStatusJob implements ShouldQueue
 
             foreach ($this->statuses as $status) {
                 $chatWamId = $status['id'];
-                $statusValue = $status['status'];
+                // `played` (تشغيل رسالة صوتية) لا يعرفها تطبيق الموبايل ويرفض
+                // الردّ كلّه بسببها، فنترجمها قبل الحفظ لا عند الإخراج فقط.
+                $statusValue = ChatStatus::forStorage($status['status'] ?? null);
+                $status['status'] = $statusValue;
 
                 // Avoid loading the full row (metadata can be large) unless failed status
                 // needs type/media_id/metadata for transcode retry.

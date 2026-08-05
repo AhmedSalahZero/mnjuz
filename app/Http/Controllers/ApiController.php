@@ -1912,6 +1912,8 @@ class ApiController extends Controller
             'created_at' => 'sometimes|max:255',
             'message_types' => 'sometimes|array|in:chat,ticket,notes',
             'search' => 'sometimes|string|max:255',
+            'per_page' => 'sometimes|integer|min:1|max:500',
+            'page' => 'sometimes|integer|min:1',
         ]);
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
@@ -1921,6 +1923,14 @@ class ApiController extends Controller
         $createdAt = $request->input('created_at', null);
         $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
         $orgId = (int) $organizationId;
+
+        // ترقيم اختياري على جهات الاتصال. بدونه يُسلسل الردّ محادثات المنشأة
+        // كاملةً في استجابة واحدة — قِسناها على منشأة بثلاثة آلاف محادثة فبلغت
+        // 13 ميغابايت و175 ميغابايت ذاكرة، وهو ما يتجاوز مهلة الخادم أو حدّ
+        // الذاكرة فيموت الطلب قبل PHP فلا يظهر في السجلّ. الغياب يُبقي السلوك
+        // القديم كما هو حتى يتحوّل التطبيق.
+        $perPage = $request->filled('per_page') ? (int) $request->input('per_page') : null;
+        $page = max(1, (int) $request->input('page', 1));
 
         // Step 1: Load only contacts that have matching chat_logs (skip empty contacts)
         $contactsQuery = Contact::where('organization_id', $orgId)
@@ -1954,15 +1964,30 @@ class ApiController extends Controller
 
        
 
-        $contacts = $contactsQuery->orderBy('latest_chat_created_at', 'desc')->get();
+        $contactsQuery->orderBy('latest_chat_created_at', 'desc');
+
+        $pagination = null;
+        if ($perPage !== null) {
+            $totalContacts = (clone $contactsQuery)->toBase()->getCountForPagination();
+            $contacts = $contactsQuery->forPage($page, $perPage)->get();
+            $pagination = [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total_contacts' => $totalContacts,
+                'last_page' => (int) max(1, ceil($totalContacts / $perPage)),
+            ];
+        } else {
+            $contacts = $contactsQuery->get();
+        }
 
         if ($contacts->isEmpty()) {
-            return response()->json([
+            return response()->json(array_filter([
                 'statusCode' => 200,
                 'success' => true,
                 'message' => __('Chat messages fetched successfully'),
                 'data' => [],
-            ], 200);
+                'pagination' => $pagination,
+            ], fn ($value) => $value !== null), 200);
         }
 
         $contactIds = $contacts->pluck('id')->all();
@@ -2064,12 +2089,30 @@ class ApiController extends Controller
             ];
         }
 
-        return response()->json([
+        $payload = array_filter([
             'statusCode' => 200,
             'success' => true,
             'message' => __('Chat messages fetched successfully'),
             'data' => $results,
-        ], 200);
+            'pagination' => $pagination,
+        ], fn ($value) => $value !== null);
+
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        // ردّ ضخم لا يفشل هنا بل عند الخادم أو التطبيق، فلا يترك أثراً في
+        // السجلّ. نُسجّله بأنفسنا كي يُعرف السبب بدل «خطأ ما» عند العميل.
+        $megabytes = strlen($json) / 1048576;
+        if ($megabytes > (float) config('chat.large_sync_warn_mb', 4)) {
+            Log::warning('Chat sync response is large', [
+                'organization_id' => $orgId,
+                'megabytes' => round($megabytes, 2),
+                'contacts' => count($results),
+                'paginated' => $pagination !== null,
+                'created_at' => $createdAt,
+            ]);
+        }
+
+        return response()->json($payload, 200);
     }
     /**
      * Load models with whereIn in chunks to stay under MySQL's prepared-statement
