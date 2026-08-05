@@ -512,9 +512,12 @@ class WazBusinessService
      * التوثيق ينبّه: رسوم التأسيس والاشتراك فاتورتان **منفصلتان** لا بندان في
      * فاتورة واحدة — لذلك هذه الدالة تُنشئ فاتورة ببند واحد، وتُستدعى مرتين.
      *
-     * المبالغ: نمرّر السعر قبل الضريبة، والمنصة تحسب الضريبة من taxname.
+     * المبالغ: `gross` هو ما يدفعه العميل فعلاً شاملاً الضريبة، فنشتقّ منه
+     * السعر قبلها. مثال التوثيق يثبّت هذا الاتجاه: باقة Pro المعروضة بـ322
+     * فاتورتها subtotal=280 و total=322 — أي أن السعر المعلن هو الإجمالي لا
+     * الوعاء. عكسُها يُصدر فاتورة أعلى ممّا دُفع بـ15%.
      *
-     * @param  array{company_id: int, description: string, long_description?: string, rate: float, qty?: int, date?: \DateTimeInterface, billing?: array<string, string>, number?: string}  $data
+     * @param  array{company_id: int, description: string, long_description?: string, gross: float, qty?: int, date?: \DateTimeInterface, billing?: array<string, string>, number?: string}  $data
      * @return array{id: ?int, number: string, response: array<string, mixed>}
      *
      * @throws WazBusinessException
@@ -525,11 +528,10 @@ class WazBusinessService
         // Carbon لأن DateTimeInterface لا يضمن modify/add، وDateTimeImmutable
         // لا يعدّل نفسه — فالنسخة الصريحة تتفادى الحالتين.
         $date = Carbon::instance(
-            $data['date'] instanceof \DateTimeInterface ? $data['date'] : now()
+            ($data['date'] ?? null) instanceof \DateTimeInterface ? $data['date'] : now()
         );
-        $qty = (int) ($data['qty'] ?? 1);
-        $subtotal = round(((float) $data['rate']) * $qty, 2);
-        $total = round($subtotal * (1 + $cfg['tax_rate'] / 100), 2);
+        $total = round((float) $data['gross'], 2);
+        $subtotal = round($total / (1 + $cfg['tax_rate'] / 100), 2);
         $number = $data['number'] ?? $this->invoiceNumber();
 
         $payload = [
@@ -546,15 +548,26 @@ class WazBusinessService
             'adminnote' => $cfg['admin_note'],
             'newitems[0][description]' => $data['description'],
             'newitems[0][long_description]' => $data['long_description'] ?? $cfg['long_descriptions']['plan'],
-            'newitems[0][qty]' => (string) $qty,
+            'newitems[0][qty]' => '1',
             'newitems[0][unit]' => $cfg['unit'],
-            'newitems[0][rate]' => number_format((float) $data['rate'], 2, '.', ''),
+            // التوثيق يشترط تطابق rate مع subtotal حرفياً — بند واحد بكمية 1.
+            'newitems[0][rate]' => number_format($subtotal, 2, '.', ''),
             'newitems[0][taxname][]' => $cfg['tax_name'],
         ];
 
-        // عنوان الفوترة كما سُجّل وقت التسجيل.
+        // عنوان الفوترة كما سُجّل وقت التسجيل. الدولة رقمها لا اسمها: إرسال
+        // الاسم يُخزَّن 0 أي بلا دولة، كما ينصّ الـOverview على معرّفات الدول.
         foreach (($data['billing'] ?? []) as $key => $value) {
-            $payload['billing_' . $key] = (string) $value;
+            $value = (string) $value;
+
+            if ($key === 'country') {
+                $value = (string) (config('waz_countries.' . $value) ?? '');
+                if ($value === '') {
+                    continue;
+                }
+            }
+
+            $payload['billing_' . $key] = $value;
         }
 
         // الفواتير — بخلاف العملاء وجهات الاتصال — ترجع invoice_id مباشرة.
@@ -617,9 +630,82 @@ class WazBusinessService
 
         if (!empty($data['transaction_id'])) {
             $payload['transactionid'] = (string) $data['transaction_id'];
+
+            // معرّف العملية فريد لدى بوابة الدفع، فوجوده على الفاتورة يعني أن
+            // هذه الدفعة سُجّلت في محاولة سابقة. الفحص قبل الإرسال يجعل إعادة
+            // المحاولة — لأي سبب — لا تُضاعف المبلغ المحصَّل.
+            if ($this->paymentExists($payload)) {
+                Log::info('Waz: payment already recorded, skipping', [
+                    'invoice_id' => $payload['invoiceid'],
+                    'transaction_id' => $payload['transactionid'],
+                ]);
+
+                return ['id' => null, 'duplicate' => true];
+            }
         }
 
-        return $this->post('/api/payments', $payload);
+        try {
+            return $this->post('/api/payments', $payload);
+        } catch (WazBusinessException $e) {
+            // المنصة تُسجّل الدفعة ثم تتأخر استجابتها عن المهلة. اعتبارها فشلاً
+            // يجعل المزامنة تُعيد المحاولة فتُسجَّل الدفعة مرتين وتظهر الفاتورة
+            // مدفوعة بضعف قيمتها — لذلك نتحقق أولاً.
+            if (!$e->connectionFailed || !$this->paymentExists($payload)) {
+                throw $e;
+            }
+
+            return ['id' => null, 'recovered' => true];
+        }
+    }
+
+    /**
+     * هل سُجّلت هذه الدفعة على الفاتورة فعلاً؟
+     *
+     * نُطابق على معرّف العملية إن وُجد لأنه فريد، وإلا على المبلغ — فالبحث
+     * النصّي في المنصة يطابق حقولاً عدّة، والتصفية على invoiceid إلزامية.
+     *
+     * @param  array<string, string>  $payload
+     */
+    private function paymentExists(array $payload): bool
+    {
+        $invoiceId = (string) $payload['invoiceid'];
+        $needle = $payload['transactionid'] ?? $invoiceId;
+
+        foreach ($this->listPayments($needle) as $payment) {
+            if (!is_array($payment) || (string) ($payment['invoiceid'] ?? '') !== $invoiceId) {
+                continue;
+            }
+
+            if (isset($payload['transactionid'])) {
+                if ((string) ($payment['transactionid'] ?? '') === $payload['transactionid']) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if ((string) ($payment['amount'] ?? '') === $payload['amount']) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * بحث في الدفعات. الرد مُغلَّف مثل التذاكر.
+     *
+     * @return array<int, mixed>
+     */
+    public function listPayments(string $query): array
+    {
+        $rows = $this->get('/api/payments/search/' . rawurlencode($query));
+
+        if (isset($rows[0]['data']) && is_array($rows[0]['data'])) {
+            return $rows[0]['data'];
+        }
+
+        return $rows;
     }
 
     /**
@@ -649,7 +735,37 @@ class WazBusinessService
             $payload['custom_fields[tickets][' . $cfg['company_custom_field'] . ']'] = $data['company_name'];
         }
 
-        return $this->post('/api/tickets', $payload);
+        try {
+            return $this->post('/api/tickets', $payload);
+        } catch (WazBusinessException $e) {
+            // كالشركة وجهة الاتصال: المنصة تُنشئ التذكرة ثم تتأخر استجابتها عن
+            // المهلة. اعتبارها فشلاً يجعل العميل يُعيد الإرسال فتتكرّر التذكرة
+            // على فريق الدعم. نتحقق أولاً بالبحث عن العنوان.
+            if (!$e->connectionFailed || !$this->ticketExists($data['company_id'], $data['subject'])) {
+                throw $e;
+            }
+
+            Log::warning('Waz: ticket creation timed out but the record exists', [
+                'company_id' => $data['company_id'],
+                'subject' => $data['subject'],
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * هل توجد تذكرة بهذا العنوان لهذه الشركة؟
+     */
+    private function ticketExists(int $companyId, string $subject): bool
+    {
+        foreach ($this->listTickets($companyId) as $ticket) {
+            if (is_array($ticket) && ($ticket['subject'] ?? null) === $subject) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

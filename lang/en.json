@@ -1343,5 +1343,11 @@
     "Links this user to their contact on the billing platform. Leave empty to unlink.": "Links this user to their contact on the billing platform. Leave empty to unlink.",
     "No active organization was found for your account. Please select an organization and try again.": "No active organization was found for your account. Please select an organization and try again.",
     "WhatsApp is not connected for :organization. Connect your WhatsApp Business account from Settings → WhatsApp, then try again.": "WhatsApp is not connected for :organization. Connect your WhatsApp Business account from Settings → WhatsApp, then try again.",
-    "The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.": "The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp."
+    "The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.": "The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.",
+    "Meetings": "Meetings",
+    "Other": "Other",
+    "Resend failed messages": "Resend failed messages",
+    "Resend :count failed message(s) for this campaign?": "Resend :count failed message(s) for this campaign?",
+    "This campaign cannot be resent.": "This campaign cannot be resent.",
+    "View invoice": "View invoice"
 }

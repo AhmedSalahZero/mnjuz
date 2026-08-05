@@ -70,7 +70,12 @@ class ChatMetadataHelper
                 break;
 
             case 'location':
-                $out['location'] = isset($message['location']) ? array_intersect_key($message['location'], array_flip(['latitude', 'longitude'])) : [];
+                // name/address/url تصل حين يشارك المرسل مكاناً مسمّى لا نقطة
+                // خام، وهي أوضح للموظف من إحداثيات مجرّدة — ونصوص قصيرة لا
+                // تُثقل العمود.
+                $out['location'] = isset($message['location'])
+                    ? array_intersect_key($message['location'], array_flip(['latitude', 'longitude', 'name', 'address', 'url']))
+                    : [];
                 break;
 
             case 'contacts':

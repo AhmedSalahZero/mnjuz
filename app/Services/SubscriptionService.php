@@ -163,14 +163,23 @@ class SubscriptionService
             $setupFee = str_replace(',', '', (string) ($billingDetails['setupFee'] ?? 0));
             $setupFee = (float) $setupFee;
 
+            // خصم الكوبون كان يُطبَّق على المبلغ المستحق فقط دون أن يُسجَّل على
+            // الفاتورة، فتبقى بقيمتها كاملة رغم أن العميل دفع أقل — يختلّ بذلك
+            // رصيد حسابه بفارق الخصم، وتصدر فاتورته الرسمية بأكثر مما سدّد.
+            $discount = str_replace(',', '', (string) ($billingDetails['coupon']['discount'] ?? 0));
+            $discount = min((float) $discount, $netAmount);
+            $chargedAmount = round($netAmount - $discount, 2);
+
             $invoice = BillingInvoice::create([
                 'organization_id' => $organizationId,
                 'plan_id' => $planId,
                 'subtotal' => $netAmount,
                 'setup_fee' => $setupFee,
+                'coupon_id' => $billingDetails['coupon']['id'] ?? null,
+                'coupon_amount' => $discount,
                 'tax' => $totalTaxAmount,
                 'tax_type' => $billingDetails['isTaxInclusive'] === true ? 'inclusive' : 'exclusive',
-                'total' => $netAmount,
+                'total' => $chargedAmount,
             ]);
 
             foreach($billingDetails['taxRates'] as $taxRate){
@@ -182,12 +191,14 @@ class SubscriptionService
                 ]);
             }
 
+            // الحركة بالمبلغ المُحصَّل لا بقيمة الفاتورة قبل الخصم، وإلا بقي
+            // رصيد العميل مديناً بفارق الكوبون فارتفع استحقاق التجديد التالي.
             $invoiceBillingTransaction = BillingTransaction::create([
                 'organization_id' => $organizationId,
                 'entity_type' => 'invoice',
                 'entity_id' => $invoice->id,
                 'description' => 'Invoice',
-                'amount' => -$netAmount,
+                'amount' => -$chargedAmount,
                 'created_by' => $userId,
             ]);
 
@@ -298,6 +309,8 @@ class SubscriptionService
                     $discount = min($discount, $amountDue);
 
                     $coupon = [
+                        // المعرّف يُحفظ على الفاتورة، فبدونه لا يُعرف أي كوبون خُصم.
+                        'id' => $couponData->id,
                         'code' => $couponData->code,
                         'type' => 'percentage',
                         'amount' => $couponData->percentage,

@@ -9,10 +9,14 @@
 					</p>
 				</div>
 				<div class="space-x-2">
-					<a :href="'/resend-all-failed-campaigns'"
-						class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-						{{ $t('Resend Failed Campaigns') }}
-					</a>
+					<!-- إعادة الإرسال لهذه الحملة وحدها. الزر يعرض العدد ويطلب
+						 تأكيداً صريحاً — الصيغة السابقة كانت رابطاً واحداً يُعيد
+						 إرسال فشل كل الحملات بضغطة بلا تأكيد. -->
+					<button v-if="props.resendableCount > 0" type="button" @click="resendFailed()"
+						:disabled="isResending"
+						class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm disabled:opacity-60">
+						{{ $t('Resend failed messages') }} ({{ props.resendableCount }})
+					</button>
 					<a :href="'/campaigns/export/' + props.campaign.uuid"
 						class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
 						{{ $t('Export as CSV') }}
@@ -84,7 +88,32 @@
 import AppLayout from "./../Layout/App.vue"
 import CampaignLogTable from '@/Components/Tables/CampaignLogTable.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
-import { Link } from "@inertiajs/vue3"
+import { Link, router } from "@inertiajs/vue3"
+import { ref } from 'vue'
+import { useTrans } from '@/Composables/useTrans'
 
-const props = defineProps(['campaign', 'rows', 'filters'])
+const trans = useTrans()
+
+const props = defineProps(['campaign', 'rows', 'filters', 'resendableCount'])
+
+const isResending = ref(false)
+
+/**
+ * إعادة إرسال فشل هذه الحملة فقط، بعد تأكيد يذكر العدد والاسم صراحةً —
+ * إعادة الإرسال تستهلك رصيد إرسال وتؤثّر على تقييم جودة الرقم.
+ */
+const resendFailed = () => {
+	const message = trans('Resend :count failed message(s) for this campaign?')
+		.replace(':count', props.resendableCount)
+
+	if (!confirm(message)) {
+		return
+	}
+
+	isResending.value = true
+	router.post(`/campaigns/${props.campaign.uuid}/resend-failed`, {}, {
+		preserveScroll: true,
+		onFinish: () => { isResending.value = false },
+	})
+}
 </script>

@@ -18,32 +18,6 @@ use Inertia\Inertia;
  */
 class WazPortalController extends BaseController
 {
-    public function invoices(WazSyncService $waz)
-    {
-        $organizationId = (int) session('current_organization');
-
-        $rows = [];
-        $error = null;
-
-        if ($waz->enabled()) {
-            try {
-                $rows = $waz->invoicesFor($organizationId);
-            } catch (WazBusinessException $e) {
-                $error = __('We could not load your invoices right now.');
-                Log::error('Waz: failed to load invoices', [
-                    'organization_id' => $organizationId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        return Inertia::render('User/Billing/WazInvoices', [
-            'title' => __('Invoices'),
-            'rows' => $rows,
-            'loadError' => $error,
-        ]);
-    }
-
     public function meetings(WazSyncService $waz)
     {
         $organizationId = (int) session('current_organization');
@@ -122,7 +96,10 @@ class WazPortalController extends BaseController
     /**
      * أسباب الاجتماع كما يصنّفها فريق الدعم — كل سبب لون في تقويمهم.
      *
-     * @return array<int, array{value: string, label: string}>
+     * نُرسل اللون أيضاً لأن المنصة لا تُرجع السبب في قائمة المواعيد بل لونه
+     * فقط، فالواجهة تستدلّ منه على الاسم.
+     *
+     * @return array<int, array{value: string, label: string, color: string}>
      */
     private function meetingReasons(): array
     {
@@ -135,8 +112,12 @@ class WazPortalController extends BaseController
         ];
 
         $reasons = [];
-        foreach (array_keys(config('waz.meetings.colors', [])) as $key) {
-            $reasons[] = ['value' => $key, 'label' => $labels[$key] ?? $key];
+        foreach (config('waz.meetings.colors', []) as $key => $color) {
+            $reasons[] = [
+                'value' => $key,
+                'label' => $labels[$key] ?? $key,
+                'color' => $color,
+            ];
         }
 
         return $reasons;

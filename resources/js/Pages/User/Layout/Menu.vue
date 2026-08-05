@@ -199,7 +199,7 @@
 					</Link>
 				</li>
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
-					:class="($page.url.startsWith('/billing') && !$page.url.startsWith('/billing/invoices')) || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
+					:class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-x-3 rounded-md">
 						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -209,19 +209,7 @@
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Billing and subscription') }}</span>
 						</Link>
 					</li>
-					<!-- الفواتير الرسمية من واز أعمال — تحت الفوترة لأنها نفس المجال،
-						 ومحجوبة عن الموظف تماماً كما /billing. -->
-					<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
-						:class="$page.url.startsWith('/billing/invoices') ? 'bg-slate-50 text-black' : ''">
-						<Link rel="noopener noreferrer" href="/billing/invoices" class="flex items-center p-2 space-x-3 rounded-md">
-							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-									stroke-width="2"
-									d="M14 3v4a1 1 0 0 0 1 1h4M5 8V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3m4-4h6m-6 4h4" />
-							</svg>
-							<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Invoices') }}</span>
-					</Link>
-				</li>
+					
 				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/support') && !$page.url.startsWith('/support/meetings') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/support" class="flex items-center p-2 space-x-3 rounded-md">

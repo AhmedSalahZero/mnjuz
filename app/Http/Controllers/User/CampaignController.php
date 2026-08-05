@@ -15,6 +15,7 @@ use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\CampaignMediaHistoryService;
+use App\Services\CampaignRetryService;
 use App\Services\CampaignService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -78,6 +79,12 @@ class CampaignController extends BaseController
             }
 
             $data['campaign'] = $campaign;
+
+            // عدد ما سيُرسَل فعلاً لو ضُغط زر إعادة الإرسال — يُعرَض على الزر
+            // نفسه وفي تأكيد الإرسال، فلا يُفاجأ العميل بعدد لم يتوقّعه.
+            $data['resendableCount'] = $campaign
+                ? $this->resendableLogIds($campaign->id)->count()
+                : 0;
 
             $data['filters'] = request()->all(['search']);
 
@@ -156,69 +163,113 @@ class CampaignController extends BaseController
             ]
         );
     }
-    public function resendAllFailed()
+    /**
+     * إعادة إرسال الرسائل الفاشلة **لحملة واحدة** يحدّدها المستخدم.
+     *
+     * كان الزر داخل صفحة حملة بعينها لكنه ينادي مساراً يعيد إرسال فشل كل
+     * حملات المنظمة، فضغطة واحدة أطلقت آلاف الرسائل وأدّت إلى حظر رقم العميل.
+     * صار النطاق حملة واحدة صراحةً — والمسار الشامل أُزيل بالكامل.
+     */
+    public function resendFailed($uuid)
     {
         $organizationId = session()->get('current_organization');
 
-        // نقتصر على الحملات التي يمكن أن تُستأنف فعلاً. الحملة المجدولة مثلاً لا
-        // يلتقطها ProcessCampaignMessagesJob (يشترط ongoing)، فإعادة سجلّاتها إلى
-        // pending كانت تتركها عالقة بلا إرسال ولا رسالة فشل.
-        $campaignIds = Campaign::where('organization_id', $organizationId)
+        // نقتصر على الحملات التي يمكن أن تُستأنف فعلاً: الحملة المجدولة لا
+        // يلتقطها ProcessCampaignMessagesJob (يشترط ongoing) فتبقى سجلّاتها
+        // عالقة في pending بلا إرسال ولا رسالة خطأ.
+        $campaign = Campaign::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
             ->whereIn('status', ['completed', 'ongoing'])
-            ->pluck('id');
+            ->first();
 
-        if ($campaignIds->isEmpty()) {
-            return Redirect::back()->with(
-                'status', [
-                    'type' => 'info',
-                    'message' => __('No failed campaign messages to resend.'),
-                ]
-            );
+        if (!$campaign) {
+            return Redirect::back()->with('status', [
+                'type' => 'error',
+                'message' => __('This campaign cannot be resent.'),
+            ]);
         }
 
-        $failedCount = CampaignLog::whereIn('campaign_id', $campaignIds)
-            ->where('status', 'failed')
-            ->count();
+        $resendable = $this->resendableLogIds($campaign->id);
 
-        if ($failedCount === 0) {
-            return Redirect::back()->with(
-                'status', [
-                    'type' => 'info',
-                    'message' => __('No failed campaign messages to resend.'),
-                ]
-            );
+        if ($resendable->isEmpty()) {
+            return Redirect::back()->with('status', [
+                'type' => 'info',
+                'message' => __('No failed campaign messages to resend.'),
+            ]);
         }
 
-        $campaignIdsToReopen = CampaignLog::whereIn('campaign_id', $campaignIds)
-            ->where('status', 'failed')
-            ->distinct()
-            ->pluck('campaign_id');
+        DB::transaction(function () use ($campaign, $resendable) {
+            CampaignLog::whereIn('id', $resendable)->update([
+                'status' => 'pending',
+                'metadata' => null,
+                'chat_id' => null,
+                'updated_at' => now(),
+            ]);
 
-        DB::transaction(function () use ($campaignIds, $campaignIdsToReopen) {
-            CampaignLog::whereIn('campaign_id', $campaignIds)
-                ->where('status', 'failed')
-                ->update([
-                    'status' => 'pending',
-                    'metadata' => null,
-                    'chat_id' => null,
-                    'updated_at' => now(),
-                ]);
-
-            Campaign::whereIn('id', $campaignIdsToReopen)
-                ->where('status', 'completed')
-                ->update(['status' => 'ongoing']);
+            if ($campaign->status === 'completed') {
+                $campaign->update(['status' => 'ongoing']);
+            }
         });
 
         ProcessCampaignMessagesJob::dispatch()
             ->onQueue('campaign-messages')
             ->afterCommit();
 
-        return Redirect::back()->with(
-            'status', [
-                'type' => 'success',
-                'message' => __(':count failed campaign message(s) queued for resending.', ['count' => $failedCount]),
-            ]
-        );
+        return Redirect::back()->with('status', [
+            'type' => 'success',
+            'message' => __(':count failed campaign message(s) queued for resending.', [
+                'count' => $resendable->count(),
+            ]),
+        ]);
+    }
+
+    /**
+     * معرّفات السجلات الفاشلة التي **يصحّ** إعادة إرسالها لهذه الحملة.
+     *
+     * نستبعد الفشل النهائي (الرقم ليس على واتساب، المستلم رفض الاستقبال…):
+     * إعادة الإرسال إليه لن تنجح أبداً، وتكرارها هو ما يخفض تقييم جودة الرقم
+     * حتى الحظر — وهو ما وقع فعلاً عند إعادة الإرسال الشاملة.
+     *
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    private function resendableLogIds(int $campaignId)
+    {
+        $logs = CampaignLog::where('campaign_id', $campaignId)
+            ->where('status', 'failed')
+            ->pluck('chat_id', 'id');
+
+        if ($logs->isEmpty()) {
+            return collect();
+        }
+
+        $retryService = app(CampaignRetryService::class);
+
+        // آخر بلاغ فشل لكل محادثة يحمل كود الخطأ الذي يحدّد قابلية الإعادة.
+        $errorsByChat = [];
+        $chatIds = $logs->filter()->values();
+        if ($chatIds->isNotEmpty()) {
+            DB::table('chat_status_logs')
+                ->whereIn('chat_id', $chatIds)
+                ->where('metadata', 'like', '%"status":"failed"%')
+                ->orderBy('id')
+                ->select('chat_id', 'metadata')
+                ->get()
+                ->each(function ($row) use (&$errorsByChat) {
+                    $decoded = json_decode($row->metadata, true);
+                    if (($decoded['status'] ?? null) === 'failed') {
+                        $errorsByChat[$row->chat_id] = $decoded['errors'] ?? [];
+                    }
+                });
+        }
+
+        return $logs->filter(function ($chatId, $logId) use ($errorsByChat, $retryService) {
+            // بلا محادثة = رُفض الطلب قبل الإرسال، فلا كود خطأ نهائي هنا.
+            if (!$chatId || !array_key_exists($chatId, $errorsByChat)) {
+                return true;
+            }
+
+            return $retryService->isRetryableFailure($errorsByChat[$chatId]);
+        })->keys();
     }
 }

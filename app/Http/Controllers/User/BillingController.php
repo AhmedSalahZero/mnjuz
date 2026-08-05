@@ -14,6 +14,9 @@ use App\Models\Subscription;
 use App\Resolvers\PaymentPlatformResolver;
 use App\Services\BillingService;
 use App\Services\SubscriptionService;
+use App\Services\WazSyncService;
+use App\Exceptions\WazBusinessException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Redirect;
@@ -37,6 +40,8 @@ class BillingController extends BaseController
         $data['subscription'] = Subscription::with('plan')->where('organization_id', $organizationId)->first();
         $data['subscriptionIsActive'] = SubscriptionService::isSubscriptionActive($organizationId);
         $data['rows'] = $this->billingService->get($request, $organization->uuid);
+        // رابط عرض الفاتورة الرسمية بجانب كل صفّ فاتورة.
+        $data['invoiceUrls'] = $this->wazInvoiceUrls($organizationId);
         $data['filters'] = $request->all();
         $data['methods'] = $this->paymentMethods();
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
@@ -137,5 +142,66 @@ class BillingController extends BaseController
         }
 
         return (new PaymentPlatformResolver())->filterSupportedMethods($mergedData);
+    }
+
+    /**
+     * روابط عرض الفواتير الرسمية، مفهرسة بمعرّف حركة الفوترة المحلية.
+     *
+     * الجدول يعرض حركات (`billing_transactions`) لا فواتير، فنربط كل حركة من
+     * نوع invoice بفاتورتها ثم بنظيرتها في واز. الفاتورة الواحدة عندنا قد
+     * تقابل فاتورتين هناك (رسوم التأسيس والاشتراك منفصلتان بشرط المنصة)،
+     * فنُرجع رابط الاشتراك وإلا رابط التأسيس.
+     *
+     * تعذّر الوصول للمنصة لا يُفشل صفحة الفوترة — تظهر بلا أزرار عرض فقط.
+     *
+     * @return array<int, string>  transaction_id => رابط
+     */
+    private function wazInvoiceUrls($organizationId): array
+    {
+        $waz = app(WazSyncService::class);
+
+        try {
+            $urls = $waz->invoiceUrlsFor((int) $organizationId);
+        } catch (WazBusinessException $e) {
+            Log::warning('Waz: could not load invoice links for the billing page', [
+                'organization_id' => $organizationId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+
+        if (!$urls) {
+            return [];
+        }
+
+        $transactions = DB::table('billing_transactions')
+            ->where('organization_id', $organizationId)
+            ->where('entity_type', 'invoice')
+            ->pluck('entity_id', 'id');
+
+        if ($transactions->isEmpty()) {
+            return [];
+        }
+
+        $invoices = DB::table('billing_invoices')
+            ->whereIn('id', $transactions->values())
+            ->get(['id', 'waz_invoice_id', 'waz_setup_invoice_id'])
+            ->keyBy('id');
+
+        $result = [];
+        foreach ($transactions as $transactionId => $invoiceId) {
+            $invoice = $invoices->get($invoiceId);
+            if (!$invoice) {
+                continue;
+            }
+
+            $wazId = $invoice->waz_invoice_id ?: $invoice->waz_setup_invoice_id;
+            if ($wazId && isset($urls[(int) $wazId])) {
+                $result[(int) $transactionId] = $urls[(int) $wazId];
+            }
+        }
+
+        return $result;
     }
 }

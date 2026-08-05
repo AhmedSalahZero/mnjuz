@@ -19,6 +19,11 @@
         filters: {
             type: Object
         },
+        // { transaction_id: url } — يُملأ من صفحة الفوترة فقط
+        invoiceUrls: {
+            type: Object,
+            default: () => ({})
+        },
         uuid: {
             type: String,
         }
@@ -84,8 +89,21 @@
                 <TableBodyRowItem :position="'first'" class="capitalize">{{ item.organization.name }}</TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell capitalize">{{ item.description }}</TableBodyRowItem>
                 <TableBodyRowItem class="">{{ item.amount }}</TableBodyRowItem>
-                <TableBodyRowItem class="hidden sm:table-cell">
-                    <span class="float-right"></span>
+                <TableBodyRowItem>
+                    <!-- الفاتورة الرسمية على منصة الفوترة. الرابط يُبنى من id
+                         و hash القادمين من الـAPI، فلا يظهر الزر إلا لحركة
+                         فاتورة لها نظير هناك. -->
+                    <div class="flex justify-end">
+                        <a v-if="invoiceUrls && invoiceUrls[item.id]" :href="invoiceUrls[item.id]"
+                            target="_blank" rel="noopener noreferrer" :title="$t('View invoice')"
+                            class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" class="shrink-0">
+                                <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M14 3v4a1 1 0 0 0 1 1h4M9 13h6m-6 4h3M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
+                            </svg>
+                            <span class="hidden sm:inline">{{ $t('View invoice') }}</span>
+                        </a>
+                    </div>
                 </TableBodyRowItem>
             </TableBodyRow>
         </TableBody>

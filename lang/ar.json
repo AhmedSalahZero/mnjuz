@@ -1509,5 +1509,11 @@
     "Links this user to their contact on the billing platform. Leave empty to unlink.": "يربط هذا المستخدم بجهة اتصاله في منصة الفوترة. اتركه فارغاً لفكّ الربط.",
     "No active organization was found for your account. Please select an organization and try again.": "لا توجد منشأة نشطة لحسابك. اختر منشأة ثم أعد المحاولة.",
     "WhatsApp is not connected for :organization. Connect your WhatsApp Business account from Settings → WhatsApp, then try again.": "واتساب غير مرتبط بـ:organization. اربط حساب واتساب أعمال من الإعدادات ← واتساب ثم أعد المحاولة.",
-    "The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.": "ربط واتساب لـ:organization ناقص (المفقود: :fields). أعد ربطه من الإعدادات ← واتساب."
+    "The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.": "ربط واتساب لـ:organization ناقص (المفقود: :fields). أعد ربطه من الإعدادات ← واتساب.",
+    "Meetings": "الاجتماعات",
+    "Other": "أخرى",
+    "Resend failed messages": "إعادة إرسال الرسائل الفاشلة",
+    "Resend :count failed message(s) for this campaign?": "إعادة إرسال :count رسالة فاشلة لهذه الحملة؟",
+    "This campaign cannot be resent.": "لا يمكن إعادة إرسال هذه الحملة.",
+    "View invoice": "عرض الفاتورة"
 }

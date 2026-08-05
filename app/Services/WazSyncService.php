@@ -75,13 +75,13 @@ class WazSyncService
         $cfg = config('waz.invoices');
 
         // رسوم التأسيس: فاتورة مستقلة، مرة واحدة.
-        $setupFee = (float) ($invoice->setup_fee ?? 0);
+        $setupFee = $this->setupGross($invoice);
         if ($setupFee > 0 && !$invoice->waz_setup_invoice_id) {
             $created = $this->waz->createInvoice([
                 'company_id' => $companyId,
                 'description' => $cfg['descriptions']['setup'],
                 'long_description' => $cfg['long_descriptions']['setup'],
-                'rate' => $setupFee,
+                'gross' => $setupFee,
                 'billing' => $billing,
             ]);
             $invoice->waz_setup_invoice_id = $created['id'];
@@ -89,18 +89,47 @@ class WazSyncService
         }
 
         // الاشتراك في الباقة.
-        $subtotal = (float) $invoice->subtotal;
-        if ($subtotal > 0 && !$invoice->waz_invoice_id) {
+        $planGross = $this->planGross($invoice);
+        if ($planGross > 0 && !$invoice->waz_invoice_id) {
             $created = $this->waz->createInvoice([
                 'company_id' => $companyId,
                 'description' => $cfg['descriptions'][$planKey] ?? $cfg['descriptions']['start'],
                 'long_description' => $cfg['long_descriptions']['plan'],
-                'rate' => $subtotal,
+                'gross' => $planGross,
                 'billing' => $billing,
             ]);
             $invoice->waz_invoice_id = $created['id'];
             $invoice->save();
         }
+    }
+
+    /**
+     * حصّة الاشتراك من الفاتورة، شاملة الضريبة كما دفعها العميل.
+     *
+     * المرجع هو `total` — المبلغ المُحصَّل بعد خصم الكوبون — لا `subtotal` الذي
+     * يسبق الخصم. وهو يشمل رسوم التأسيس (`netAmount` في SubscriptionService =
+     * الوعاء + الضريبة + التأسيس)، فطرحُها لازم وإلا صدرت في فاتورتها وفي
+     * فاتورة الباقة معاً. الخصم يقع كلّه على الاشتراك: رسوم التأسيس مبلغ مقطوع.
+     */
+    private function planGross(BillingInvoice $invoice): float
+    {
+        return round(max(0, $this->chargedTotal($invoice) - $this->setupGross($invoice)), 2);
+    }
+
+    private function setupGross(BillingInvoice $invoice): float
+    {
+        return round(min((float) ($invoice->setup_fee ?? 0), $this->chargedTotal($invoice)), 2);
+    }
+
+    /**
+     * المبلغ المُحصَّل فعلاً. الفواتير السابقة للكوبونات فيها total = subtotal،
+     * فالرجوع إلى subtotal عند غياب total يبقيها على قيمتها.
+     */
+    private function chargedTotal(BillingInvoice $invoice): float
+    {
+        $total = (float) ($invoice->total ?? 0);
+
+        return round($total > 0 ? $total : (float) $invoice->subtotal, 2);
     }
 
     /**
@@ -118,10 +147,7 @@ class WazSyncService
             ? BillingInvoice::find($payment->invoice_id)
             : null;
 
-        // الدفعة تُسجَّل على فاتورة الاشتراك؛ رسوم التأسيس تُسدَّد بفاتورتها.
-        $wazInvoiceId = $invoice?->waz_invoice_id ?? $invoice?->waz_setup_invoice_id;
-
-        if (!$wazInvoiceId) {
+        if (!$invoice || (!$invoice->waz_invoice_id && !$invoice->waz_setup_invoice_id)) {
             Log::info('Waz sync: skipping payment, invoice not synced yet', [
                 'payment_id' => $payment->id,
                 'invoice_id' => $payment->invoice_id,
@@ -130,12 +156,50 @@ class WazSyncService
             return;
         }
 
-        $this->waz->addPayment([
-            'invoice_id' => (int) $wazInvoiceId,
-            'amount' => (float) $payment->amount,
-            'payment_method' => $payment->payment_method ?: ($payment->processor ?: 'Online'),
-            'transaction_id' => $payment->transaction_id,
-        ]);
+        // الدفعة عندنا واحدة، وفاتورتها هناك اثنتان (التأسيس والاشتراك) — فتُوزَّع
+        // عليهما بقدر استحقاق كلٍّ منهما. بلا توزيع تُسجَّل كاملة على واحدة
+        // فتظهر مدفوعة بأكثر من قيمتها والأخرى غير مدفوعة.
+        $remaining = round((float) $payment->amount, 2);
+        $method = $payment->payment_method ?: ($payment->processor ?: 'Online');
+
+        $dues = [
+            [$invoice->waz_setup_invoice_id, $this->setupGross($invoice), '-setup'],
+            [$invoice->waz_invoice_id, $this->planGross($invoice), ''],
+        ];
+
+        $split = $invoice->waz_setup_invoice_id && $invoice->waz_invoice_id;
+
+        foreach ($dues as [$wazInvoiceId, $due, $suffix]) {
+            if (!$wazInvoiceId || $remaining <= 0) {
+                continue;
+            }
+
+            // آخر فاتورة تأخذ ما تبقّى كاملاً، فلا تضيع هللات التقريب.
+            $share = $wazInvoiceId === $invoice->waz_invoice_id
+                ? $remaining
+                : round(min($remaining, $due), 2);
+
+            if ($share <= 0) {
+                continue;
+            }
+
+            // المنصة تعتبر معرّف العملية فريداً عالمياً لا لكل فاتورة: إرسال
+            // القسطين بمعرّف واحد يجعلها ترفض الثاني وتردّ duplicate. فنلحق
+            // لاحقة بقسط التأسيس ونُبقي معرّف البوابة كما هو لفاتورة الاشتراك.
+            $transactionId = $payment->transaction_id;
+            if ($split && $suffix && $transactionId) {
+                $transactionId .= $suffix;
+            }
+
+            $this->waz->addPayment([
+                'invoice_id' => (int) $wazInvoiceId,
+                'amount' => $share,
+                'payment_method' => $method,
+                'transaction_id' => $transactionId,
+            ]);
+
+            $remaining = round($remaining - $share, 2);
+        }
 
         $payment->waz_synced_at = now();
         $payment->save();
@@ -225,6 +289,35 @@ class WazSyncService
         }
 
         return $rows;
+    }
+
+    /**
+     * روابط عرض فواتير واز مفهرسة بمعرّف الفاتورة.
+     *
+     * الرابط يحتاج id و hash معاً، والـhash لا يُحفظ عندنا — يأتي من
+     * `GET /api/invoices/?clientid=X` وحده. فنجلب القائمة مرة واحدة ونبني منها
+     * خريطة، بدل نداء لكل فاتورة.
+     *
+     * @return array<int, string>  waz_invoice_id => رابط العرض
+     */
+    public function invoiceUrlsFor(int $organizationId): array
+    {
+        $companyId = $this->companyId($organizationId);
+        if (!$companyId || !$this->enabled()) {
+            return [];
+        }
+
+        $urls = [];
+        foreach ($this->waz->listInvoices($companyId) as $invoice) {
+            if (is_array($invoice) && isset($invoice['id'], $invoice['hash'])) {
+                $urls[(int) $invoice['id']] = $this->waz->invoiceUrl(
+                    (int) $invoice['id'],
+                    (string) $invoice['hash']
+                );
+            }
+        }
+
+        return $urls;
     }
 
     /**

@@ -79,7 +79,7 @@
                         </p>
                     </div>
                     <div class="w-100">
-                        <BillingTable :rows="props.rows" :filters="props.filters"/>
+                        <BillingTable :rows="props.rows" :filters="props.filters" :invoiceUrls="props.invoiceUrls"/>
                     </div>
                 </div>
             </div>
@@ -127,7 +127,8 @@
 
     const props = defineProps([
         'subscription',
-        'rows', 
+        'rows',
+        'invoiceUrls', 
         'filters', 
         'subscriptionIsActive', 
         'subscriptionDetails', 

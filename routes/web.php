@@ -205,7 +205,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);
-                Route::get('/resend-all-failed-campaigns', [App\Http\Controllers\User\CampaignController::class, 'resendAllFailed']);
+                // إعادة الإرسال محصورة بحملة واحدة. المسار الشامل السابق
+                // (/resend-all-failed-campaigns) أُزيل: كان زرّه داخل صفحة حملة
+                // بعينها فيوهم أنه يخصّها، بينما يُعيد إرسال فشل كل الحملات.
+                Route::post('/campaigns/{uuid}/resend-failed', [App\Http\Controllers\User\CampaignController::class, 'resendFailed'])->name('campaigns.resendFailed');
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
 
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
@@ -226,7 +229,6 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/support/meetings', [App\Http\Controllers\User\WazPortalController::class, 'meetings'])->name('waz.meetings');
                 Route::post('/support/meetings', [App\Http\Controllers\User\WazPortalController::class, 'bookMeeting']);
                 Route::delete('/support/meetings/{meetingId}', [App\Http\Controllers\User\WazPortalController::class, 'cancelMeeting'])->whereNumber('meetingId');
-                Route::get('/billing/invoices', [App\Http\Controllers\User\WazPortalController::class, 'invoices'])->name('waz.invoices');
 
                 Route::get('/support/{uuid?}', [App\Http\Controllers\User\TicketController::class, 'index'])->name('support');
                 Route::post('/support', [App\Http\Controllers\User\TicketController::class, 'store']);
