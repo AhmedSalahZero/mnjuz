@@ -128,6 +128,13 @@ return [
 
         'admin_note' => 'This invoice was created by Mnjz Chat API',
 
+        /*
+         | عنوان الفوترة الأخير حين لا نعرف عنوان المنشأة لا عندنا ولا في
+         | المنصة. المنصة تشترط billing_street غير فارغ وترفض الفاتورة بدونه،
+         | وفقدان الفاتورة أسوأ من عنوان ناقص يُصحَّح لاحقاً.
+         */
+        'fallback_billing_street' => env('WAZ_BUSINESS_FALLBACK_STREET', 'Saudi Arabia'),
+
         'tags' => 'Mnjz Chat, Service fee',
 
         /** أوصاف الخدمات كما هي معتمدة في واز — لا تُترجم ولا تُغيَّر. */

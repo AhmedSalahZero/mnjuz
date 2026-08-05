@@ -457,6 +457,39 @@ class WazBusinessService
     }
 
     /**
+     * عنوان فوترة الشركة كما هو مسجَّل في المنصة (كُتب وقت التسجيل).
+     *
+     * مصدر احتياطي حين يخلو عنوان المنشأة عندنا: المنصة ترفض الفاتورة بلا
+     * billing_street، فالرجوع إلى ما تعرفه هي أصدق من قيمة مصطنعة.
+     *
+     * @return array{street: string, city: string, state: string, zip: string, country: string}
+     */
+    public function companyBillingAddress(int $companyId): array
+    {
+        $rows = $this->get('/api/customers/' . $companyId);
+        $company = is_array($rows[0] ?? null) ? $rows[0] : [];
+
+        $pick = static function (array $keys) use ($company): string {
+            foreach ($keys as $key) {
+                $value = trim((string) ($company[$key] ?? ''));
+                if ($value !== '' && $value !== '0') {
+                    return $value;
+                }
+            }
+
+            return '';
+        };
+
+        return [
+            'street' => $pick(['billing_street', 'address']),
+            'city' => $pick(['billing_city', 'city']),
+            'state' => $pick(['billing_state', 'state']),
+            'zip' => $pick(['billing_zip', 'zip']),
+            'country' => $pick(['billing_country', 'country']),
+        ];
+    }
+
+    /**
      * الخدمات/المنتجات المعرّفة في واز — مصدر أسماء وأسعار الخدمات الرسمية
      * بدل تكرارها نصّاً عند إنشاء الفواتير.
      *
@@ -557,10 +590,11 @@ class WazBusinessService
 
         // عنوان الفوترة كما سُجّل وقت التسجيل. الدولة رقمها لا اسمها: إرسال
         // الاسم يُخزَّن 0 أي بلا دولة، كما ينصّ الـOverview على معرّفات الدول.
+        // وقد تصل مُعرَّفاً أصلاً حين تُقرأ من المنصة، فتُمرَّر كما هي.
         foreach (($data['billing'] ?? []) as $key => $value) {
             $value = (string) $value;
 
-            if ($key === 'country') {
+            if ($key === 'country' && !ctype_digit($value)) {
                 $value = (string) (config('waz_countries.' . $value) ?? '');
                 if ($value === '') {
                     continue;

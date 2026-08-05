@@ -105,7 +105,7 @@ class WazSyncService
             return;
         }
 
-        $billing = $this->billingAddress((int) $invoice->organization_id);
+        $billing = $this->billingAddress((int) $invoice->organization_id, $companyId);
         $planKey = $this->planKey($invoice);
         $cfg = config('waz.invoices');
 
@@ -486,20 +486,60 @@ class WazSyncService
      *
      * @return array<string, string>
      */
-    private function billingAddress(int $organizationId): array
+    private function billingAddress(int $organizationId, ?int $companyId = null): array
     {
         $address = json_decode(
             (string) Organization::where('id', $organizationId)->value('address'),
             true
         ) ?: [];
 
-        return [
-            'street' => (string) ($address['street'] ?? ''),
-            'city' => (string) ($address['city'] ?? ''),
-            'state' => (string) ($address['state'] ?? ''),
-            'zip' => (string) ($address['zip'] ?? ''),
-            'country' => (string) ($address['country'] ?? ''),
-        ];
+        $billing = [];
+        foreach (['street', 'city', 'state', 'zip', 'country'] as $key) {
+            $billing[$key] = trim((string) ($address[$key] ?? ''));
+        }
+
+        // المنصة ترفض الفاتورة كلّها إذا خلا billing_street — مُرسَلاً فارغاً أو
+        // محذوفاً، جرّبتُ الحالتين — ولا ترثه من بطاقة العميل. وأكثر من نصف
+        // منشآتنا بلا عنوان محفوظ (سُجّلت قبل أن يُطلب العنوان)، فكانت كل
+        // فاتورة لها تفشل وتُعيد المحاولة بلا طائل. نستكمل الناقص ممّا سجّلته
+        // المنصة نفسها وقت التسجيل، ثم بقيمة أخيرة كي تصدر الفاتورة.
+        if ($billing['street'] === '' && $companyId) {
+            try {
+                foreach ($this->companyAddress($companyId) as $key => $value) {
+                    if (($billing[$key] ?? '') === '') {
+                        $billing[$key] = $value;
+                    }
+                }
+            } catch (WazBusinessException $e) {
+                Log::warning('Waz sync: could not read company address', [
+                    'company_id' => $companyId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($billing['street'] === '') {
+            $billing['street'] = (string) config('waz.invoices.fallback_billing_street');
+        }
+
+        return $billing;
+    }
+
+    /**
+     * عنوان الشركة من المنصة، مُخزَّن مؤقتاً — الفاتورتان تُصدَران في نفس
+     * المزامنة فلا داعي لطلبه مرتين.
+     *
+     * @return array<string, string>
+     *
+     * @throws WazBusinessException
+     */
+    private function companyAddress(int $companyId): array
+    {
+        return Cache::remember(
+            'waz_company_address_' . $companyId,
+            now()->addHours(6),
+            fn () => $this->waz->companyBillingAddress($companyId)
+        );
     }
 
     /**
