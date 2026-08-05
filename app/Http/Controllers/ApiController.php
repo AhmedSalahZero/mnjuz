@@ -1266,15 +1266,29 @@ class ApiController extends Controller
     {
         $organizationId = $request->user()->current_mobile_organization_id;
         $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
+
+        // إرسال عدّة صور دفعة واحدة يصل كـ file[]، وقاعدة `file` المفردة كانت
+        // ترفضه كلّه فيفشل الإرسال بأكمله. نقبل الشكلين ونعامل المفرد كقائمة
+        // من عنصر واحد.
+        $isBatch = is_array($request->file('file'));
+        $fileRule = 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp,svg,ico,heic,heif,mp4,avi,mov,wmv,flv,mkv,webm,3gp,mpeg,mpg,mp3,wav,ogg,aac,m4a,flac,wma,amr,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,rtf,odt,ods,odp|max:'
+            . (int) config('chat.max_upload_kb', 16384);
+
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
                     $fail('The phone number is not valid.');
                 }
             }],
-			'file' => 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp,svg,ico,heic,heif,mp4,avi,mov,wmv,flv,mkv,webm,3gp,mpeg,mpg,mp3,wav,ogg,aac,m4a,flac,wma,amr,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,rtf,odt,ods,odp|max:4096',
             'caption' => 'nullable',
         ];
+
+        if ($isBatch) {
+            $rules['file'] = 'required|array|max:' . (int) config('chat.max_batch_files', 10);
+            $rules['file.*'] = $fileRule;
+        } else {
+            $rules['file'] = $fileRule;
+        }
 
         $validator = Validator::make($request->all(), $rules);
 
@@ -1301,35 +1315,40 @@ class ApiController extends Controller
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
 
-        $file = $request->file('file');
-		logger('sendFileMessage');
-		logger(json_encode([
-            'uuid' => $contact->uuid,
-            'file' => $file,
-            'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
-            'caption' => $request->caption,
-            'messageUUID' => $request->get('msg_uuid'),
-        ]));
-        $request->merge([
-            'uuid' => $contact->uuid,
-            'file' => $file,
-            'type'=> self::getFileTypeFromExtension($file->getClientOriginalExtension()) ,
-            'caption' => $request->caption,
-            'messageUUID' => $request->get('msg_uuid'),
-        ]);
-        
-        // +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
+        $files = $request->file('file');
+        $files = is_array($files) ? array_values($files) : [$files];
 
-    
-    
+        // معرّفات الرسائل من التطبيق: واحد لكل ملف. عمود uuid فريد، فمعرّف
+        // واحد لعدّة ملفات يُنجح الأول ويُفشل البقية — نأخذ ما يُرسله بالترتيب
+        // وما زاد عن ذلك يُولَّد عندنا.
+        $messageUUIDs = $request->get('msg_uuid');
+        $messageUUIDs = is_array($messageUUIDs) ? array_values($messageUUIDs) : [$messageUUIDs];
+
+        // +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
         $chatService = new ChatService($organizationId);
-        $chatService->sendMessage($request);
+
+        foreach ($files as $index => $file) {
+            // التعليق يُرفق بالأول فقط؛ تكراره على كل صورة يُظهره مرات عدداً
+            // في محادثة العميل.
+            $request->merge([
+                'uuid' => $contact->uuid,
+                'file' => $file,
+                'type' => self::getFileTypeFromExtension($file->getClientOriginalExtension()),
+                'caption' => $index === 0 ? $request->caption : null,
+                'messageUUID' => $messageUUIDs[$index] ?? null,
+            ]);
+            $request->files->set('file', $file);
+
+            $chatService->sendMessage($request);
+        }
+
         return response()->json([
             'statusCode' => 200,
             'success' => true,
             'message' => __('Message sent successfully'),
             'data' => [
                 'queued' => true,
+                'files' => count($files),
                 'contact_id' => $contact->id,
                 'contact_uuid' => $contact->uuid,
                 'phone' => $contact->phone,

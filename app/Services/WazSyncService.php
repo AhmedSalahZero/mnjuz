@@ -8,6 +8,7 @@ use App\Models\BillingPayment;
 use App\Models\Organization;
 use App\Models\Ticket;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -48,6 +49,40 @@ class WazSyncService
         $id = User::where('id', $userId)->value('waz_contact_id');
 
         return $id ? (int) $id : null;
+    }
+
+    /**
+     * جهة اتصال الشركة الرئيسية في واز.
+     *
+     * التسجيل يُنشئ جهة اتصال للمالك وحده، أما من يُدعى للفريق لاحقاً — مدير أو
+     * موظف — فلا نظير له هناك. بدون بديل تبقى تذكرته عندنا ولا يراها الدعم،
+     * فنُسندها إلى جهة اتصال المنشأة الرئيسية: وصولها باسم الشركة أنفع من
+     * ضياعها باسم صاحبها.
+     */
+    public function primaryContactId(int $companyId): ?int
+    {
+        return Cache::remember(
+            'waz_primary_contact_' . $companyId,
+            now()->addHours(6),
+            function () use ($companyId) {
+                $contacts = $this->waz->listContacts($companyId);
+                $fallback = null;
+
+                foreach ($contacts as $contact) {
+                    if (!is_array($contact) || !isset($contact['id'])) {
+                        continue;
+                    }
+
+                    if ((string) ($contact['is_primary'] ?? '') === '1') {
+                        return (int) $contact['id'];
+                    }
+
+                    $fallback ??= (int) $contact['id'];
+                }
+
+                return $fallback;
+            }
+        );
     }
 
     /**
@@ -221,13 +256,23 @@ class WazSyncService
         }
 
         $companyId = $this->companyId($organizationId);
-        $contactId = $this->contactId((int) $ticket->user_id);
 
-        if (!$companyId || !$contactId) {
-            Log::info('Waz sync: skipping ticket, missing waz ids', [
+        if (!$companyId) {
+            Log::info('Waz sync: skipping ticket, organization has no waz company', [
+                'ticket_id' => $ticket->id,
+                'organization_id' => $organizationId,
+            ]);
+
+            return false;
+        }
+
+        $contactId = $this->contactId((int) $ticket->user_id)
+            ?? $this->primaryContactId($companyId);
+
+        if (!$contactId) {
+            Log::info('Waz sync: skipping ticket, company has no contact', [
                 'ticket_id' => $ticket->id,
                 'company_id' => $companyId,
-                'contact_id' => $contactId,
             ]);
 
             return false;

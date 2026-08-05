@@ -184,7 +184,7 @@ class WhatsappService
 				'status' => 'delivered',
 				'created_at' => now(),
 			]);
-			if ($messageUUID) {
+			if ($this->isAssignableMessageUuid($messageUUID, $chat->id)) {
 				$chat->uuid = $messageUUID;
 				$chat->save();
 			}
@@ -706,6 +706,32 @@ class WhatsappService
      * @param string $imageUrl The URL of the stored image.
      * @return mixed Returns the response from the HTTP request.
      */
+    /**
+     * هل نُلبس الرسالة معرّف التطبيق؟
+     *
+     * عمود uuid فريد. حين يرسل التطبيق عدّة ملفات بمعرّف واحد — أو يُعيد
+     * المحاولة بمعرّف سبق استعماله — كان الحفظ يرمي خطأ تكرار بعد أن تكون
+     * الرسالة قد وصلت واتساب فعلاً: العميل يستلمها والموظف يرى فشلاً.
+     * نتخطّى الإلباس عندها ونُبقي المعرّف المُولَّد.
+     */
+    private function isAssignableMessageUuid(?string $messageUUID, int $chatId): bool
+    {
+        if (!$messageUUID) {
+            return false;
+        }
+
+        $taken = Chat::where('uuid', $messageUUID)->where('id', '!=', $chatId)->exists();
+
+        if ($taken) {
+            Log::warning('Duplicate msg_uuid from client, keeping generated uuid', [
+                'msg_uuid' => $messageUUID,
+                'chat_id' => $chatId,
+            ]);
+        }
+
+        return !$taken;
+    }
+
     public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null, $tempMessageId = null, $messageUUID = null, $existingChatId = null)
     {
 
@@ -815,7 +841,7 @@ class WhatsappService
                 $updateData = [
                     'media_id' => $media->id,
                 ];
-                if($messageUUID){ // when sending message from mobile api only
+                if ($this->isAssignableMessageUuid($messageUUID, $chat->id)) { // when sending message from mobile api only
                     $updateData['uuid'] = $messageUUID;
                 }
                 Chat::where('id', $chat->id)->update($updateData);
