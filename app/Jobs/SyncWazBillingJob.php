@@ -77,6 +77,19 @@ class SyncWazBillingJob implements ShouldQueue
         }
 
         $sync->syncPayment($payment);
+
+        // syncPayment تنصرف بصمت إذا لم تكن الفاتورة جاهزة — والدفعة تُنشأ قبل
+        // فاتورتها في نفس المعاملة، فقد تصل هذه الوظيفة و`invoice_id` بعدُ
+        // فارغ. الانصراف بلا استثناء يعني ألّا تُعاد المحاولة أبداً فتضيع
+        // الدفعة من نظام المحاسبة. نُطلقها من جديد بعد مهلة.
+        if (!$payment->fresh()?->waz_synced_at && $sync->companyId((int) $payment->organization_id)) {
+            Log::info('Waz billing sync: payment not ready, releasing for retry', [
+                'payment_id' => $payment->id,
+                'invoice_id' => $payment->invoice_id,
+            ]);
+
+            $this->release(120);
+        }
     }
 
     public function failed(Throwable $e): void
