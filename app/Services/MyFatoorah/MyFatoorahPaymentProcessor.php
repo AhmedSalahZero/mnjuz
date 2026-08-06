@@ -2,6 +2,7 @@
 
 namespace App\Services\MyFatoorah;
 
+use App\Models\BillingInvoice;
 use App\Models\BillingPayment;
 use App\Models\BillingTransaction;
 use App\Models\User;
@@ -22,7 +23,10 @@ class MyFatoorahPaymentProcessor
     public function processVerifiedPayment(array $context): object
     {
         $paymentId = (string) ($context['payment_id'] ?? '');
-        $invoiceId = (string) ($context['invoice_id'] ?? '');
+        // فاتورة ماي فاتورة، لا صفّ في billing_invoices. كانت تُكتب في العمود
+        // invoice_id فيحمل مفتاحاً أجنبياً لنظام آخر: كل بحث عن فاتورة الدفعة
+        // يرجع فارغاً، فلا تصل الدفعة إلى منصة الفوترة أبداً.
+        $gatewayInvoiceId = (string) ($context['gateway_invoice_id'] ?? $context['invoice_id'] ?? '');
         $amount = (float) ($context['amount'] ?? 0);
         $currency = (string) ($context['currency'] ?? MyFatoorahApiClient::resolveConfig()['currency']);
         $paymentMethod = (string) ($context['payment_method'] ?? '');
@@ -37,10 +41,10 @@ class MyFatoorahPaymentProcessor
             return (object) ['success' => false, 'message' => 'Incomplete payment context'];
         }
 
-        if ($this->paymentAlreadyProcessed($paymentId, $invoiceId)) {
+        if ($this->paymentAlreadyProcessed($paymentId, $gatewayInvoiceId)) {
             Log::info('MyFatoorah payment already processed', [
                 'payment_id' => $paymentId,
-                'invoice_id' => $invoiceId,
+                'gateway_invoice_id' => $gatewayInvoiceId,
             ]);
 
             return (object) ['success' => true, 'duplicate' => true];
@@ -48,7 +52,7 @@ class MyFatoorahPaymentProcessor
 
         DB::transaction(function () use (
             $paymentId,
-            $invoiceId,
+            $gatewayInvoiceId,
             $amount,
             $currency,
             $paymentMethod,
@@ -62,7 +66,7 @@ class MyFatoorahPaymentProcessor
                 'processor' => config('myfatoorah.processor'),
                 'details' => $paymentId,
                 'transaction_id' => $paymentId,
-                'invoice_id' => $invoiceId !== '' ? $invoiceId : null,
+                'gateway_invoice_id' => $gatewayInvoiceId !== '' ? $gatewayInvoiceId : null,
                 'payment_status' => $paymentStatus,
                 'payment_method' => $paymentMethod !== '' ? $paymentMethod : null,
                 'currency' => $currency,
@@ -78,10 +82,15 @@ class MyFatoorahPaymentProcessor
                 'created_by' => $userId,
             ]);
 
-            if ($planId === null || $planId === '' || $planId === 'topup') {
-                $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId);
-            } else {
-                $this->subscriptionService->updateSubscriptionPlan($organizationId, (int) $planId, $userId);
+            $invoice = ($planId === null || $planId === '' || $planId === 'topup')
+                ? $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId)
+                : $this->subscriptionService->updateSubscriptionPlan($organizationId, (int) $planId, $userId);
+
+            // الفاتورة تصدر بعد الدفعة في نفس المعاملة، فنربطها الآن. بلا ذلك
+            // تبقى الدفعة بلا فاتورة فلا تُرحَّل إلى منصة الفوترة.
+            if ($invoice instanceof BillingInvoice) {
+                $payment->invoice_id = $invoice->id;
+                $payment->save();
             }
         });
 
@@ -173,15 +182,17 @@ class MyFatoorahPaymentProcessor
         return substr($digits, 0, 11) ?: '500000000';
     }
 
-    private function paymentAlreadyProcessed(string $paymentId, string $invoiceId): bool
+    private function paymentAlreadyProcessed(string $paymentId, string $gatewayInvoiceId): bool
     {
         return BillingPayment::where('processor', config('myfatoorah.processor'))
-            ->where(function ($query) use ($paymentId, $invoiceId) {
+            ->where(function ($query) use ($paymentId, $gatewayInvoiceId) {
                 $query->where('details', $paymentId)
                     ->orWhere('transaction_id', $paymentId);
 
-                if ($invoiceId !== '') {
-                    $query->orWhere('invoice_id', $invoiceId);
+                // إعادة محاولة الدفع تُنتج PaymentId جديداً تحت نفس فاتورة
+                // البوابة، فالمطابقة عليها تمنع تسجيل الدفعة مرتين.
+                if ($gatewayInvoiceId !== '') {
+                    $query->orWhere('gateway_invoice_id', $gatewayInvoiceId);
                 }
             })
             ->exists();

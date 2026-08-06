@@ -19,6 +19,14 @@ class Kernel extends ConsoleKernel
             ->everyMinute()
             ->withoutOverlapping();
 
+        // الرصيد المشحون قبل انتهاء الاشتراك لا يستهلكه شيء: الخصم يجري لحظة
+        // الدفع فقط وبشرط أن يكون منتهياً وقتها. كل ساعة كي لا يتوقّف حساب
+        // رصيده كافٍ لأكثر من ساعة بعد انتهائه.
+        $schedule->command('subscriptions:renew-from-credits')
+            ->hourly()
+            ->withoutOverlapping()
+            ->runInBackground();
+
         $campaignSendInterval = max(1, (int) config('campaigns.send_interval_seconds', 5));
         $overlapSeconds = max(1, $campaignSendInterval - 1);
 

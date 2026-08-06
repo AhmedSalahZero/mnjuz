@@ -101,56 +101,89 @@ class SubscriptionService
         }
     }
 
+    /**
+     * تجديد الاشتراك من رصيد الحساب متى كفى الرصيد.
+     *
+     * @return \App\Models\BillingInvoice|false الفاتورة الصادرة، أو false إن لم يُجدَّد.
+     */
     public static function activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId = 0)
     {
         $subscription = Subscription::where('organization_id', $organizationId)->first();
 
-        if($subscription->valid_until < now()){
-            if($subscription->plan_id){
-                $planId = $subscription->plan_id;
-
-                $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $planId);
-
-                if($billingDetails['amountDue'] == 0){
-                    self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
-
-                    $team = Team::where('organization_id', $organizationId)
-                        ->whereIn('role', ['owner', 'manager'])
-                        ->orderByRaw("FIELD(role, 'owner', 'manager')")
-                        ->first();
-                    $user = User::where('id', $team->user_id)->first();
-                    $plan = SubscriptionPlan::where('id', $planId)->first();
-
-                    //Send subscription email
-                    Email::sendSubscriptionEmail('Subscription Renewal', $user, $plan);
-                }
-            } 
+        // تُستدعى الآن من أمر مجدوَل يمرّ على كل المنشآت، فصفّ ناقص عند واحدة
+        // لا يصحّ أن يُسقط الدفعة كلّها.
+        if (!$subscription || !$subscription->plan_id || $subscription->valid_until >= now()) {
+            return false;
         }
 
-        return false;
+        $planId = $subscription->plan_id;
+        $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $planId);
+
+        if ($billingDetails['amountDue'] != 0) {
+            return false;
+        }
+
+        $invoice = self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
+
+        $team = Team::where('organization_id', $organizationId)
+            ->whereIn('role', ['owner', 'manager'])
+            ->orderByRaw("FIELD(role, 'owner', 'manager')")
+            ->first();
+        $user = $team ? User::where('id', $team->user_id)->first() : null;
+        $plan = SubscriptionPlan::where('id', $planId)->first();
+
+        // التجديد تمّ وحُفظ؛ فشل البريد لا يصحّ أن يُلغيه.
+        if ($user && $plan) {
+            try {
+                Email::sendSubscriptionEmail('Subscription Renewal', $user, $plan);
+            } catch (\Throwable $e) {
+                Log::warning('Subscription renewal email failed', [
+                    'organization_id' => $organizationId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $invoice;
     }
 
+    /**
+     * @return \App\Models\BillingInvoice|null الفاتورة الصادرة إن صدرت.
+     */
     public static function updateSubscriptionPlan($organizationId, $planId, $userId)
     {
         $plan = SubscriptionPlan::where('id', $planId)->first();
 
-        if($plan){
-            $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $planId);
+        if (!$plan) {
+            return null;
+        }
 
-            if($billingDetails['amountDue'] == 0){
-                self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
+        $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $planId);
 
-                $team = Team::where('organization_id', $organizationId)
-                    ->whereIn('role', ['owner', 'manager'])
-                    ->orderByRaw("FIELD(role, 'owner', 'manager')")
-                    ->first();
-                $user = User::where('id', $team->user_id)->first();
-                $plan = SubscriptionPlan::where('id', $planId)->first();
+        if ($billingDetails['amountDue'] != 0) {
+            return null;
+        }
 
-                //Send subscription email
+        $invoice = self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
+
+        $team = Team::where('organization_id', $organizationId)
+            ->whereIn('role', ['owner', 'manager'])
+            ->orderByRaw("FIELD(role, 'owner', 'manager')")
+            ->first();
+        $user = $team ? User::where('id', $team->user_id)->first() : null;
+
+        if ($user) {
+            try {
                 Email::sendSubscriptionEmail('Subscription Plan Purchase', $user, $plan);
+            } catch (\Throwable $e) {
+                Log::warning('Subscription purchase email failed', [
+                    'organization_id' => $organizationId,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
+
+        return $invoice;
     }
 
     public static function createBillingInvoice($billingDetails, $organizationId, $planId, $userId)

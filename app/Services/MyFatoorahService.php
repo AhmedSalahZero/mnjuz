@@ -288,7 +288,9 @@ class MyFatoorahService
 
         return [
             'payment_id' => $paymentId,
-            'invoice_id' => (string) ($data->InvoiceId ?? ''),
+            // فاتورة ماي فاتورة لا فاتورتنا. الاسم الصريح لازم: كان يُمرَّر
+            // باسم invoice_id فيُكتب في العمود الذي يشير إلى billing_invoices.
+            'gateway_invoice_id' => (string) ($data->InvoiceId ?? ''),
             'amount' => $amountDetails['amount'],
             'currency' => $amountDetails['currency'],
             'payment_method' => (string) ($transaction->PaymentGateway ?? $transaction->PaymentMethod ?? ''),
