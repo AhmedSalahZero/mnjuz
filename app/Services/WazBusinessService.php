@@ -605,7 +605,21 @@ class WazBusinessService
         }
 
         // الفواتير — بخلاف العملاء وجهات الاتصال — ترجع invoice_id مباشرة.
-        $response = $this->post('/api/invoices', $payload);
+        try {
+            $response = $this->post('/api/invoices', $payload);
+        } catch (WazBusinessException $e) {
+            // كالشركة وجهة الاتصال والدفعة: المنصة تُصدر الفاتورة ثم تتأخّر
+            // استجابتها عن المهلة. إعادة المحاولة تُصدر فاتورة ثانية بنفس
+            // المبلغ فيرى المحاسب فاتورتين لعملية واحدة. رقم الفاتورة وُلّد
+            // قبل الإرسال وهو فريد، فيصلح دليلاً على وصولها.
+            $existing = $this->findInvoiceIdByNumber((int) $data['company_id'], $number);
+
+            if (!$e->connectionFailed || !$existing) {
+                throw $e;
+            }
+
+            return ['id' => $existing, 'number' => $number, 'response' => ['recovered' => true]];
+        }
 
         return [
             'id' => $this->idFromResponse($response),
@@ -622,6 +636,28 @@ class WazBusinessService
     public function getInvoice(int $invoiceId): array
     {
         return $this->get('/api/invoices/' . $invoiceId);
+    }
+
+    /**
+     * معرّف فاتورة العميل ذات الرقم المعطى، أو null.
+     */
+    private function findInvoiceIdByNumber(int $companyId, string $number): ?int
+    {
+        try {
+            foreach ($this->listInvoices($companyId) as $invoice) {
+                if (is_array($invoice) && (string) ($invoice['number'] ?? '') === $number) {
+                    return (int) $invoice['id'];
+                }
+            }
+        } catch (WazBusinessException $e) {
+            Log::warning('Waz: could not verify invoice after timeout', [
+                'company_id' => $companyId,
+                'number' => $number,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
 
     /**

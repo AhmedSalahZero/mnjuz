@@ -1515,5 +1515,6 @@
     "Resend failed messages": "إعادة إرسال الرسائل الفاشلة",
     "Resend :count failed message(s) for this campaign?": "إعادة إرسال :count رسالة فاشلة لهذه الحملة؟",
     "This campaign cannot be resent.": "لا يمكن إعادة إرسال هذه الحملة.",
-    "View invoice": "عرض الفاتورة"
+    "View invoice": "عرض الفاتورة",
+    "Setup fees invoice": "فاتورة رسوم التأسيس"
 }

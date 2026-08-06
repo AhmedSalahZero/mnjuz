@@ -8,6 +8,7 @@ use App\Models\BillingPayment;
 use App\Models\Organization;
 use App\Models\Ticket;
 use App\Models\User;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -94,6 +95,33 @@ class WazSyncService
      * @throws WazBusinessException
      */
     public function syncInvoice(BillingInvoice $invoice): void
+    {
+        // الشراء يُنشئ الدفعة والفاتورة في معاملة واحدة، فيُطلق المراقب
+        // وظيفتين تصلان الطابور معاً — ووظيفة الدفعة تُزامن الفاتورة أيضاً إن
+        // لم تُزامَن. عاملان متوازيان يقرآن waz_invoice_id فارغاً في اللحظة
+        // نفسها فيُصدر كلٌّ منهما فاتورة: يرى المحاسب فاتورتين لعملية واحدة،
+        // إحداهما مدفوعة والأخرى مستحقّة. القفل يجعل الثانية تنتظر ثم تقرأ
+        // المعرّف المحفوظ فتنصرف.
+        $lock = Cache::lock('waz_sync_invoice_' . $invoice->id, 120);
+
+        try {
+            $lock->block(30);
+        } catch (LockTimeoutException $e) {
+            Log::warning('Waz sync: could not acquire invoice lock', ['invoice_id' => $invoice->id]);
+
+            return;
+        }
+
+        try {
+            // القراءة داخل القفل لا قبله، وإلا عملنا على نسخة سبقها غيرنا.
+            $invoice->refresh();
+            $this->createInvoicesFor($invoice);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function createInvoicesFor(BillingInvoice $invoice): void
     {
         $companyId = $this->companyId((int) $invoice->organization_id);
         if (!$companyId) {

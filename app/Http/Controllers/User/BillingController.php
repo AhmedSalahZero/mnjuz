@@ -148,13 +148,13 @@ class BillingController extends BaseController
      * روابط عرض الفواتير الرسمية، مفهرسة بمعرّف حركة الفوترة المحلية.
      *
      * الجدول يعرض حركات (`billing_transactions`) لا فواتير، فنربط كل حركة من
-     * نوع invoice بفاتورتها ثم بنظيرتها في واز. الفاتورة الواحدة عندنا قد
-     * تقابل فاتورتين هناك (رسوم التأسيس والاشتراك منفصلتان بشرط المنصة)،
-     * فنُرجع رابط الاشتراك وإلا رابط التأسيس.
+     * نوع invoice بفاتورتها ثم بنظائرها في واز. الفاتورة الواحدة عندنا تقابل
+     * فاتورتين هناك — رسوم التأسيس والاشتراك منفصلتان بشرط المنصة — فنُرجعهما
+     * معاً. كان يُرجَع رابط واحد فقط، فلا يجد العميل رسوم تأسيسه إطلاقاً.
      *
      * تعذّر الوصول للمنصة لا يُفشل صفحة الفوترة — تظهر بلا أزرار عرض فقط.
      *
-     * @return array<int, string>  transaction_id => رابط
+     * @return array<int, array<int, array{kind: string, url: string}>>
      */
     private function wazInvoiceUrls($organizationId): array
     {
@@ -196,9 +196,16 @@ class BillingController extends BaseController
                 continue;
             }
 
-            $wazId = $invoice->waz_invoice_id ?: $invoice->waz_setup_invoice_id;
-            if ($wazId && isset($urls[(int) $wazId])) {
-                $result[(int) $transactionId] = $urls[(int) $wazId];
+            // الاشتراك أولاً لأنه المبلغ الأساسي، ثم التأسيس.
+            $links = [];
+            foreach (['plan' => $invoice->waz_invoice_id, 'setup' => $invoice->waz_setup_invoice_id] as $kind => $wazId) {
+                if ($wazId && isset($urls[(int) $wazId])) {
+                    $links[] = ['kind' => $kind, 'url' => $urls[(int) $wazId]];
+                }
+            }
+
+            if ($links) {
+                $result[(int) $transactionId] = $links;
             }
         }
 

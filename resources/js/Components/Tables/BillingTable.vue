@@ -1,5 +1,6 @@
 <script setup>
     import { ref } from 'vue';
+    import { useI18n } from 'vue-i18n';
     import debounce from 'lodash/debounce';
     import { router } from '@inertiajs/vue3';
     import 'vue3-toastify/dist/index.css';
@@ -19,7 +20,7 @@
         filters: {
             type: Object
         },
-        // { transaction_id: url } — يُملأ من صفحة الفوترة فقط
+        // { transaction_id: [{kind, url}, …] } — يُملأ من صفحة الفوترة فقط
         invoiceUrls: {
             type: Object,
             default: () => ({})
@@ -56,6 +57,18 @@
         })
     }
 
+    const { t } = useI18n();
+
+    // نتحمّل الشكل القديم (رابط نصّي واحد) كي لا تختفي الأزرار لو وصلت صفحة
+    // مبنيّة قبل التحديث.
+    const invoiceLinks = (item) => {
+        const links = props.invoiceUrls?.[item.id];
+        if (!links) return [];
+        return typeof links === 'string' ? [{ kind: 'plan', url: links }] : links;
+    };
+
+    const linkLabel = (kind) => kind === 'setup' ? t('Setup fees invoice') : t('View invoice');
+
     const emit = defineEmits(['update:modelValue', 'callback']);
 </script>
 <template>
@@ -90,18 +103,18 @@
                 <TableBodyRowItem class="hidden sm:table-cell capitalize">{{ item.description }}</TableBodyRowItem>
                 <TableBodyRowItem class="">{{ item.amount }}</TableBodyRowItem>
                 <TableBodyRowItem>
-                    <!-- الفاتورة الرسمية على منصة الفوترة. الرابط يُبنى من id
-                         و hash القادمين من الـAPI، فلا يظهر الزر إلا لحركة
-                         فاتورة لها نظير هناك. -->
-                    <div class="flex justify-end">
-                        <a v-if="invoiceUrls && invoiceUrls[item.id]" :href="invoiceUrls[item.id]"
-                            target="_blank" rel="noopener noreferrer" :title="$t('View invoice')"
+                    <!-- الفواتير الرسمية على منصة الفوترة. الحركة الواحدة عندنا
+                         تقابل فاتورتين هناك — الاشتراك ورسوم التأسيس — فيظهر
+                         لكلٍّ منهما رابطه. -->
+                    <div class="flex flex-wrap justify-end gap-2">
+                        <a v-for="link in invoiceLinks(item)" :key="link.kind" :href="link.url"
+                            target="_blank" rel="noopener noreferrer" :title="linkLabel(link.kind)"
                             class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" class="shrink-0">
                                 <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M14 3v4a1 1 0 0 0 1 1h4M9 13h6m-6 4h3M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z" />
                             </svg>
-                            <span class="hidden sm:inline">{{ $t('View invoice') }}</span>
+                            <span class="hidden sm:inline">{{ linkLabel(link.kind) }}</span>
                         </a>
                     </div>
                 </TableBodyRowItem>
