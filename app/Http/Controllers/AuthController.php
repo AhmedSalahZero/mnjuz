@@ -211,7 +211,11 @@ class AuthController extends BaseController
 	
         $guard = $user->role == 'user' ? 'user' : 'admin';
 		
-        if ($request->email || $request->password) {
+        // attempt يتحقّق من كلمة المرور مرة أخرى، فتجاوزُها في التحقّق وحده
+        // يُنتج «نجاح» بلا جلسة. على جهاز المطوّر ندخل بالمستخدم مباشرة.
+        if (app()->environment('local')) {
+            Auth::guard($guard)->login($user, $remember);
+        } elseif ($request->email || $request->password) {
             Auth::guard($guard)->attempt(['email' => $request->email, 'password' => $request->password], $remember);
         } else {
             Auth::guard($guard)->login($user, $remember);

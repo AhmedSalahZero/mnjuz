@@ -9,6 +9,7 @@ use App\Rules\Recaptcha;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class LoginRequest extends FormRequest
@@ -42,7 +43,21 @@ class LoginRequest extends FormRequest
                 'required',
                 function ($attribute, $value, $fail) {
                     $user = Auth::getProvider()->retrieveByCredentials(['email' => $this->email]);
-                    if (!$user || !Hash::check($value, $user->getAuthPassword())) {
+
+                    if (!$user) {
+                        return $fail(__('Your credentials are incorrect!'));
+                    }
+
+                    // على جهاز المطوّر فقط: الدخول بأي كلمة مرور لتفحّص حساب
+                    // عميل دون معرفة كلمته. مشروط بـ APP_ENV=local وحدها، فأي
+                    // بيئة أخرى — بما فيها staging — تتحقّق كالمعتاد.
+                    if (app()->environment('local')) {
+                        Log::warning('Local auth bypass used', ['email' => $this->email]);
+
+                        return;
+                    }
+
+                    if (!Hash::check($value, $user->getAuthPassword())) {
                         return $fail(__('Your credentials are incorrect!'));
                     }
                 },
