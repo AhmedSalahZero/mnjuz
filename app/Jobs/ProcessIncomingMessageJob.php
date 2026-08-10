@@ -15,6 +15,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use App\Support\JsonText;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -205,7 +206,7 @@ class ProcessIncomingMessageJob implements ShouldQueue
                 'wam_id' => $wamId,
                 'contact_id' => $contact->id,
                 'type' => 'inbound',
-                'metadata' => json_encode(\App\Helpers\ChatMetadataHelper::minimalPayloadForStorage($this->message)),
+                'metadata' => JsonText::encode(\App\Helpers\ChatMetadataHelper::minimalPayloadForStorage($this->message)),
                 'created_at' => now(),
                 'status' => 'delivered',
                 'is_read' => 0,

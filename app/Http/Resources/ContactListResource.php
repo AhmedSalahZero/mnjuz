@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Contact;
+use App\Support\JsonText;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -92,6 +93,6 @@ class ContactListResource extends JsonResource
         } else {
             $out = $decoded;
         }
-        return json_encode($out);
+        return JsonText::encode($out);
     }
 }

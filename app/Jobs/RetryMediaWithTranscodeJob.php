@@ -14,6 +14,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use App\Support\JsonText;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -93,7 +94,7 @@ class RetryMediaWithTranscodeJob implements ShouldQueue, ShouldBeUnique
 
         $metadata['transcode_retry_count'] = 1;
         $metadata['transcode_retry_status'] = 'retrying';
-        $chat->update(['metadata' => json_encode($metadata)]);
+        $chat->update(['metadata' => JsonText::encode($metadata)]);
         $this->broadcastChatUpdate($chat->fresh(['media', 'contact', 'logs']));
 
         $source = $this->resolveSourceFile($chat);
@@ -167,7 +168,7 @@ class RetryMediaWithTranscodeJob implements ShouldQueue, ShouldBeUnique
     {
         $metadata['transcode_retry_status'] = 'failed';
         $chat->update([
-            'metadata' => json_encode($metadata),
+            'metadata' => JsonText::encode($metadata),
             'status' => 'failed',
         ]);
         $this->broadcastChatUpdate($chat->fresh(['media', 'contact', 'logs']));

@@ -9,6 +9,7 @@ use App\Models\Chat;
 use App\Models\ChatStatusLog;
 use App\Services\CampaignRetryService;
 use App\Support\ChatStatus;
+use App\Support\JsonText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -76,7 +77,7 @@ class ProcessMessageStatusJob implements ShouldQueue
                     // نسجّل كل بلاغ يصل حتى لو لم نطبّقه، فالسجل هو مرجع التدقيق.
                     ChatStatusLog::create([
                         'chat_id' => $chat->id,
-                        'metadata' => json_encode($status),
+                        'metadata' => JsonText::encode($status),
                         'created_at' => $now,
                     ]);
 

@@ -30,9 +30,11 @@ use App\Services\PhoneService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Support\ChatStatus;
+use App\Support\JsonText;
 use App\Support\OrganizationRole;
 use App\Traits\TemplateTrait;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -2097,7 +2099,7 @@ class ApiController extends Controller
             'pagination' => $pagination,
         ], fn ($value) => $value !== null);
 
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = JsonText::encode($payload);
 
         // ردّ ضخم لا يفشل هنا بل عند الخادم أو التطبيق، فلا يترك أثراً في
         // السجلّ. نُسجّله بأنفسنا كي يُعرف السبب بدل «خطأ ما» عند العميل.
@@ -2112,7 +2114,10 @@ class ApiController extends Controller
             ]);
         }
 
-        return response()->json($payload, 200);
+        // نُرجع النصّ المُرمَّز أعلاه بدل تمرير المصفوفة لـ response()->json،
+        // فذاك يُرمّزها مرّة ثانية — نسخة كاملة أخرى من الردّ في الذاكرة بلا
+        // فائدة، وبرايات افتراضية تُعيد تهريب العربية التي وفّرناها للتوّ.
+        return JsonResponse::fromJsonString($json, 200);
     }
     /**
      * Load models with whereIn in chunks to stay under MySQL's prepared-statement
@@ -2179,7 +2184,7 @@ class ApiController extends Controller
                 }
                 $minimal = array_intersect_key($decoded, array_flip(['status', 'errors', 'id']));
                 $minimal = ChatStatus::normalizeLogMetadata($minimal);
-                $logs[] = ['metadata' => json_encode($minimal)];
+                $logs[] = ['metadata' => JsonText::encode($minimal)];
             }
         }
 
@@ -2190,7 +2195,7 @@ class ApiController extends Controller
             $metadata[$type] = null;
         }
         if (is_array($metadata)) {
-            $metadata = json_encode($metadata);
+            $metadata = JsonText::encode($metadata);
         }
 
         $fullName = $contactFullName;

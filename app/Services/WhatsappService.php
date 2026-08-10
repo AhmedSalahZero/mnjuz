@@ -18,6 +18,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\Request;
+use App\Support\JsonText;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
@@ -180,7 +181,7 @@ class WhatsappService
 				'contact_id' => $contact->id,
 				'type' => 'outbound',
 				'user_id' => $userId,
-				'metadata' => json_encode($response),
+				'metadata' => JsonText::encode($response),
 				'status' => 'delivered',
 				'created_at' => now(),
 			]);
@@ -484,7 +485,7 @@ class WhatsappService
             }
         }
 
-        return json_encode($array);
+        return JsonText::encode($array);
     }
 
     private function buildTemplateChatMessage($templateContent, $contact){
@@ -495,7 +496,7 @@ class WhatsappService
             ->first();
 
         if (!$template || empty($template->metadata)) {
-            return json_encode([
+            return JsonText::encode([
                 'type' => 'text',
                 'text' => [
                     'body' => (string) ($templateContent['name'] ?? 'template'),
@@ -599,7 +600,7 @@ class WhatsappService
         }
 
         //\Log::info(json_encode($array));
-        return json_encode($array);
+        return JsonText::encode($array);
     }
 
     private function resolveTemplateParameterValue(array $parameter, $contact): string
@@ -773,7 +774,7 @@ class WhatsappService
                     $chat->update([
                         'wam_id' => $wamId,
                         'status' => 'sent',
-                        'metadata' => json_encode($mediaData),
+                        'metadata' => JsonText::encode($mediaData),
                     ]);
 
                     if ($chat->media) {
@@ -788,7 +789,7 @@ class WhatsappService
 
                     ChatStatusLog::create([
                         'chat_id' => $chat->id,
-                        'metadata' => json_encode([
+                        'metadata' => JsonText::encode([
                             'id' => $wamId,
                             'status' => 'sent',
                         ]),
@@ -818,7 +819,7 @@ class WhatsappService
                     'contact_id' => $contact->id,
                     'type' => 'outbound',
                     'user_id' => $userId,
-                    'metadata' => json_encode($mediaData),
+                    'metadata' => JsonText::encode($mediaData),
                     'status' => 'sent',
                     'created_at'=>now()
                 ]);

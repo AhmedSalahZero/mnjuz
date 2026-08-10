@@ -4,6 +4,7 @@ namespace App\Services\Chat;
 
 use App\Models\Contact;
 use App\Support\ChatStatus;
+use App\Support\JsonText;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -96,7 +97,7 @@ class ChatBroadcastPayloadBuilder
         $metadata = $arr['metadata'] ?? null;
         $metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
         if (is_array($metadata)) {
-            $metadata = json_encode($metadata);
+            $metadata = JsonText::encode($metadata);
         }
 
         return [
@@ -258,7 +259,7 @@ class ChatBroadcastPayloadBuilder
             }
             $minimal = array_intersect_key($decoded, array_flip(self::LOG_METADATA_KEYS));
             $minimal = ChatStatus::normalizeLogMetadata($minimal);
-            $out[] = ['metadata' => json_encode($minimal)];
+            $out[] = ['metadata' => JsonText::encode($minimal)];
         }
 
         return $out;

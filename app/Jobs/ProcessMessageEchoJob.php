@@ -12,6 +12,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use App\Support\JsonText;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -135,7 +136,7 @@ class ProcessMessageEchoJob implements ShouldQueue
                 'wam_id' => $wamId,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
-                'metadata' => json_encode(ChatMetadataHelper::minimalPayloadForStorage($this->echo)),
+                'metadata' => JsonText::encode(ChatMetadataHelper::minimalPayloadForStorage($this->echo)),
                 'created_at' => now(),
                 'status' => 'sent',
                 'is_read' => 1,
