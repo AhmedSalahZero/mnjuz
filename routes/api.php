@@ -119,6 +119,8 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	// Route::get('/list-chat-contacts', [App\Http\Controllers\ApiController::class, 'listChatContacts']); // removed because it is not used in the mobile app
 	// Route::get('/list-messages-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'listChatContactsForContact']);
 	Route::get('/list-messages-from-uuid-to-end', [App\Http\Controllers\ApiController::class, 'listChatMessagesFromUuidToEnd']);
+	// نفس البيانات بلا تكرار جهة الاتصال في كل رسالة. v1 باقٍ حتى ينتقل التطبيق.
+	Route::get('/list-messages-from-uuid-to-end-v2', [App\Http\Controllers\ApiController::class, 'listChatMessagesFromUuidToEndV2']);
 	Route::delete('/delete-chat-for-contact/{uuid}', [App\Http\Controllers\ApiController::class, 'deleteChatForContact']);
 	// Route::get('/media/signed-url', [App\Http\Controllers\ApiController::class, 'getSignedMediaUrl']);
 	Route::post('/toggle-ticket-status/{id}', [App\Http\Controllers\ApiController::class, 'toggleTicketStatus']);
