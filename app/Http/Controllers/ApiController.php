@@ -27,6 +27,8 @@ use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\MediaService;
 use App\Services\PhoneService;
+use App\Services\ActivityLogger;
+use App\Services\AgentPerformanceService;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Support\ChatStatus;
@@ -959,6 +961,17 @@ class ApiController extends Controller
         }
         
         $message = $this->whatsappService->sendMessage($contact->uuid, $request->message, 0, $type, $request->buttons, $header, $request->footer);
+
+        // مسار التطبيق لا يمرّ بـ ChatService، فلولا هذا السطر لغاب كل ما يرسله
+        // الموظفون من الموبايل عن سجلّ النشاط — وهو المسار الأكثر استعمالاً.
+        ActivityLogger::log(
+            ActivityLogger::MESSAGE_SENT,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id,
+            [],
+            (int) $organizationId
+        );
 
         $data = $message;
         if ($message === null) {
@@ -2255,6 +2268,25 @@ class ApiController extends Controller
             'logs' => $logs,
             'user' => $user,
         ];
+    }
+
+    /**
+     * نبضة نشاط من التطبيق. لم يكن للموبايل نبضة إطلاقاً — النبضة الوحيدة في
+     * routes/web.php — فكل من يعمل من التطبيق يظهر «غير متصل» دائماً مهما أرسل.
+     */
+    public function performanceHeartbeat(Request $request)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+
+        if ($organizationId && SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance')) {
+            AgentPerformanceService::recordHeartbeat(
+                $organizationId,
+                (int) $request->user()->id,
+                $request->boolean('visible', true)
+            );
+        }
+
+        return response()->json(['success' => true]);
     }
 
     /**

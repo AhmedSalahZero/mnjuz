@@ -135,14 +135,42 @@
 				<hr>
 			</div>
 			<ul class="pb-4 space-y-1 text-sm mt-2">
-				<li v-if="!isOrgAgent && organization?.plan?.features?.agent_performance" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
-					:class="$page.url.startsWith('/performance') ? 'bg-slate-50 text-black' : ''">
-					<Link rel="noopener noreferrer" href="/performance" class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>
+				<!-- التقرير: تبويب أب يفتح قائمة فرعية طوليّة بجانب القائمة -->
+				<li v-if="isOrgPrivileged" class="relative rounded-[5px] px-2"
+					@mouseenter="reportsOpen = true" @mouseleave="reportsOpen = false">
+					<button type="button" @click="reportsOpen = !reportsOpen"
+						class="w-full flex items-center justify-between p-2 rounded-md hover:bg-slate-50 hover:text-black"
+						:class="isReportsActive ? 'bg-slate-50 text-black' : ''"
+						:aria-expanded="reportsOpen" aria-haspopup="true">
+						<span class="flex items-center space-x-3 truncate">
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>
+							</svg>
+							<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Reports') }}</span>
+						</span>
+						<svg v-if="!menuIconsOnly" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+							fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+							class="shrink-0 transition-transform" :class="isRtl ? 'rotate-180' : ''">
+							<polyline points="9 18 15 12 9 6" />
 						</svg>
-						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Agent Performance') }}</span>
-					</Link>
+					</button>
+
+					<div v-show="reportsOpen"
+						class="absolute top-0 z-30 min-w-[200px] rounded-md border border-slate-200 bg-white p-1 shadow-lg"
+						:class="isRtl ? 'right-full mr-1' : 'left-full ml-1'">
+						<Link v-if="organization?.plan?.features?.agent_performance" href="/performance"
+							class="block rounded-[5px] px-3 py-2 text-sm hover:bg-slate-50 hover:text-black"
+							:class="$page.url.startsWith('/performance') ? 'bg-slate-50 text-black' : ''"
+							@click="reportsOpen = false">
+							{{ $t('Agent Performance') }}
+						</Link>
+						<Link href="/activity-log"
+							class="block rounded-[5px] px-3 py-2 text-sm hover:bg-slate-50 hover:text-black"
+							:class="$page.url.startsWith('/activity-log') ? 'bg-slate-50 text-black' : ''"
+							@click="reportsOpen = false">
+							{{ $t('Activity Log') }}
+						</Link>
+					</div>
 				</li>
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
@@ -363,6 +391,13 @@ const isLocationSwitchModalOpen = ref(false)
 const showDropdown1 = ref(false)
 const isOpenOrganizationModal = ref(false)
 const menuIconsOnly = ref(localStorage.getItem('MenuOpen') === 'true' ?? false)
+
+// قائمة «التقرير» الفرعية. تُفتح بالمرور أو بالنقر — النقر يلزم للمس.
+const reportsOpen = ref(false)
+const isRtl = computed(() => usePage().props.isRtl)
+const isReportsActive = computed(() =>
+	usePage().url.startsWith('/performance') || usePage().url.startsWith('/activity-log')
+)
 
 const emit = defineEmits(['closeSidebar'])
 

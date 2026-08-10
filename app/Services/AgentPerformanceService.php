@@ -13,6 +13,13 @@ use Illuminate\Support\Facades\DB;
  */
 class AgentPerformanceService
 {
+    /**
+     * نافذة اعتبار الموظف متصلاً. كانت دقيقتين والنبضة كل دقيقة، فنبضة
+     * واحدة تتأخّر — والمتصفّح يخنق مؤقّتات التبويبات الخلفية — تكفي
+     * لإظهاره غير متصل.
+     */
+    private const ONLINE_WINDOW_MINUTES = 5;
+
     private int $organizationId;
 
     public function __construct(int $organizationId)
@@ -39,14 +46,22 @@ class AgentPerformanceService
 
         // ملاحظة: الأعمدة المجمّعة تحتاج alias صريحاً مع select() قبل pluck()؛
         // pluck() يقصّ التعبير الخام عند آخر نقطة فيبحث عن عمود غير موجود.
-        $messagesSent = DB::table('chats')
+        // نجمع العدّ وآخر إرسال في مرور واحد: الثاني دليل حضورٍ مستقلّ عن النبضة.
+        $sentStats = DB::table('chats')
             ->where('organization_id', $org)
             ->where('type', 'outbound')
             ->whereNotNull('user_id')
             ->whereBetween('created_at', [$from, $to])
             ->groupBy('user_id')
-            ->select(['user_id', DB::raw('COUNT(*) as total')])
-            ->pluck('total', 'user_id');
+            ->select([
+                'user_id',
+                DB::raw('COUNT(*) as total'),
+                DB::raw('MAX(created_at) as last_action_at'),
+            ])
+            ->get()
+            ->keyBy('user_id');
+
+        $messagesSent = $sentStats->map(fn ($r) => $r->total);
 
         $ticketsAssigned = DB::table('chat_tickets')
             ->join('contacts', 'contacts.id', '=', 'chat_tickets.contact_id')
@@ -104,7 +119,20 @@ class AgentPerformanceService
         foreach ($members as $m) {
             $userId = (int) $m->user_id;
             $lastPing = $lastActivity[$userId] ?? null;
-            $online = $lastPing ? Carbon::parse($lastPing)->gt($now->copy()->subMinutes(2)) : false;
+
+            // النبضة تأتي من الويب وحده، فمن يعمل من التطبيق أو من تبويب في
+            // الخلفية كان يظهر «غير متصل» وهو يرسل الرسائل. فِعلٌ مُثبت في
+            // قاعدة البيانات دليلُ حضورٍ لا يقلّ عن النبضة، فنأخذ الأحدث منهما.
+            $lastAction = $sentStats[$userId]->last_action_at ?? null;
+
+            $lastSeen = $lastPing;
+            if ($lastAction && (!$lastSeen || $lastAction > $lastSeen)) {
+                $lastSeen = $lastAction;
+            }
+
+            $online = $lastSeen
+                ? Carbon::parse($lastSeen)->gt($now->copy()->subMinutes(self::ONLINE_WINDOW_MINUTES))
+                : false;
 
             $rows[] = [
                 'user_id' => $userId,
@@ -117,7 +145,7 @@ class AgentPerformanceService
                 'avg_first_response_seconds' => isset($firstResponse[$userId]) ? (int) round($firstResponse[$userId]) : null,
                 'avg_resolution_seconds' => isset($resolution[$userId]) ? (int) round($resolution[$userId]) : null,
                 'active_seconds' => (int) ($activity[$userId]->active_seconds ?? 0),
-                'last_activity_at' => $lastPing,
+                'last_activity_at' => $lastSeen,
                 'online' => $online,
             ];
         }
@@ -185,7 +213,13 @@ class AgentPerformanceService
      * تسجيل نبضة نشاط للموظف الحالي: يضيف الفترة المنقضية (بحدّ أقصى) إلى
      * الوقت النشط لليوم ويحدّث آخر نبضة.
      */
-    public static function recordHeartbeat(int $organizationId, int $userId): void
+    /**
+     * @param  bool  $countTime  هل تُحتسب الفترة المنقضية ضمن الوقت النشط؟
+     *   النبضة تؤدّي وظيفتين مختلفتين: إثبات الحضور، وقياس الوقت النشط. الموظف
+     *   الذي تبويبه مفتوح في الخلفية حاضرٌ لكنه غير نشط، فنُثبت حضوره ولا نزيد
+     *   وقته. خلط الوظيفتين هو ما كان يُظهر الموظفين العاملين «غير متصلين».
+     */
+    public static function recordHeartbeat(int $organizationId, int $userId, bool $countTime = true): void
     {
         $today = Carbon::now()->toDateString();
         $now = Carbon::now();
@@ -228,7 +262,7 @@ class AgentPerformanceService
         }
 
         $increment = 0;
-        if ($existing->last_ping_at) {
+        if ($countTime && $existing->last_ping_at) {
             $elapsed = $now->diffInSeconds(Carbon::parse($existing->last_ping_at));
             $increment = min($elapsed, $maxIncrement);
         }

@@ -60,6 +60,11 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('queue:prune-batches --hours=48 --unfinished=72')
             ->daily();
+
+        // سجلّ النشاط يُحفظ سبعة أيام ثم يُحذف — والصفحة تُعلن ذلك للمستخدم.
+        $schedule->command('activity:prune')
+            ->dailyAt('03:30')
+            ->withoutOverlapping();
         
         // $schedule->command('model:prune', [
         //     '--model' => [CampaignLog::class],

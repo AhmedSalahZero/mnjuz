@@ -39,6 +39,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use App\Services\ActivityLogger;
 
 class ChatService
 {
@@ -553,6 +554,15 @@ class ChatService
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
             return MessagingWindowHelper::closedWindowJsonResponse();
         }
+
+        ActivityLogger::log(
+            $request->file('file') ? ActivityLogger::MEDIA_SENT : ActivityLogger::MESSAGE_SENT,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id,
+            [],
+            (int) $this->organizationId
+        );
 
         if ($request->file('file')) {
 			$fileType = $request->type;

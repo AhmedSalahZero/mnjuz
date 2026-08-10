@@ -11,6 +11,7 @@ use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
+use App\Services\ActivityLogger;
 
 class TeamController extends BaseController
 {
@@ -50,6 +51,14 @@ class TeamController extends BaseController
     public function invite(StoreTeam $request){
         $this->teamService->invite($request);
 
+        ActivityLogger::log(
+            ActivityLogger::TEAM_MEMBER_INVITED,
+            (string) $request->input('email'),
+            'team_invite',
+            null,
+            ['role' => $request->input('role')]
+        );
+
         //response()->json(['success' => true, 'message'=> __('User invited successfully!'), 'data' => $invite])
 
         return Redirect::back()->with(
@@ -63,6 +72,14 @@ class TeamController extends BaseController
     public function update(Request $request, $uuid){
         $this->teamService->update($request, $uuid);
 
+        ActivityLogger::log(
+            ActivityLogger::TEAM_MEMBER_ROLE_CHANGED,
+            $this->teamMemberLabel($uuid),
+            'team',
+            null,
+            ['role' => $request->input('role')]
+        );
+
         return Redirect::back()->with(
             'status', [
                 'type' => 'success', 
@@ -73,6 +90,28 @@ class TeamController extends BaseController
 
     public function delete($uuid)
     {
+        $label = $this->teamMemberLabel($uuid);
+
         $this->teamService->destroy($uuid);
+
+        ActivityLogger::log(ActivityLogger::TEAM_MEMBER_REMOVED, $label, 'team', null);
+    }
+
+    /**
+     * اسم العضو للسجلّ، يُقرأ قبل الحذف.
+     * الـ uuid هنا للصفّ في teams لا للمستخدم — جدول users بلا عمود uuid.
+     */
+    private function teamMemberLabel($uuid): ?string
+    {
+        $user = \App\Models\User::whereIn(
+            'id',
+            \App\Models\Team::where('uuid', $uuid)->select('user_id')
+        )->first(['first_name', 'last_name', 'email']);
+
+        if (!$user) {
+            return null;
+        }
+
+        return trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->email;
     }
 }

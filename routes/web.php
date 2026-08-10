@@ -168,6 +168,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chats/{uuid}/read', [App\Http\Controllers\User\ChatController::class, 'markAsRead']);
                 Route::get('/shortcuts/available', [App\Http\Controllers\User\ShortcutController::class, 'available']);
                 Route::get('/performance', [App\Http\Controllers\User\AgentPerformanceController::class, 'index']);
+                Route::get('/activity-log', [App\Http\Controllers\User\ActivityLogController::class, 'index']);
+                Route::get('/activity-log/export', [App\Http\Controllers\User\ActivityLogController::class, 'export']);
                 Route::post('/performance/heartbeat', [App\Http\Controllers\User\AgentPerformanceController::class, 'heartbeat']);
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);

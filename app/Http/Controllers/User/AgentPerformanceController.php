@@ -63,7 +63,11 @@ class AgentPerformanceController extends BaseController
     public function heartbeat(Request $request)
     {
         if ($this->featureEnabled()) {
-            AgentPerformanceService::recordHeartbeat((int) $this->organizationId(), (int) auth()->id());
+            AgentPerformanceService::recordHeartbeat(
+                (int) $this->organizationId(),
+                (int) auth()->id(),
+                $request->boolean('visible', true)
+            );
         }
 
         return response()->json(['success' => true]);

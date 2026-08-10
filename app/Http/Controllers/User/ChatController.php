@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Redirect;
+use App\Services\ActivityLogger;
 
 class ChatController extends BaseController
 {
@@ -145,6 +146,12 @@ class ChatController extends BaseController
 		$res= null;
 		if($contact){
 			$res = $this->chatService()->blockContact($organization,$contact);
+			ActivityLogger::log(
+				ActivityLogger::CONTACT_BLOCKED,
+				trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+				'contact',
+				$contact->id
+			);
 		}else{
 			return Redirect::back()->with(
             'status', [
@@ -170,6 +177,12 @@ class ChatController extends BaseController
 		$res= null;
 		if($contact){
 			$res = $this->chatService()->unblockContact($organization,$contact);
+			ActivityLogger::log(
+				ActivityLogger::CONTACT_UNBLOCKED,
+				trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+				'contact',
+				$contact->id
+			);
 		}else{
 			return Redirect::back()->with(
             'status', [
@@ -189,12 +202,24 @@ class ChatController extends BaseController
     }
     public function deleteChats($uuid)
     {
+        // نقرأ الاسم قبل المسح ليبقى السطر مفهوماً في السجلّ.
+        $clearedContact = Contact::where('uuid', $uuid)->first(['id', 'first_name', 'last_name', 'phone']);
+
         if (!$this->chatService()->clearContactChat($uuid)) {
             return Redirect::back()->with(
                 'status', [
                     'type' => 'error',
                     'message' => __('Contact not found'),
                 ]
+            );
+        }
+
+        if ($clearedContact) {
+            ActivityLogger::log(
+                ActivityLogger::CHAT_DELETED,
+                trim(($clearedContact->first_name ?? '') . ' ' . ($clearedContact->last_name ?? '')) ?: $clearedContact->phone,
+                'contact',
+                $clearedContact->id
             );
         }
 

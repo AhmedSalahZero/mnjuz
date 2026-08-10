@@ -121,11 +121,12 @@ provide('updateTotalUnreadMessages', (val) => {
 })
 
 // نبضة نشاط لقياس أداء الموظفين (مفعّلة فقط عند اشتراك المنظمة في الميزة).
-// نرسل نبضة فقط عندما تكون النافذة مرئية لتمثيل الوقت النشط الفعلي.
+// نرسل النبضة دائماً لإثبات الحضور، ونُعلم الخادم هل النافذة مرئية ليقرّر
+// احتساب الوقت النشط. كان الإرسال يتوقّف كلّياً حين يُخفى التبويب، فيظهر
+// الموظف «غير متصل» بعد دقيقتين وهو على المنصة.
 let heartbeatTimer = null
 const sendHeartbeat = () => {
-	if (document.visibilityState !== 'visible') return
-	axios.post('/performance/heartbeat').catch(() => { })
+	axios.post('/performance/heartbeat', { visible: document.visibilityState === 'visible' }).catch(() => { })
 }
 const setupActivityHeartbeat = () => {
 	if (!organization.value?.plan?.features?.agent_performance) return

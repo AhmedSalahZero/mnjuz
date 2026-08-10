@@ -47,6 +47,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use App\Services\ActivityLogger;
 
 class AuthController extends BaseController
 {
@@ -224,6 +225,27 @@ class AuthController extends BaseController
         // API routes لا تستخدم session middleware — regenerate للويب فقط
         if ($request->hasSession()) {
             $request->session()->regenerate();
+        }
+
+        // نُسجّل الدخول هنا: نقطة الالتقاء الوحيدة للويب والتطبيق معاً، وبعد
+        // نجاح المصادقة قطعاً. المنظمة قد لا تكون مختارة بعد، فنستنتجها من
+        // آخر منظمة للمستخدم أو من عضويته الوحيدة.
+        if ($user->role === 'user') {
+            $loginOrgId = (int) ($user->current_web_organization_id
+                ?? $user->current_mobile_organization_id
+                ?? Team::where('user_id', $user->id)->value('organization_id')
+                ?? 0);
+
+            if ($loginOrgId) {
+                ActivityLogger::log(
+                    ActivityLogger::LOGIN,
+                    null, null, null,
+                    ['channel' => ($request->expectsJson() || $request->is('api/*')) ? 'mobile' : 'web'],
+                    $loginOrgId,
+                    (int) $user->id,
+                    trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->email
+                );
+            }
         }
 		/**
 		 * @var User $user
@@ -854,6 +876,22 @@ class AuthController extends BaseController
 
     public function logout(Request $request)
     {
+        // قبل أي إبطال للجلسة أو حذف للتوكن — بعده لا يبقى مستخدم يُنسب إليه.
+        $logoutUser = $request->user() ?? auth()->user();
+        if ($logoutUser && ($logoutUser->role ?? null) === 'user') {
+            ActivityLogger::log(
+                ActivityLogger::LOGOUT,
+                null, null, null,
+                ['channel' => ($request->expectsJson() || $request->is('api/*')) ? 'mobile' : 'web'],
+                (int) (session()->get('current_organization')
+                    ?? $logoutUser->current_mobile_organization_id
+                    ?? $logoutUser->current_web_organization_id
+                    ?? 0) ?: null,
+                (int) $logoutUser->id,
+                trim(($logoutUser->first_name ?? '') . ' ' . ($logoutUser->last_name ?? '')) ?: $logoutUser->email
+            );
+        }
+
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
             // Set locale based on user's language for proper translation

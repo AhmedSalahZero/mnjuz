@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Validator;
+use App\Services\ActivityLogger;
 
 class ContactController extends BaseController
 {
@@ -303,6 +304,13 @@ class ContactController extends BaseController
 
     public function store(StoreContact $request){
         $contact = $this->contactService()->store($request);
+
+        ActivityLogger::log(
+            ActivityLogger::CONTACT_CREATED,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id
+        );
         
         return redirect('/contacts?id=' . $contact->uuid)->with(
             'status', [
@@ -315,6 +323,13 @@ class ContactController extends BaseController
     public function update(StoreContact $request, $uuid)
     {
         $contact = $this->contactService()->store($request, $uuid);
+
+        ActivityLogger::log(
+            ActivityLogger::CONTACT_UPDATED,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id
+        );
 
         return redirect('/contacts/' . $contact->uuid)->with(
             'status', [
@@ -339,7 +354,21 @@ class ContactController extends BaseController
     public function delete(Request $request)
     {
         $uuids = $request->input('uuids', []);
+
+        // نقرأ الأسماء قبل الحذف: بعده لا يبقى ما يُسمّى في السجلّ.
+        $deleted = \App\Models\Contact::whereIn('uuid', (array) $uuids)
+            ->get(['id', 'first_name', 'last_name', 'phone']);
+
         $this->contactService()->delete($uuids);
+
+        foreach ($deleted as $contact) {
+            ActivityLogger::log(
+                ActivityLogger::CONTACT_DELETED,
+                trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+                'contact',
+                $contact->id
+            );
+        }
 
         return redirect('/contacts')->with(
             'status', [

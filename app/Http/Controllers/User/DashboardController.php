@@ -50,7 +50,11 @@ class DashboardController extends BaseController
         $settings = Setting::whereIn('key', ['is_embedded_signup_active', 'whatsapp_client_id', 'whatsapp_config_id'])
             ->pluck('value', 'key');
 
-        $data['organization'] = $organization;
+        // لا نمرّر organization كخاصية صفحة: خصائص الصفحة تطغى على المشتركة في
+        // Inertia، وهذا الكائن خام بلا plan.features ولا notification المفكوكة.
+        // فكانت لوحة التحكم وحدها تُخفي تبويبات الباقة (أداء الموظفين،
+        // الاختصارات) وتُعطّل نبضة النشاط في App.vue. المشترك في
+        // HandleInertiaRequests هو المصدر الوحيد.
         $data['campaigns'] = Campaign::where('organization_id', $organizationId)
             ->whereIn('status', ['pending', 'scheduled'])
             ->limit(5)
