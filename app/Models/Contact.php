@@ -377,8 +377,15 @@ class Contact extends Model
 
     protected function decodeUnicodeBytes($value)
     {
+        // نُرجع '' لا null عن عمد.
+        //
+        // قبل الحراسة كانت preg_replace_callback تتلقّى null فتُرجع '' مع تحذير
+        // إهمال — فكان الـ API يُخرج first_name = "" لجهات الاتصال بلا اسم.
+        // وحين أرجعتُ null «تنظيفاً» تغيّر عقد الـ API صامتاً، فرفض التطبيق
+        // تحويل null إلى نصّ وأظهر خطأه العام عند البحث. المخرَج يبقى كما كان،
+        // والحراسة تمنع الانهيار فقط.
         if ($value === null) {
-            return null;
+            return '';
         }
 
         return preg_replace_callback('/\\\\x([0-9A-F]{2})/i', function ($matches) {

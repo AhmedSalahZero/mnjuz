@@ -95,6 +95,42 @@ class ContactPhoneNormalizationTest extends TestCase
         $this->assertSame('+20554881779', $this->saving('20554881779')->phone);
     }
 
+    /**
+     * عقد الـ API: جهة اتصال بلا اسم تُخرج نصّاً فارغاً لا null.
+     *
+     * حارس null «التنظيفي» في decodeUnicodeBytes حوّل "" إلى null، فرفض تطبيق
+     * الموبايل تحويلها إلى نصّ وانكسر البحث في جهات الاتصال. المخرَج جزء من
+     * العقد لا تفصيل داخلي.
+     */
+    public function test_a_nameless_contact_returns_empty_strings_not_null(): void
+    {
+        $contact = new Contact();
+        $contact->setRawAttributes(['id' => 1, 'first_name' => null, 'last_name' => null]);
+
+        $this->assertSame('', $contact->first_name);
+        $this->assertSame('', $contact->last_name);
+        $this->assertSame(' ', $contact->full_name);
+    }
+
+    /** وحين يغيب المفتاح أصلاً: نصّ فارغ أيضاً، لا انهيار ولا null. */
+    public function test_a_missing_name_column_returns_empty_string_without_crashing(): void
+    {
+        $contact = new Contact();
+        $contact->setRawAttributes(['id' => 1, 'phone' => '+966500000000']);
+
+        $this->assertSame('', $contact->first_name);
+        $this->assertSame('', $contact->last_name);
+    }
+
+    public function test_a_real_name_passes_through_untouched(): void
+    {
+        $contact = new Contact();
+        $contact->setRawAttributes(['first_name' => 'أحمد', 'last_name' => 'سالم']);
+
+        $this->assertSame('أحمد', $contact->first_name);
+        $this->assertSame('أحمد سالم', $contact->full_name);
+    }
+
     public function test_to_e164_returns_null_rather_than_guessing(): void
     {
         $this->assertNull(PhoneService::toE164('0537675751'));
