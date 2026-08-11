@@ -91,6 +91,7 @@ class HandleInertiaRequests extends Middleware
                         'ice_breakers' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'ice_breakers'),
                         'shortcuts' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts'),
                         'agent_performance' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance'),
+                        'activity_log' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'activity_log'),
                     ],
                 ];
 

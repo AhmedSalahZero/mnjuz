@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Services\ActivityLogger;
 
 class CampaignController extends BaseController
 {
@@ -113,6 +114,8 @@ class CampaignController extends BaseController
     public function store(StoreCampaign $request){
         $this->campaignService->store($request);
 
+        ActivityLogger::log(ActivityLogger::CAMPAIGN_CREATED, (string) $request->input('name'), 'campaign');
+
         return Redirect::route('campaigns')->with(
             'status', [
                 'type' => 'success', 
@@ -154,7 +157,17 @@ class CampaignController extends BaseController
     }
 
     public function delete($uuid){
+        // نقرأ الاسم قبل الحذف — بعده لا يبقى ما يُسمّى في السجلّ.
+        $campaign = \App\Models\Campaign::where('uuid', $uuid)->first(['id', 'name']);
+
         $this->campaignService->destroy($uuid);
+
+        ActivityLogger::log(
+            ActivityLogger::CAMPAIGN_DELETED,
+            $campaign->name ?? null,
+            'campaign',
+            $campaign->id ?? null
+        );
 
         return Redirect::back()->with(
             'status', [

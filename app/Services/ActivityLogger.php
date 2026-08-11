@@ -55,11 +55,36 @@ class ActivityLogger
     // الإعدادات والمجموعات
     public const SETTINGS_UPDATED = 'settings_updated';
     public const CONTACT_GROUP_CREATED = 'contact_group_created';
+    public const CONTACT_GROUP_UPDATED = 'contact_group_updated';
     public const CONTACT_GROUP_DELETED = 'contact_group_deleted';
     public const AUTO_REPLY_UPDATED = 'auto_reply_updated';
+    public const SHORTCUT_CREATED = 'shortcut_created';
+    public const SHORTCUT_DELETED = 'shortcut_deleted';
 
     /** أيام الاحتفاظ قبل الحذف — تُعرض للمستخدم في الصفحة. */
     public const RETENTION_DAYS = 7;
+
+    /**
+     * ذاكرة الطلب الواحد لحالة الميزة لكل منشأة.
+     *
+     * isSubscriptionFeatureEnabled يستعلم قاعدة البيانات في كل نداء، والتسجيل
+     * يقع على مسارات ساخنة — كل رسالة تُرسل — فبدون هذا الحفظ نضيف استعلاماً
+     * لكل فعل. الحفظ داخل الطلب فقط، فتغيير الباقة يسري على الطلب التالي.
+     *
+     * @var array<int, bool>
+     */
+    private static array $featureCache = [];
+
+    /** هل ميزة سجلّ النشاط مفعّلة في باقة المنشأة؟ */
+    public static function featureEnabled($organizationId): bool
+    {
+        $id = (int) $organizationId;
+        if ($id === 0) {
+            return false;
+        }
+
+        return self::$featureCache[$id] ??= SubscriptionService::isSubscriptionFeatureEnabled((string) $id, 'activity_log');
+    }
 
     /**
      * وصفٌ عربي لكل حدث. %s موضع اسم الشيء (عميل، عضو، حملة…).
@@ -101,8 +126,11 @@ class ActivityLogger
 
             self::SETTINGS_UPDATED => 'عدّل إعدادات المنظمة',
             self::CONTACT_GROUP_CREATED => 'أنشأ مجموعة «%s»',
+            self::CONTACT_GROUP_UPDATED => 'عدّل مجموعة «%s»',
             self::CONTACT_GROUP_DELETED => 'حذف مجموعة «%s»',
             self::AUTO_REPLY_UPDATED => 'عدّل الردود التلقائية',
+            self::SHORTCUT_CREATED => 'أنشأ اختصار «%s»',
+            self::SHORTCUT_DELETED => 'حذف اختصار «%s»',
         ];
     }
 
@@ -117,7 +145,8 @@ class ActivityLogger
             'tickets' => [self::TICKET_ASSIGNED, self::TICKET_CLOSED, self::TICKET_REOPENED],
             'team' => [self::TEAM_MEMBER_INVITED, self::TEAM_MEMBER_REMOVED, self::TEAM_MEMBER_ROLE_CHANGED],
             'campaigns' => [self::CAMPAIGN_CREATED, self::CAMPAIGN_DELETED, self::TEMPLATE_CREATED, self::TEMPLATE_DELETED],
-            'settings' => [self::SETTINGS_UPDATED, self::CONTACT_GROUP_CREATED, self::CONTACT_GROUP_DELETED, self::AUTO_REPLY_UPDATED],
+            'settings' => [self::SETTINGS_UPDATED, self::CONTACT_GROUP_CREATED, self::CONTACT_GROUP_UPDATED, self::CONTACT_GROUP_DELETED,
+                self::AUTO_REPLY_UPDATED, self::SHORTCUT_CREATED, self::SHORTCUT_DELETED],
         ];
     }
 
@@ -149,7 +178,7 @@ class ActivityLogger
     ): void {
         try {
             $organizationId = $organizationId ?? self::currentOrganizationId();
-            if (!$organizationId) {
+            if (!$organizationId || !self::featureEnabled($organizationId)) {
                 return;
             }
 

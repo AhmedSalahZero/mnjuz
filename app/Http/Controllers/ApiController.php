@@ -125,6 +125,7 @@ class ApiController extends Controller
         try {
             $contactService = new ContactService($organizationId);
             $contact = $contactService->store($request, null); // null for create
+            $this->logMobileActivity(ActivityLogger::CONTACT_CREATED, $contact, [], (int) $organizationId);
             if ($request->is('api/v1/*')) {
                 return response()->json([
                     'statusCode' => 200,
@@ -215,6 +216,7 @@ class ApiController extends Controller
         try {
             $contactService = new ContactService($organizationId);
             $contact = $contactService->store($request, $uuid); // uuid for update
+            $this->logMobileActivity(ActivityLogger::CONTACT_UPDATED, $contact, [], (int) $organizationId);
             if ($request->is('api/v1/*')) {
                 return response()->json([
                     'statusCode' => 200,
@@ -372,6 +374,7 @@ class ApiController extends Controller
                     'message' => __('Contact not found', [], getApiLang())
                 ], 404);
             }
+            $this->logMobileActivity(ActivityLogger::CONTACT_DELETED, $contact, [], (int) $organizationId);
             $contactService->delete([$contact->uuid]);
             if ($request->is('api/v1/*')) {
                 return response()->json([
@@ -474,6 +477,15 @@ class ApiController extends Controller
             $contactGroup->created_by = 0;
             $contactGroup->save();
 
+            ActivityLogger::log(
+                $request->isMethod('post') ? ActivityLogger::CONTACT_GROUP_CREATED : ActivityLogger::CONTACT_GROUP_UPDATED,
+                $contactGroup->name,
+                'contact_group',
+                $contactGroup->id,
+                [],
+                (int) $organizationId
+            );
+
             // Prepare a clean contact object for webhook
             $cleanContactGroup = $contactGroup->makeHidden(['id', 'organization_id', 'created_by']);
 
@@ -516,6 +528,15 @@ class ApiController extends Controller
             $contactGroup = ContactGroup::where('organization_id', $organizationId)->where('uuid', $uuid)->firstOrFail();
             $contactGroup->deleted_at = date('Y-m-d H:i:s');
             $contactGroup->save();
+
+            ActivityLogger::log(
+                ActivityLogger::CONTACT_GROUP_DELETED,
+                $contactGroup->name,
+                'contact_group',
+                $contactGroup->id,
+                [],
+                (int) $organizationId
+            );
 
             //Remove contact associations
             Contact::where('contact_group_id', $contactGroup->id)->update([
@@ -1042,6 +1063,7 @@ class ApiController extends Controller
 
         $this->initializeWhatsappService($organizationId);
         $responseObject = $this->whatsappService->sendTemplateMessage($contact->uuid, $request->template, 0, null, null, $sendByQueue);
+        $this->logMobileActivity(ActivityLogger::TEMPLATE_SENT, $contact, ['template' => $request->template], (int) $organizationId);
 
         return response()->json([
             'statusCode' => 200,
@@ -1129,6 +1151,7 @@ class ApiController extends Controller
         // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);
         $responseObject = $this->whatsappService->sendTemplateMessage($contact->uuid, $request->template, 0, null, null, $sendByQueue);
+        $this->logMobileActivity(ActivityLogger::TEMPLATE_SENT, $contact, ['template' => $request->template], (int) $organizationId);
 
         return response()->json([
             'statusCode' => 200,
@@ -1329,6 +1352,7 @@ class ApiController extends Controller
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
+        $this->logMobileActivity(ActivityLogger::MEDIA_SENT, $contact, [], (int) $organizationId);
 
         $files = $request->file('file');
         $files = is_array($files) ? array_values($files) : [$files];
@@ -1687,6 +1711,15 @@ class ApiController extends Controller
             'created_by' => $userId,
         ]);
 
+        ActivityLogger::log(
+            ActivityLogger::SHORTCUT_CREATED,
+            $shortcut->command,
+            'shortcut',
+            $shortcut->id,
+            ['scope' => $scope],
+            (int) $organizationId
+        );
+
         return response()->json([
             'statusCode' => 200,
             'success' => true,
@@ -1832,6 +1865,14 @@ class ApiController extends Controller
             ], 403);
         }
 
+        ActivityLogger::log(
+            ActivityLogger::SHORTCUT_DELETED,
+            $shortcut->command ?? null,
+            'shortcut',
+            $shortcut->id ?? null,
+            [],
+            (int) $organizationId
+        );
         $shortcut->delete();
 
         return response()->json([
@@ -2271,6 +2312,22 @@ class ApiController extends Controller
     }
 
     /**
+     * تسجيل حدث من مسار التطبيق. مسارات API لا تملك جلسة، فالمنظمة تُؤخذ من
+     * عمود المستخدم صراحةً بدل الاعتماد على الاستنتاج.
+     */
+    private function logMobileActivity(string $event, $contact = null, array $properties = [], ?int $organizationId = null): void
+    {
+        ActivityLogger::log(
+            $event,
+            $contact ? (trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone) : null,
+            $contact ? 'contact' : null,
+            $contact->id ?? null,
+            $properties,
+            (int) ($organizationId ?? request()->user()?->current_mobile_organization_id ?? 0) ?: null
+        );
+    }
+
+    /**
      * نبضة نشاط من التطبيق. لم يكن للموبايل نبضة إطلاقاً — النبضة الوحيدة في
      * routes/web.php — فكل من يعمل من التطبيق يظهر «غير متصل» دائماً مهما أرسل.
      */
@@ -2693,6 +2750,7 @@ class ApiController extends Controller
         
         $chatService = new ChatService($organizationId);
         $chatService->clearContactChat($uuid);
+        $this->logMobileActivity(ActivityLogger::CHAT_DELETED, $contact, [], (int) $organizationId);
         
         return response()->json([
             'statusCode' => 200,
@@ -2713,7 +2771,13 @@ class ApiController extends Controller
         }
         
         $contact->toggleTicketStatus($request->status);
-        
+        $this->logMobileActivity(
+            $request->status === 'closed' ? ActivityLogger::TICKET_CLOSED : ActivityLogger::TICKET_REOPENED,
+            $contact,
+            ['status' => $request->status],
+            (int) $contact->organization_id
+        );
+
         return response()->json([
             'statusCode' => 200,
             'success' => true,
@@ -2865,6 +2929,12 @@ class ApiController extends Controller
 			], 404);
 		}
 		$contact->assignToUserThroughTicket($user);
+		$this->logMobileActivity(
+			ActivityLogger::TICKET_ASSIGNED,
+			$contact,
+			['assigned_to' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->email],
+			(int) $contact->organization_id
+		);
 		return response()->json([
 			'statusCode' => 200,
 			'success' => true,

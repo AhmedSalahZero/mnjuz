@@ -10,6 +10,7 @@ use App\Support\OrganizationRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
+use App\Services\ActivityLogger;
 
 class ShortcutController extends BaseController
 {
@@ -133,12 +134,19 @@ class ShortcutController extends BaseController
                     'message' => $row['message'],
                     'created_by' => $userId,
                 ]);
+
+                ActivityLogger::log(ActivityLogger::SHORTCUT_CREATED, $command, 'shortcut', null, ['scope' => $row['scope'] ?? null]);
             }
         }
 
         // حذف الاختصارات القابلة للإدارة التي لم تعد موجودة في الطلب
         $toDelete = $manageable->keys()->diff($keptIds);
         if ($toDelete->isNotEmpty()) {
+            // نُسجّل قبل الحذف لنحتفظ بالأمر الذي كان — بعده لا اسم له.
+            foreach ($manageable->only($toDelete->all()) as $gone) {
+                ActivityLogger::log(ActivityLogger::SHORTCUT_DELETED, $gone->command, 'shortcut', $gone->id);
+            }
+
             Shortcut::whereIn('id', $toDelete->all())->delete();
         }
 

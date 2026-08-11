@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Helper;
+use App\Services\ActivityLogger;
 
 class CannedReplyController extends BaseController
 {
@@ -74,6 +75,8 @@ class CannedReplyController extends BaseController
     public function store(StoreAutoReply $request){
         $this->autoReplyService->store($request);
 
+        ActivityLogger::log(ActivityLogger::AUTO_REPLY_UPDATED, (string) $request->input('name'), 'auto_reply');
+
         return Redirect::route('cannedReply.create')->with(
             'status', [
                 'type' => 'success', 
@@ -109,6 +112,8 @@ class CannedReplyController extends BaseController
     public function update(StoreAutoReply $request, $uuid){
         $this->autoReplyService->store($request, $uuid);
 
+        ActivityLogger::log(ActivityLogger::AUTO_REPLY_UPDATED, (string) $request->input('name'), 'auto_reply');
+
         return Redirect::route('cannedReply.edit', $uuid)->with(
             'status', [
                 'type' => 'success', 
@@ -120,6 +125,8 @@ class CannedReplyController extends BaseController
     public function delete($uuid)
     {
         $this->autoReplyService->destroy($uuid);
+
+        ActivityLogger::log(ActivityLogger::AUTO_REPLY_UPDATED, null, 'auto_reply');
 
         return Redirect::back()->with(
             'status', [

@@ -10,6 +10,7 @@ use App\Services\TemplateService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Validator;
+use App\Services\ActivityLogger;
 
 class TemplateController extends BaseController
 {
@@ -25,7 +26,13 @@ class TemplateController extends BaseController
 
     public function create(Request $request)
     {
-        return $this->templateService()->createTemplate($request);
+        $response = $this->templateService()->createTemplate($request);
+
+        if ($request->isMethod('post') && $this->wasSuccessful($response)) {
+            ActivityLogger::log(ActivityLogger::TEMPLATE_CREATED, (string) $request->input('name'), 'template');
+        }
+
+        return $response;
     }
 
     public function update(Request $request, $uuid)
@@ -35,6 +42,32 @@ class TemplateController extends BaseController
 
     public function delete($uuid)
     {
-        return $this->templateService()->deleteTemplate($uuid);
+        $template = \App\Models\Template::where('uuid', $uuid)->first(['id', 'name']);
+
+        $response = $this->templateService()->deleteTemplate($uuid);
+
+        // القالب يُحذف عند واتساب أيضاً، فلا نسجّل إلا عند نجاح العملية.
+        if ($this->wasSuccessful($response)) {
+            ActivityLogger::log(
+                ActivityLogger::TEMPLATE_DELETED,
+                $template->name ?? null,
+                'template',
+                $template->id ?? null
+            );
+        }
+
+        return $response;
+    }
+
+    /** هل انتهت العملية بنجاح؟ الخدمة تُرجع JsonResponse فيها success. */
+    private function wasSuccessful($response): bool
+    {
+        if (!$response instanceof \Illuminate\Http\JsonResponse) {
+            return false;
+        }
+
+        $data = $response->getData(true);
+
+        return (bool) ($data['success'] ?? false);
     }
 }

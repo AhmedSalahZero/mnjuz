@@ -1529,5 +1529,7 @@
     "Event": "الحدث",
     "Account": "الحساب",
     "Tickets": "التذاكر",
-    "Activity is kept for :days days and then deleted automatically. Export the data if you need to keep it longer.": "يُحتفظ بالنشاط لمدة :days أيام ثم يُحذف تلقائياً. صدّر البيانات إن أردت الاحتفاظ بها مدة أطول."
+    "Activity is kept for :days days and then deleted automatically. Export the data if you need to keep it longer.": "يُحتفظ بالنشاط لمدة :days أيام ثم يُحذف تلقائياً. صدّر البيانات إن أردت الاحتفاظ بها مدة أطول.",
+    "Enable Activity Log": "تفعيل سجل النشاط",
+    "When enabled, managers on this plan can view and export the organization activity log.": "عند التفعيل، يمكن للمديرين في هذه الباقة عرض سجل نشاط المنظمة وتصديره."
 }

@@ -16,6 +16,7 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Excel;
 use Validator;
+use App\Services\ActivityLogger;
 
 class ContactGroupController extends BaseController
 {
@@ -153,6 +154,8 @@ class ContactGroupController extends BaseController
         // Trigger webhook
         WebhookHelper::triggerWebhookEvent('group.created', $cleanContactGroup);
 
+        ActivityLogger::log(ActivityLogger::CONTACT_GROUP_CREATED, $contactGroup->name, 'contact_group', $contactGroup->id);
+
         return response()->json(['success' => true, 'message'=> __('Contact group added successfully'), 'data' => $contactGroup]);
     }
 
@@ -195,6 +198,7 @@ class ContactGroupController extends BaseController
                     'uuid' => $group->uuid,
                     'deleted_at' => now()->toISOString(), // Assuming you're using Laravel's Carbon
                 ];
+                ActivityLogger::log(ActivityLogger::CONTACT_GROUP_DELETED, $group->name, 'contact_group', $group->id);
             }
 
             // Delete all groups
@@ -208,6 +212,7 @@ class ContactGroupController extends BaseController
                     'uuid' => $group->uuid,
                     'deleted_at' => now()->toISOString(),
                 ];
+                ActivityLogger::log(ActivityLogger::CONTACT_GROUP_DELETED, $group->name, 'contact_group', $group->id);
             }
 
             // Delete only selected groups

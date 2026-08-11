@@ -135,12 +135,11 @@
 				<hr>
 			</div>
 			<ul class="pb-4 space-y-1 text-sm mt-2">
-				<!-- التقرير: تبويب أب يفتح قائمة فرعية طوليّة بجانب القائمة -->
-				<li v-if="isOrgPrivileged" class="relative rounded-[5px] px-2"
-					@mouseenter="reportsOpen = true" @mouseleave="reportsOpen = false">
-					<button type="button" @click="reportsOpen = !reportsOpen"
+				<!-- التقارير: زرّ يفتح لوحة بكامل الارتفاع ملاصقة للشريط -->
+				<li v-if="isOrgPrivileged && hasAnyReport" class="rounded-[5px] px-2">
+					<button ref="reportsButton" type="button" @click="toggleReports"
 						class="w-full flex items-center justify-between p-2 rounded-md hover:bg-slate-50 hover:text-black"
-						:class="isReportsActive ? 'bg-slate-50 text-black' : ''"
+						:class="isReportsActive || reportsOpen ? 'bg-slate-50 text-black' : ''"
 						:aria-expanded="reportsOpen" aria-haspopup="true">
 						<span class="flex items-center space-x-3 truncate">
 							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -154,23 +153,6 @@
 							<polyline points="9 18 15 12 9 6" />
 						</svg>
 					</button>
-
-					<div v-show="reportsOpen"
-						class="absolute top-0 z-30 min-w-[200px] rounded-md border border-slate-200 bg-white p-1 shadow-lg"
-						:class="isRtl ? 'right-full mr-1' : 'left-full ml-1'">
-						<Link v-if="organization?.plan?.features?.agent_performance" href="/performance"
-							class="block rounded-[5px] px-3 py-2 text-sm hover:bg-slate-50 hover:text-black"
-							:class="$page.url.startsWith('/performance') ? 'bg-slate-50 text-black' : ''"
-							@click="reportsOpen = false">
-							{{ $t('Agent Performance') }}
-						</Link>
-						<Link href="/activity-log"
-							class="block rounded-[5px] px-3 py-2 text-sm hover:bg-slate-50 hover:text-black"
-							:class="$page.url.startsWith('/activity-log') ? 'bg-slate-50 text-black' : ''"
-							@click="reportsOpen = false">
-							{{ $t('Activity Log') }}
-						</Link>
-					</div>
 				</li>
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
@@ -368,11 +350,55 @@
 	<ProfileModal :user="props.user" :organization="props.organization" :isOpen="isOpen" role="user"
 		:languages="languages" @close="closeModal()" />
 	<OrganizationModal v-model:modelValue="isOpenOrganizationModal" />
+	<!--
+		لوحة التقارير: fixed لا absolute، لأن حاوية القائمة عليها overflow-y-scroll
+		وهي تقصّ كل ما يخرج عنها أفقياً — فكانت اللوحة تُرسم ثم تُقصّ فتبدو مختفية.
+		وبكامل الارتفاع ملاصقةً للشريط كما في التصميم المرجعي.
+	-->
+	<teleport to="body">
+		<div v-if="reportsOpen" class="fixed inset-0 z-[60]" @click="reportsOpen = false"></div>
+		<transition
+			enter-active-class="transition ease-out duration-200"
+			:enter-from-class="isRtl ? 'translate-x-full opacity-0' : '-translate-x-full opacity-0'"
+			enter-to-class="translate-x-0 opacity-100"
+			leave-active-class="transition ease-in duration-150"
+			leave-from-class="translate-x-0 opacity-100"
+			:leave-to-class="isRtl ? 'translate-x-full opacity-0' : '-translate-x-full opacity-0'">
+			<aside v-if="reportsOpen" :style="reportsPanelStyle"
+				class="fixed inset-y-0 z-[61] flex flex-col bg-white shadow-2xl border-slate-200"
+				:class="isRtl ? 'border-l' : 'border-r'">
+				<div class="flex items-center justify-between px-5 h-20 shrink-0">
+					<h2 class="text-lg font-semibold text-gray-900">{{ $t('Reports') }}</h2>
+					<button type="button" @click="reportsOpen = false" :aria-label="$t('Close')"
+						class="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-black">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+							stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+						</svg>
+					</button>
+				</div>
+				<nav class="flex-grow overflow-y-auto px-3 pb-4 space-y-1 text-sm">
+					<Link v-if="organization?.plan?.features?.agent_performance" href="/performance"
+						class="block rounded-[5px] px-3 py-3 hover:bg-slate-50 hover:text-black"
+						:class="$page.url.startsWith('/performance') ? 'bg-slate-50 text-black' : ''"
+						@click="reportsOpen = false">
+						{{ $t('Agent Performance') }}
+					</Link>
+					<Link v-if="organization?.plan?.features?.activity_log" href="/activity-log"
+						class="block rounded-[5px] px-3 py-3 hover:bg-slate-50 hover:text-black"
+						:class="$page.url.startsWith('/activity-log') ? 'bg-slate-50 text-black' : ''"
+						@click="reportsOpen = false">
+						{{ $t('Activity Log') }}
+					</Link>
+				</nav>
+			</aside>
+		</transition>
+	</teleport>
 </template>
 <script setup>
 import axios from "axios"
 import { Link, router, useForm, usePage } from "@inertiajs/vue3"
-import { defineProps, ref, computed, onMounted } from "vue"
+import { defineProps, ref, computed, onMounted, onUnmounted, nextTick } from "vue"
 import FormInput from '@/Components/FormInput.vue'
 import Modal from '@/Components/Modal.vue'
 import ProfileModal from '@/Components/ProfileModal.vue'
@@ -392,12 +418,62 @@ const showDropdown1 = ref(false)
 const isOpenOrganizationModal = ref(false)
 const menuIconsOnly = ref(localStorage.getItem('MenuOpen') === 'true' ?? false)
 
-// قائمة «التقرير» الفرعية. تُفتح بالمرور أو بالنقر — النقر يلزم للمس.
+// لوحة «التقارير». تُفتح بالنقر فقط: لوحة بكامل الارتفاع تُفتح بمرور المؤشّر مزعجة.
 const reportsOpen = ref(false)
+const reportsButton = ref(null)
+const reportsPanelStyle = ref({})
 const isRtl = computed(() => usePage().props.isRtl)
 const isReportsActive = computed(() =>
 	usePage().url.startsWith('/performance') || usePage().url.startsWith('/activity-log')
 )
+
+// لا نُظهر تبويب «التقارير» إن لم تكن أي ميزة تحته مفعّلة في الباقة،
+// فتبويبٌ يفتح لوحةً فارغة أسوأ من غيابه.
+const hasAnyReport = computed(() => {
+	const f = props.organization?.plan?.features ?? {}
+	return Boolean(f.agent_performance || f.activity_log)
+})
+
+const REPORTS_PANEL_WIDTH = 288 // 18rem
+
+/**
+ * نحسب موضع اللوحة من الحجم الفعلي للشريط لا من قيمة ثابتة، فعرضه يتبدّل بين
+ * w-80 و w-20 حسب وضع الأيقونات، ويختلف جانبه بين العربية والإنجليزية.
+ */
+const positionReportsPanel = () => {
+	const host = reportsButton.value?.closest('aside')
+	const isMobile = window.innerWidth < 768
+
+	// في الجوال الشريط درج بعرض الشاشة، فاللوحة تغطّيه بالكامل.
+	if (!host || isMobile) {
+		reportsPanelStyle.value = { left: '0px', right: '0px' }
+		return
+	}
+
+	const rect = host.getBoundingClientRect()
+	reportsPanelStyle.value = isRtl.value
+		? { right: `${Math.round(window.innerWidth - rect.left)}px`, width: `${REPORTS_PANEL_WIDTH}px` }
+		: { left: `${Math.round(rect.right)}px`, width: `${REPORTS_PANEL_WIDTH}px` }
+}
+
+const toggleReports = () => {
+	reportsOpen.value = !reportsOpen.value
+	if (reportsOpen.value) nextTick(positionReportsPanel)
+}
+
+const onReportsKeydown = (e) => {
+	if (e.key === 'Escape') reportsOpen.value = false
+}
+
+onMounted(() => {
+	window.addEventListener('resize', positionReportsPanel)
+	window.addEventListener('keydown', onReportsKeydown)
+})
+
+onUnmounted(() => {
+	window.removeEventListener('resize', positionReportsPanel)
+	window.removeEventListener('keydown', onReportsKeydown)
+})
 
 const emit = defineEmits(['closeSidebar'])
 

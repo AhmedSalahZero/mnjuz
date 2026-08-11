@@ -283,6 +283,16 @@ class ContactController extends BaseController
 
         ProcessContactsImportJob::dispatch($organizationId, $userId, $path)->afterResponse();
 
+        // بعد القبول والجدولة لا قبلهما: الطلب المرفوض بـ 409 ليس استيراداً.
+        ActivityLogger::log(
+            ActivityLogger::CONTACT_IMPORTED,
+            $request->file('file')->getClientOriginalName(),
+            'contact_import',
+            null,
+            [],
+            $organizationId
+        );
+
         return response()->json([
             'state' => 'queued',
             'message' => __('Your contacts are being imported in the background. You can close this window and continue working.'),

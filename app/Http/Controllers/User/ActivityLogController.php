@@ -34,6 +34,10 @@ class ActivityLogController extends BaseController
 
     private function guard(): void
     {
+        if (!ActivityLogger::featureEnabled($this->organizationId())) {
+            abort(403, __('This feature is not available in your plan.'));
+        }
+
         if (!$this->isManager()) {
             abort(403, __('You are not allowed to access this page.'));
         }

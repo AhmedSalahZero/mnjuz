@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Validator;
+use App\Services\ActivityLogger;
 
 class SettingController extends BaseController
 {
@@ -159,6 +160,10 @@ class SettingController extends BaseController
 	
         $embeddedSignupActive = Setting::where('key', 'is_embedded_signup_active')->value('value');
         $setWebhookUrl = $embeddedSignupActive == 1 ? true : false;
+
+        // لا نُسجّل قيم الإعدادات نفسها: access_token سرّ لا يجوز أن يستقرّ
+        // في سجلّ يُعرض ويُصدَّر. نُسجّل واقعة التعديل ومن قام بها فقط.
+        ActivityLogger::log(ActivityLogger::SETTINGS_UPDATED, null, 'settings', null, ['section' => 'whatsapp']);
 
         return $this->saveWhatsappSettings(
             $request->access_token,

@@ -11,6 +11,7 @@ use App\Services\OrganizationService;
 use DB;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Services\ActivityLogger;
 
 class OrganizationController extends BaseController
 {
@@ -39,6 +40,15 @@ class OrganizationController extends BaseController
         // letting an attacker switch into orgs they don't belong to. The
         // service performs a membership check before persisting.
         if ($organization && $this->organizationContext->setCurrent($request->user(), $organization->id)) {
+            ActivityLogger::log(
+                ActivityLogger::ORGANIZATION_SWITCHED,
+                $organization->name,
+                'organization',
+                $organization->id,
+                [],
+                (int) $organization->id
+            );
+
             return to_route('dashboard');
         }
 

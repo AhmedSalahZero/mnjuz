@@ -879,17 +879,25 @@ class AuthController extends BaseController
         // قبل أي إبطال للجلسة أو حذف للتوكن — بعده لا يبقى مستخدم يُنسب إليه.
         $logoutUser = $request->user() ?? auth()->user();
         if ($logoutUser && ($logoutUser->role ?? null) === 'user') {
-            ActivityLogger::log(
-                ActivityLogger::LOGOUT,
-                null, null, null,
-                ['channel' => ($request->expectsJson() || $request->is('api/*')) ? 'mobile' : 'web'],
-                (int) (session()->get('current_organization')
-                    ?? $logoutUser->current_mobile_organization_id
-                    ?? $logoutUser->current_web_organization_id
-                    ?? 0) ?: null,
-                (int) $logoutUser->id,
-                trim(($logoutUser->first_name ?? '') . ' ' . ($logoutUser->last_name ?? '')) ?: $logoutUser->email
-            );
+            $isMobile = $request->expectsJson() || $request->is('api/*');
+
+            // نحصر المصدر بالقناة: خروجٌ من الويب لا يُنسب لمنظمة الموبايل ولا
+            // العكس، وإلا سُجّل الحدث في سجلّ منظمة لم يحدث فيها شيء — وهو ما
+            // رأيناه فعلاً حين انتهت الجلسة فسقط الاستنتاج على منظمة التطبيق.
+            $logoutOrgId = $isMobile
+                ? (int) ($logoutUser->current_mobile_organization_id ?? 0)
+                : (int) (session()->get('current_organization') ?? $logoutUser->current_web_organization_id ?? 0);
+
+            if ($logoutOrgId) {
+                ActivityLogger::log(
+                    ActivityLogger::LOGOUT,
+                    null, null, null,
+                    ['channel' => $isMobile ? 'mobile' : 'web'],
+                    $logoutOrgId,
+                    (int) $logoutUser->id,
+                    trim(($logoutUser->first_name ?? '') . ' ' . ($logoutUser->last_name ?? '')) ?: $logoutUser->email
+                );
+            }
         }
 
         // Check if this is an API request (mobile)

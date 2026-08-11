@@ -92,6 +92,17 @@ class ChatController extends BaseController
 		$res= null;
 		if($template){
 			$res = $this->chatService()->sendTemplateMessage($request, $uuid);
+
+			$templateContact = Contact::where('uuid', $uuid)->first(['id', 'first_name', 'last_name', 'phone']);
+			ActivityLogger::log(
+				ActivityLogger::TEMPLATE_SENT,
+				$templateContact
+					? (trim(($templateContact->first_name ?? '') . ' ' . ($templateContact->last_name ?? '')) ?: $templateContact->phone)
+					: null,
+				'contact',
+				$templateContact->id ?? null,
+				['template' => $template->name ?? null]
+			);
 		}else{
 			return Redirect::back()->with(
             'status', [

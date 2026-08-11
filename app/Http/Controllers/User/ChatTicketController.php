@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Support\OrganizationRole;
 use Illuminate\Http\Request;
 use Redirect;
+use App\Services\ActivityLogger;
 
 class ChatTicketController extends BaseController
 {
@@ -71,6 +72,14 @@ class ChatTicketController extends BaseController
 
 		$contact->toggleTicketStatus($request->status);
 
+        ActivityLogger::log(
+            $request->status === 'closed' ? ActivityLogger::TICKET_CLOSED : ActivityLogger::TICKET_REOPENED,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id,
+            ['status' => $request->status]
+        );
+
         return Redirect::back()->with(
             'status', [
                 'type' => 'success', 
@@ -91,6 +100,14 @@ class ChatTicketController extends BaseController
         
         if($team && $user){
             $contact->assignToUserThroughTicket($user);
+
+            ActivityLogger::log(
+                ActivityLogger::TICKET_ASSIGNED,
+                trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+                'contact',
+                $contact->id,
+                ['assigned_to' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->email]
+            );
 
             return Redirect::back()->with(
                 'status', [
