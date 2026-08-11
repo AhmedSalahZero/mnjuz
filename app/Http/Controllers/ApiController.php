@@ -2317,14 +2317,30 @@ class ApiController extends Controller
      */
     private function logMobileActivity(string $event, $contact = null, array $properties = [], ?int $organizationId = null): void
     {
-        ActivityLogger::log(
-            $event,
-            $contact ? (trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone) : null,
-            $contact ? 'contact' : null,
-            $contact->id ?? null,
-            $properties,
-            (int) ($organizationId ?? request()->user()?->current_mobile_organization_id ?? 0) ?: null
-        );
+        // كل شيء داخل try — بما فيه بناء الاسم. ActivityLogger::log يحمي نفسه،
+        // لكن بناء الوسائط كان يقع خارج حمايته، فرمى استدعاءُ اسمٍ غير مُحمَّل
+        // استثناءً أسقط /api/send/template في الإنتاج. التسجيل خدمةٌ للعملية،
+        // ولا يجوز بحال أن يُفشل إرسال رسالة إلى عميل.
+        try {
+            $label = null;
+            if ($contact) {
+                $label = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone;
+            }
+
+            ActivityLogger::log(
+                $event,
+                $label,
+                $contact ? 'contact' : null,
+                $contact->id ?? null,
+                $properties,
+                (int) ($organizationId ?? request()->user()?->current_mobile_organization_id ?? 0) ?: null
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('logMobileActivity failed', [
+                'event' => $event,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

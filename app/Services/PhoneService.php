@@ -144,6 +144,50 @@ class PhoneService
     }
 
     /**
+     * تحويل الرقم إلى صيغة E.164 قياسية، أو null إن تعذّر تحليله.
+     *
+     * getE164Format وحدها لا تكفي: هي تشترط البادئة «+»، وواتساب يسلّم الأرقام
+     * بدونها («966502486051»)، والإدخال اليدوي يأتي بفواصل أو ببادئة «00».
+     * فنجرّب الرقم كما هو، ثم نعيد بناءه من أرقامه وحدها ببادئة «+».
+     *
+     * لا نُخمّن مفتاح دولة أبداً: رقم محلي مجرّد مثل «0537675751» يبقى كما هو،
+     * لأن افتراض السعودية قد يرسل رسالة عميلٍ إلى بلد آخر. الأسلم أن يبقى
+     * كما أدخله صاحبه من أن نغيّره بظنّ.
+     *
+     * @param  string|null  $phoneNumber
+     * @return string|null  صيغة E.164، أو null إن لم يكن الرقم صالحاً دولياً.
+     */
+    public static function toE164($phoneNumber): ?string
+    {
+        if ($phoneNumber === null) {
+            return null;
+        }
+
+        $raw = trim((string) $phoneNumber);
+        if ($raw === '') {
+            return null;
+        }
+
+        // 1) كما هو — يغطّي «+966…» و«+966 53 767 5751»
+        $e164 = self::getE164Format($raw);
+        if ($e164 !== null) {
+            return $e164;
+        }
+
+        // 2) من أرقامه وحدها ببادئة «+» — يغطّي «966…» و«00966…» و«966-53-…»
+        $digits = preg_replace('/\D/', '', $raw);
+        if ($digits === '' || $digits === null) {
+            return null;
+        }
+
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        }
+
+        return self::getE164Format('+' . $digits);
+    }
+
+    /**
      * Normalize phone number (ensure it starts with +)
      * 
      * @param string $phoneNumber

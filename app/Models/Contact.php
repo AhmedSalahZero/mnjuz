@@ -328,7 +328,10 @@ class Contact extends Model
 
     public function getFirstNameAttribute()
     {
-        $firstName = $this->attributes['first_name'];
+        // ?? null لا زينة: النموذج قد يُحمَّل بأعمدة منتقاة أو يُنشأ بلا اسم
+        // (findOrCreateByPhone يُسقط الفارغ)، فقراءة المفتاح مباشرةً ترمي
+        // «Undefined array key» وتُسقط الطلب كلّه — وقد أسقطت /api/send/template فعلاً.
+        $firstName = $this->attributes['first_name'] ?? null;
         $firstName = $this->decodeUnicodeBytes($firstName);
 
         return $firstName;
@@ -336,7 +339,7 @@ class Contact extends Model
 
     public function getLastNameAttribute()
     {
-        $lastName = $this->attributes['last_name'];
+        $lastName = $this->attributes['last_name'] ?? null;
         $lastName = $this->decodeUnicodeBytes($lastName);
 
         return $lastName;
@@ -344,8 +347,8 @@ class Contact extends Model
 
     public function getFullNameAttribute()
     {
-        $firstName = $this->attributes['first_name'];
-        $lastName = $this->attributes['last_name'];
+        $firstName = $this->attributes['first_name'] ?? null;
+        $lastName = $this->attributes['last_name'] ?? null;
 
         // Convert byte sequences to Unicode characters
         $firstName = $this->decodeUnicodeBytes($firstName);
@@ -374,6 +377,10 @@ class Contact extends Model
 
     protected function decodeUnicodeBytes($value)
     {
+        if ($value === null) {
+            return null;
+        }
+
         return preg_replace_callback('/\\\\x([0-9A-F]{2})/i', function ($matches) {
             return chr(hexdec($matches[1]));
         }, $value);
