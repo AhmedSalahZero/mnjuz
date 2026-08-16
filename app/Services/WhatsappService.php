@@ -1041,9 +1041,13 @@ class WhatsappService
         } else {
             $bodyComponent = [];
 
-            if($request->body['text'] != null){
+            // النموذج قد يصل بلا مفتاح text أصلاً (لا بقيمة فارغة)، فالقراءة
+            // المباشرة كانت ترمي «Undefined array key» وتُسقط الطلب بـ 500.
+            $bodyText = $request->body['text'] ?? null;
+
+            if($bodyText != null){
                 $bodyComponent['type'] = "BODY";
-                $bodyComponent['text'] = $request->body['text'];
+                $bodyComponent['text'] = $bodyText;
 
                 if (!empty($request->body['example'])) {
                     $bodyComponent['example']['body_text'][] = $request->body['example'];

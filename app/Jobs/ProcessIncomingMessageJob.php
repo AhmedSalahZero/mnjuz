@@ -150,9 +150,24 @@ class ProcessIncomingMessageJob implements ShouldQueue
 
     private function getOrCreateContact(): array
     {
-        $phone = PhoneService::getE164Format(
-            '+' . ltrim($this->message['from'], '+')
-        );
+        // بعض حمولات واتساب تصل بلا "from" — رسائل النظام وبعض الأنواع غير
+        // المدعومة. القراءة المباشرة كانت ترمي «Undefined array key» فيفشل
+        // الجوب، وتضيع رسالة العميل كاملةً بلا أثر عند العميل ولا عندنا.
+        // نرمي استثناءً واضحاً بدل تحذير PHP غامض، ونسجّل الحمولة لتُشخَّص.
+        $from = $this->message['from'] ?? null;
+
+        if ($from === null || $from === '') {
+            Log::warning('Incoming message has no sender', [
+                'organization_id' => $this->organizationId,
+                'message_id'      => $this->message['id'] ?? null,
+                'message_type'    => $this->message['type'] ?? null,
+                'keys'            => array_keys($this->message),
+            ]);
+
+            throw new \RuntimeException('Incoming WhatsApp message has no "from" field.');
+        }
+
+        $phone = PhoneService::getE164Format('+' . ltrim($from, '+'));
 
         try {
             $contact = Contact::firstOrCreate(
