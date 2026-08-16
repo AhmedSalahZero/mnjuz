@@ -77,6 +77,18 @@ class NewChatEvent implements ShouldBroadcast
 
         $this->contactId = $this->extractContactId($this->chat);
 
+        // حمولة بلا رسالة حقيقية لا تُبثّ ولا تُرسل إشعاراً: buildMinimalValue
+        // يُرجع [] حين يتعذّر العثور على الكيان، وبثّها كان يُرسل «رسالة» كل
+        // حقولها null فينهار التطبيق عليها. نُسجّلها هنا لتُشخَّص.
+        if (!$this->payloadBuilder()->hasUsableChat($this->chat)) {
+            Log::warning('NewChatEvent skipped: chat entity could not be resolved', [
+                'organization_id' => $organizationId,
+                'contact_id'      => $this->contactId,
+            ]);
+
+            return;
+        }
+
         if ($sendToFirestore) {
             $this->dispatchPushNotification();
         }
@@ -91,6 +103,10 @@ class NewChatEvent implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
+        if (!$this->payloadBuilder()->hasUsableChat($this->chat)) {
+            return [];
+        }
+
         try {
             $userIds = app(ChatChannelRecipients::class)
                 ->resolveUserIds($this->organizationId, $this->contactId);

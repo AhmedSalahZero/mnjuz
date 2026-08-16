@@ -74,6 +74,19 @@ class ChatBroadcastPayloadBuilder
             ? $value->toArray()
             : (array) $value;
 
+        // قيمة فارغة تعني أن الكيان لم يُعثر عليه — ChatLog::relatedEntities
+        // تُرجع null حين تشير entity_id إلى رسالة غير موجودة، وخمسة مواقع بثّ
+        // تمرّرها بلا احتياط.
+        //
+        // البناء من مصفوفة فارغة كان يُنتج «رسالة» كل حقولها null: بلا معرّف
+        // ولا تاريخ ولا محتوى. والتطبيق يفعل createdAt! على الواردة فينهار.
+        // فنُرجع [] ليمتنع البثّ رأساً (انظر hasUsableChat) — تحديثٌ يفوت
+        // تستدركه المزامنة التالية، أمّا حمولة كاذبة فتُخزَّن عند العميل
+        // وتنهار عليها الواجهة.
+        if ($arr === [] || ($arr['id'] ?? null) === null) {
+            return [];
+        }
+
         $user = null;
         if (!empty($arr['user']) && is_array($arr['user'])) {
             $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
@@ -125,6 +138,23 @@ class ChatBroadcastPayloadBuilder
             'logs'                    => $logs,
             'user'                    => $user,
         ];
+    }
+
+    /**
+     * هل الحمولة تحمل رسالة حقيقية؟ buildMinimalValue يُرجع [] حين يتعذّر
+     * العثور على الكيان، وهذه هي العلامة التي يقرأها الحدث ليمتنع عن البثّ.
+     *
+     * @param  mixed  $chat  الغلاف كما يبنيه buildWrappedChat.
+     */
+    public function hasUsableChat($chat): bool
+    {
+        if (!is_array($chat)) {
+            return false;
+        }
+
+        $value = $chat[0]['value'] ?? $chat['value'] ?? null;
+
+        return is_array($value) && ($value['id'] ?? null) !== null;
     }
 
     /**

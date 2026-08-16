@@ -27,7 +27,7 @@
                         </div>
                         <div @click="isOpenModal = true" class="flex space-x-8 bg-white border rounded-md px-4 py-2 justify-between items-center w-full hover:bg-slate-100 cursor-pointer">
                             <div class="w-full">
-                                <h2 class="font-light text-center text-sm">Create Organization</h2>
+                                <h2 class="font-light text-center text-sm">{{ $t('Create organization') }}</h2>
                             </div>
                         </div>
                     </div>

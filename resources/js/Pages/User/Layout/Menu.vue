@@ -337,7 +337,7 @@
 				<div v-if="!isOrgAgent" @click="isOpenOrganizationModal = true"
 					class="flex gap-x-8 bg-slate-50 hover:bg-slate-200 rounded-lg py-1 justify-between items-center w-full cursor-pointer border border-slate-100 pl-1 pr-2 py-3">
 					<div class="w-full">
-						<h3 class="text-center">Create Organization</h3>
+						<h3 class="text-center">{{ $t('Create organization') }}</h3>
 					</div>
 				</div>
 			</div>

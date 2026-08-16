@@ -97,7 +97,7 @@ class ActivityLogger
         return [
             self::LOGIN => 'سجّل دخوله',
             self::LOGOUT => 'سجّل خروجه',
-            self::ORGANIZATION_SWITCHED => 'انتقل إلى منظمة أخرى',
+            self::ORGANIZATION_SWITCHED => 'انتقل إلى نشاط تجاري آخر',
 
             self::CONTACT_CREATED => 'أضاف العميل «%s»',
             self::CONTACT_UPDATED => 'عدّل بيانات العميل «%s»',
@@ -124,7 +124,7 @@ class ActivityLogger
             self::TEMPLATE_CREATED => 'أنشأ قالب «%s»',
             self::TEMPLATE_DELETED => 'حذف قالب «%s»',
 
-            self::SETTINGS_UPDATED => 'عدّل إعدادات المنظمة',
+            self::SETTINGS_UPDATED => 'عدّل إعدادات النشاط التجاري',
             self::CONTACT_GROUP_CREATED => 'أنشأ مجموعة «%s»',
             self::CONTACT_GROUP_UPDATED => 'عدّل مجموعة «%s»',
             self::CONTACT_GROUP_DELETED => 'حذف مجموعة «%s»',
