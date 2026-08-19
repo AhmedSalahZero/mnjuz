@@ -136,7 +136,7 @@
 			</div>
 			<ul class="pb-4 space-y-1 text-sm mt-2">
 				<!-- التقارير: زرّ يفتح لوحة بكامل الارتفاع ملاصقة للشريط -->
-				<li v-if="isOrgPrivileged && hasAnyReport" class="rounded-[5px] px-2">
+				<li v-if="isOrgPrivileged" class="rounded-[5px] px-2">
 					<button ref="reportsButton" type="button" @click="toggleReports"
 						class="w-full flex items-center justify-between p-2 rounded-md hover:bg-slate-50 hover:text-black"
 						:class="isReportsActive || reportsOpen ? 'bg-slate-50 text-black' : ''"
@@ -435,10 +435,10 @@ const isReportsActive = computed(() =>
 
 // لا نُظهر تبويب «التقارير» إن لم تكن أي ميزة تحته مفعّلة في الباقة،
 // فتبويبٌ يفتح لوحةً فارغة أسوأ من غيابه.
-const hasAnyReport = computed(() => {
-	const f = props.organization?.plan?.features ?? {}
-	return Boolean(f.agent_performance || f.activity_log)
-})
+// لا شرط باقة على زرّ «التقارير»: «تقييمات العملاء» متاحة لكل الباقات (المقيَّد
+// بالباقة هو حذف التقييمات لا عرضها)، فاللوحة تحمل عنصراً واحداً على الأقلّ لكل
+// مخوَّل. الشرط القديم كان يفحص agent_performance وactivity_log وحدهما، فمنشأة
+// بلا هاتين الميزتين كان يختفي عنها الزرّ كلّه ومعه رابطٌ لا علاقة له بباقتها.
 
 const REPORTS_PANEL_WIDTH = 288 // 18rem
 
