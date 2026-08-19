@@ -586,6 +586,103 @@ class ChatService
         );
     }
 
+    /**
+     * إرسال موقع النشاط التجاري إلى العميل — عكس requestLocation.
+     *
+     * @param  array{latitude: mixed, longitude: mixed, name?: ?string, address?: ?string}  $location
+     */
+    public function sendLocation(string $contactUuid, array $location, $userId = null)
+    {
+        $this->initializeWhatsappService();
+
+        $contact = $this->findContactByUuidInOrganization($contactUuid);
+        if (!$contact) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Contact not found'),
+            ], 404);
+        }
+
+        $this->assertConversationAccess($contact);
+
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowJsonResponse();
+        }
+
+        if (!WhatsappService::isUsableLocation($location)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('A valid location is required.'),
+            ], 422);
+        }
+
+        ActivityLogger::log(
+            ActivityLogger::MESSAGE_SENT,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id,
+            ['kind' => 'location'],
+            (int) $this->organizationId
+        );
+
+        return $this->whatsappService->sendLocation($contact->uuid, $location, $userId);
+    }
+
+    /**
+     * موقع النشاط التجاري المحفوظ في إعدادات المنشأة، أو null إن لم يُضبط بعد.
+     *
+     * العنوان مخزّن JSON في عمود address، والإحداثيات حقلان داخله أُضيفا مع
+     * هذه الميزة — فالمنشآت القديمة تُرجع null حتى يحدّد صاحبها موقعه.
+     *
+     * @return array{latitude: float, longitude: float, name: string, address: string}|null
+     */
+    public function getOrganizationLocation(): ?array
+    {
+        $organization = Organization::find($this->organizationId);
+        if (!$organization) {
+            return null;
+        }
+
+        return self::resolveOrganizationLocation($organization);
+    }
+
+    /**
+     * @return array{latitude: float, longitude: float, name: string, address: string}|null
+     */
+    public static function resolveOrganizationLocation(Organization $organization): ?array
+    {
+        $address = json_decode((string) $organization->address, true);
+        if (!is_array($address)) {
+            return null;
+        }
+
+        $location = [
+            'latitude' => $address['latitude'] ?? null,
+            'longitude' => $address['longitude'] ?? null,
+        ];
+
+        if (!WhatsappService::isUsableLocation($location)) {
+            return null;
+        }
+
+        // العنوان النصّي يُبنى من الحقول المضبوطة فقط: المنشآت لا تملأ كلها
+        // كل حقل، والفواصل المتتالية حول الفراغات تظهر للعميل في البطاقة.
+        $parts = array_filter([
+            $address['street'] ?? null,
+            $address['city'] ?? null,
+            $address['state'] ?? null,
+            $address['zip'] ?? null,
+            $address['country'] ?? null,
+        ], fn ($part) => trim((string) $part) !== '');
+
+        return [
+            'latitude' => (float) $location['latitude'],
+            'longitude' => (float) $location['longitude'],
+            'name' => (string) $organization->name,
+            'address' => implode('، ', array_map(fn ($part) => trim((string) $part), $parts)),
+        ];
+    }
+
     public function sendMessage(object $request)
     {
 		$this->initializeWhatsappService();

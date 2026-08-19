@@ -182,6 +182,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
 				Route::post('/chat/{uuid}/send/auth-template', [App\Http\Controllers\User\ChatController::class, 'sendAuthTemplate']);
                 Route::post('/chat/{uuid}/request-location', [App\Http\Controllers\User\ChatController::class, 'requestLocation']);
+                Route::post('/chat/{uuid}/send-location', [App\Http\Controllers\User\ChatController::class, 'sendLocation']);
                 Route::post('/chat/{uuid}/block', [App\Http\Controllers\User\ChatController::class, 'blockContact']);
                 Route::post('/chat/{uuid}/unblock', [App\Http\Controllers\User\ChatController::class, 'unblockContact']);
                 Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);

@@ -97,6 +97,48 @@ class ChatController extends BaseController
         return $this->chatService()->requestLocation($uuid, (string) $request->input('body'), auth()->id());
     }
 
+    /**
+     * إرسال موقع النشاط التجاري إلى العميل — بطاقة خريطة يفتحها للملاحة.
+     *
+     * الموقع إمّا المحفوظ في إعدادات المنشأة (use_organization_location) وإمّا
+     * نقطة يختارها الموظّف من الخريطة. حلّ العنوان المحفوظ يجري في الخادم لا
+     * في الواجهة: تطبيق الجوال والداشبورد يجب أن يرسلا نفس النقطة بالضبط.
+     */
+    public function sendLocation(Request $request, $uuid)
+    {
+        $useOrganizationLocation = $request->boolean('use_organization_location');
+
+        $request->validate([
+            'use_organization_location' => ['sometimes', 'boolean'],
+            'latitude' => [$useOrganizationLocation ? 'nullable' : 'required', 'numeric', 'between:-90,90'],
+            'longitude' => [$useOrganizationLocation ? 'nullable' : 'required', 'numeric', 'between:-180,180'],
+            'name' => ['nullable', 'string', 'max:' . WhatsappService::LOCATION_NAME_MAX],
+            'address' => ['nullable', 'string', 'max:' . WhatsappService::LOCATION_ADDRESS_MAX],
+        ]);
+
+        $service = $this->chatService();
+
+        if ($useOrganizationLocation) {
+            $location = $service->getOrganizationLocation();
+
+            if ($location === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Your business location is not set yet. Add it in Settings first.'),
+                ], 422);
+            }
+        } else {
+            $location = [
+                'latitude' => $request->input('latitude'),
+                'longitude' => $request->input('longitude'),
+                'name' => $request->input('name'),
+                'address' => $request->input('address'),
+            ];
+        }
+
+        return $service->sendLocation($uuid, $location, auth()->id());
+    }
+
     public function sendTemplateMessage(Request $request, $uuid)
     {
 	

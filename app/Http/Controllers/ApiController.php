@@ -2385,6 +2385,93 @@ class ApiController extends Controller
     }
 
     /**
+     * إرسال موقع النشاط التجاري إلى العميل من تطبيق الجوال.
+     *
+     * نظير ChatController::sendLocation، بشكل ردٍّ حامل لـstatusCode كبقية
+     * مسارات هذا المتحكّم — تطبيق الجوال يقرؤه ويفرّع عليه.
+     */
+    public function sendLocation(Request $request)
+    {
+        $organizationId = (int) ($request->user()?->current_mobile_organization_id ?: $request->organization);
+        $useOrganizationLocation = $request->boolean('use_organization_location');
+
+        $validator = Validator::make($request->all(), [
+            'uuid' => 'required|string',
+            'use_organization_location' => 'sometimes|boolean',
+            'latitude' => ($useOrganizationLocation ? 'nullable' : 'required') . '|numeric|between:-90,90',
+            'longitude' => ($useOrganizationLocation ? 'nullable' : 'required') . '|numeric|between:-180,180',
+            'name' => 'nullable|string|max:' . WhatsappService::LOCATION_NAME_MAX,
+            'address' => 'nullable|string|max:' . WhatsappService::LOCATION_ADDRESS_MAX,
+        ]);
+
+        if ($validator->fails()) {
+            $errors = $validator->errors();
+
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => $errors->first(),
+                'errors' => $errors,
+            ], 400);
+        }
+
+        // نفحص النافذة هنا لا في الخدمة: ردّ الخدمة بشكل الويب، وتطبيق الجوال
+        // يتوقّع statusCode — نفس علّة requestLocation أعلاه.
+        $contact = Contact::where('uuid', (string) $request->input('uuid'))
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if ($contact && !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowApiJsonResponse();
+        }
+
+        $service = new ChatService($organizationId);
+
+        if ($useOrganizationLocation) {
+            $location = $service->getOrganizationLocation();
+
+            if ($location === null) {
+                return response()->json([
+                    'statusCode' => 422,
+                    'success' => false,
+                    'message' => __('Your business location is not set yet. Add it in Settings first.'),
+                ], 422);
+            }
+        } else {
+            $location = [
+                'latitude' => $request->input('latitude'),
+                'longitude' => $request->input('longitude'),
+                'name' => $request->input('name'),
+                'address' => $request->input('address'),
+            ];
+        }
+
+        return $service->sendLocation(
+            (string) $request->input('uuid'),
+            $location,
+            (int) $request->user()->id
+        );
+    }
+
+    /**
+     * موقع النشاط التجاري المحفوظ — يملأ به التطبيق خيار «أرسل عنواننا»
+     * ويُخفيه إن لم يُضبط بعد بدل أن يُرسل نقطةً فارغة.
+     */
+    public function organizationLocation(Request $request)
+    {
+        $organizationId = (int) ($request->user()?->current_mobile_organization_id ?: $request->organization);
+
+        $location = (new ChatService($organizationId))->getOrganizationLocation();
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => true,
+            'data' => $location,
+            'is_set' => $location !== null,
+        ]);
+    }
+
+    /**
      * نبضة نشاط من التطبيق. لم يكن للموبايل نبضة إطلاقاً — النبضة الوحيدة في
      * routes/web.php — فكل من يعمل من التطبيق يظهر «غير متصل» دائماً مهما أرسل.
      */

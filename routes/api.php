@@ -128,6 +128,8 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::post('mark-as-read',[App\Http\Controllers\ApiController::class, 'markAsRead']);
 	
 	Route::post('/request-location', [App\Http\Controllers\ApiController::class, 'requestLocation']);
+	Route::post('/send-location', [App\Http\Controllers\ApiController::class, 'sendLocation']);
+	Route::get('/organization-location', [App\Http\Controllers\ApiController::class, 'organizationLocation']);
 	Route::post('/performance/heartbeat', [App\Http\Controllers\ApiController::class, 'performanceHeartbeat']);
 	Route::get('/list-teams', [App\Http\Controllers\ApiController::class, 'listTeamMembers']);
 

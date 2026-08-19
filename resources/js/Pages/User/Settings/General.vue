@@ -63,6 +63,32 @@
 									:class="'col-span-2'" />
 							</div>
 						</div>
+						<div class="flex space-x-10 w-full px-4 py-6 border-t">
+							<div class="w-[40%]">
+								<span class="text-slate-600">{{ $t('Business location on the map') }}</span>
+								<div class="text-xs text-slate-700 flex items-start mt-1">
+									<svg class="mr-1 mt-0.5 shrink-0" xmlns="http://www.w3.org/2000/svg" width="15"
+										height="15" viewBox="0 0 24 24">
+										<path fill="none" stroke="currentColor" stroke-linecap="round"
+											stroke-linejoin="round" stroke-width="2"
+											d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
+									</svg>
+									<span>{{ $t('Set the exact point of your business so your team can send it to customers in chat. Optional.') }}</span>
+								</div>
+								<button v-if="form2.latitude !== null && form2.latitude !== undefined" type="button"
+									class="mt-3 text-xs text-red-600 hover:underline" @click="clearOrganizationLocation">
+									{{ $t('Clear saved location') }}
+								</button>
+							</div>
+							<div class="w-[60%]">
+								<LocationPicker v-model="organizationLocation" :api-key="googleMapsApiKey"
+									:show-text-fields="false" :height="'280px'" />
+								<p v-if="form2.errors.latitude || form2.errors.longitude"
+									class="mt-2 text-xs text-red-600">
+									{{ form2.errors.latitude || form2.errors.longitude }}
+								</p>
+							</div>
+						</div>
 					</div>
 					<!-- <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
 						<div class="flex space-x-10 border-b w-full px-4 py-6">
@@ -368,7 +394,7 @@
 </template>
 <script setup>
 import SettingLayout from "./Layout.vue"
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import EmbeddedSignupBtn from '@/Components/EmbeddedSignupBtn.vue'
 import FormModal from '@/Components/FormModal.vue'
 import CampaignForm from '@/Components/CampaignForm.vue'
@@ -380,7 +406,8 @@ import Modal from '@/Components/Modal.vue'
 import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
-import { router, useForm } from "@inertiajs/vue3"
+import { router, useForm, usePage } from "@inertiajs/vue3"
+import LocationPicker from '@/Components/LocationPicker.vue'
 
 const props = defineProps({
 	contactGroups: { type: Array, default: () => [] },
@@ -451,6 +478,8 @@ const form2 = useForm({
 	state: getAddressDetail(props.settings?.address, 'state'),
 	zip: getAddressDetail(props.settings?.address, 'zip'),
 	country: getAddressDetail(props.settings?.address, 'country'),
+	latitude: getAddressDetail(props.settings?.address, 'latitude'),
+	longitude: getAddressDetail(props.settings?.address, 'longitude'),
 	timezone: settings.value && settings.value.timezone ? settings.value.timezone : 'UTC',
 	enable_sound_notification: settings.value && settings.value.notifications ? settings.value.notifications.enable_sound : false,
 	volume: settings.value && settings.value.notifications ? settings.value.notifications.volume : 1,
@@ -461,6 +490,37 @@ const form2 = useForm({
 	failed_campaign_group: settings.value && settings.value?.campaigns?.failed_campaign_group ? settings.value.campaigns?.failed_campaign_group : null,
 	support_ticket_form_url: settings.value?.support?.ticket_form_url ?? '',
 })
+
+const googleMapsApiKey = computed(() => {
+	const config = usePage().props.config ?? []
+	return config.find((item) => item.key === 'google_maps_api_key')?.value ?? ''
+})
+
+/**
+ * النموذج مسطّح (latitude/longitude) والمنتقي يتكلّم بكائن — هذا الوسيط بينهما.
+ *
+ * الاسم والعنوان النصّي لا يُحفظان هنا: البطاقة تُبنى وقت الإرسال من اسم
+ * المنشأة وحقول عنوانها، فحفظ نسخة ثانية منهما كان سيتيح تعارضهما.
+ */
+const organizationLocation = computed({
+	get: () => ({
+		latitude: form2.latitude,
+		longitude: form2.longitude,
+		name: form2.organization_name ?? '',
+		address: [form2.address, form2.city, form2.state, form2.zip, form2.country]
+			.filter((part) => (part ?? '').toString().trim() !== '')
+			.join('، '),
+	}),
+	set: (value) => {
+		form2.latitude = value?.latitude ?? null
+		form2.longitude = value?.longitude ?? null
+	},
+})
+
+const clearOrganizationLocation = () => {
+	form2.latitude = null
+	form2.longitude = null
+}
 
 const capitalizeString = (string) => {
 	return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase()

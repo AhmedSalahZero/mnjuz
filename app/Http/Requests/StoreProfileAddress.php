@@ -20,6 +20,14 @@ class StoreProfileAddress extends FormRequest
         if ($url === '' || $url === null) {
             $this->merge(['support_ticket_form_url' => null]);
         }
+
+        // منتقي الخريطة يُرسل '' حين لا يُحدَّد موقع، وقاعدة numeric ترفضها
+        // فيفشل حفظ الإعدادات كلّها بسبب حقل لم يمسّه المستخدم أصلاً.
+        foreach (['latitude', 'longitude'] as $coordinate) {
+            if ($this->input($coordinate) === '') {
+                $this->merge([$coordinate => null]);
+            }
+        }
     }
 
     /**
@@ -44,6 +52,10 @@ class StoreProfileAddress extends FormRequest
             'resend_intervals.*' => 'integer|min:1|max:168',
             'failed_campaign_group' => 'required_if:move_failed_contacts_to_group,true|nullable|exists:contact_groups,uuid',
             'support_ticket_form_url' => 'nullable|url|max:2048',
+            // موقع النشاط على الخريطة — يُرسَل للعميل بطاقةَ موقع في المحادثة.
+            // اختياري كلّياً، لكن نصف نقطة لا يُرسَل: كلٌّ يشترط الآخر.
+            'latitude' => 'nullable|required_with:longitude|numeric|between:-90,90',
+            'longitude' => 'nullable|required_with:latitude|numeric|between:-180,180',
         ];
 
         return $rules;

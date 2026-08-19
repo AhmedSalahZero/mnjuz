@@ -174,6 +174,15 @@ class ProfileController extends BaseController
         $addressArray['zip'] = $request->input('zip');
         $addressArray['country'] = $request->input('country');
 
+        // الإحداثيات تسكن نفس JSON العنوان لا عموداً جديداً: هي وجهٌ آخر لنفس
+        // العنوان، وفصلها كان سيُلزم كل قارئ للعنوان بقراءتين.
+        $latitude = $request->input('latitude');
+        $longitude = $request->input('longitude');
+        if ($latitude !== null && $longitude !== null) {
+            $addressArray['latitude'] = (float) $latitude;
+            $addressArray['longitude'] = (float) $longitude;
+        }
+
         // نلتقط الحالة قبل الحفظ لنعرف ما تغيّر فعلاً — واز تقبل التعديل
         // الجزئي، فلا نرسل حقولاً لم يمسّها المستخدم.
         $wazChanges = $this->wazCompanyChanges($organizationConfig, $request->input('organization_name'), $addressArray);

@@ -62,6 +62,13 @@ class WhatsappService
 	/** نوع رسالة طلب الموقع كما نمرّره داخلياً إلى sendMessage. */
 	public const TYPE_LOCATION_REQUEST = 'location request';
 
+	/** نوع رسالة «إرسال موقعنا» كما نمرّره داخلياً إلى sendMessage. */
+	public const TYPE_LOCATION = 'location';
+
+	/** أقصى طول لاسم الموقع وعنوانه النصّي كما تقبله Meta. */
+	public const LOCATION_NAME_MAX = 1000;
+	public const LOCATION_ADDRESS_MAX = 1000;
+
 	/** أقصى طول لنصّ الجسم كما تفرضه Meta. */
 	public const LOCATION_REQUEST_MAX_BODY = 1024;
 
@@ -96,7 +103,74 @@ class WhatsappService
 		];
 	}
 
-	 public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
+	/**
+	 * حمولة رسالة الموقع الصادرة كما تنصّ عليها وثيقة Meta بالضبط.
+	 *
+	 * فُصلت عن sendMessage لتُختبر بلا شبكة — كما فُعل مع طلب الموقع: شكل
+	 * الحمولة هو العقد مع Meta، وأي انحراف فيه يُرفض الطلب برسالة غامضة.
+	 *
+	 * الإحداثيات تُرسل أرقاماً لا نصوصاً: Meta ترفض السلاسل النصّية هنا.
+	 * name و address اختياريان، وإرسالهما فارغين يُظهر بطاقةً بلا عنوان،
+	 * فنُسقطهما بدل تمرير سلسلة فارغة.
+	 *
+	 * @param  array{latitude: mixed, longitude: mixed, name?: ?string, address?: ?string}  $location
+	 * @return array{type: string, location: array}
+	 */
+	public static function buildLocationPayload(array $location): array
+	{
+		$payload = [
+			'latitude' => round((float) $location['latitude'], 8),
+			'longitude' => round((float) $location['longitude'], 8),
+		];
+
+		// القصّ بالمحارف لا بالبايتات: العربي حرفان بايتياً، فالقصّ الخام
+		// يشطر الحرف ويُنتج نصّاً تالفاً — نفس علّة طلب الموقع.
+		$name = trim((string) ($location['name'] ?? ''));
+		if ($name !== '') {
+			$payload['name'] = mb_substr($name, 0, self::LOCATION_NAME_MAX);
+		}
+
+		$address = trim((string) ($location['address'] ?? ''));
+		if ($address !== '') {
+			$payload['address'] = mb_substr($address, 0, self::LOCATION_ADDRESS_MAX);
+		}
+
+		return [
+			'type' => 'location',
+			'location' => $payload,
+		];
+	}
+
+	/**
+	 * هل الإحداثيات صالحة للإرسال؟
+	 *
+	 * خط العرض صفر وخط الطول صفر نقطة حقيقية في المحيط الأطلسي، لكنها في
+	 * الواقع دائماً حقلٌ لم يُملأ — فنرفضها كي لا يُرسَل موقع «Null Island».
+	 */
+	public static function isUsableLocation($location): bool
+	{
+		if (!is_array($location)) {
+			return false;
+		}
+
+		$latitude = $location['latitude'] ?? null;
+		$longitude = $location['longitude'] ?? null;
+
+		if (!is_numeric($latitude) || !is_numeric($longitude)) {
+			return false;
+		}
+
+		$latitude = (float) $latitude;
+		$longitude = (float) $longitude;
+
+		if ($latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180) {
+			return false;
+		}
+
+		return !($latitude === 0.0 && $longitude === 0.0);
+	}
+
+	 public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null, $location = null)
     {
 		$tempMessageId = Request()->get('tempMessageId');
 		$messageUUID = Request()->get('msg_uuid');
@@ -104,7 +178,9 @@ class WhatsappService
 		if ($type === 'text' && $messageContent === '') {
 			return (object) ['success' => false, 'message' => __('Message cannot be empty.')];
 		}
-		if ($tempMessageId !== null && $tempMessageId !== '') {
+		// رسالة الموقع لا تمرّ بـSendTextMessageJob: توقيع الـjob لا يحمل
+		// الإحداثيات، فتمريرها عبره يُسقطها ويُرسل رسالة نصّية فارغة.
+		if ($type !== self::TYPE_LOCATION && $tempMessageId !== null && $tempMessageId !== '') {
 			\App\Jobs\SendTextMessageJob::dispatch(
 				$this->organizationId,
 				$contactUuId,
@@ -131,7 +207,8 @@ class WhatsappService
 			$footer,
 			$buttonLabel,
 			$messageUUID,
-			$tempMessageId
+			$tempMessageId,
+			$location
 		);
     }
 
@@ -149,7 +226,8 @@ class WhatsappService
 		$footer = null,
 		$buttonLabel = null,
 		$messageUUID = null,
-		$tempMessageId = null
+		$tempMessageId = null,
+		$location = null
 	) {
 		$contact = Contact::where('uuid', $contactUuId)
 			->where('organization_id', $this->organizationId)
@@ -163,6 +241,12 @@ class WhatsappService
 			return (object) ['success' => false, 'message' => __('Message cannot be empty.')];
 		}
 
+		// إحداثيات ناقصة تجعل Meta ترفض الطلب برسالة غامضة؛ نُمسكها هنا
+		// لنُرجع سبباً مفهوماً للواجهة بدل خطأ Graph API الخام.
+		if ($type === self::TYPE_LOCATION && !self::isUsableLocation($location)) {
+			return (object) ['success' => false, 'message' => __('A valid location is required.')];
+		}
+
 		$url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
 		$headers = $this->setHeaders();
 
@@ -173,6 +257,12 @@ class WhatsappService
 			$requestData['type'] = 'text';
 			$requestData['text']['preview_url'] = true;
 			$requestData['text']['body'] = clean($messageContent);
+		} else if ($type == self::TYPE_LOCATION) {
+			// رسالة موقع صادرة من النشاط التجاري إلى العميل. تصل بطاقةً فيها
+			// خريطة يفتحها العميل مباشرةً في تطبيق الخرائط عنده.
+			// https://developers.facebook.com/docs/whatsapp/cloud-api/messages/location-messages
+			$locationPayload = self::buildLocationPayload($location);
+			$requestData = array_merge($requestData, $locationPayload);
 		} else if ($type == self::TYPE_LOCATION_REQUEST) {
 			// طلب موقع العميل. يقبل body و action فقط — لا header ولا footer،
 			// خلافاً لبقية الأنواع التفاعلية، وإرسالهما يجعل Meta ترفض الطلب.
@@ -222,6 +312,15 @@ class WhatsappService
 			$response = ['text' => ['body' => clean($messageContent)], 'type' => 'text'];
 			if ($type === self::TYPE_LOCATION_REQUEST) {
 				$response['location_request'] = true;
+			}
+			if ($type === self::TYPE_LOCATION) {
+				// نفس شكل الموقع الوارد بالضبط (ChatMetadataHelper) — الفقاعة
+				// وتطبيق الجوال يفرّعان على type=location ويقرآن الإحداثيات من
+				// هنا، فتوحيد الشكل يجعل الصادر يُعرض بلا كود عرض جديد.
+				$response = [
+					'type' => 'location',
+					'location' => $locationPayload['location'],
+				];
 			}
 			$chat = Chat::create([
 				'organization_id' => $contact->organization_id,
@@ -1010,21 +1109,29 @@ class WhatsappService
      * @param object $location The location object containing longitude, latitude, name, and address.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendLocation($phoneNumber, $location)
+    /**
+     * إرسال موقع النشاط التجاري إلى العميل.
+     *
+     * كانت هذه الدالّة تبني الطلب بنفسها وترسله مباشرةً: لا تُنشئ سجلّ محادثة،
+     * ولا تُرجع قيمة، ولا تُطلق حدث المحادثة الجديدة. النتيجة أن الرسالة تصل
+     * العميل ولا يراها الموظّف في الشاشة إطلاقاً. صارت تمرّ بمسار الإرسال
+     * الموحّد فتنال سجلّ المحادثة والبثّ والويبهوك مثل بقية الأنواع.
+     *
+     * @param  array{latitude: mixed, longitude: mixed, name?: ?string, address?: ?string}  $location
+     */
+    public function sendLocation(string $contactUuId, array $location, $userId = null)
     {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
-        $headers = $this->setHeaders();
-
-        $requestData['messaging_product'] = 'whatsapp';
-        $requestData['to'] = $phoneNumber;
-        $requestData['type'] = 'location';
-        $requestData['location']['longitude'] = $location->longitude;
-        $requestData['location']['latitude'] = $location->latitude;
-        $requestData['location']['name'] = $location->name;
-        $requestData['location']['address'] = $location->address;
-
-        $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
+        return $this->sendMessage(
+            $contactUuId,
+            '',
+            $userId,
+            self::TYPE_LOCATION,
+            [],
+            [],
+            null,
+            null,
+            $location
+        );
     }
 
     public function createTemplate(Request $request)

@@ -5,6 +5,8 @@ import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourComposeBanner.vue'
 import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
+import LocationPicker from '@/Components/LocationPicker.vue'
+import { usePage } from '@inertiajs/vue3'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
@@ -120,6 +122,113 @@ const requestLocation = async () => {
 		requestingLocation.value = false
 		await nextTick()
 		textInputRef.value?.focus()
+	}
+}
+
+/**
+ * إرسال موقع النشاط التجاري إلى العميل — عكس requestLocation أعلاه.
+ *
+ * الموقع المحفوظ يُرسَل بعلَم use_organization_location لا بإحداثيات من هنا:
+ * الخادم هو مصدر الحقيقة، فلو عدّله زميل في الإعدادات بينما الصفحة مفتوحة
+ * أُرسل الجديد لا نسخة قديمة عالقة في الواجهة.
+ */
+const showLocationModal = ref(false)
+const sendingLocation = ref(false)
+const pickedLocation = ref(null)
+
+const googleMapsApiKey = computed(() => {
+	const config = usePage().props.config ?? []
+	return config.find((item) => item.key === 'google_maps_api_key')?.value ?? ''
+})
+
+const organizationLocation = computed(() => {
+	const organization = usePage().props.organization
+	if (!organization?.address) return null
+
+	let address
+	try {
+		address = typeof organization.address === 'string' ? JSON.parse(organization.address) : organization.address
+	} catch (error) {
+		return null
+	}
+
+	const lat = Number(address?.latitude)
+	const lng = Number(address?.longitude)
+	if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null
+
+	return {
+		latitude: lat,
+		longitude: lng,
+		name: organization.name ?? '',
+		address: [address.street, address.city, address.state, address.zip, address.country]
+			.filter((part) => (part ?? '').toString().trim() !== '')
+			.map((part) => part.toString().trim())
+			.join('، '),
+	}
+})
+
+const openLocationModal = () => {
+	if (!isInboundChatWithin24Hours.value) return
+	pickedLocation.value = organizationLocation.value
+		? { ...organizationLocation.value }
+		: { latitude: null, longitude: null, name: '', address: '' }
+	showLocationModal.value = true
+}
+
+const closeLocationModal = () => {
+	showLocationModal.value = false
+	pickedLocation.value = null
+}
+
+const useBusinessLocation = () => {
+	if (!organizationLocation.value) return
+	pickedLocation.value = { ...organizationLocation.value }
+}
+
+const isPickedLocationValid = computed(() => {
+	const value = pickedLocation.value
+	if (!value) return false
+	const lat = Number(value.latitude)
+	const lng = Number(value.longitude)
+	return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)
+})
+
+/** هل المختار هو الموقع المحفوظ نفسه؟ عندها نترك الخادم يحلّه بنفسه. */
+const isSavedBusinessLocation = computed(() => {
+	const saved = organizationLocation.value
+	const picked = pickedLocation.value
+	if (!saved || !picked) return false
+	return Number(saved.latitude) === Number(picked.latitude)
+		&& Number(saved.longitude) === Number(picked.longitude)
+		&& (saved.name ?? '') === (picked.name ?? '')
+		&& (saved.address ?? '') === (picked.address ?? '')
+})
+
+const sendLocation = async () => {
+	if (!isPickedLocationValid.value || sendingLocation.value || !isInboundChatWithin24Hours.value) return
+
+	const payload = isSavedBusinessLocation.value
+		? { use_organization_location: true }
+		: {
+			latitude: pickedLocation.value.latitude,
+			longitude: pickedLocation.value.longitude,
+			name: pickedLocation.value.name || '',
+			address: pickedLocation.value.address || '',
+		}
+
+	sendingLocation.value = true
+	try {
+		const { data } = await axios.post(`/chat/${props.contact.uuid}/send-location`, payload)
+		if (data?.success === false) {
+			toast.error(trans(data.message || 'Something went wrong'))
+		} else {
+			toast.success(trans('Location sent'))
+			closeLocationModal()
+		}
+	} catch (error) {
+		toast.error(trans(error.response?.data?.message || 'Something went wrong'))
+	} finally {
+		sendingLocation.value = false
 	}
 }
 
@@ -682,6 +791,19 @@ onBeforeUnmount(() => {
 						</g>
 					</svg>
 				</button>
+				<button type="button" @click="openLocationModal()"
+					:disabled="sendingLocation || !isInboundChatWithin24Hours"
+					class="text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
+					:title="$t('Send our location')" :aria-label="$t('Send our location')">
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+						<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+							stroke-linejoin="round">
+							<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z"
+								fill="currentColor" fill-opacity="0.15" />
+							<path d="m14.5 8.5l-5 2.2l2.1 1l1 2.1z" fill="currentColor" />
+						</g>
+					</svg>
+				</button>
 				<label @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
 						<path fill="currentColor"
@@ -900,6 +1022,18 @@ onBeforeUnmount(() => {
 								</g>
 							</svg>
 						</button>
+						<button type="button" class="py-1 ms-2 cursor-pointer disabled:opacity-40"
+							@click="openLocationModal()" :disabled="sendingLocation || !isInboundChatWithin24Hours"
+							:title="$t('Send our location')" :aria-label="$t('Send our location')">
+							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+								<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+									stroke-linejoin="round">
+									<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z"
+										fill="currentColor" fill-opacity="0.15" />
+									<path d="m14.5 8.5l-5 2.2l2.1 1l1 2.1z" fill="currentColor" />
+								</g>
+					</svg>
+						</button>
 					</div>
 				</div>
 				<div>|</div>
@@ -1012,5 +1146,60 @@ onBeforeUnmount(() => {
 			</div>
 			</div>
 		</div>
+		<Teleport to="body">
+		<!-- نافذة إرسال الموقع: عنوان النشاط بضغطة، أو نقطة يختارها الموظّف -->
+		<div v-if="showLocationModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+			role="dialog" aria-modal="true">
+			<div class="absolute inset-0 bg-black/40" @click="closeLocationModal()"></div>
+			<div class="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-xl">
+				<div class="flex items-center justify-between border-b px-5 py-4">
+					<h3 class="text-base font-medium text-slate-800">{{ $t('Send a location') }}</h3>
+					<button type="button" class="text-slate-400 hover:text-slate-600" @click="closeLocationModal()"
+						:aria-label="$t('Close')">
+						<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
+								d="M6 6l12 12M18 6L6 18" />
+						</svg>
+					</button>
+				</div>
+
+				<div class="px-5 py-4">
+					<button v-if="organizationLocation" type="button"
+						class="mb-4 flex w-full items-center gap-3 rounded-lg border border-slate-200 px-4 py-3 text-left hover:border-slate-400 hover:bg-slate-50"
+						@click="useBusinessLocation()">
+						<svg class="shrink-0 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="22" height="22"
+							viewBox="0 0 24 24">
+							<g fill="none" stroke="currentColor" stroke-width="1.5">
+								<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z" />
+								<circle cx="12" cy="10.5" r="2.5" />
+							</g>
+						</svg>
+						<span class="min-w-0">
+							<span class="block text-sm text-slate-800">{{ $t('Use our business location') }}</span>
+							<span class="block truncate text-xs text-slate-500">{{ organizationLocation.address || organizationLocation.name }}</span>
+						</span>
+					</button>
+
+					<div v-else class="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+						{{ $t('Your business location is not set yet. Add it in Settings first.') }}
+					</div>
+
+					<LocationPicker v-model="pickedLocation" :api-key="googleMapsApiKey" :height="'300px'" />
+				</div>
+
+				<div class="flex items-center justify-end gap-3 border-t px-5 py-4">
+					<button type="button" class="rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
+						@click="closeLocationModal()">
+						{{ $t('Cancel') }}
+					</button>
+					<button type="button"
+						class="rounded-md bg-slate-900 px-5 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-40"
+						:disabled="!isPickedLocationValid || sendingLocation" @click="sendLocation()">
+						{{ sendingLocation ? $t('Sending...') : $t('Send location') }}
+					</button>
+				</div>
+			</div>
+		</div>
+		</Teleport>
 	</form>
 </template>
