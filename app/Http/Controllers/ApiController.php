@@ -2580,7 +2580,7 @@ class ApiController extends Controller
             'contactsById' => $contacts->keyBy('id'),
             'logsByContact' => $allChatLogs->groupBy('contact_id'),
             'chatsMap' => $this->getModelsByIdsInChunks(
-                Chat::query()->with('media', 'user', 'logs'),
+                $this->visibleChatsQuery()->with('media', 'user', 'logs'),
                 'id',
                 $chatIds
             )->keyBy('id'),
@@ -2588,6 +2588,22 @@ class ApiController extends Controller
             'notesMap' => $this->getModelsByIdsInChunks(ChatNote::query(), 'id', $noteIds)->keyBy('id'),
             'pagination' => $pagination,
         ];
+    }
+
+    /**
+     * استعلام الرسائل الذاهبة إلى تطبيق الجوال، بلا التفاعلات بالإيموجي.
+     *
+     * التفاعل يصل صفّاً مستقلاً بلا فرع عرض في التطبيق، فيظهر فقاعةً فارغة —
+     * نفس ما كان يقع في الداشبورد قبل ترشيحه هناك. ولأن التطبيق يشتقّ «آخر
+     * رسالة» في قائمة المحادثات من هذه المصفوفة نفسها، فترشيحه هنا يُصلح
+     * السطر الفارغ في القائمة أيضاً.
+     *
+     * مطابقة نصّية لا دوالّ JSON: JSON_EXTRACT على صفّ تالف تُوقف الاستعلام
+     * بخطأ وتُسقط المحادثة كلّها.
+     */
+    private function visibleChatsQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Chat::query()->where('metadata', 'not like', '%"type":"reaction"%');
     }
 
     /**
@@ -2722,7 +2738,7 @@ class ApiController extends Controller
         $noteIds = $chatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
 
         $chatsMap = !empty($chatIds)
-            ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
+            ? $this->visibleChatsQuery()->with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
             : collect();
         $ticketLogsMap = !empty($ticketIds)
             ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
@@ -2736,6 +2752,13 @@ class ApiController extends Controller
             $value = null;
             if ($chatLog->entity_type === 'chat') {
                 $value = $chatsMap->get($chatLog->entity_id);
+
+                // رسالة غير موجودة في الخريطة: محذوفة أو مُرشَّحة (تفاعل).
+                // الحلقتان الأخريان تتخطّيان هنا، وهذه كانت تمرّر null.
+                if (!$value) {
+                    continue;
+                }
+
                 // temp condition to skip buttons and context for mobile testing now
                 if (env('APP_ENV') == 'development') {
                     if (isset($value['metadata']) && (isset(json_decode($value['metadata'], true)['buttons']) || isset(json_decode($value['metadata'], true)['context']))
