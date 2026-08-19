@@ -173,11 +173,23 @@ class Contact extends Model
      * استخدام ofMany يمنع تحميل كل الـ chats ثم أخذ الأول (آلاف السجلات).
      * المعامل الثاني Closure يطبّق على الـ subquery؛ الثالث يجب أن يكون string (اسم العلاقة) أو null.
      */
+    /**
+     * آخر رسالة حقيقية في المحادثة — تُعرض معاينةً في قائمة المحادثات.
+     *
+     * التفاعل بالإيموجي مستثنى: واتساب ترسله رسالةً مستقلّة، فكان يصير «آخر
+     * رسالة» في 2,022 محادثة ويُظهر سطر المعاينة فارغاً — لا فرع يعرضه ولا
+     * نصّ فيه. تخطّيه يُعيد للسطر ما يُذكّر الموظّف بما دار فعلاً.
+     *
+     * الترتيب في القائمة يبقى على latest_chat_created_at، فالتفاعل ما زال
+     * يرفع المحادثة إلى الأعلى — وهو صحيح: نشاط جديد وقع بالفعل.
+     */
     public function lastChat()
     {
         return $this->hasOne(Chat::class, 'contact_id')
             ->ofMany(['created_at' => 'max'], function (Builder $q) {
-                $q->whereNull('deleted_at')->whereHas('chatLog');
+                $q->whereNull('deleted_at')
+                    ->whereHas('chatLog')
+                    ->where('metadata', 'not like', '%"type":"reaction"%');
             })
             ->with('media');
     }
