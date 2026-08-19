@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { default as axios } from 'axios'
 import ChatBubble from '@/Components/ChatComponents/ChatBubble.vue'
 
@@ -23,6 +23,37 @@ const props = defineProps({
 })
 
 const messages = ref(props.initialMessages)
+
+/**
+ * أنواع لا تُعرض في المحادثة إطلاقاً.
+ *
+ * التفاعل بالإيموجي منها. إخفاء محتواه وحده لم يكن كافياً: غلاف الفقاعة
+ * يُرسَم هنا لا في ChatBubble، فكانت تظهر فقاعة فارغة لكل تفاعل — وهي أظهر
+ * إزعاجاً من التفاعل نفسه.
+ */
+const HIDDEN_CHAT_TYPES = ['reaction']
+
+const chatMetadataType = (entry) => {
+	const raw = entry?.value?.metadata
+	if (typeof raw !== 'string') return raw?.type ?? null
+	try {
+		return JSON.parse(raw)?.type ?? null
+	} catch {
+		return null
+	}
+}
+
+/**
+ * ما يُرسَم فعلاً. نُرشّح هنا لا في ChatBubble كي لا يبقى العنصر الحاوي
+ * بهوامشه فيُحدث فجوةً بين الرسائل بلا سبب ظاهر.
+ */
+const visibleMessages = computed(() =>
+	messages.value.filter((chat) => {
+		const entry = chat?.[0]
+		if (entry?.type !== 'chat') return true
+		return !HIDDEN_CHAT_TYPES.includes(chatMetadataType(entry))
+	})
+)
 watch(
 	() => props.initialMessages,
 	(newInitialMessages) => {
@@ -82,7 +113,7 @@ const loadMoreMessages = async () => {
 						d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
 				</svg> {{ $t('Load More Messages') }} </button>
 		</div>
-		<div v-for="(chat, index) in messages" :key="index" class="flex flex-grow flex-col"
+		<div v-for="(chat, index) in visibleMessages" :key="index" class="flex flex-grow flex-col"
 			:class="chat[0].type === 'ticket' ? 'justify-center' : 'justify-end'">
 			<ChatBubble v-if="chat[0].type === 'chat'" :content="chat[0].value" :type="chat[0].value.type" />
 			<div v-if="chat[0].type === 'ticket'" class="py-2">

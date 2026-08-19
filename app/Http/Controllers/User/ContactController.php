@@ -44,7 +44,10 @@ class ContactController extends BaseController
 
         if($uuid === 'export') {
             $format = $request->query('format', 'xlsx');
-            return $this->exportContacts($format);
+
+            // التصدير كان يتجاهل التحديد ويُخرج كل شيء دائماً، فمن حدّد بضع
+            // جهات ثم صدّر وجد الملف يحوي القائمة كاملة.
+            return $this->exportContacts($format, $this->resolveExportUuids($request));
         } else if($uuid === 'template') {
             return $this->downloadTemplate();
         } else {
@@ -89,21 +92,52 @@ class ContactController extends BaseController
         }
     }
 
-    public function exportContacts($format = 'xlsx')
+    /**
+     * معرّفات ما يُصدَّر، أو null حين يريد المستخدم القائمة كاملة.
+     *
+     * @return array<int, string>|null
+     */
+    private function resolveExportUuids(Request $request): ?array
+    {
+        // «حدّد الكل» بلا استثناءات = القائمة كاملة، فلا داعي لتعداد المعرّفات.
+        if ($request->boolean('select_all')) {
+            $excluded = array_filter((array) $request->query('excluded', []));
+            $search = $request->query('search');
+
+            if ($excluded === [] && ($search === null || $search === '')) {
+                return null;
+            }
+
+            return $this->uuidsMatchingFilter($search, $excluded);
+        }
+
+        $uuids = array_filter((array) $request->query('uuids', []));
+
+        return $uuids === [] ? null : array_values($uuids);
+    }
+
+    /**
+     * @param  array<int, string>|null  $uuids  null = كل جهات الاتصال.
+     */
+    public function exportContacts($format = 'xlsx', ?array $uuids = null)
     {
         if ($format === 'csv') {
-            return $this->exportContactsAsCsv();
+            return $this->exportContactsAsCsv($uuids);
         } else {
-            return Excel::download(new ContactsExport, 'contacts.xlsx');
+            return Excel::download(new ContactsExport($uuids), 'contacts.xlsx');
         }
     }
 
-    public function exportContactsAsCsv()
+    /**
+     * @param  array<int, string>|null  $uuids  null = كل جهات الاتصال.
+     */
+    public function exportContactsAsCsv(?array $uuids = null)
     {
         $organizationId = $this->getCurrentOrganizationId();
         $contacts = Contact::with('contactGroups')
             ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
+            ->when($uuids !== null, fn ($query) => $query->whereIn('uuid', $uuids))
             ->get();
 	$organization = Organization::find($organizationId);
         // Get dynamic fields from the contact_fields table
@@ -363,10 +397,40 @@ class ContactController extends BaseController
 
     public function delete(Request $request)
     {
-        $uuids = $request->input('uuids', []);
+        $request->validate([
+            'uuids' => 'array',
+            'uuids.*' => 'string',
+            'select_all' => 'sometimes|boolean',
+            'search' => 'nullable|string|max:255',
+            'excluded' => 'array',
+            'excluded.*' => 'string',
+        ]);
+
+        // «حدّد الكل» لا يمرّر عشرات الآلاف من المعرّفات: أكبر منشأة لديها
+        // 63,361 جهة اتصال، وحمولة بهذا الحجم تتجاوز حدّ الطلب وسعة التخزين
+        // المحلّي في المتصفّح. تُمرَّر النيّة مع المرشّح، ويُحلّها الخادم.
+        if ($request->boolean('select_all')) {
+            $uuids = $this->uuidsMatchingFilter(
+                $request->input('search'),
+                (array) $request->input('excluded', [])
+            );
+        } else {
+            $uuids = (array) $request->input('uuids', []);
+
+            // مصفوفة فارغة كانت تعني «احذف كل شيء» في الخدمة، فأي طلب فقد
+            // معرّفاته في الطريق كان يمسح جهات اتصال المنشأة كلّها. النيّة
+            // صارت تُطلب صراحةً، والفراغ صار لا يفعل شيئاً.
+            if (empty($uuids)) {
+                return redirect('/contacts')->with('status', [
+                    'type' => 'info',
+                    'message' => __('No contacts selected.'),
+                ]);
+            }
+        }
 
         // نقرأ الأسماء قبل الحذف: بعده لا يبقى ما يُسمّى في السجلّ.
-        $deleted = \App\Models\Contact::whereIn('uuid', (array) $uuids)
+        $deleted = \App\Models\Contact::where('organization_id', $this->getCurrentOrganizationId())
+            ->whereIn('uuid', $uuids)
             ->get(['id', 'first_name', 'last_name', 'phone']);
 
         $this->contactService()->delete($uuids);
@@ -386,6 +450,26 @@ class ContactController extends BaseController
                 'message' => __('Contact(s) deleted successfully')
             ]
         );
+    }
+
+    /**
+     * معرّفات جهات الاتصال المطابقة للبحث الحالي داخل المنشأة، ناقص ما استثناه
+     * المستخدم بعد «حدّد الكل».
+     *
+     * نفس مرشّح القائمة حرفياً (searchTerm) كي يطابق ما يراه المستخدم على
+     * الشاشة ما يقع عليه الإجراء — ولا يُحذف أو يُصدَّر ما لا يراه.
+     *
+     * @param  array<int, string>  $excluded
+     * @return array<int, string>
+     */
+    private function uuidsMatchingFilter(?string $search, array $excluded = []): array
+    {
+        return \App\Models\Contact::where('organization_id', $this->getCurrentOrganizationId())
+            ->whereNull('deleted_at')
+            ->searchTerm($search)
+            ->when($excluded !== [], fn ($query) => $query->whereNotIn('uuid', $excluded))
+            ->pluck('uuid')
+            ->all();
     }
 
     private function getLocationSettings(){

@@ -66,6 +66,11 @@ const props = defineProps({
     type: {
         type: String,
         default: 'contact'
+    },
+    // وصف التحديد الحالي، أو null لتصدير القائمة كاملة.
+    selection: {
+        type: Object,
+        default: null
     }
 });
 
@@ -75,12 +80,21 @@ const selectedFormat = ref('xlsx');
 
 const exportData = () => {
     if (!selectedFormat.value) return;
-    
-    const url = props.type === 'contact' 
-        ? `/contacts/export?format=${selectedFormat.value}`
-        : `/contact-groups/export?format=${selectedFormat.value}`;
-    
-    window.open(url, '_blank');
+
+    const base = props.type === 'contact' ? '/contacts/export' : '/contact-groups/export';
+    const query = new URLSearchParams({ format: selectedFormat.value });
+
+    // بلا تحديد يبقى السلوك كما كان: القائمة كاملة.
+    const selection = props.selection;
+    if (selection?.select_all) {
+        query.set('select_all', '1');
+        if (selection.search) query.set('search', selection.search);
+        (selection.excluded ?? []).forEach((uuid) => query.append('excluded[]', uuid));
+    } else if (selection?.uuids?.length) {
+        selection.uuids.forEach((uuid) => query.append('uuids[]', uuid));
+    }
+
+    window.open(`${base}?${query.toString()}`, '_blank');
     emit('update:modelValue', false);
 };
 </script> 

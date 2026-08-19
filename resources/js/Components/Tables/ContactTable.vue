@@ -30,6 +30,31 @@ const selectedCount = ref(0)
 const checkedContacts = ref([])
 const checkedGroups = ref([])
 
+/**
+ * «حدّد الكل» يشمل كل ما يطابق البحث لا الصفحة المعروضة وحدها.
+ *
+ * لا نُنزّل المعرّفات كلّها: أكبر منشأة لديها 63,361 جهة اتصال، وقائمة بهذا
+ * الحجم تتجاوز سعة التخزين المحلّي وحدّ حجم الطلب. نحفظ النيّة والمرشّح
+ * ويحلّهما الخادم، ونتتبّع ما يستثنيه المستخدم بعدها — وهو قليل دائماً.
+ */
+const selectAllMatching = ref(false)
+const excludedUuids = ref([])
+
+/** إجمالي المطابق للبحث الحالي — يأتي من المُرقِّم لا من الصفحة. */
+const totalMatching = computed(() => props.rows?.meta?.total ?? props.rows?.data?.length ?? 0)
+
+/**
+ * ما يُصدَّر: null حين لا تحديد (القائمة كاملة كما كان)، وإلا وصف التحديد.
+ * كان التصدير يتجاهل التحديد ويُخرج كل شيء دائماً.
+ */
+const exportSelection = computed(() => {
+	if (props.type !== 'contact') return null
+	if (selectAllMatching.value) {
+		return { select_all: true, search: params.value.search ?? null, excluded: excludedUuids.value }
+	}
+	return checkedContacts.value.length > 0 ? { uuids: checkedContacts.value } : null
+})
+
 function getRow(value) {
 	params.value.id = value
 
@@ -112,6 +137,17 @@ function updateCheckedItems(uuid, isChecked) {
 function toggleCheckbox(contactUuid) {
 	const contact = props.rows.data.find(contact => contact.uuid === contactUuid)
 	contact.isChecked = !contact.isChecked
+
+	// أثناء التحديد الشامل نتتبّع المستثنى لا المحدَّد: إلغاء تحديد ثلاثة من
+	// ثلاثة وستّين ألفاً يُحفظ ثلاثة معرّفات لا ثلاثة وستّين ألفاً.
+	if (selectAllMatching.value) {
+		const index = excludedUuids.value.indexOf(contactUuid)
+		if (!contact.isChecked && index === -1) excludedUuids.value.push(contactUuid)
+		else if (contact.isChecked && index !== -1) excludedUuids.value.splice(index, 1)
+		updateSelectedCount()
+		return
+	}
+
 	updateCheckedItems(contactUuid, contact.isChecked)
 	updateBulkCheckboxState()
 	updateSelectedCount()
@@ -120,15 +156,35 @@ function toggleCheckbox(contactUuid) {
 // Function to toggle all checkboxes
 function toggleAllCheckboxes() {
 	bulkCheckbox.value = !bulkCheckbox.value
+
+	// جهات الاتصال وحدها تدعم التحديد الشامل: قوائم المجموعات والتصنيفات
+	// قصيرة أصلاً فلا يوجد ما يتجاوز صفحتها.
+	if (props.type === 'contact') {
+		selectAllMatching.value = bulkCheckbox.value
+		excludedUuids.value = []
+		checkedContacts.value = []
+		saveCheckedItems()
+	}
+
 	props.rows.data.forEach(row => {
 		row.isChecked = bulkCheckbox.value
-		updateCheckedItems(row.uuid, bulkCheckbox.value)
+		if (props.type !== 'contact') updateCheckedItems(row.uuid, bulkCheckbox.value)
 	})
 	updateSelectedCount()
 }
 
 // Function to apply checked state from local storage
 function applyCheckedState() {
+	// بعد التحديد الشامل، كل صفّ في أي صفحة محدَّد ما لم يُستثنَ صراحةً.
+	if (selectAllMatching.value) {
+		props.rows.data.forEach(row => {
+			row.isChecked = !excludedUuids.value.includes(row.uuid)
+		})
+		updateBulkCheckboxState()
+		updateSelectedCount()
+		return
+	}
+
 	const checked = props.type === 'contact' ? checkedContacts.value : (props.type === 'category' ? checkedCategories.value : checkedGroups.value)
 	props.rows.data.forEach(row => {
 		row.isChecked = checked.includes(row.uuid)
@@ -139,11 +195,19 @@ function applyCheckedState() {
 
 // Function to update bulk checkbox state
 function updateBulkCheckboxState() {
+	if (selectAllMatching.value) {
+		bulkCheckbox.value = excludedUuids.value.length === 0
+		return
+	}
 	bulkCheckbox.value = props.rows.data.length > 0 && props.rows.data.every(row => row.isChecked)
 }
 
 // Function to update selected count based on checked items array
 function updateSelectedCount() {
+	if (selectAllMatching.value) {
+		selectedCount.value = Math.max(0, totalMatching.value - excludedUuids.value.length)
+		return
+	}
 	selectedCount.value = props.type === 'contact' ? checkedContacts.value.length : (props.type === 'category' ? checkedCategories.value.length : checkedGroups.value.length)
 }
 
@@ -152,15 +216,26 @@ function deleteItems(value) {
 	const storageKey = props.type === 'contact' ? 'checkedContacts' : (props.type === 'category' ? 'checkedCategories' : 'checkedGroups')
 	const itemsToDelete = props.type === 'contact' ? checkedContacts.value : (props.type === 'category' ? checkedCategories.value : checkedGroups.value)
 
+	// «احذف الكل» و«حدّد الكل ثم احذف» يمرّان بنفس البوابة: نيّة صريحة مع
+	// المرشّح. المصفوفة الفارغة لم تعد تعني «الكل» — كانت تفعل، فأي طلب فقد
+	// معرّفاته في الطريق كان يمسح جهات اتصال المنشأة كلّها.
+	const payload = (value === 'all' || (props.type === 'contact' && selectAllMatching.value))
+		? { select_all: true, search: params.value.search ?? null, excluded: value === 'all' ? [] : excludedUuids.value }
+		: { uuids: itemsToDelete }
+
 	router.visit(baseUrl, {
 		method: 'delete',
-		data: { 'uuids': value === 'all' ? [] : itemsToDelete },
+		data: payload,
 		preserveState: true,
 		onSuccess: () => {
 			localStorage.removeItem(storageKey)
 			if (props.type === 'contact') checkedContacts.value = []
 			else if (props.type === 'category') checkedCategories.value = []
 			else checkedGroups.value = []
+			selectAllMatching.value = false
+			excludedUuids.value = []
+			bulkCheckbox.value = false
+			updateSelectedCount()
 		}
 	})
 }
@@ -235,7 +310,7 @@ watchEffect(() => {
 			</label>
 			<label @click="toggleAllCheckboxes($event)" class="cursor-pointer text-sm">
 				<span v-if="selectedCount == 0">{{ $t('Select all') }} ({{ selectedCount }})</span>
-				<span v-else-if="selectedCount > 0">{{ selectedCount }} {{ $t('selected') }}</span>
+				<span v-else-if="selectedCount > 0">{{ selectedCount.toLocaleString() }} {{ $t('selected') }}</span>
 			</label>
 		</div>
 		<div>
@@ -348,5 +423,5 @@ watchEffect(() => {
 		<Pagination class="mt-3" :pagination="rows.meta" />
 	</div>
 	<ContactImportModal :type="type" v-model:modelValue="isOpenModal" />
-	<ExportModal :type="type" v-model:modelValue="isExportModalOpen" />
+	<ExportModal :type="type" v-model:modelValue="isExportModalOpen" :selection="exportSelection" />
 </template>

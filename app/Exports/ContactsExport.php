@@ -11,6 +11,13 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 class ContactsExport implements FromCollection, WithHeadings
 {
     /**
+     * @param  array<int, string>|null  $uuids  معرّفات ما يُصدَّر، أو null للقائمة كاملة.
+     */
+    public function __construct(private ?array $uuids = null)
+    {
+    }
+
+    /**
     * @return \Illuminate\Support\Collection
     */
     public function collection()
@@ -18,6 +25,7 @@ class ContactsExport implements FromCollection, WithHeadings
         $contacts = Contact::with(['contactGroups', 'contactCategories'])
             ->where('organization_id', session()->get('current_organization'))
             ->whereNull('deleted_at')
+            ->when($this->uuids !== null, fn ($query) => $query->whereIn('uuid', $this->uuids))
             ->get();
 
         // Get dynamic fields from the contact_fields table
