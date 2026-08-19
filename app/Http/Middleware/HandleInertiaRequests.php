@@ -168,6 +168,10 @@ class HandleInertiaRequests extends Middleware
             'applicationVersion' => fn () => Config::get('version.version'),
             'applicationReleaseDate' => fn () => Config::get('version.release_date'),
             'config' => $config,
+            // أقصى حجم يقبله الخادم فعلاً. الملف الأكبر يرفضه PHP قبل بلوغ
+            // Laravel، فتصل حمولة بلا ملف ويظنّ المستخدم أن الإرسال نجح.
+            // نمرّره للواجهة لتردّ الملف مبكّراً برسالة تذكر الحدّ الحقيقي.
+            'max_upload_bytes' => self::maxUploadBytes(),
             'admin_organization_impersonation' => (bool) session('admin_org_impersonation', false),
             'admin_impersonation_org_name' => session('admin_impersonation_org_name'),
             'auth' => [
@@ -201,5 +205,34 @@ class HandleInertiaRequests extends Middleware
     public function isInstalled(): bool
     {
         return file_exists(storage_path('installed'));
+    }
+
+    /**
+     * أصغر الحدّين: upload_max_filesize يحكم الملف، وpost_max_size يحكم الطلب
+     * كلّه ومعه النصّ والحقول — فالفعّال هو الأصغر.
+     */
+    private static function maxUploadBytes(): int
+    {
+        $toBytes = static function (string $value): int {
+            $value = trim($value);
+            if ($value === '' || $value === '-1') {
+                return PHP_INT_MAX;
+            }
+
+            $unit = strtolower(substr($value, -1));
+            $number = (int) $value;
+
+            return match ($unit) {
+                'g' => $number * 1024 * 1024 * 1024,
+                'm' => $number * 1024 * 1024,
+                'k' => $number * 1024,
+                default => $number,
+            };
+        };
+
+        return min(
+            $toBytes((string) ini_get('upload_max_filesize')),
+            $toBytes((string) ini_get('post_max_size'))
+        );
     }
 }

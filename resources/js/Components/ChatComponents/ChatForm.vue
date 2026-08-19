@@ -488,6 +488,193 @@ const handleFileUpload = (event) => {
 	reader.readAsDataURL(file)
 }
 
+/**
+ * ====== اللصق والسحب والإفلات ======
+ *
+ * نفس ما يفعله واتساب: صورة أو مستند في الحافظة يُلصق في المحادثة، أو يُسحب
+ * إليها من سطح المكتب. الفارق عن زرّ الاختيار أن هذين قد يقعان سهواً — لقطة
+ * شاشة في الحافظة تُلصق بضغطة — فيمرّان بمعاينة قبل الإرسال، بخلاف الزرّ الذي
+ * يعني اختياراً مقصوداً.
+ */
+
+/** ما تقبله واتساب فعلاً. أي امتداد خارجها تردّه Meta برسالة غامضة. */
+const ACCEPTED_MEDIA = {
+	image: { extensions: ['jpg', 'jpeg', 'png'], maxBytes: 5 * 1024 * 1024 },
+	video: { extensions: ['mp4'], maxBytes: 16 * 1024 * 1024 },
+	audio: { extensions: ['mp3', 'ogg'], maxBytes: 16 * 1024 * 1024 },
+	document: {
+		extensions: ['txt', 'pdf', 'ppt', 'doc', 'xls', 'docx', 'pptx', 'xlsx'],
+		maxBytes: 100 * 1024 * 1024,
+	},
+}
+
+/**
+ * الحدّ الذي يقبله الخادم فعلاً (upload_max_filesize / post_max_size).
+ *
+ * أكبر منه يرفضه PHP قبل بلوغ Laravel، فتصل حمولة بلا ملف ولا خطأ — يظنّ
+ * المستخدم أن الإرسال نجح ولا يصل شيء. نردّه هنا برسالة تذكر الحدّ.
+ */
+const serverMaxUploadBytes = computed(() => usePage().props.max_upload_bytes ?? Infinity)
+
+const isDraggingFile = ref(false)
+const pendingAttachments = ref([])
+const attachmentCaption = ref('')
+const sendingAttachments = ref(false)
+let dragDepth = 0
+
+/** نوع الملف من امتداده لا من MIME: المتصفّحات تختلف في MIME الملفات المكتبية. */
+const resolveMediaType = (file) => {
+	const extension = (file.name.split('.').pop() ?? '').toLowerCase()
+	for (const [type, spec] of Object.entries(ACCEPTED_MEDIA)) {
+		if (spec.extensions.includes(extension)) return type
+	}
+
+	// لقطة الشاشة تصل بلا اسم ملف ذي امتداد، فنرجع إلى MIME.
+	const mime = file.type || ''
+	if (mime.startsWith('image/')) return 'image'
+	if (mime.startsWith('video/')) return 'video'
+	if (mime.startsWith('audio/')) return 'audio'
+	return null
+}
+
+const humanSize = (bytes) => `${Math.round(bytes / (1024 * 1024))} MB`
+
+/** @returns {{file: File, type: string, previewUrl: ?string}|null} */
+const buildAttachment = (file) => {
+	const type = resolveMediaType(file)
+	if (!type) {
+		toast.error(trans('This file type is not supported.'))
+		return null
+	}
+
+	// حدّ الخادم أوّلاً: هو السقف الحقيقي مهما سمحت واتساب.
+	if (file.size > serverMaxUploadBytes.value) {
+		toast.error(trans('File is larger than the :size limit.', { size: humanSize(serverMaxUploadBytes.value) }))
+		return null
+	}
+
+	const spec = ACCEPTED_MEDIA[type]
+	// الصور فوق حدّ واتساب يضغطها الخادم، فلا نردّها هنا.
+	if (type !== 'image' && file.size > spec.maxBytes) {
+		toast.error(trans('File is larger than the :size limit.', { size: humanSize(spec.maxBytes) }))
+		return null
+	}
+
+	return {
+		file,
+		type,
+		previewUrl: type === 'image' ? URL.createObjectURL(file) : null,
+	}
+}
+
+const releasePreviews = () => {
+	pendingAttachments.value.forEach((item) => {
+		if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+	})
+}
+
+const closeAttachmentPreview = () => {
+	releasePreviews()
+	pendingAttachments.value = []
+	attachmentCaption.value = ''
+}
+
+const queueAttachments = (files) => {
+	if (!isInboundChatWithin24Hours.value || !files?.length) return
+
+	const accepted = Array.from(files).map(buildAttachment).filter(Boolean)
+	if (!accepted.length) return
+
+	// نُضيف لا نستبدل: لصق ملفٍ ثانٍ والمعاينة مفتوحة يعني «وهذا أيضاً»،
+	// والاستبدال كان سيُسقط الأول بلا إنذار.
+	pendingAttachments.value = [...pendingAttachments.value, ...accepted]
+
+	// النصّ المكتوب يصير تعليقاً على المرفق، كما يفعل واتساب حين تلصق ومعك نصّ.
+	if (attachmentCaption.value === '') {
+		attachmentCaption.value = (formTextInput.value ?? '').trim()
+	}
+}
+
+const removeAttachment = (index) => {
+	const [removed] = pendingAttachments.value.splice(index, 1)
+	if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl)
+	if (!pendingAttachments.value.length) closeAttachmentPreview()
+}
+
+/**
+ * الإرسال تتابعاً لا تفرّعاً: الخادم يبني رسالة لكل ملف، وإرسالها معاً يقلب
+ * ترتيبها في المحادثة حسب أيّها انتهى أولاً.
+ */
+const sendAttachments = async () => {
+	if (!pendingAttachments.value.length || sendingAttachments.value) return
+	if (!isInboundChatWithin24Hours.value) return
+
+	sendingAttachments.value = true
+	const queue = [...pendingAttachments.value]
+	const caption = attachmentCaption.value.trim()
+
+	try {
+		for (const [index, item] of queue.entries()) {
+			form.value.file = item.file
+			form.value.type = item.type
+			// التعليق يُرفق بالأول وحده — تكراره على كل ملف يُغرق المحادثة.
+			formTextInput.value = index === 0 && caption !== '' ? caption : null
+			await sendMessage()
+		}
+		closeAttachmentPreview()
+	} finally {
+		sendingAttachments.value = false
+		form.value.file = null
+		form.value.type = 'text'
+	}
+}
+
+/**
+ * اللصق. نتدخّل فقط حين تحمل الحافظة ملفاً — لصق النصّ يمرّ كما هو، وإلا
+ * تعطّل أبسط استخدام للملحن.
+ */
+const handlePaste = (event) => {
+	const files = Array.from(event.clipboardData?.files ?? [])
+	if (!files.length) return
+
+	event.preventDefault()
+	queueAttachments(files)
+}
+
+/**
+ * السحب والإفلات على مساحة المحادثة كلّها لا على الملحن وحده — كما في واتساب.
+ * dragDepth يعالج تعاقب dragenter/dragleave على العناصر المتداخلة: بدونه
+ * تختفي الطبقة كلّما مرّ المؤشّر فوق عنصر داخلي.
+ */
+const isFileDrag = (event) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
+
+const handleDragEnter = (event) => {
+	if (!isFileDrag(event) || !isInboundChatWithin24Hours.value) return
+	event.preventDefault()
+	dragDepth += 1
+	isDraggingFile.value = true
+}
+
+const handleDragOver = (event) => {
+	if (!isFileDrag(event) || !isInboundChatWithin24Hours.value) return
+	event.preventDefault()
+	event.dataTransfer.dropEffect = 'copy'
+}
+
+const handleDragLeave = (event) => {
+	if (!isFileDrag(event)) return
+	dragDepth = Math.max(0, dragDepth - 1)
+	if (dragDepth === 0) isDraggingFile.value = false
+}
+
+const handleDrop = (event) => {
+	if (!isFileDrag(event)) return
+	event.preventDefault()
+	dragDepth = 0
+	isDraggingFile.value = false
+	queueAttachments(event.dataTransfer?.files)
+}
+
 const getAcceptedFileTypes = () => {
 	switch (form.value.type) {
 		case 'image':
@@ -666,6 +853,13 @@ const getSuggestion = async () => {
 
 onMounted(() => {
 	document.addEventListener('click', handleClickOutside)
+	// على المستند لا على الملحن: واتساب يقبل اللصق والإفلات في مساحة المحادثة
+	// كلّها. والملحن لا يُركَّب إلا مع محادثة مفتوحة، فالنطاق صحيح.
+	document.addEventListener('paste', handlePaste)
+	document.addEventListener('dragenter', handleDragEnter)
+	document.addEventListener('dragover', handleDragOver)
+	document.addEventListener('dragleave', handleDragLeave)
+	document.addEventListener('drop', handleDrop)
 	loadShortcuts()
 	recorder.value = new MicRecorder({
 		bitRate: 128,
@@ -678,6 +872,12 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	document.removeEventListener('click', handleClickOutside)
+	document.removeEventListener('paste', handlePaste)
+	document.removeEventListener('dragenter', handleDragEnter)
+	document.removeEventListener('dragover', handleDragOver)
+	document.removeEventListener('dragleave', handleDragLeave)
+	document.removeEventListener('drop', handleDrop)
+	releasePreviews()
 	stopTimer()
 	stopPlaybackTimer()
 	if (messagingWindowTimer) {
@@ -1147,6 +1347,82 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 		<Teleport to="body">
+			<!-- طبقة السحب: تُغطّي الشاشة فيصحّ الإفلات في أي موضع من المحادثة -->
+			<div v-if="isDraggingFile"
+				class="pointer-events-none fixed inset-0 z-[9998] flex items-center justify-center bg-slate-900/40">
+				<div class="rounded-xl border-2 border-dashed border-white bg-white/95 px-10 py-8 text-center shadow-xl">
+					<svg class="mx-auto mb-3 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="44" height="44"
+						viewBox="0 0 24 24">
+						<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+							stroke-width="1.5" d="M12 16V4m0 0L8 8m4-4l4 4M4 15v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" />
+					</svg>
+					<p class="text-base font-medium text-slate-800">{{ $t('Drop files to send them') }}</p>
+					<p class="mt-1 text-xs text-slate-500">{{ $t('Images, videos, audio and documents') }}</p>
+				</div>
+			</div>
+
+			<!-- معاينة المرفقات قبل الإرسال: اللصق والإفلات قد يقعان سهواً -->
+			<div v-if="pendingAttachments.length" class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+				role="dialog" aria-modal="true">
+				<div class="absolute inset-0 bg-black/40" @click="closeAttachmentPreview()"></div>
+				<div class="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+					<div class="flex items-center justify-between border-b px-5 py-4">
+						<h3 class="text-base font-medium text-slate-800">
+							{{ pendingAttachments.length === 1 ? $t('Send file') : $t('Send :count files', { count: pendingAttachments.length }) }}
+						</h3>
+						<button type="button" class="text-slate-400 hover:text-slate-600"
+							@click="closeAttachmentPreview()" :aria-label="$t('Close')">
+							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
+									d="M6 6l12 12M18 6L6 18" />
+							</svg>
+						</button>
+					</div>
+
+					<div class="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+						<div v-for="(item, index) in pendingAttachments" :key="index"
+							class="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
+							<img v-if="item.previewUrl" :src="item.previewUrl" alt=""
+								class="h-16 w-16 shrink-0 rounded object-cover" />
+							<div v-else
+								class="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-slate-100 text-[11px] font-medium uppercase text-slate-500">
+								{{ (item.file.name.split('.').pop() || '?').slice(0, 4) }}
+							</div>
+							<div class="min-w-0 flex-1">
+								<p class="truncate text-sm text-slate-800" dir="auto">{{ item.file.name }}</p>
+								<p class="text-xs text-slate-500">
+									{{ (item.file.size / 1024 / 1024).toFixed(2) }} MB
+								</p>
+							</div>
+							<button type="button" class="shrink-0 text-slate-400 hover:text-red-600"
+								@click="removeAttachment(index)" :aria-label="$t('Remove')">
+								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+									<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
+										d="M6 6l12 12M18 6L6 18" />
+								</svg>
+							</button>
+						</div>
+					</div>
+
+					<div class="border-t px-5 py-4">
+						<input v-model="attachmentCaption" type="text" :placeholder="$t('Add a caption...')"
+							class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-primary focus:ring-primary"
+							@keydown.enter.prevent="sendAttachments()" />
+						<div class="mt-4 flex items-center justify-end gap-3">
+							<button type="button" class="rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
+								@click="closeAttachmentPreview()">
+								{{ $t('Cancel') }}
+							</button>
+							<button type="button"
+								class="rounded-md bg-slate-900 px-5 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-40"
+								:disabled="sendingAttachments" @click="sendAttachments()">
+								{{ sendingAttachments ? $t('Sending...') : $t('Send') }}
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+
 		<!-- نافذة إرسال الموقع: عنوان النشاط بضغطة، أو نقطة يختارها الموظّف -->
 		<div v-if="showLocationModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
 			role="dialog" aria-modal="true">
