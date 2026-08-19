@@ -2366,6 +2366,17 @@ class ApiController extends Controller
             ], 400);
         }
 
+        // نفحص النافذة هنا لا في الخدمة: مسارات الإرسال الأخرى في هذا المتحكّم
+        // تُرجع شكل الـAPI الحامل لـstatusCode (السطران 972 و1276)، وتطبيق
+        // الجوال يقرؤه. تركُ ردّ الويب يمرّ كان سيُخرج شكلاً مختلفاً لنفس الخطأ.
+        $contact = Contact::where('uuid', (string) $request->input('uuid'))
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if ($contact && !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowApiJsonResponse();
+        }
+
         return (new ChatService($organizationId))->requestLocation(
             (string) $request->input('uuid'),
             (string) $request->input('body'),
