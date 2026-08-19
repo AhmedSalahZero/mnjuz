@@ -111,17 +111,11 @@ class ChatMetadataHelper
                 }
                 break;
 
-            // الأنواع الأربعة التالية كانت تسقط في default فتُحفظ خاماً بكل
+            // الأنواع الثلاثة التالية كانت تسقط في default فتُحفظ خاماً بكل
             // حقول الويب هوك، ولا تجد فرعاً يعرضها فتظهر فقاعةً فارغة. أُدرجت
             // هنا ليُقلَّص تخزينها ويُعرَض محتواها.
-
-            case 'reaction':
-                // emoji فارغ = المرسل أزال تفاعله، وهو حدث مقصود لا حقل ناقص.
-                // message_id هو wam_id للرسالة المتفاعَل معها.
-                $out['reaction'] = isset($message['reaction'])
-                    ? array_intersect_key($message['reaction'], array_flip(['emoji', 'message_id']))
-                    : [];
-                break;
+            //
+            // reaction مستثناة عمداً: التفاعل يبقى بلا معالجة كما كان.
 
             case 'system':
                 // إشعار واتساب بتغيّر رقم العميل. wa_id هو الرقم الجديد،

@@ -30,31 +30,6 @@ class ChatNotificationForSilentTypesTest extends TestCase
         return $this->builder->buildBody(['metadata' => json_encode($metadata)], $locale);
     }
 
-    // ------------------------------------------------------------ reaction
-
-    public function test_reaction_shows_the_emoji_the_customer_used(): void
-    {
-        $body = $this->body(['type' => 'reaction', 'reaction' => ['emoji' => '❤️']]);
-
-        $this->assertStringStartsWith('❤️', $body);
-        $this->assertStringContainsString('Reacted to a message', $body);
-    }
-
-    /** إيموجي فارغ = إزالة تفاعل سابق، لا تفاعل بلا رمز. */
-    public function test_removing_a_reaction_reads_differently_from_adding_one(): void
-    {
-        $removed = $this->body(['type' => 'reaction', 'reaction' => ['emoji' => '']]);
-        $added = $this->body(['type' => 'reaction', 'reaction' => ['emoji' => '👍']]);
-
-        $this->assertStringContainsString('Removed a reaction', $removed);
-        $this->assertNotSame($added, $removed);
-    }
-
-    public function test_reaction_without_a_reaction_block_still_reads_sensibly(): void
-    {
-        $this->assertStringContainsString('Removed a reaction', $this->body(['type' => 'reaction']));
-    }
-
     // -------------------------------------------------------------- system
 
     public function test_system_notification_carries_the_actual_body(): void
@@ -108,18 +83,13 @@ class ChatNotificationForSilentTypesTest extends TestCase
      * نفس المفاتيح في الشكلين، فلا يحتاج ترحيل بيانات — وهذا ما يثبته هذا
      * الاختبار: الحمولة الخامّة كاملةً تُنتج نفس النصّ.
      */
-    public function test_legacy_raw_rows_produce_the_same_notification(): void
+    /** التفاعل يبقى على الفرع الافتراضي كما كان — بلا سطر خاصّ به. */
+    public function test_reactions_keep_the_generic_default_line(): void
     {
-        $raw = [
-            'from' => '966564127797',
-            'id' => 'wamid.HBgMOTY2NTY0MTI3Nzk3FQIAEhgWM0VCMEI1M0EyRjJERkJEREU3QjBBNwA=',
-            'timestamp' => '1761642669',
-            'type' => 'reaction',
-            'reaction' => ['message_id' => 'wamid.PARENT', 'emoji' => '❤️'],
-        ];
-        $minimized = ['type' => 'reaction', 'reaction' => ['message_id' => 'wamid.PARENT', 'emoji' => '❤️']];
+        $body = $this->body(['type' => 'reaction', 'reaction' => ['emoji' => '❤️']]);
 
-        $this->assertSame($this->body($minimized), $this->body($raw));
+        $this->assertStringNotContainsString('❤️', $body, 'لا معالجة للإيموجي');
+        $this->assertNotSame('', trim($body), 'يبقى سطر عامّ لا فراغ');
     }
 
     public function test_legacy_raw_edit_rows_produce_the_same_notification(): void
@@ -179,8 +149,6 @@ class ChatNotificationForSilentTypesTest extends TestCase
         $arabic = json_decode(file_get_contents(base_path('lang/ar.json')), true);
 
         foreach ([
-            'Reacted to a message',
-            'Removed a reaction',
             'Contact changed their number',
             'Edited a message',
             'Deleted a message',
@@ -192,10 +160,10 @@ class ChatNotificationForSilentTypesTest extends TestCase
         }
     }
 
-    public function test_reaction_notification_resolves_in_arabic(): void
+    public function test_the_new_lines_resolve_in_arabic(): void
     {
-        $body = $this->body(['type' => 'reaction', 'reaction' => ['emoji' => '❤️']], 'ar');
+        $body = $this->body(['type' => 'revoke'], 'ar');
 
-        $this->assertStringContainsString('تفاعل مع رسالة', $body);
+        $this->assertStringContainsString('حذف رسالة', $body);
     }
 }

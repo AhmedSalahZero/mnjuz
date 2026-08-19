@@ -148,6 +148,33 @@ class ChatBubbleRenderChainTest extends TestCase
 
     // ------------------------------------------------- ترتيب الاحتياطي
 
+    /**
+     * التفاعل بالإيموجي متروك بلا عرض بقرار صريح لا بجهل. لولا استثناؤه في
+     * SILENT_TYPES لالتقطه الاحتياطي وأظهر «لا يمكن عرض هذا النوع» على 9,577
+     * صفّاً — وهو أسوأ من صمته.
+     */
+    public function test_deliberately_silent_types_are_excluded_from_the_fallback(): void
+    {
+        $this->assertMatchesRegularExpression(
+            "/const SILENT_TYPES = \[[^\]]*'reaction'/",
+            $this->source,
+            'reaction يجب أن تبقى في SILENT_TYPES ما دامت بلا معالجة'
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/!RENDERED_TYPES\.includes\(type\) && !SILENT_TYPES\.includes\(type\)/',
+            $this->source,
+            'الاحتياطي يجب أن يستثني المتروك عمداً كما يستثني المعروض'
+        );
+    }
+
+    /** ولا يُدرَج المتروك عمداً في قائمة المعروض: القائمتان لا تتقاطعان. */
+    public function test_silent_types_are_not_also_listed_as_rendered(): void
+    {
+        $this->assertNotContains('reaction', $this->declaredRenderedTypes());
+        $this->assertNotContains('reaction', array_column($this->branches, 'type'));
+    }
+
     public function test_the_fallback_is_the_last_branch_in_its_chain(): void
     {
         $fallbackIndexes = array_keys(array_column($this->branches, 'fallback'), true);
@@ -196,7 +223,6 @@ class ChatBubbleRenderChainTest extends TestCase
     public static function previouslySilentTypes(): array
     {
         return [
-            'تفاعل' => ['reaction'],
             'تغيّر رقم' => ['system'],
             'تعديل رسالة' => ['edit'],
             'حذف رسالة' => ['revoke'],
@@ -230,7 +256,7 @@ class ChatBubbleRenderChainTest extends TestCase
      */
     public function test_readers_use_optional_chaining_so_both_shapes_work(): void
     {
-        foreach (['editedBody', 'reactionEmoji'] as $reader) {
+        foreach (['editedBody'] as $reader) {
             $this->assertMatchesRegularExpression(
                 '/const ' . $reader . ' = .*\?\./s',
                 $this->source,

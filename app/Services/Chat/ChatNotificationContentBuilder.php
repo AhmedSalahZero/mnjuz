@@ -90,17 +90,9 @@ class ChatNotificationContentBuilder
             case 'contacts':
                 return $this->mediaStyleLine($type, $metadata, $locale);
 
-            // الأنواع الأربعة التالية كانت تسقط في default فيصل الموظّف
+            // الأنواع الثلاثة التالية كانت تسقط في default فيصل الموظّف
             // «💬 رسالة» ثم يفتح المحادثة فلا يجد شيئاً. صار الإشعار يقول
-            // ما حدث فعلاً.
-
-            case 'reaction':
-                $emoji = trim((string) ($metadata['reaction']['emoji'] ?? ''));
-
-                // إيموجي فارغ = إزالة تفاعل سابق، لا تفاعل بلا رمز.
-                return $emoji !== ''
-                    ? $emoji . ' ' . $this->translate('Reacted to a message', $locale)
-                    : '↩️ ' . $this->translate('Removed a reaction', $locale);
+            // ما حدث فعلاً. reaction مستثناة عمداً: تبقى على الفرع الافتراضي.
 
             case 'system':
                 $body = trim((string) ($metadata['system']['body'] ?? ''));

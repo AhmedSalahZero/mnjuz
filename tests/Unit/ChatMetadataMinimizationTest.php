@@ -8,74 +8,15 @@ use PHPUnit\Framework\TestCase;
 /**
  * تقليص حمولة الويب هوك قبل حفظها في chats.metadata.
  *
- * أربعة أنواع — reaction و system و edit و revoke — كانت تسقط في الفرع
- * الافتراضي فتُحفظ خاماً بكل حقول الويب هوك (from و id و timestamp مع كل صف)،
- * ولا تجد فرعاً يعرضها فتظهر فقاعةً فارغة. الحمولات أدناه منسوخة حرفياً من
- * قاعدة البيانات الإنتاجية، لا مُختلَقة.
+ * ثلاثة أنواع — system و edit و revoke — كانت تسقط في الفرع الافتراضي فتُحفظ
+ * خاماً بكل حقول الويب هوك (from و id و timestamp مع كل صف)، ولا تجد فرعاً
+ * يعرضها فتظهر فقاعةً فارغة. الحمولات أدناه منسوخة حرفياً من قاعدة البيانات
+ * الإنتاجية، لا مُختلَقة.
+ *
+ * reaction ليست منها: طُلب إبقاؤها بلا معالجة، ويحرس ذلك اختبار صريح أدناه.
  */
 class ChatMetadataMinimizationTest extends TestCase
 {
-    // ------------------------------------------------------------ reaction
-
-    /** @return array<string, mixed> */
-    private function realReactionPayload(): array
-    {
-        return [
-            'from' => '966564127797',
-            'id' => 'wamid.HBgMOTY2NTY0MTI3Nzk3FQIAEhgWM0VCMEI1M0EyRjJERkJEREU3QjBBNwA=',
-            'timestamp' => '1761642669',
-            'type' => 'reaction',
-            'reaction' => [
-                'message_id' => 'wamid.HBgMOTY2NTY0MTI3Nzk3FQIAERgSQzE3Nzk0OTc3RDlENUU5OTRGAA==',
-                'emoji' => '❤️',
-            ],
-        ];
-    }
-
-    public function test_reaction_keeps_only_the_emoji_and_parent_message_id(): void
-    {
-        $out = ChatMetadataHelper::minimalPayloadForStorage($this->realReactionPayload());
-
-        $this->assertSame([
-            'type' => 'reaction',
-            'reaction' => [
-                'message_id' => 'wamid.HBgMOTY2NTY0MTI3Nzk3FQIAERgSQzE3Nzk0OTc3RDlENUU5OTRGAA==',
-                'emoji' => '❤️',
-            ],
-        ], $out);
-    }
-
-    /**
-     * الحقول الثلاثة التي كانت تُحفظ مع كل صفّ خام. غيابها هو كل الفرق في الحجم.
-     */
-    public function test_reaction_drops_the_envelope_fields(): void
-    {
-        $out = ChatMetadataHelper::minimalPayloadForStorage($this->realReactionPayload());
-
-        $this->assertArrayNotHasKey('from', $out);
-        $this->assertArrayNotHasKey('id', $out);
-        $this->assertArrayNotHasKey('timestamp', $out);
-    }
-
-    /** إيموجي فارغ = أزال المرسل تفاعله. حدث مقصود يجب ألّا يُسقَط. */
-    public function test_removing_a_reaction_is_preserved_as_an_empty_emoji(): void
-    {
-        $payload = $this->realReactionPayload();
-        $payload['reaction']['emoji'] = '';
-
-        $out = ChatMetadataHelper::minimalPayloadForStorage($payload);
-
-        $this->assertArrayHasKey('emoji', $out['reaction']);
-        $this->assertSame('', $out['reaction']['emoji']);
-    }
-
-    public function test_reaction_without_a_reaction_block_does_not_explode(): void
-    {
-        $out = ChatMetadataHelper::minimalPayloadForStorage(['type' => 'reaction']);
-
-        $this->assertSame(['type' => 'reaction', 'reaction' => []], $out);
-    }
-
     // -------------------------------------------------------------- system
 
     public function test_system_keeps_the_body_and_the_new_number(): void
@@ -216,6 +157,23 @@ class ChatMetadataMinimizationTest extends TestCase
         $this->assertSame($payload, ChatMetadataHelper::minimalPayloadForStorage($payload));
     }
 
+    /**
+     * التفاعل بالإيموجي يبقى بلا معالجة بقرار صريح: يسقط في الفرع الافتراضي
+     * فيُحفظ كما وصل. لو أُدرج له فرع يوماً فليكن بقرار لا بالسهو.
+     */
+    public function test_reactions_are_deliberately_left_unprocessed(): void
+    {
+        $payload = [
+            'from' => '966564127797',
+            'id' => 'wamid.HBgMOTY2NTY0MTI3Nzk3FQIAEhgWM0VCMEI1M0EyRjJERkJEREU3QjBBNwA=',
+            'timestamp' => '1761642669',
+            'type' => 'reaction',
+            'reaction' => ['message_id' => 'wamid.PARENT', 'emoji' => '❤️'],
+        ];
+
+        $this->assertSame($payload, ChatMetadataHelper::minimalPayloadForStorage($payload));
+    }
+
     public function test_payload_without_a_type_is_returned_untouched(): void
     {
         $payload = ['from' => '9665', 'id' => 'wamid.Z'];
@@ -226,7 +184,7 @@ class ChatMetadataMinimizationTest extends TestCase
     /** النسخ المفرّغة تبقى قابلة للترميز JSON — تُحفظ في عمود نصّي. */
     public function test_every_new_type_survives_a_json_round_trip(): void
     {
-        foreach ([$this->realReactionPayload(), $this->realEditPayload()] as $payload) {
+        foreach ([$this->realEditPayload()] as $payload) {
             $out = ChatMetadataHelper::minimalPayloadForStorage($payload);
             $encoded = json_encode($out, JSON_UNESCAPED_UNICODE);
 
