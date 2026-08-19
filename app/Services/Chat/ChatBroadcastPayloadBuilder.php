@@ -137,6 +137,9 @@ class ChatBroadcastPayloadBuilder
             'media'                   => $media,
             'logs'                    => $logs,
             'user'                    => $user,
+            // التفاعل يصل بثّاً لحظياً كبقية الرسائل، وبلا هذا الحقل يظهر
+            // بلا اقتباس حتى تُعاد الصفحة.
+            'reaction_context'        => $arr['reaction_context'] ?? null,
         ];
     }
 

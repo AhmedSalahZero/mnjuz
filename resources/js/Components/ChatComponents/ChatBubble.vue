@@ -5,6 +5,9 @@ import { computed, ref } from 'vue'
 import { GoogleMap, Marker } from 'vue3-google-map'
 import ImageLightbox from './ImageLightbox.vue'
 import ContactCardBubble from './ContactCardBubble.vue'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 
 const props = defineProps({
 	content: Object,
@@ -107,6 +110,25 @@ const editedBody = (metadata) => parseMetadata(metadata).edit?.message?.text?.bo
 
 /** إيموجي فارغ = أزال المرسل تفاعله، وهو حدث مقصود لا حقل ناقص. */
 const reactionEmoji = (metadata) => (parseMetadata(metadata).reaction?.emoji ?? '').trim()
+
+/**
+ * وصف الرسالة الأصل حين لا نصّ لها — صورة بلا تعليق مثلاً.
+ * الخادم يمرّر النوع فقط ويترك الوصف هنا: هو وحده يعرف لغة القارئ.
+ */
+const REACTION_PARENT_LABELS = {
+	image: 'Photo',
+	video: 'Video',
+	audio: 'Audio',
+	document: 'File',
+	sticker: 'Sticker',
+	location: 'Location',
+	contacts: 'Contact',
+}
+
+const reactionParentLabel = (context) => {
+	const key = REACTION_PARENT_LABELS[context?.preview_type]
+	return key ? trans(key) : trans('Message')
+}
 
 const getValueByKey = (key) => {
 	const config = computed(() => usePage().props.config)
@@ -723,13 +745,24 @@ async function handleMediaDownload(event, content) {
 					</div>
 				</div>
 			</div>
-			<!--Reaction: تفاعل بإيموجي على رسالة سابقة-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'reaction'"
-				class="max-w-[320px] flex items-center gap-2 text-slate-600">
-				<span v-if="reactionEmoji(content.metadata)" class="text-xl leading-none">{{ reactionEmoji(content.metadata) }}</span>
-				<span class="text-xs">
-					{{ reactionEmoji(content.metadata) ? $t('Reacted to a message') : $t('Removed a reaction') }}
-				</span>
+			<!--Reaction: اقتباس الرسالة الأصل ثمّ التفاعل نفسه-->
+			<div v-else-if="JSON.parse(content.metadata).type === 'reaction'" class="max-w-[320px]">
+				<!-- الاقتباس هو ما يجيب «على أي رسالة؟» — بدونه التفاعل بلا معنى -->
+				<div v-if="content.reaction_context"
+					class="mb-1 rounded border-s-[3px] border-slate-400 bg-black/5 px-2 py-1">
+					<p class="truncate text-[11px] font-medium text-slate-500">
+						{{ content.reaction_context.direction === 'outbound' ? $t('Your message') : $t('Their message') }}
+					</p>
+					<p v-if="content.reaction_context.preview" class="line-clamp-2 text-xs text-slate-700"
+						dir="auto">{{ content.reaction_context.preview }}</p>
+					<p v-else class="text-xs italic text-slate-500">{{ reactionParentLabel(content.reaction_context) }}</p>
+				</div>
+				<div class="flex items-center gap-2 text-slate-600">
+					<span v-if="reactionEmoji(content.metadata)" class="text-xl leading-none">{{ reactionEmoji(content.metadata) }}</span>
+					<span class="text-xs">
+						{{ reactionEmoji(content.metadata) ? $t('Reacted to a message') : $t('Removed a reaction') }}
+					</span>
+				</div>
 			</div>
 			<!--System: واتساب تُبلغ بتغيّر رقم العميل-->
 			<div v-else-if="JSON.parse(content.metadata).type === 'system'"

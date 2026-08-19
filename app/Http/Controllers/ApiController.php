@@ -2701,6 +2701,9 @@ class ApiController extends Controller
             'media' => $media,
             'logs' => $logs,
             'user' => $user,
+            // الرسالة التي يشير إليها التفاعل — null لغير التفاعلات. الحمولة
+            // قائمة بيضاء، فالمُلحَق لا يصل التطبيق ما لم يُذكر هنا صراحةً.
+            'reaction_context' => $arr['reaction_context'] ?? null,
         ];
     }
 
