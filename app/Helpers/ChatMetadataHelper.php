@@ -111,6 +111,45 @@ class ChatMetadataHelper
                 }
                 break;
 
+            // الأنواع الأربعة التالية كانت تسقط في default فتُحفظ خاماً بكل
+            // حقول الويب هوك، ولا تجد فرعاً يعرضها فتظهر فقاعةً فارغة. أُدرجت
+            // هنا ليُقلَّص تخزينها ويُعرَض محتواها.
+
+            case 'reaction':
+                // emoji فارغ = المرسل أزال تفاعله، وهو حدث مقصود لا حقل ناقص.
+                // message_id هو wam_id للرسالة المتفاعَل معها.
+                $out['reaction'] = isset($message['reaction'])
+                    ? array_intersect_key($message['reaction'], array_flip(['emoji', 'message_id']))
+                    : [];
+                break;
+
+            case 'system':
+                // إشعار واتساب بتغيّر رقم العميل. wa_id هو الرقم الجديد،
+                // وبه يعرف الموظّف أن المحادثة انتقلت لرقم آخر.
+                $out['system'] = isset($message['system'])
+                    ? array_intersect_key($message['system'], array_flip(['body', 'type', 'wa_id']))
+                    : [];
+                break;
+
+            case 'edit':
+                // نصّ الرسالة بعد التعديل يسكن edit.message، ونحفظه كاملاً:
+                // هو المحتوى الوحيد الذي يُعرض، وشكله شكل رسالة عادية.
+                $out['edit'] = [];
+                if (isset($message['edit']['original_message_id'])) {
+                    $out['edit']['original_message_id'] = $message['edit']['original_message_id'];
+                }
+                if (isset($message['edit']['message'])) {
+                    $out['edit']['message'] = $message['edit']['message'];
+                }
+                break;
+
+            case 'revoke':
+                // حذف للجميع. لا محتوى بعده — يبقى المعرّف وحده ليُربط بالأصل.
+                $out['revoke'] = isset($message['revoke'])
+                    ? array_intersect_key($message['revoke'], array_flip(['original_message_id']))
+                    : [];
+                break;
+
             default:
                 return $message;
         }

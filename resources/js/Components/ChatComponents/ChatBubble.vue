@@ -78,6 +78,36 @@ const location = (metadata) => {
 	return { lat: item.location.latitude, lng: item.location.longitude }
 }
 
+/**
+ * الأنواع التي لها فرع عرض فعلي في هذا المكوّن.
+ *
+ * الاحتياطي أدناه يعتمد على هذه القائمة لا على v-else مجرّد: سلسلة العرض ليست
+ * سلسلة واحدة — text و unsupported و button تبدأ كلٌّ بـv-if مستقلّ — فـv-else
+ * في آخر السلسلة كان سيصدُق عليها أيضاً ويرسمها مرّتين.
+ */
+const RENDERED_TYPES = [
+	'text', 'unsupported', 'button', 'interactive',
+	'image', 'document', 'location', 'sticker', 'contacts', 'audio', 'video',
+	'reaction', 'system', 'edit', 'revoke',
+]
+
+const parseMetadata = (metadata) => {
+	try {
+		return JSON.parse(metadata) ?? {}
+	} catch {
+		return {}
+	}
+}
+
+/** نوع وصل من واتساب ولا نعرف رسمه — نُخبر الموظّف بدل فقاعة فارغة. */
+const isUnrenderableType = (metadata) => !RENDERED_TYPES.includes(parseMetadata(metadata).type)
+
+/** نصّ الرسالة بعد التعديل. الشكل نفسه في الصفوف القديمة الخام والجديدة المقلَّصة. */
+const editedBody = (metadata) => parseMetadata(metadata).edit?.message?.text?.body ?? ''
+
+/** إيموجي فارغ = أزال المرسل تفاعله، وهو حدث مقصود لا حقل ناقص. */
+const reactionEmoji = (metadata) => (parseMetadata(metadata).reaction?.emoji ?? '').trim()
+
 const getValueByKey = (key) => {
 	const config = computed(() => usePage().props.config)
 
@@ -692,6 +722,59 @@ async function handleMediaDownload(event, content) {
 						<span>{{ item.text }}</span>
 					</div>
 				</div>
+			</div>
+			<!--Reaction: تفاعل بإيموجي على رسالة سابقة-->
+			<div v-else-if="JSON.parse(content.metadata).type === 'reaction'"
+				class="max-w-[320px] flex items-center gap-2 text-slate-600">
+				<span v-if="reactionEmoji(content.metadata)" class="text-xl leading-none">{{ reactionEmoji(content.metadata) }}</span>
+				<span class="text-xs">
+					{{ reactionEmoji(content.metadata) ? $t('Reacted to a message') : $t('Removed a reaction') }}
+				</span>
+			</div>
+			<!--System: واتساب تُبلغ بتغيّر رقم العميل-->
+			<div v-else-if="JSON.parse(content.metadata).type === 'system'"
+				class="max-w-[320px] flex items-start gap-2 text-slate-600">
+				<svg class="mt-[2px] shrink-0" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+					viewBox="0 0 24 24">
+					<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+						stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
+				</svg>
+				<span class="text-xs whitespace-pre-wrap" dir="auto">
+					{{ JSON.parse(content.metadata).system?.body || $t('Contact changed their number') }}
+				</span>
+			</div>
+			<!--Edit: العميل عدّل رسالة أرسلها-->
+			<div v-else-if="JSON.parse(content.metadata).type === 'edit'" style="overflow-wrap: break-word"
+				class="max-w-[320px]">
+				<p v-if="editedBody(content.metadata)" class="normal-case whitespace-pre-wrap"
+					v-html="linkifyText(editedBody(content.metadata))"></p>
+				<span class="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+					<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24">
+						<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+							stroke-width="2" d="M4 20h4L18.5 9.5a2.828 2.828 0 1 0-4-4L4 16v4m9.5-13.5l4 4" />
+					</svg>
+					{{ $t('Edited a message') }}
+				</span>
+			</div>
+			<!--Revoke: حُذفت للجميع، فلا محتوى بعدها-->
+			<div v-else-if="JSON.parse(content.metadata).type === 'revoke'"
+				class="max-w-[320px] flex items-center gap-2 italic text-slate-500">
+				<svg class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+					<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+						<circle cx="12" cy="12" r="9" />
+						<path d="M5.6 5.6l12.8 12.8" />
+					</g>
+				</svg>
+				<span class="text-xs">{{ $t('This message was deleted') }}</span>
+			</div>
+			<!--نوع لا نعرف رسمه: أفضل من فقاعة فارغة بلا تفسير-->
+			<div v-else-if="isUnrenderableType(content.metadata)"
+				class="max-w-[320px] flex items-center gap-2 text-slate-500">
+				<svg class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+					<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+						stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
+				</svg>
+				<span class="text-xs">{{ $t('This message type cannot be displayed here.') }}</span>
 			</div>
 			<!--Timestamp-->
 			<div v-if="props.type === 'outbound' && content.user" class="mt-2 mb--2">

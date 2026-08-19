@@ -90,6 +90,34 @@ class ChatNotificationContentBuilder
             case 'contacts':
                 return $this->mediaStyleLine($type, $metadata, $locale);
 
+            // الأنواع الأربعة التالية كانت تسقط في default فيصل الموظّف
+            // «💬 رسالة» ثم يفتح المحادثة فلا يجد شيئاً. صار الإشعار يقول
+            // ما حدث فعلاً.
+
+            case 'reaction':
+                $emoji = trim((string) ($metadata['reaction']['emoji'] ?? ''));
+
+                // إيموجي فارغ = إزالة تفاعل سابق، لا تفاعل بلا رمز.
+                return $emoji !== ''
+                    ? $emoji . ' ' . $this->translate('Reacted to a message', $locale)
+                    : '↩️ ' . $this->translate('Removed a reaction', $locale);
+
+            case 'system':
+                $body = trim((string) ($metadata['system']['body'] ?? ''));
+                return $body !== ''
+                    ? 'ℹ️ ' . $this->payloadBuilder->truncateToBytes($body, self::MAX_BODY_BYTES)
+                    : 'ℹ️ ' . $this->translate('Contact changed their number', $locale);
+
+            case 'edit':
+                // النصّ بعد التعديل هو ما يهمّ الموظّف؛ نُظهره كما نُظهر نصّاً عادياً.
+                $edited = trim((string) ($metadata['edit']['message']['text']['body'] ?? ''));
+                return $edited !== ''
+                    ? '✏️ ' . $this->payloadBuilder->truncateToBytes($edited, self::MAX_BODY_BYTES)
+                    : '✏️ ' . $this->translate('Edited a message', $locale);
+
+            case 'revoke':
+                return '🚫 ' . $this->translate('Deleted a message', $locale);
+
             default:
                 if (!empty($metadata['text']['body'])) {
                     return $this->payloadBuilder->truncateToBytes(

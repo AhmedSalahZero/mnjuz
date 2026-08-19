@@ -307,6 +307,59 @@ class SendLocationTest extends TestCase
 
     // ------------------------------------------------------ تسجيل المسارات
 
+    /**
+     * كل نصّ تعرضه هذه الميزة له مقابل عربي.
+     *
+     * الترجمات تُقرأ من lang/ar.json مباشرةً، والمفتاح المفقود يظهر للعميل
+     * إنجليزياً وسط واجهة عربية بلا أي خطأ يشي بذلك — فيمرّ بلا أن يُلاحَظ.
+     */
+    public function test_every_string_this_feature_shows_has_an_arabic_translation(): void
+    {
+        $arabic = json_decode(file_get_contents(base_path('lang/ar.json')), true);
+        $this->assertIsArray($arabic, 'lang/ar.json يجب أن يبقى JSON صالحاً');
+
+        $strings = [
+            // الملحن ونافذة الإرسال
+            'Send our location',
+            'Send a location',
+            'Send location',
+            'Location sent',
+            'Use our business location',
+            'Your business location is not set yet. Add it in Settings first.',
+            'A valid location is required.',
+            'Cancel',
+            'Close',
+            'Sending...',
+            // منتقي الخريطة المشترك
+            'Search for a place by name',
+            'Click on the map or drag the marker to fine-tune the exact point.',
+            'Location name',
+            'Address label',
+            'Google Maps API key is not configured. Ask your administrator to add it in the admin settings.',
+            // إعدادات المنشأة
+            'Business location on the map',
+            'Set the exact point of your business so your team can send it to customers in chat. Optional.',
+            'Clear saved location',
+        ];
+
+        foreach ($strings as $string) {
+            $this->assertArrayHasKey($string, $arabic, "ترجمة عربية مفقودة: {$string}");
+            $this->assertNotSame('', trim((string) $arabic[$string]), "ترجمة فارغة: {$string}");
+        }
+    }
+
+    /** رسائل الخادم تصل الواجهة مترجمةً لا بمفاتيحها الإنجليزية. */
+    public function test_server_side_messages_resolve_in_arabic(): void
+    {
+        $this->app->setLocale('ar');
+
+        $this->assertSame('يجب تحديد موقع صالح.', __('A valid location is required.'));
+        $this->assertSame(
+            'لم يُحدَّد موقع نشاطك بعد. أضِفه من الإعدادات أولاً.',
+            __('Your business location is not set yet. Add it in Settings first.')
+        );
+    }
+
     public function test_web_and_mobile_routes_are_registered(): void
     {
         $routes = collect(Route::getRoutes())->map(fn ($route) => $route->methods()[0] . ' ' . $route->uri());
