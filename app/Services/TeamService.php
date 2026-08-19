@@ -140,6 +140,58 @@ class TeamService
             ->exists();
     }
 
+    /**
+     * استعادة عضو محذوف: العضوية **والمستخدم** معاً.
+     *
+     * الحذف ناعم في الحالتين، لكن المسارين مختلفان: حذف العضو من صفحة الفريق
+     * يحذف صفّ teams وحده، و«حذف الحساب» يحذف العضويات ثم المستخدم. فاستعادة
+     * العضوية وحدها تُرجع عضواً لا يستطيع الدخول — رأيناها عملياً: الحساب
+     * يجتاز التحقّق ثم يُردّ بـ«حسابك غير مرتبط بأي منشأة».
+     *
+     * @return array{ok: bool, message: string, user: ?User}
+     */
+    public function restore(string $uuid, int $organizationId): array
+    {
+        $team = Team::withTrashed()
+            ->where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if (!$team) {
+            return ['ok' => false, 'message' => __('Member not found.'), 'user' => null];
+        }
+
+        if ($team->deleted_at === null) {
+            return ['ok' => false, 'message' => __('This member is already active.'), 'user' => null];
+        }
+
+        $user = User::withTrashed()->find($team->user_id);
+
+        if (!$user) {
+            return ['ok' => false, 'message' => __('Member not found.'), 'user' => null];
+        }
+
+        // عضوية نشطة أخرى لنفس المستخدم في نفس المنشأة تجعل الاستعادة ازدواجاً.
+        $alreadyActive = Team::where('organization_id', $organizationId)
+            ->where('user_id', $team->user_id)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if ($alreadyActive) {
+            return ['ok' => false, 'message' => __('This member is already active.'), 'user' => null];
+        }
+
+        DB::transaction(function () use ($team, $user) {
+            if ($user->trashed()) {
+                $user->restore();
+            }
+
+            $team->restore();
+        });
+
+        return ['ok' => true, 'message' => __('Member restored successfully!'), 'user' => $user];
+    }
+
     public function destroy($uuid)
     {
         $team = Team::where('uuid', $uuid)->first();

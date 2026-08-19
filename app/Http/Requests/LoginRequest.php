@@ -72,6 +72,24 @@ class LoginRequest extends FormRequest
         return $rules;
     }
 
+    /**
+     * رسائل عربية لقواعد Laravel المدمجة.
+     *
+     * لا يوجد lang/ar/validation.php في المشروع، فرسائل «required» و«email»
+     * تعود إنجليزيةً افتراضاً. وشاشة الدخول تعرض message وحدها، فيرى العميل
+     * العربي نصّاً إنجليزياً. نُغطّي قواعد هذه الشاشة فقط.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'email.required' => __('The email field is required.'),
+            'email.email' => __('Please enter a valid email address.'),
+            'password.required' => __('The password field is required.'),
+        ];
+    }
+
     private function emailExists(string $email): bool
     {
         return User::where('email', $email)->where('status', '1')->where('deleted_at', null)->exists();
@@ -88,11 +106,17 @@ class LoginRequest extends FormRequest
     protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
     {
         if ($this->expectsJson() || $this->is('api/*')) {
+            // نضع السبب الفعلي في message لا العنوان العام: التطبيق يعرض
+            // message وحده ويتجاهل errors، فكان العميل يرى «The given data was
+            // invalid» سواء أخطأ في كلمة المرور أم كان حسابه محذوفاً — ولا
+            // يعرف أيّهما. نفس ما يفعله StoreContactRequest.
+            $errors = $validator->errors();
+
             throw new \Illuminate\Http\Exceptions\HttpResponseException(
                 response()->json([
                     'success' => false,
-                    'message' => __('The given data was invalid.'),
-                    'errors' => $validator->errors()
+                    'message' => $errors->first() ?: __('The given data was invalid.', [], getApiLang()),
+                    'errors' => $errors,
                 ], 422)
             );
         }

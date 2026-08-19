@@ -23,7 +23,19 @@ trait HasDeviceTokens
     {
         return $this->getDeviceTokens();
     }
-	public function syncDeviceTokens(string $deviceToken , ?string $deviceName = null , ?string $deviceType = null ):void{
+	/**
+	 * الوسيط ?string لا string: التطبيق قد يرسل device_token فارغاً، وتشديد
+	 * النوع كان يُسقط تسجيل الدخول بـ TypeError بدل تخطّي المزامنة.
+	 *
+	 * ونخرج قبل الحذف لا بعده: الدالّة تمحو الرموز القائمة ثم تُنشئ الجديد،
+	 * فرمزٌ فارغ يمرّ كان سيمحو رمز الجهاز الحالي ويستبدله بصفّ فارغ — فيفقد
+	 * المستخدم إشعاراته بلا أن يظهر خطأ.
+	 */
+	public function syncDeviceTokens(?string $deviceToken , ?string $deviceName = null , ?string $deviceType = null ):void{
+		if ($deviceToken === null || $deviceToken === '') {
+			return;
+		}
+
 		$this->deviceTokens()->delete();
 		$this->deviceTokens()->create([
 				'model_type'=>HHelpers::getClassNameWithoutNameSpace($this) , 

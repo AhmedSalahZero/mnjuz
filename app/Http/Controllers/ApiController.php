@@ -2344,6 +2344,36 @@ class ApiController extends Controller
     }
 
     /**
+     * طلب موقع العميل من التطبيق.
+     */
+    public function requestLocation(Request $request)
+    {
+        $organizationId = (int) ($request->user()?->current_mobile_organization_id ?: $request->organization);
+
+        $validator = Validator::make($request->all(), [
+            'uuid' => 'required|string',
+            'body' => 'required|string|max:' . WhatsappService::LOCATION_REQUEST_MAX_BODY,
+        ]);
+
+        if ($validator->fails()) {
+            $errors = $validator->errors();
+
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => $errors->first(),
+                'errors' => $errors,
+            ], 400);
+        }
+
+        return (new ChatService($organizationId))->requestLocation(
+            (string) $request->input('uuid'),
+            (string) $request->input('body'),
+            (int) $request->user()->id
+        );
+    }
+
+    /**
      * نبضة نشاط من التطبيق. لم يكن للموبايل نبضة إطلاقاً — النبضة الوحيدة في
      * routes/web.php — فكل من يعمل من التطبيق يظهر «غير متصل» دائماً مهما أرسل.
      */

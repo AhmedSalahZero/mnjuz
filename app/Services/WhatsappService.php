@@ -59,6 +59,43 @@ class WhatsappService
         ]);
     }
 
+	/** نوع رسالة طلب الموقع كما نمرّره داخلياً إلى sendMessage. */
+	public const TYPE_LOCATION_REQUEST = 'location request';
+
+	/** أقصى طول لنصّ الجسم كما تفرضه Meta. */
+	public const LOCATION_REQUEST_MAX_BODY = 1024;
+
+	/**
+	 * حمولة رسالة «طلب الموقع» كما تنصّ عليها وثيقة Meta بالضبط.
+	 *
+	 * فُصلت عن sendMessage لتُختبر بلا شبكة: شكل الحمولة هو العقد مع Meta،
+	 * وأي انحراف فيه يُرفض الطلب برسالة غامضة.
+	 *
+	 * النصّ يصل منقّى من المُستدعي — كما تفعل بقية الأنواع — فتبقى هذه الدالّة
+	 * نقيّةً بلا حاجة إلى حاوية Laravel.
+	 *
+	 * @return array{type: string, interactive: array}
+	 */
+	public static function buildLocationRequestPayload(string $to, string $bodyText): array
+	{
+		$body = $bodyText;
+
+		// القصّ بالمحارف لا بالبايتات: العربي حرفان بايتياً، فالقصّ الخام يشطر
+		// الحرف ويُنتج نصّاً تالفاً.
+		if (mb_strlen($body) > self::LOCATION_REQUEST_MAX_BODY) {
+			$body = mb_substr($body, 0, self::LOCATION_REQUEST_MAX_BODY);
+		}
+
+		return [
+			'type' => 'interactive',
+			'interactive' => [
+				'type' => 'location_request_message',
+				'body' => ['text' => $body],
+				'action' => ['name' => 'send_location'],
+			],
+		];
+	}
+
 	 public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
     {
 		$tempMessageId = Request()->get('tempMessageId');
@@ -136,6 +173,11 @@ class WhatsappService
 			$requestData['type'] = 'text';
 			$requestData['text']['preview_url'] = true;
 			$requestData['text']['body'] = clean($messageContent);
+		} else if ($type == self::TYPE_LOCATION_REQUEST) {
+			// طلب موقع العميل. يقبل body و action فقط — لا header ولا footer،
+			// خلافاً لبقية الأنواع التفاعلية، وإرسالهما يجعل Meta ترفض الطلب.
+			// https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/location-request-messages/
+			$requestData = array_merge($requestData, self::buildLocationRequestPayload($contact->phone, clean($messageContent)));
 		} else if ($type == 'interactive buttons' || $type == 'interactive call to action url' || $type == 'interactive list') {
 			$requestData['type'] = 'interactive';
 			if ($type == 'interactive buttons') {
@@ -174,7 +216,13 @@ class WhatsappService
 		$responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
 		if ($responseObject->success === true) {
+			// نُبقي type=text عن عمد: عملاء اليوم يفرّعون على type، وإدخال نوع
+			// جديد يُسقط تطبيق الموبايل في فرعه الافتراضي. العلامة الإضافية
+			// يتجاهلها القديم وتكفي واجهةً أحدث لتمييز الطلب.
 			$response = ['text' => ['body' => clean($messageContent)], 'type' => 'text'];
+			if ($type === self::TYPE_LOCATION_REQUEST) {
+				$response['location_request'] = true;
+			}
 			$chat = Chat::create([
 				'organization_id' => $contact->organization_id,
 				'wam_id' => $responseObject->data->messages[0]->id,

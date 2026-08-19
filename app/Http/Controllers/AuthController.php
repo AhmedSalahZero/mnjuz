@@ -256,7 +256,10 @@ class AuthController extends BaseController
             // Set locale based on user's language for proper translation
             // $userLanguage = $user->language ?? 'en';
             // App::setLocale($userLanguage);
-			if($request->has('device_token')){
+     		// filled لا has: الأخيرة تُرجع true للمفتاح الموجود ولو كانت قيمته
+			// null، والتطبيق يرسل device_token: null حين لا يملك رمزاً — فيُمرَّر
+			// null إلى وسيط من نوع string فيسقط تسجيل الدخول كلّه بـ TypeError.
+			if($request->filled('device_token')){
 				$user->syncDeviceTokens($request->get('device_token'),$request->get('device_name'),$request->get('device_type'));
 			}
 			

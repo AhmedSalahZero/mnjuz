@@ -92,6 +92,7 @@ class HandleInertiaRequests extends Middleware
                         'shortcuts' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts'),
                         'agent_performance' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance'),
                         'activity_log' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'activity_log'),
+                        'rating_delete' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'rating_delete'),
                     ],
                 ];
 

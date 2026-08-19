@@ -76,6 +76,14 @@ class ChatMetadataHelper
                 $out['location'] = isset($message['location'])
                     ? array_intersect_key($message['location'], array_flip(['latitude', 'longitude', 'name', 'address', 'url']))
                     : [];
+
+                // معرّف الرسالة التي يردّ عليها العميل. حين يأتي الموقع رداً على
+                // «طلب الموقع» تحمله Meta في context.id، وبه نربط الردّ بطلبه
+                // فتعرف الواجهة أن هذه النقطة جواب سؤالنا لا مشاركة عابرة.
+                $contextId = $message['context']['id'] ?? null;
+                if ($contextId) {
+                    $out['context'] = ['id' => $contextId];
+                }
                 break;
 
             case 'contacts':

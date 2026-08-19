@@ -45,6 +45,7 @@ class ActivityLogger
     public const TEAM_MEMBER_INVITED = 'team_member_invited';
     public const TEAM_MEMBER_REMOVED = 'team_member_removed';
     public const TEAM_MEMBER_ROLE_CHANGED = 'team_member_role_changed';
+    public const TEAM_MEMBER_RESTORED = 'team_member_restored';
 
     // الحملات والقوالب
     public const CAMPAIGN_CREATED = 'campaign_created';
@@ -60,6 +61,10 @@ class ActivityLogger
     public const AUTO_REPLY_UPDATED = 'auto_reply_updated';
     public const SHORTCUT_CREATED = 'shortcut_created';
     public const SHORTCUT_DELETED = 'shortcut_deleted';
+
+    // تقييمات العملاء
+    public const RATING_RECEIVED = 'rating_received';
+    public const RATING_DELETED = 'rating_deleted';
 
     /** أيام الاحتفاظ قبل الحذف — تُعرض للمستخدم في الصفحة. */
     public const RETENTION_DAYS = 7;
@@ -118,6 +123,7 @@ class ActivityLogger
             self::TEAM_MEMBER_INVITED => 'دعا العضو «%s» للفريق',
             self::TEAM_MEMBER_REMOVED => 'أزال العضو «%s» من الفريق',
             self::TEAM_MEMBER_ROLE_CHANGED => 'غيّر دور العضو «%s»',
+            self::TEAM_MEMBER_RESTORED => 'استعاد العضو «%s»',
 
             self::CAMPAIGN_CREATED => 'أنشأ حملة «%s»',
             self::CAMPAIGN_DELETED => 'حذف حملة «%s»',
@@ -131,6 +137,9 @@ class ActivityLogger
             self::AUTO_REPLY_UPDATED => 'عدّل الردود التلقائية',
             self::SHORTCUT_CREATED => 'أنشأ اختصار «%s»',
             self::SHORTCUT_DELETED => 'حذف اختصار «%s»',
+
+            self::RATING_RECEIVED => 'قيّم العميل «%s» الخدمة',
+            self::RATING_DELETED => 'حذف تقييم العميل «%s»',
         ];
     }
 
@@ -143,10 +152,12 @@ class ActivityLogger
                 self::CONTACT_BLOCKED, self::CONTACT_UNBLOCKED, self::CONTACT_IMPORTED],
             'chats' => [self::MESSAGE_SENT, self::TEMPLATE_SENT, self::MEDIA_SENT, self::CHAT_DELETED],
             'tickets' => [self::TICKET_ASSIGNED, self::TICKET_CLOSED, self::TICKET_REOPENED],
-            'team' => [self::TEAM_MEMBER_INVITED, self::TEAM_MEMBER_REMOVED, self::TEAM_MEMBER_ROLE_CHANGED],
+            'team' => [self::TEAM_MEMBER_INVITED, self::TEAM_MEMBER_REMOVED, self::TEAM_MEMBER_ROLE_CHANGED,
+                self::TEAM_MEMBER_RESTORED],
             'campaigns' => [self::CAMPAIGN_CREATED, self::CAMPAIGN_DELETED, self::TEMPLATE_CREATED, self::TEMPLATE_DELETED],
             'settings' => [self::SETTINGS_UPDATED, self::CONTACT_GROUP_CREATED, self::CONTACT_GROUP_UPDATED, self::CONTACT_GROUP_DELETED,
                 self::AUTO_REPLY_UPDATED, self::SHORTCUT_CREATED, self::SHORTCUT_DELETED],
+            'ratings' => [self::RATING_RECEIVED, self::RATING_DELETED],
         ];
     }
 

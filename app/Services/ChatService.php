@@ -538,6 +538,54 @@ class ChatService
         
     }
 
+    /**
+     * إرسال «طلب موقع» إلى العميل — رسالة تفاعلية تُظهر زرّ «إرسال الموقع».
+     *
+     * ليست قالباً: قوالب Meta لا تحوي هذا النوع، فهي تخضع لنافذة الأربع
+     * وعشرين ساعة كأي رسالة عادية، ولذلك تمرّ بنفس حراسات sendMessage.
+     */
+    public function requestLocation(string $contactUuid, string $bodyText, $userId = null)
+    {
+        $this->initializeWhatsappService();
+
+        $contact = $this->findContactByUuidInOrganization($contactUuid);
+        if (!$contact) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Contact not found'),
+            ], 404);
+        }
+
+        $this->assertConversationAccess($contact);
+
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowJsonResponse();
+        }
+
+        if (trim($bodyText) === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('Message cannot be empty.'),
+            ], 422);
+        }
+
+        ActivityLogger::log(
+            ActivityLogger::MESSAGE_SENT,
+            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            'contact',
+            $contact->id,
+            ['kind' => 'location_request'],
+            (int) $this->organizationId
+        );
+
+        return $this->whatsappService->sendMessage(
+            $contact->uuid,
+            $bodyText,
+            $userId,
+            WhatsappService::TYPE_LOCATION_REQUEST
+        );
+    }
+
     public function sendMessage(object $request)
     {
 		$this->initializeWhatsappService();

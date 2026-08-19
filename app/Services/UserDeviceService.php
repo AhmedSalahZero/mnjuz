@@ -144,16 +144,48 @@ class UserDeviceService
         $device = $user->deviceForCategory($category);
 
         if (!$device) {
-            return UserDevice::create([
+            $device = UserDevice::create([
                 'user_id' => $user->id,
                 ...$deviceData,
             ]);
+        } else {
+            $device->fill($deviceData);
+            $device->save();
         }
 
-        $device->fill($deviceData);
-        $device->save();
+        $this->evictOtherCategory($user, $category);
 
         return $device;
+    }
+
+    /**
+     * جهاز واحد لكل حساب — عبر الويب والجوال معاً.
+     *
+     * كان لكل فئة خانة مستقلّة، فيبقى المتصفّح والتطبيق مسجَّلَين في آنٍ واحد.
+     * الآن أيّ دخول جديد يطرد الآخر، وطريقة الطرد تختلف باختلاف ما يحمل الجلسة:
+     *
+     * • التطبيق يُطرد بإبطال رموز Sanctum مع تسجيل السبب — كلّها للجوال، فإبطالها
+     *   يقطع وصوله فوراً، والسبب المحفوظ يجعل الـ401 التالي مفهوماً لا غامضاً.
+     * • المتصفّح يُطرد بتدوير معرّف جهاز الويب: الجلسة تحمل المعرّف القديم،
+     *   وEnsureDeviceIsCurrent يقارنهما في كل طلب فيُخرجها عند أول طلب تالٍ.
+     *
+     * لا نحذف صفّ جهاز الويب لأن الميدلوير لا يُخرج أحداً حين لا يجد صفّاً —
+     * الحذف كان سيُبقي الجلسة حيّة بدل أن ينهيها.
+     */
+    private function evictOtherCategory(User $user, string $keepCategory): void
+    {
+        if ($keepCategory === 'mobile') {
+            $user->devices()
+                ->where('device_category', 'web')
+                ->update([
+                    'device_identifier' => (string) \Illuminate\Support\Str::uuid(),
+                    'updated_at' => now(),
+                ]);
+
+            return;
+        }
+
+        \App\Support\TokenRevocation::revokeAll($user);
     }
 
     private function normalized(?string $value): string

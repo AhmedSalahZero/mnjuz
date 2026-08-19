@@ -24,6 +24,9 @@ use Validator;
 
 class AutoReplyService
 {
+    /** نوع الردّ الذي يطلب موقع العميل. */
+    public const REPLY_LOCATION_REQUEST = 'location_request';
+
     public function getRows(object $request)
     {
         $organizationId = session()->get('current_organization');
@@ -69,7 +72,9 @@ class AutoReplyService
                 $metadata['data']['file']['location'] = $media->file->location;
                 $metadata['data']['file']['url'] = $media->file->url;
             }
-        } else if($request->response_type === 'text') {
+        } else if($request->response_type === 'text' || $request->response_type === self::REPLY_LOCATION_REQUEST) {
+            // طلب الموقع يحمل نصّ جسم كالنصّ العادي؛ الفرق في كيفية إرساله لا
+            // في ما يُخزَّن، فيتشاركان نفس المفتاح.
             $metadata['data']['text'] = $request->response;
         } else {
             $metadata['data']['template'] = $request->response;
@@ -337,6 +342,20 @@ class AutoReplyService
                 return;
             }
             $this->initializeWhatsappService($organization_id)->sendMessage($contact->uuid, $message);
+        } else if($replyType === self::REPLY_LOCATION_REQUEST){
+            // رسالة تفاعلية بزرّ «إرسال الموقع». تخضع لنافذة الأربع وعشرين
+            // ساعة كأي رسالة عادية — ونحن هنا نردّ على رسالة واردة للتوّ،
+            // فالنافذة مفتوحة قطعاً.
+            $message = trim($this->replacePlaceholders($organization_id, $contact->uuid, $metadata->data->text ?? ''));
+            if ($message === '') {
+                return;
+            }
+            $this->initializeWhatsappService($organization_id)->sendMessage(
+                $contact->uuid,
+                $message,
+                null,
+                WhatsappService::TYPE_LOCATION_REQUEST
+            );
         } else if($replyType === 'audio' || $replyType === 'image'){
 	//		logger('inside audio image');
             $location = strpos($metadata->data->file->location, 'public\\') === 0 ? 'local' : 'amazon';

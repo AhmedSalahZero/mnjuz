@@ -161,6 +161,17 @@
                         <FormToggleSwitch v-model="form.activity_log" class="float-left"/>
                     </div>
                 </div>
+                <div class="py-5 sm:flex border-b">
+                    <div class="hidden sm:block w-[40%] mb-1">
+                        <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Allow Deleting Ratings') }}</h1>
+                        <div class="text-xs text-slate-700 flex items-center">
+                            <span>{{ $t('When enabled, the business owner can delete customer ratings. Managers can only view them.') }}</span>
+                        </div>
+                    </div>
+                    <div class="sm:w-[20%]">
+                        <FormToggleSwitch v-model="form.rating_delete" class="float-left"/>
+                    </div>
+                </div>
                 <div class="py-6">
                     <button type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         {{ $t('Save') }}
@@ -229,6 +240,7 @@ const trans = useTrans();
         shortcuts: getDetail(props.plan?.metadata, 'shortcuts') == 1 || getDetail(props.plan?.metadata, 'shortcuts') === true,
         agent_performance: getDetail(props.plan?.metadata, 'agent_performance') == 1 || getDetail(props.plan?.metadata, 'agent_performance') === true,
         activity_log: getDetail(props.plan?.metadata, 'activity_log') == 1 || getDetail(props.plan?.metadata, 'activity_log') === true,
+        rating_delete: getDetail(props.plan?.metadata, 'rating_delete') == 1 || getDetail(props.plan?.metadata, 'rating_delete') === true,
     })
 
     const statusOptions = ref([

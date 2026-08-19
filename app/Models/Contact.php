@@ -490,6 +490,12 @@ class Contact extends Model
             'entity_id' => $ticketId,
             'created_at' =>  now()
         ]);
+
+        // استبيان الرضا: نقطة واحدة تغطّي الإغلاق من الويب ومن التطبيق وأي
+        // إغلاق آلي يُضاف لاحقاً. الخدمة لا ترمي أبداً فلا تُعطّل الإغلاق.
+        if ($status === 'closed') {
+            \App\Services\ConversationRatingService::onConversationClosed($this, auth()->id());
+        }
 		
     }
 	public function ticket():HasOne

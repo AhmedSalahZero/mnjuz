@@ -390,6 +390,12 @@
 						@click="reportsOpen = false">
 						{{ $t('Activity Log') }}
 					</Link>
+					<Link v-if="isOrgPrivileged" href="/ratings"
+						class="block rounded-[5px] px-3 py-3 hover:bg-slate-50 hover:text-black"
+						:class="$page.url.startsWith('/ratings') ? 'bg-slate-50 text-black' : ''"
+						@click="reportsOpen = false">
+						{{ $t('Customer Ratings') }}
+					</Link>
 				</nav>
 			</aside>
 		</transition>
@@ -424,7 +430,7 @@ const reportsButton = ref(null)
 const reportsPanelStyle = ref({})
 const isRtl = computed(() => usePage().props.isRtl)
 const isReportsActive = computed(() =>
-	usePage().url.startsWith('/performance') || usePage().url.startsWith('/activity-log')
+	usePage().url.startsWith('/performance') || usePage().url.startsWith('/activity-log') || usePage().url.startsWith('/ratings')
 )
 
 // لا نُظهر تبويب «التقارير» إن لم تكن أي ميزة تحته مفعّلة في الباقة،

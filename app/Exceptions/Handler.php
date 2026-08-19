@@ -49,15 +49,41 @@ class Handler extends ExceptionHandler
     /**
      * Convert an authentication exception into a response.
      */
+    /**
+     * جسم ردّ 401 للتطبيق.
+     *
+     * الحالة تبقى 401 لأنها الصحيحة — الرمز لم يعد صالحاً — لكن `code` يميّز
+     * سبب الخروج: device_replaced تعني «دخلتَ من جهاز آخر» فيعرضها التطبيق
+     * ويعود بالمستخدم إلى شاشة الدخول بدل رسالة خطأ غامضة أو شاشة فارغة.
+     */
+    protected static function unauthenticatedPayload($request): array
+    {
+        $reason = \App\Support\TokenRevocation::reasonForRequest($request);
+
+        if ($reason !== null) {
+            return [
+                'success' => false,
+                'code' => $reason,
+                'action' => 'logout',
+                'message' => \App\Support\TokenRevocation::messageFor($reason),
+                'error' => \App\Support\TokenRevocation::messageFor($reason),
+            ];
+        }
+
+        return [
+            'success' => false,
+            'code' => 'unauthenticated',
+            'action' => 'logout',
+            'message' => __('Unauthenticated'),
+            'error' => __('You are not authenticated. Please login first.'),
+        ];
+    }
+
     protected function unauthenticated($request, AuthenticationException $exception)
     {
         // For API requests, return JSON response
         if ($request->expectsJson() || $request->is('api/*')) {
-            return response()->json([
-                'success' => false,
-                'message' => __('Unauthenticated'),
-                'error' => __('You are not authenticated. Please login first.'),
-            ], 401);
+            return response()->json(self::unauthenticatedPayload($request), 401);
         }
 
         // For web requests, redirect to login
@@ -71,11 +97,7 @@ class Handler extends ExceptionHandler
             // AuthenticationException must be handled before isHttpException check
             // because it is NOT an HttpException and would otherwise fall through to 500
             if ($exception instanceof AuthenticationException) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('Unauthenticated'),
-                    'error' => __('You are not authenticated. Please login first.'),
-                ], 401);
+                return response()->json(self::unauthenticatedPayload($request), 401);
             }
 
             if ($this->isHttpException($exception)) {

@@ -14,7 +14,7 @@
                 </div>
             </div>
             <!-- Table Component-->
-            <TeamTable :rows="props.rows" @edit="openModal"/>
+            <TeamTable :rows="props.rows" :filters="props.filters" :showTrashed="props.showTrashed" @edit="openModal"/>
         </div>
 
         <Modal :label="label" :isOpen=isOpenFormModal>
@@ -46,7 +46,7 @@
 
 const trans = useTrans();
 
-    const props = defineProps({ rows: Object, filters: Object });
+    const props = defineProps({ rows: Object, filters: Object, showTrashed: Boolean });
     const isOpenFormModal = ref(false);
     const formUrl = ref('/team/invite');
     const formMethod = ref('post');

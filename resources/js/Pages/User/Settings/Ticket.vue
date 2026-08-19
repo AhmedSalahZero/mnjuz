@@ -168,6 +168,61 @@
               </div>
             </div>
           </div>
+
+          <!-- استبيان رضا العميل بعد إغلاق المحادثة -->
+          <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm px-4 mb-20">
+            <div class="w-full py-2 mb-4 mt-2">
+              <div class="flex w-full">
+                <div class="w-3/4 text-md">
+                  <h4 class="text-[16px]">{{ $t('Ask for a rating after closing a conversation') }}</h4>
+                  <div class="mb-1 text-slate-500">
+                    {{ $t('When a conversation is marked as closed, the customer receives a message with a rating link.') }}
+                  </div>
+                </div>
+                <div class="w-1/4">
+                  <div
+                    class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
+                    :class="{ 'bg-primary': form.rating_survey_active }"
+                    @click="toggleRatingSurvey()">
+                    <div
+                      class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                      :class="{ 'translate-x-6': form.rating_survey_active }"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="form.rating_survey_active" class="mt-4">
+                <label class="block text-sm text-gray-900 mb-1">{{ $t('Message text') }}</label>
+                <textarea
+                  v-model="form.rating_survey_message"
+                  rows="3"
+                  class="block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 text-sm"></textarea>
+                <div class="text-xs text-slate-500 mt-1">
+                  {{ $t('Use {rating_link} where the link should appear. Contact fields such as {first_name} work too.') }}
+                </div>
+                <div class="text-xs text-slate-500">
+                  {{ $t('The link works once and expires after {days} days.', { days: props.ratingLinkValidDays }) }}
+                </div>
+
+                <label class="block text-sm text-gray-900 mt-4 mb-1">{{ $t('Days before the same customer is asked again') }}</label>
+                <input
+                  v-model.number="form.rating_survey_cooldown_days"
+                  type="number"
+                  min="0"
+                  :max="props.ratingMaxCooldownDays"
+                  class="block w-full sm:w-40 rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 text-sm" />
+                <div class="text-xs text-slate-500 mt-1">
+                  {{ $t('A rating is requested once per conversation. This is the minimum gap between two requests to the same customer. Use 0 for no gap.') }}
+                </div>
+                <button
+                  type="button"
+                  class="mt-3 rounded-md bg-black px-3 py-2 text-sm text-white"
+                  @click="submitForm()">
+                  {{ $t('Save') }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -181,7 +236,7 @@ import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
-const props = defineProps(['rows', 'filters', 'settings', 'modules'])
+const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays'])
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 
@@ -221,6 +276,9 @@ const form = useForm({
   reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
   allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
   encrypt_contacts_for_agents: settings.value?.tickets?.encrypt_contacts_for_agents ?? false,
+  rating_survey_active: props.ratingSurvey?.active ?? false,
+  rating_survey_message: props.ratingSurvey?.message ?? '',
+  rating_survey_cooldown_days: props.ratingSurvey?.cooldown_days ?? 30,
 })
 
 const toggleState1 = () => {
@@ -239,6 +297,11 @@ const toggleState3 = () => {
 }
 const toggleState4 = () => {
   form.encrypt_contacts_for_agents = !form.encrypt_contacts_for_agents
+  submitForm()
+}
+
+const toggleRatingSurvey = () => {
+  form.rating_survey_active = !form.rating_survey_active
   submitForm()
 }
 

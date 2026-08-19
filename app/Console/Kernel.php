@@ -65,6 +65,12 @@ class Kernel extends ConsoleKernel
         $schedule->command('activity:prune')
             ->dailyAt('03:30')
             ->withoutOverlapping();
+
+        // رموز الوصول المُبطَلة تبقى شهراً لتُفسّر سبب الخروج لتطبيق الجوال،
+        // ثم تُحذف. من يعود بعد الشهر يصله 401 عاماً — وهو صحيح على أي حال.
+        $schedule->command('sanctum:prune-expired --hours=720')
+            ->dailyAt('03:45')
+            ->withoutOverlapping();
         
         // $schedule->command('model:prune', [
         //     '--model' => [CampaignLog::class],

@@ -88,9 +88,16 @@
 						</div>
 					</div>
 				</div>
-				<div v-if="form.response_type === 'text'" class="flex py-5">
+				<div v-if="form.response_type === 'text' || form.response_type === 'location_request'" class="flex py-5">
 					<div class="w-[40%] mb-1">
-						<h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Text response') }}</h2>
+						<h2 class="text-sm text-gray-500 tracking-[0px]">
+							{{ form.response_type === 'location_request' ? $t('Message shown above the button') : $t('Text response') }}
+						</h2>
+						<!-- طلب الموقع رسالة تفاعلية لا قالب، فيلزم أن تكون نافذة
+						     الأربع وعشرين ساعة مفتوحة — وهي كذلك هنا لأننا نردّ. -->
+						<p v-if="form.response_type === 'location_request'" class="text-xs text-slate-500 mt-1">
+							{{ $t('WhatsApp shows a “Send location” button under this text.') }}
+						</p>
 					</div>
 					<div class="w-[60%] flex space-x-6">
 						<div class="w-[80%]">
@@ -348,6 +355,7 @@ const responseOptions = ref([
 	{ value: 'text', label: trans('Respond with text') },
 	{ value: 'image', label: trans('Respond with image') },
 	{ value: 'audio', label: trans('Respond with audio') },
+	{ value: 'location_request', label: trans('Ask for customer location') },
 ])
 
 const loadTemplates = async (query, setOptions) => {

@@ -63,6 +63,7 @@ class SubscriptionPlanService
                 'shortcuts' => $request->input('shortcuts', 0),
                 'agent_performance' => $request->input('agent_performance', 0),
                 'activity_log' => $request->input('activity_log', 0),
+                'rating_delete' => $request->input('rating_delete', 0),
                 'setup_fee' => $request->input('setup_fee', 0),
             ]),
         ]);
@@ -105,6 +106,7 @@ class SubscriptionPlanService
         $metadata['shortcuts'] = $request->input('shortcuts', 0);
         $metadata['agent_performance'] = $request->input('agent_performance', 0);
         $metadata['activity_log'] = $request->input('activity_log', 0);
+        $metadata['rating_delete'] = $request->input('rating_delete', 0);
         $metadata['setup_fee'] = $request->input('setup_fee', 0);
 
         $plan->name = $request->input('name');

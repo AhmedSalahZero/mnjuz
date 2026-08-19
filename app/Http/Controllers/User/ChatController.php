@@ -85,6 +85,18 @@ class ChatController extends BaseController
         return $this->chatService()->sendMessage($request);
     }
 
+    /**
+     * طلب موقع العميل — رسالة تفاعلية بزرّ «إرسال الموقع».
+     */
+    public function requestLocation(Request $request, $uuid)
+    {
+        $request->validate([
+            'body' => 'required|string|max:' . \App\Services\WhatsappService::LOCATION_REQUEST_MAX_BODY,
+        ]);
+
+        return $this->chatService()->requestLocation($uuid, (string) $request->input('body'), auth()->id());
+    }
+
     public function sendTemplateMessage(Request $request, $uuid)
     {
 	

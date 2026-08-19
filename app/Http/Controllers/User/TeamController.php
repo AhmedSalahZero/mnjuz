@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use App\Services\ActivityLogger;
+use App\Support\OrganizationRole;
 
 class TeamController extends BaseController
 {
@@ -23,10 +24,17 @@ class TeamController extends BaseController
     }
 
     public function index(Request $request){
-        $rows = TeamResource::collection(
-            Team::with('user')->where('organization_id', session()->get('current_organization'))
-                ->latest()->paginate(10)
-        );
+        // مبدّل «المحذوفون»: نعرض صفوف teams المحذوفة ناعماً مع تاريخ حذفها.
+        // withTrashed على المستخدم أيضاً، وإلا لظهر العضو بلا اسم ولا بريد حين
+        // يكون حسابه نفسه محذوفاً (وهو الحال في «حذف الحساب»).
+        $showTrashed = $request->boolean('trashed');
+
+        $query = Team::with(['user' => fn ($q) => $q->withTrashed()])
+            ->where('organization_id', session()->get('current_organization'));
+
+        $query = $showTrashed ? $query->onlyTrashed() : $query;
+
+        $rows = TeamResource::collection($query->latest()->paginate(10)->withQueryString());
 
         if($request->expectsJson()){
             $rows = DB::table('users')
@@ -44,6 +52,8 @@ class TeamController extends BaseController
                 'title' => __('Team'),
                 'filters' => $request->all(),
                 'rows' => $rows,
+                'showTrashed' => $showTrashed,
+                'canManageTeam' => $this->canManageTeam(),
             ]);
         }
     }
@@ -86,6 +96,41 @@ class TeamController extends BaseController
                 'message' => __('User account updated successfully!')
             ]
         );
+    }
+
+    /** الاستعادة للمالك والمدير وحدهما. */
+    private function canManageTeam(): bool
+    {
+        $role = auth()->user()?->getRoleNameForOrganization(session()->get('current_organization'));
+
+        return OrganizationRole::isPrivileged($role !== '' ? $role : OrganizationRole::OWNER);
+    }
+
+    /**
+     * استعادة عضو محذوف — هو وحسابه معاً.
+     */
+    public function restore($uuid)
+    {
+        if (!$this->canManageTeam()) {
+            abort(403, __('You are not allowed to access this page.'));
+        }
+
+        $result = $this->teamService->restore($uuid, (int) session()->get('current_organization'));
+
+        if ($result['ok']) {
+            $user = $result['user'];
+            ActivityLogger::log(
+                ActivityLogger::TEAM_MEMBER_RESTORED,
+                trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $user->email,
+                'team',
+                null
+            );
+        }
+
+        return Redirect::back()->with('status', [
+            'type' => $result['ok'] ? 'success' : 'error',
+            'message' => $result['message'],
+        ]);
     }
 
     public function delete($uuid)

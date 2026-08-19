@@ -256,6 +256,9 @@ class SettingController extends BaseController
                 'rows' => $contactFieldService->get($request),
                 'settings' => $settings,
                 'modules' => Addon::get(),
+                'ratingSurvey' => \App\Services\ConversationRatingService::settings((int) session()->get('current_organization')),
+                'ratingLinkValidDays' => \App\Models\ConversationRating::LINK_VALID_DAYS,
+                'ratingMaxCooldownDays' => \App\Services\ConversationRatingService::MAX_COOLDOWN_DAYS,
             ]);
         } else if($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
@@ -271,6 +274,16 @@ class SettingController extends BaseController
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
             $metadataArray['tickets']['encrypt_contacts_for_agents'] = $request->encrypt_contacts_for_agents;
+
+            // استبيان رضا العميل بعد إغلاق المحادثة
+            $metadataArray['ratings']['active'] = (bool) $request->input('rating_survey_active');
+            $ratingMessage = trim((string) $request->input('rating_survey_message'));
+            $metadataArray['ratings']['message'] = $ratingMessage !== ''
+                ? $ratingMessage
+                : \App\Services\ConversationRatingService::DEFAULT_MESSAGE;
+            $metadataArray['ratings']['cooldown_days'] = \App\Services\ConversationRatingService::normalizeCooldown(
+                $request->input('rating_survey_cooldown_days')
+            );
 
             $updatedMetadataJson = json_encode($metadataArray);
 

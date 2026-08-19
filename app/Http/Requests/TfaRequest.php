@@ -98,11 +98,14 @@ class TfaRequest extends FormRequest
   protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
   {
     if ($this->expectsJson() || $this->is('api/*')) {
+      // السبب الفعلي في message: التطبيق يعرضه وحده ويتجاهل errors.
+      $errors = $validator->errors();
+
       throw new \Illuminate\Http\Exceptions\HttpResponseException(
         response()->json([
           'success' => false,
-          'message' => __('The given data was invalid.'),
-          'errors' => $validator->errors()
+          'message' => $errors->first() ?: __('The given data was invalid.', [], getApiLang()),
+          'errors' => $errors,
         ], 400)
       );
     }

@@ -88,6 +88,41 @@ const sendAuthTemplate = async () => {
 		sendingAuthTemplate.value = false
 	}
 }
+/**
+ * طلب موقع العميل — رسالة تفاعلية بزرّ «إرسال الموقع» في واتساب.
+ *
+ * نستخدم نصّ صندوق الكتابة إن كتب الموظّف شيئاً، وإلا فجملة افتراضية: النقرة
+ * الواحدة هي الحالة الشائعة، والتخصيص متاح بلا خطوة إضافية.
+ *
+ * لا نضيف فقاعة متفائلة كما تفعل sendMessage: تلك تعتمد على tempMessageId
+ * لتستبدل الفقاعة عند وصول البثّ، وهذا المسار لا يمرّره فتبقى الفقاعة مكرّرة.
+ * الرسالة تظهر عند وصول البثّ خلال أجزاء من الثانية.
+ */
+const requestingLocation = ref(false)
+const requestLocation = async () => {
+	if (!isInboundChatWithin24Hours.value || requestingLocation.value) return
+
+	const typed = (formTextInput.value ?? '').trim()
+	const body = typed || trans('Please share your location so we can reach you accurately.')
+
+	requestingLocation.value = true
+	try {
+		const { data } = await axios.post(`/chat/${props.contact.uuid}/request-location`, { body })
+		if (data?.success === false) {
+			toast.error(trans(data.message || 'Something went wrong'))
+		} else {
+			if (typed) formTextInput.value = null
+			toast.success(trans('Location request sent'))
+		}
+	} catch (error) {
+		toast.error(trans(error.response?.data?.message || 'Something went wrong'))
+	} finally {
+		requestingLocation.value = false
+		await nextTick()
+		textInputRef.value?.focus()
+	}
+}
+
 const appendMessageIntoBody = (form) => {
 	emit('newMessage', form)
 }
@@ -637,6 +672,16 @@ onBeforeUnmount(() => {
 							d="M6.5 5.5A4.5 4.5 0 0 0 2 10v12a4.5 4.5 0 0 0 4.5 4.5h12A4.5 4.5 0 0 0 23 22v-1.5l4.2 3.15c1.153.865 2.8.042 2.8-1.4V9.75c0-1.442-1.647-2.265-2.8-1.4L23 11.5V10a4.5 4.5 0 0 0-4.5-4.5zM23 14l5-3.75v11.5L23 18zm-2-4v12a2.5 2.5 0 0 1-2.5 2.5h-12A2.5 2.5 0 0 1 4 22V10a2.5 2.5 0 0 1 2.5-2.5h12A2.5 2.5 0 0 1 21 10" />
 					</svg>
 				</label>
+				<button type="button" @click="requestLocation()" :disabled="requestingLocation"
+					class="text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
+					:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+						<g fill="none" stroke="currentColor" stroke-width="1.5">
+							<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z" />
+							<circle cx="12" cy="10.5" r="2.5" />
+						</g>
+					</svg>
+				</button>
 				<label @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
 						<path fill="currentColor"
@@ -843,6 +888,18 @@ onBeforeUnmount(() => {
 								</g>
 							</svg>
 						</label>
+					</div>
+					<div>
+						<button type="button" class="py-1 cursor-pointer disabled:opacity-40"
+							@click="requestLocation()" :disabled="requestingLocation"
+							:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
+							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+								<g fill="none" stroke="currentColor" stroke-width="1.5">
+									<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z" />
+									<circle cx="12" cy="10.5" r="2.5" />
+								</g>
+							</svg>
+						</button>
 					</div>
 				</div>
 				<div>|</div>

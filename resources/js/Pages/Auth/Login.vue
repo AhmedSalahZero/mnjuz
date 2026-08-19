@@ -26,7 +26,7 @@
                                     <Link href="/reset-devices" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Reset Linked Devices?') }}</Link>
                                 </div>
                             </div>
-                            <FormInput v-model="form.password" :name="$t('Password')" :error="form.errors.password" :type="'password'" :class="'col-span-3'"/>
+                            <FormInput v-model="form.password" :name="$t('Password')" :error="form.errors.password" :type="'password'" :class="'col-span-3'" toggle-visibility/>
                             <div v-if="form.errors.recaptcha_response" class="form-error text-[#b91c1c] text-xs">{{ form.errors.recaptcha_response }}</div>
                         </div>
                         <div class="flex items-center justify-between mt-5">

@@ -80,6 +80,10 @@ Route::get('media/{filename}', [App\Http\Controllers\FileController::class, 'sho
 Route::get('/invite/{identifier}', [App\Http\Controllers\AuthController::class, 'viewInvite']);
 Route::post('/invite/{identifier}', [App\Http\Controllers\AuthController::class, 'invite']);
 
+// صفحة تقييم الخدمة — عامة بلا مصادقة؛ الرمز في الرابط هو التصريح الوحيد
+Route::get('/rate/{token}', [App\Http\Controllers\RatingController::class, 'show']);
+Route::post('/rate/{token}', [App\Http\Controllers\RatingController::class, 'store']);
+
 Route::get('/logout', [App\Http\Controllers\AuthController::class, 'logout'])->name('logout');
 
 //Webhook
@@ -170,11 +174,14 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/performance', [App\Http\Controllers\User\AgentPerformanceController::class, 'index']);
                 Route::get('/activity-log', [App\Http\Controllers\User\ActivityLogController::class, 'index']);
                 Route::get('/activity-log/export', [App\Http\Controllers\User\ActivityLogController::class, 'export']);
+                Route::get('/ratings', [App\Http\Controllers\User\RatingController::class, 'index']);
+                Route::delete('/ratings/{uuid}', [App\Http\Controllers\User\RatingController::class, 'destroy']);
                 Route::post('/performance/heartbeat', [App\Http\Controllers\User\AgentPerformanceController::class, 'heartbeat']);
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
 				Route::post('/chat/{uuid}/send/auth-template', [App\Http\Controllers\User\ChatController::class, 'sendAuthTemplate']);
+                Route::post('/chat/{uuid}/request-location', [App\Http\Controllers\User\ChatController::class, 'requestLocation']);
                 Route::post('/chat/{uuid}/block', [App\Http\Controllers\User\ChatController::class, 'blockContact']);
                 Route::post('/chat/{uuid}/unblock', [App\Http\Controllers\User\ChatController::class, 'unblockContact']);
                 Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);
@@ -277,6 +284,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::post('/team/invite', [App\Http\Controllers\User\TeamController::class, 'invite'])->name('team.store');
                     Route::put('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'update'])->name('team.update');
                     Route::delete('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'delete'])->name('team.destroy');
+                    Route::post('/team/{uuid}/restore', [App\Http\Controllers\User\TeamController::class, 'restore'])->name('team.restore');
 
                     Route::get('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'index']);
                     Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
