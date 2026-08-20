@@ -134,7 +134,7 @@ class ContactController extends BaseController
     public function exportContactsAsCsv(?array $uuids = null)
     {
         $organizationId = $this->getCurrentOrganizationId();
-        $contacts = Contact::with('contactGroups')
+        $contacts = Contact::with('contactGroups', 'contactCategories')
             ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
             ->when($uuids !== null, fn ($query) => $query->whereIn('uuid', $uuids))
@@ -155,6 +155,9 @@ class ContactController extends BaseController
             'Phone',
             'Email',
             'Group name',
+            // كان عمود التصنيف مفقوداً من CSV وموجوداً في Excel، فمن يُصدّر
+            // CSV ثم يُعيد استيراده كان يفقد تصنيفات جهات اتصاله كلّها.
+            'Category',
             'Street',
             'City',
             'State',
@@ -192,6 +195,7 @@ class ContactController extends BaseController
                 $contact->formatted_phone_number,
                 $contact->email,
                 $contact->contactGroups->pluck('name')->implode('|'),
+                $contact->contactCategories->pluck('name')->implode('، '),
                 $address['street'] ?? null,
                 $address['city'] ?? null,
                 $address['state'] ?? null,
@@ -250,7 +254,8 @@ class ContactController extends BaseController
                 'phone' => '+1234567890',
                 'email' => 'john.doe@example.com',
                 'group_name' => 'Customers',
-                'category' => 'VIP',
+                // مثال بتصنيفين: العمود اختياري، ويُترك فارغاً عند عدم الرغبة.
+                'category' => 'عميل محتمل، عميل خاص',
                 'street' => '123 Main St',
                 'city' => 'New York',
                 'state' => 'NY',

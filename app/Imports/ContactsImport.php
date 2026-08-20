@@ -441,8 +441,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     }
 
     /**
-     * Sync contact categories to match the import row (add missing, remove extras).
-     * Category names are pipe-separated in the category column.
+     * مزامنة تصنيفات جهة الاتصال مع صفّ الاستيراد (إضافة الناقص وإزالة الزائد).
      */
     private function syncContactCategories(Contact $contact, mixed $categoryValue, int $organizationId): void
     {
@@ -450,9 +449,19 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         $contact->contactCategories()->sync($categoryIds);
     }
 
+    /**
+     * فواصل أسماء التصنيفات المقبولة في ملف الاستيراد.
+     *
+     * الفاصلة العربية «،» هي ما يكتبه المستخدم فعلاً حين يُعدّ الملف بالعربية،
+     * والفاصلة اللاتينية ما تُنتجه بعض البرامج، والأنبوب «|» ما كان النظام
+     * يُصدّره سابقاً — فتُقبل الثلاثة كي لا يُرفض ملف صحيح لاختلاف الفاصل.
+     */
+    private const CATEGORY_SEPARATORS = ['|', '،', ','];
+
     private function resolveCategoryIdsFromImport(mixed $categoryValue, int $organizationId): array
     {
-        $categoryNames = array_filter(array_map('trim', explode('|', (string) $categoryValue)));
+        $normalized = str_replace(self::CATEGORY_SEPARATORS, '|', (string) $categoryValue);
+        $categoryNames = array_filter(array_map('trim', explode('|', $normalized)), fn ($name) => $name !== '');
 
         $categoryIds = [];
 

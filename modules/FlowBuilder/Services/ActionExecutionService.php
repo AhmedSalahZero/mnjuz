@@ -117,18 +117,34 @@ class ActionExecutionService
     }
 
     /**
-     * Remove contact from a group
+     * انسحاب جهة الاتصال من التسويق: إزالتها من كل مجموعات المنشأة وتعليمها
+     * كغير راغبة في الرسائل التسويقية.
+     *
+     * كان الإجراء يطلب اختيار مجموعة بعينها، فمن لديه مئة مجموعة كان عليه أن
+     * يضع مئة عقدة متتالية. وحتى لو فعل، لم يكن ذلك يمنع وصول الحملات: الحملة
+     * الموجّهة «للكل» تختار كل جهات اتصال المنشأة بمجموعة أو بلا مجموعة.
+     *
+     * الانسحاب الآن علامة مستقلّة عن العضوية، تُحترم في كل مسارات الحملات ولو
+     * أُعيد إدراج جهة الاتصال في مجموعة لاحقاً.
      */
     private function executeRemoveFromGroup($config, $contact)
     {
-        $groupId = $config['group_id'] ?? null;
-        if (!$groupId) {
-            Log::warning("No group_id specified for remove_from_group action");
-            return false;
+        // الحذف محصور بمجموعات منشأة جهة الاتصال: جدول الربط لا يحمل
+        // organization_id، فالحصر يجري عبر المجموعات نفسها.
+        $organizationGroupIds = ContactGroup::where('organization_id', $contact->organization_id)
+            ->whereNull('deleted_at')
+            ->pluck('id');
+
+        if ($organizationGroupIds->isNotEmpty()) {
+            $contact->contactGroups()->detach($organizationGroupIds->all());
         }
-        $contact->contactGroups()->detach($groupId);
-        // Log::info("Contact {$contact->id} removed from group {$groupId}");
-        
+
+        // نُبقي أوّل انسحاب: تكرار مرور العميل على العقدة لا يُعيد ضبط تاريخه،
+        // وهو التاريخ الذي يُحتجّ به عند المراجعة.
+        if ($contact->marketing_opted_out_at === null) {
+            $contact->forceFill(['marketing_opted_out_at' => now()])->save();
+        }
+
         return true;
     }
 

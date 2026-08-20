@@ -69,17 +69,27 @@ class CreateCampaignLogsJob implements ShouldQueue
         }
     }
 
+    /**
+     * جهات الاتصال المستهدَفة بالحملة، بلا من انسحب من التسويق.
+     *
+     * الانسحاب يُحترم في المسارين — «الكل» ومجموعة بعينها — لا في الأول وحده:
+     * من انسحب بنفسه لا يعود إليه الإرسال ولو أعاده التاجر إلى مجموعة لاحقاً.
+     */
     protected function getContactsForCampaign(Campaign $campaign)
     {
         if (empty($campaign->contact_group_id) || $campaign->contact_group_id === '0') {
             return Contact::where('organization_id', $campaign->organization_id)
                 ->whereNull('deleted_at')
+                ->whereNull('marketing_opted_out_at')
                 ->get();
         }
 
         return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
             $query->where('contact_groups.id', $campaign->contact_group_id);
-        })->whereNull('deleted_at')->get();
+        })
+            ->whereNull('deleted_at')
+            ->whereNull('marketing_opted_out_at')
+            ->get();
     }
 
     protected function createCampaignLogs(Campaign $campaign, $contacts)

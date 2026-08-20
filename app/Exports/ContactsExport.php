@@ -49,7 +49,9 @@ $shouldBeEncrypted = Contact::contactPhoneNumberShouldEncrypted($organization);
                 'phone' => $contact->formatted_phone_number, // Assuming formatted_phone_number is defined
                 'email' => $contact->email,
                 'group_name' => $contact->contactGroups->pluck('name')->implode('|'),
-                'category' => $contact->contactCategories->pluck('name')->implode('|'),
+                // فاصلة عربية لا أنبوب: هي ما يقرؤه المستخدم ويكتبه، والاستيراد
+                // يقبل الاثنين فلا ينكسر ملف قديم.
+                'category' => $contact->contactCategories->pluck('name')->implode('، '),
                 'street' => $address['street'] ?? null,
                 'city' => $address['city'] ?? null,
                 'state' => $address['state'] ?? null,

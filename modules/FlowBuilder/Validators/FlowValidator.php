@@ -245,10 +245,15 @@ class FlowValidator
         // Validate based on action type
         switch ($actionType) {
             case 'add_to_group':
-            case 'remove_from_group':
                 if (empty($config['group_id'])) {
                     $errors[] = 'Group ID is required for ' . $actionType . ' action.';
                 }
+                break;
+
+            // remove_from_group لم يعد يستقبل مجموعة: صار ينزع جهة الاتصال من
+            // كل مجموعات المنشأة ويعلّمها منسحبةً من التسويق. اشتراط مجموعة
+            // كان يجعل كل عقدة تخدم مجموعة واحدة — مئة مجموعة، مئة عقدة.
+            case 'remove_from_group':
                 break;
 
             case 'update_contact':

@@ -48,7 +48,10 @@
       
       <div class="text-xs text-gray-600 mb-2">
         <div>
-          <span class="font-medium">Remove from:</span> {{ getGroupName(config.group_id) }}
+          <span class="font-medium">Removes from:</span> All groups
+        </div>
+        <div class="text-gray-500 mt-1">
+          Marks the contact as opted out of marketing
         </div>
       </div>
       
@@ -85,27 +88,26 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Configuration</label>
               <div class="space-y-3">
-                <!-- Remove from Group -->
-                <div>
-                  <label class="block text-sm font-medium text-gray-700">Select Group</label>
-                  <FormSelect
-                    v-model="editForm.config.group_id"
-                    :options="availableGroups"
-                    placeholder="Select a group"
-                    required
-                  />
-                  <div v-if="availableGroups.length === 0" class="text-xs text-red-500 mt-1">
-                    No groups available. Please check if groups exist.
-                  </div>
-                </div>
-
-                <!-- What happens explanation -->
+                <!--
+                  لا اختيار مجموعة: الإجراء ينزع جهة الاتصال من كل مجموعات
+                  المنشأة. اشتراط مجموعة كان يعني عقدةً لكل مجموعة — مئة
+                  مجموعة، مئة عقدة متتالية.
+                -->
                 <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
                   <p class="text-xs text-gray-600 mb-1">
-                    <strong>What happens:</strong> The contact will be automatically removed from the selected group.
+                    <strong>What happens:</strong> The contact is removed from every group in this
+                    workspace, and marked as opted out of marketing.
                   </p>
                   <p class="text-xs text-gray-500">
-                    If the contact is not in the group, no action will be taken.
+                    Campaigns skip this contact from then on &mdash; including campaigns sent to
+                    everyone, and even if the contact is added back to a group later.
+                  </p>
+                </div>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p class="text-xs text-amber-800">
+                    <strong>Note:</strong> This cannot be undone from the flow. Re-subscribing a
+                    contact has to be done deliberately.
                   </p>
                 </div>
               </div>
@@ -143,9 +145,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
-import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'
 import FormCheckbox from '../../../../../../../../resources/js/Components/FormCheckbox.vue'
 
 const props = defineProps({
@@ -158,40 +159,24 @@ const { removeNodes } = useVueFlow()
 const node = useNode()
 
 // Inject contact groups from parent component
-const contactGroups = inject('contactGroups', [])
 
 const config = computed(() => props.data?.config || {})
 const isActive = computed(() => props.data?.is_active !== false)
 
 const showEditModal = ref(false)
-const availableGroups = computed(() => contactGroups || [])
 
-const actionName = computed(() => {
-  const actionConfig = config.value
-  
-  if (actionConfig.group_id) {
-    const group = availableGroups.value.find(g => g.value == actionConfig.group_id)
-    return group ? `Remove from ${group.label}` : `Remove from Group (ID: ${actionConfig.group_id})`
-  }
-  return 'Remove from Group'
-})
+// الاسم ثابت: الإجراء لم يعد يخصّ مجموعة بعينها.
+const actionName = computed(() => 'Remove from all groups')
 
 const editForm = reactive({
   config: {},
   is_active: true
 })
 
-const getGroupName = (groupId) => {
-  if (!groupId) return 'No group selected'
-  const group = availableGroups.value.find(g => g.value == groupId)
-  return group ? group.label : `Group ID: ${groupId}`
-}
-
 const toggleEdit = () => {
   // Initialize edit form with current values
-  editForm.config = {
-    group_id: config.value.group_id || ''
-  }
+  // الإعداد صار فارغاً: الإجراء لا يستقبل مجموعة.
+  editForm.config = {}
   editForm.is_active = isActive.value
   showEditModal.value = true
 }
@@ -205,7 +190,7 @@ const saveAction = () => {
   node.node.data = {
     ...node.node.data,
     actionType: 'remove_from_group',
-    config: editForm.config,
+    config: {},
     is_active: editForm.is_active
   }
   
