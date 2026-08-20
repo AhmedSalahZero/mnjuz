@@ -67,6 +67,7 @@ import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
 import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
+import { mergeChatIntoThread } from '@/Composables/mergeChatIntoThread'
 import AppLayout from './../Layout/App.vue'
 const props = defineProps({
 	rows: Array,
@@ -411,33 +412,13 @@ const generateNewMessage = (form) => {
 }
 
 const updateChatThread = (chat) => {
-	const wamId = chat[0].value.wam_id
-	const wamIdExists = chatThread.value.some(
-		(existingChat) => existingChat[0].value.wam_id === wamId,
-	)
-	if (!wamIdExists && chat[0].value.deleted_at == null) {
-		if (chat[0].tempMessageId) {
-			const tempChatIndex = chatThread.value.findIndex(
-				(item) => item[0].value.wam_id === chat[0].tempMessageId,
-			)
-			if (tempChatIndex !== -1) {
-				chatThread.value[tempChatIndex] = chat
-			} else {
-				// testing
-				chatThread.value.push(chat)
-			}
-		} else {
-			chatThread.value.push(chat)
-		}
+	// المنطق في دالّة نقيّة مفصولة: الرسالة تصل أكثر من مرّة (بثّ الإرسال ثم
+	// بثّ كل تغيّر حالة)، وترتيب وصولها غير مضمون — وهو ما كان يُنتج فقاعات
+	// مكرّرة. الفصل يجعل الدمج قابلاً للاختبار بلا Vue.
+	const { appended } = mergeChatIntoThread(chatThread.value, chat)
+
+	if (appended) {
 		setTimeout(scrollToBottom, 100)
-	} else {
-		const tempChatIndex = chatThread.value.findIndex(
-			(item) => item[0].value.wam_id === chat[0].tempMessageId,
-		)
-		if (tempChatIndex !== -1) {
-			chatThread.value[tempChatIndex] = chat
-		} else {
-		}
 	}
 }
 
