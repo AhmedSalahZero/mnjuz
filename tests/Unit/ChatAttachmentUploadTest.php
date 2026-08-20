@@ -191,15 +191,31 @@ class ChatAttachmentUploadTest extends TestCase
     }
 
     /**
-     * الإرسال تتابعاً: الخادم يبني رسالة لكل ملف، وإطلاقها معاً يقلب ترتيبها
-     * في المحادثة حسب أيّها انتهى أولاً.
+     * الترتيب مضمون بلا إرسال متعاقب.
+     *
+     * كان كل ملف يستهلك رحلة HTTP كاملة حفاظاً على الترتيب — ثلاثة ملفات ثلاث
+     * رحلات متعاقبة. صارت رحلة واحدة تحمل الملفات مرتّبةً، والخادم يُلقيها في
+     * الطابور بنفس الترتيب، فاجتمع الاختصار وضمان الترتيب.
      */
-    public function test_multiple_files_are_sent_one_after_another(): void
+    public function test_the_batch_travels_in_a_single_request(): void
+    {
+        $this->assertStringContainsString("await axios.post('/chats', formData)", $this->composer);
+        $this->assertStringContainsString("formData.append('files[]', item.file)", $this->composer);
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/for \(const \[index, item\] of queue\.entries\(\)\) \{[^}]*await sendMessage\(\)/s',
+            $this->composer,
+            'حلقة إرسال متعاقبة تُعيد البطء الذي أُصلح'
+        );
+    }
+
+    /** الملفات تُرفَق بترتيب اختيارها، فيصل العميل ما اختاره المرسِل بترتيبه. */
+    public function test_files_and_their_ids_stay_aligned(): void
     {
         $this->assertMatchesRegularExpression(
-            '/for \(const \[index, item\] of queue\.entries\(\)\) \{.*?await sendMessage\(\)/s',
+            "/queue\.forEach\(\(item, index\) => \{\s*\n\s*formData\.append\('files\[\]', item\.file\)\s*\n\s*formData\.append\('types\[\]', item\.type\)\s*\n\s*formData\.append\('tempMessageIds\[\]', tempIds\[index\]\)/",
             $this->composer,
-            'الإرسال داخل حلقة بـawait لا Promise.all'
+            'الملف ونوعه ومعرّفه المؤقّت يُرفَقون معاً بنفس الفهرس'
         );
     }
 
@@ -240,6 +256,60 @@ class ChatAttachmentUploadTest extends TestCase
     // ------------------------------------------------ الترجمة
 
     /**
+     * المشروع يستبدل الوسائط يدوياً (:name ثم replace)، لا بوسائط vue-i18n.
+     *
+     * تمرير كائن وسائط لا يفعل شيئاً هنا: النصّ يصل العميل بـ«:count» حرفياً
+     * كما ظهر فعلاً. هذا الحارس يمنع تكرارها في هذا الملحن.
+     */
+    public function test_placeholders_are_interpolated_the_way_this_project_does_it(): void
+    {
+        preg_match_all(
+            "/(?:\\\$t|trans)\\(\\s*'([^']*:[a-z]+[^']*)'\\s*(,)?/",
+            $this->composer,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        foreach ($matches as $match) {
+            $this->assertSame(
+                '',
+                $match[2] ?? '',
+                "النصّ «{$match[1]}» يمرّر وسائط لمترجم لا يقرؤها — استعمل .replace"
+            );
+        }
+    }
+
+    /**
+     * كل نصّ فيه وسيط يجب أن يُتبَع بـ.replace — في القالب كما في السكربت.
+     *
+     * الصيغة الأولى التي كُتبت مرّرت كائن وسائط، فظهر «Send :count files» حرفياً
+     * للمستخدم. الفحص هنا على النصّ نفسه لا على موضعه، فيلتقط السمة
+     * (:title="$t(...)") كما يلتقط الاستيفاء ({{ $t(...) }}).
+     */
+    public function test_no_placeholder_string_is_left_without_a_replace(): void
+    {
+        preg_match_all(
+            "/(?:\\\$t|trans)\\(\\s*'([^']*:[a-z]{2,}[^']*)'\\s*\\)(\\s*\\.replace\\()?/",
+            $this->composer,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        $unreplaced = [];
+        foreach ($matches as $match) {
+            if (($match[2] ?? '') === '') {
+                $unreplaced[] = $match[1];
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $unreplaced,
+            'وسيط يصل المستخدم حرفياً: ' . implode(' | ', $unreplaced)
+        );
+    }
+
+    /**
      * @dataProvider newStrings
      */
     public function test_every_new_string_is_translated(string $key): void
@@ -255,8 +325,6 @@ class ChatAttachmentUploadTest extends TestCase
         return array_map(fn ($s) => [$s], [
             'Drop files to send them',
             'Images, videos, audio and documents',
-            'Send file',
-            'Send :count files',
             'Add a caption...',
             'Remove',
             'Send',

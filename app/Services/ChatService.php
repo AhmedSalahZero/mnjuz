@@ -709,6 +709,13 @@ class ChatService
             (int) $this->organizationId
         );
 
+        // مرفقات متعدّدة في طلب واحد (اللصق والسحب والإفلات). كل ملف كان
+        // يستهلك رحلة HTTP كاملة، فثلاثة ملفات ثلاث رحلات متعاقبة. الرحلة
+        // الواحدة تضمن ترتيب الإرسال أيضاً: الوظائف تُلقى في الطابور بالترتيب.
+        if ($request->hasFile('files')) {
+            return $this->queueMediaBatch($request, $contact);
+        }
+
         if ($request->file('file')) {
 			$fileType = $request->type;
 			$caption = $this->resolveMediaCaption($request, $fileType);
@@ -801,6 +808,77 @@ class ChatService
         }
 
         return $this->whatsappService->sendMessage($contact->uuid, $message, auth()->user()->id);
+    }
+
+    /**
+     * إلقاء مرفقات طلب واحد في الطابور بالترتيب.
+     *
+     * مسار مستقلّ عن الملف المفرد عمداً: ذاك يخدم زرّ الاختيار وواجهة الـAPI
+     * ويحتمل الإرسال المتزامن (بلا tempMessageId)، ولمسه كان يعرّض مسارات
+     * قائمة للانكسار. هنا نقتصر على الحالة الوحيدة التي تُرسل دفعةً — من
+     * الملحن، ومعها دائماً معرّف مؤقّت لكل ملف.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function queueMediaBatch(object $request, Contact $contact)
+    {
+        $files = $request->file('files');
+        $files = is_array($files) ? $files : [$files];
+        $types = (array) $request->input('types', []);
+        $tempMessageIds = (array) $request->input('tempMessageIds', []);
+
+        if (count($tempMessageIds) !== count($files)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Something went wrong. Refresh the page and try again'),
+            ], 422);
+        }
+
+        $queued = 0;
+
+        foreach ($files as $index => $file) {
+            $fileType = $types[$index] ?? 'document';
+            $fileName = $file->getClientOriginalName();
+
+            // التعليق للأول وحده: تكراره على كل ملف يُغرق المحادثة.
+            $caption = $index === 0 ? $this->resolveMediaCaption($request, $fileType) : null;
+
+            $uploadBytes = file_get_contents($file->getRealPath());
+
+            // الصور فوق حدّ واتساب تُضغط قبل الرفع — نفس منطق الملف المفرد.
+            if ($fileType === 'image' && $file->getSize() > ImageCompressionService::IMAGE_MAX_BYTES) {
+                $compressed = ImageCompressionService::compressToLimit($file->getRealPath(), $file->getMimeType());
+                if ($compressed === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => __('Image is too large to send. Please use a smaller image.'),
+                    ], 422);
+                }
+                $uploadBytes = $compressed['contents'];
+                $fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.' . $compressed['extension'];
+            }
+
+            $extension = pathinfo($fileName, PATHINFO_EXTENSION);
+            $tempFilePath = 'temp/send-media/' . uniqid() . '_'
+                . Str::slug(pathinfo($fileName, PATHINFO_FILENAME)) . '.' . $extension;
+            Storage::disk('local')->put($tempFilePath, $uploadBytes);
+
+            SendMediaJob::dispatch(
+                $this->organizationId,
+                $contact->uuid,
+                $fileType,
+                $fileName,
+                $tempFilePath,
+                auth()->id(),
+                $tempMessageIds[$index],
+                $request->messageUUID,
+                $caption
+            )->onQueue('high');
+
+            $queued++;
+        }
+
+        return response()->json(['success' => true, 'queued' => $queued]);
     }
 
     private function resolveMediaCaption(object $request, ?string $mediaType): ?string

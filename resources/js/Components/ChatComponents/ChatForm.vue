@@ -477,15 +477,12 @@ const handleFileUpload = (event) => {
 	}
 	// Reset input so the same (or another) file can be selected again — otherwise 'change' may not fire next time
 	event.target.value = ''
-	const reader = new FileReader()
-	reader.onload = () => {
-		form.value.file = file
-		sendMessage()
-	}
-	reader.onerror = () => {
-		event.target.value = ''
-	}
-	reader.readAsDataURL(file)
+
+	// كان هنا FileReader يقرأ الملف كاملاً إلى base64 ثم يُرمى الناتج — لم
+	// يكن يُستعمل في أي موضع، وonload مجرّد مُشغِّل للإرسال. الكلفة نسخة
+	// ثانية من الملف في الذاكرة وتأخير قبل أن يبدأ الرفع أصلاً.
+	form.value.file = file
+	sendMessage()
 }
 
 /**
@@ -518,6 +515,8 @@ const serverMaxUploadBytes = computed(() => usePage().props.max_upload_bytes ?? 
 
 const isDraggingFile = ref(false)
 const pendingAttachments = ref([])
+/** المرفق المعروض كبيراً. شريط المصغّرات أسفله ينقّل بينها. */
+const activeAttachmentIndex = ref(0)
 const attachmentCaption = ref('')
 const sendingAttachments = ref(false)
 let dragDepth = 0
@@ -549,14 +548,14 @@ const buildAttachment = (file) => {
 
 	// حدّ الخادم أوّلاً: هو السقف الحقيقي مهما سمحت واتساب.
 	if (file.size > serverMaxUploadBytes.value) {
-		toast.error(trans('File is larger than the :size limit.', { size: humanSize(serverMaxUploadBytes.value) }))
+		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(serverMaxUploadBytes.value)))
 		return null
 	}
 
 	const spec = ACCEPTED_MEDIA[type]
 	// الصور فوق حدّ واتساب يضغطها الخادم، فلا نردّها هنا.
 	if (type !== 'image' && file.size > spec.maxBytes) {
-		toast.error(trans('File is larger than the :size limit.', { size: humanSize(spec.maxBytes) }))
+		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(spec.maxBytes)))
 		return null
 	}
 
@@ -577,7 +576,10 @@ const closeAttachmentPreview = () => {
 	releasePreviews()
 	pendingAttachments.value = []
 	attachmentCaption.value = ''
+	activeAttachmentIndex.value = 0
 }
+
+const activeAttachment = computed(() => pendingAttachments.value[activeAttachmentIndex.value] ?? null)
 
 const queueAttachments = (files) => {
 	if (!isInboundChatWithin24Hours.value || !files?.length) return
@@ -598,7 +600,14 @@ const queueAttachments = (files) => {
 const removeAttachment = (index) => {
 	const [removed] = pendingAttachments.value.splice(index, 1)
 	if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl)
-	if (!pendingAttachments.value.length) closeAttachmentPreview()
+
+	if (!pendingAttachments.value.length) {
+		closeAttachmentPreview()
+		return
+	}
+
+	// المعروض قد يكون هو المحذوف أو ما بعده، فنُعيد الفهرس داخل الحدود.
+	activeAttachmentIndex.value = Math.min(activeAttachmentIndex.value, pendingAttachments.value.length - 1)
 }
 
 /**
@@ -613,19 +622,46 @@ const sendAttachments = async () => {
 	const queue = [...pendingAttachments.value]
 	const caption = attachmentCaption.value.trim()
 
+	// فقاعات تفاؤلية بالترتيب أوّلاً: ترتيب العرض يتحدّد هنا لا بترتيب وصول
+	// الردود، فتظهر الملفات كما اختارها المرسِل مهما تفاوتت أحجامها.
+	const tempIds = queue.map(() => crypto.randomUUID())
+	queue.forEach((item, index) => {
+		form.value.file = item.file
+		form.value.type = item.type
+		// التعليق يُرفق بالأول وحده — تكراره على كل ملف يُغرق المحادثة.
+		form.value.message = index === 0 && caption !== '' ? caption : null
+		form.value.tempMessageId = tempIds[index]
+		appendMessageIntoBody(form)
+	})
+
+	const formData = new FormData()
+	formData.append('uuid', form.value.uuid)
+	if (caption !== '') {
+		formData.append('message', caption)
+	}
+	queue.forEach((item, index) => {
+		formData.append('files[]', item.file)
+		formData.append('types[]', item.type)
+		formData.append('tempMessageIds[]', tempIds[index])
+	})
+
 	try {
-		for (const [index, item] of queue.entries()) {
-			form.value.file = item.file
-			form.value.type = item.type
-			// التعليق يُرفق بالأول وحده — تكراره على كل ملف يُغرق المحادثة.
-			formTextInput.value = index === 0 && caption !== '' ? caption : null
-			await sendMessage()
-		}
+		// طلب واحد لكل المرفقات: كل ملف كان يستهلك رحلة HTTP كاملة، فثلاثة
+		// ملفات ثلاث رحلات متعاقبة. ورحلة واحدة تضمن ترتيب الإرسال أيضاً.
+		await axios.post('/chats', formData)
+		formTextInput.value = null
 		closeAttachmentPreview()
+	} catch (error) {
+		const message = error.response?.data?.message
+		if (message) toast.error(trans(message))
+		// نُزيل الفقاعات المتفائلة: لم يصل شيء.
+		tempIds.forEach((id) => emit('removeMessage', id))
 	} finally {
 		sendingAttachments.value = false
 		form.value.file = null
 		form.value.type = 'text'
+		form.value.message = null
+		form.value.tempMessageId = null
 	}
 }
 
@@ -1361,64 +1397,90 @@ onBeforeUnmount(() => {
 				</div>
 			</div>
 
-			<!-- معاينة المرفقات قبل الإرسال: اللصق والإفلات قد يقعان سهواً -->
+			<!--
+				معاينة المرفقات قبل الإرسال: اللصق والإفلات قد يقعان سهواً — لقطة شاشة
+				في الحافظة تُلصق بضغطة — فلا يُرسَل شيء قبل أن يراه المرسِل.
+				نافذة محدودة لا ملء شاشة: المحادثة تبقى ظاهرة خلفها فيعرف المرسِل
+				إلى أين يُرسل.
+			-->
 			<div v-if="pendingAttachments.length" class="fixed inset-0 z-[9999] flex items-center justify-center p-4"
 				role="dialog" aria-modal="true">
-				<div class="absolute inset-0 bg-black/40" @click="closeAttachmentPreview()"></div>
-				<div class="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-xl">
-					<div class="flex items-center justify-between border-b px-5 py-4">
-						<h3 class="text-base font-medium text-slate-800">
-							{{ pendingAttachments.length === 1 ? $t('Send file') : $t('Send :count files', { count: pendingAttachments.length }) }}
-						</h3>
-						<button type="button" class="text-slate-400 hover:text-slate-600"
+				<div class="absolute inset-0 bg-black/50" @click="closeAttachmentPreview()"></div>
+
+				<div class="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+					<div class="flex shrink-0 items-center gap-3 border-b px-4 py-3">
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-sm font-medium text-slate-800" dir="auto">
+								{{ activeAttachment?.file.name }}
+							</p>
+							<p class="text-xs text-slate-500">
+								{{ ((activeAttachment?.file.size ?? 0) / 1024 / 1024).toFixed(2) }} MB
+								<template v-if="pendingAttachments.length > 1">
+									· {{ activeAttachmentIndex + 1 }}/{{ pendingAttachments.length }}
+								</template>
+							</p>
+						</div>
+						<button type="button" class="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
 							@click="closeAttachmentPreview()" :aria-label="$t('Close')">
-							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+							<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
 								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
 									d="M6 6l12 12M18 6L6 18" />
 							</svg>
 						</button>
 					</div>
 
-					<div class="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-						<div v-for="(item, index) in pendingAttachments" :key="index"
-							class="flex items-center gap-3 rounded-lg border border-slate-200 p-3">
-							<img v-if="item.previewUrl" :src="item.previewUrl" alt=""
-								class="h-16 w-16 shrink-0 rounded object-cover" />
-							<div v-else
-								class="flex h-16 w-16 shrink-0 items-center justify-center rounded bg-slate-100 text-[11px] font-medium uppercase text-slate-500">
-								{{ (item.file.name.split('.').pop() || '?').slice(0, 4) }}
+					<div class="flex min-h-0 flex-1 items-center justify-center bg-slate-100 p-4">
+						<img v-if="activeAttachment?.previewUrl" :src="activeAttachment.previewUrl" alt=""
+							class="max-h-[40vh] max-w-full rounded-lg object-contain" />
+						<div v-else class="flex flex-col items-center gap-2 py-8 text-slate-500">
+							<div
+								class="flex h-20 w-16 items-center justify-center rounded-lg border-2 border-slate-300 bg-white text-sm font-medium uppercase">
+								{{ (activeAttachment?.file.name.split('.').pop() || '?').slice(0, 4) }}
 							</div>
-							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm text-slate-800" dir="auto">{{ item.file.name }}</p>
-								<p class="text-xs text-slate-500">
-									{{ (item.file.size / 1024 / 1024).toFixed(2) }} MB
-								</p>
-							</div>
-							<button type="button" class="shrink-0 text-slate-400 hover:text-red-600"
-								@click="removeAttachment(index)" :aria-label="$t('Remove')">
-								<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
-									<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
-										d="M6 6l12 12M18 6L6 18" />
-								</svg>
-							</button>
 						</div>
 					</div>
 
-					<div class="border-t px-5 py-4">
-						<input v-model="attachmentCaption" type="text" :placeholder="$t('Add a caption...')"
-							class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-primary focus:ring-primary"
+					<div v-if="pendingAttachments.length > 1"
+						class="flex shrink-0 gap-2 overflow-x-auto border-t bg-white px-4 py-2">
+						<button v-for="(item, index) in pendingAttachments" :key="index" type="button"
+							class="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border-2 transition"
+							:class="index === activeAttachmentIndex ? 'border-primary' : 'border-slate-200 opacity-70 hover:opacity-100'"
+							@click="activeAttachmentIndex = index">
+							<img v-if="item.previewUrl" :src="item.previewUrl" alt="" class="h-full w-full object-cover" />
+							<span v-else
+								class="flex h-full w-full items-center justify-center bg-slate-100 text-[10px] font-medium uppercase text-slate-500">
+								{{ (item.file.name.split('.').pop() || '?').slice(0, 4) }}
+							</span>
+							<span
+								class="absolute right-0 top-0 hidden h-4 w-4 items-center justify-center bg-black/70 text-white group-hover:flex"
+								@click.stop="removeAttachment(index)" :aria-label="$t('Remove')">
+								<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24">
+									<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="3"
+										d="M6 6l12 12M18 6L6 18" />
+								</svg>
+							</span>
+						</button>
+					</div>
+
+					<div class="flex shrink-0 items-center gap-2 border-t px-4 py-3">
+						<input v-model="attachmentCaption" type="text" :placeholder="$t('Add a caption...')" dir="auto"
+							class="min-w-0 flex-1 rounded-full border-slate-300 px-4 py-2 text-sm focus:border-primary focus:ring-primary"
 							@keydown.enter.prevent="sendAttachments()" />
-						<div class="mt-4 flex items-center justify-end gap-3">
-							<button type="button" class="rounded-md px-4 py-2 text-sm text-slate-600 hover:bg-slate-100"
-								@click="closeAttachmentPreview()">
-								{{ $t('Cancel') }}
-							</button>
-							<button type="button"
-								class="rounded-md bg-slate-900 px-5 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-40"
-								:disabled="sendingAttachments" @click="sendAttachments()">
-								{{ sendingAttachments ? $t('Sending...') : $t('Send') }}
-							</button>
-						</div>
+						<button type="button"
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white transition hover:opacity-90 disabled:opacity-40"
+							:disabled="sendingAttachments" @click="sendAttachments()"
+							:aria-label="$t('Send')" :title="$t('Send')">
+							<svg v-if="!sendingAttachments" xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+								viewBox="0 0 16 16">
+								<path fill="currentColor"
+									d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.69.953c.268.053.268.437 0 .49l-5.69.953a.5.5 0 0 0-.397.354l-1.403 4.85a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5Z" />
+							</svg>
+							<svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+								viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity="0.25" />
+								<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+							</svg>
+						</button>
 					</div>
 				</div>
 			</div>
