@@ -66,7 +66,7 @@ import Contact from '@/Components/ContactInfo.vue'
 import { usePage } from '@inertiajs/vue3'
 import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
-import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
 import { mergeChatIntoThread } from '@/Composables/mergeChatIntoThread'
 import AppLayout from './../Layout/App.vue'
@@ -100,8 +100,6 @@ const props = defineProps({
 
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
 const unsubscribeChatChannel = ref(null)
-const updateTotalUnreadMessages = inject('updateTotalUnreadMessages', null)
-
 // عند وصول رسالة جديدة والمحادثة مفتوحة بالفعل: علّمها كمقروءة على الخادم مباشرة
 // حتى لا تبقى غير مقروءة في قاعدة البيانات رغم أن الموظف يشاهدها الآن.
 const markCurrentConversationRead = debounce((uuid) => {
@@ -483,11 +481,11 @@ const updateSidePanel = async (chat, statusChanged) => {
 				created_at: inboundIso,
 				created_at_iso: inboundIso,
 			}
-			// إذا كانت المحادثة مفتوحة الآن فالرسالة تُقرأ مباشرة: لا نزيد العداد
-			// ونعلّمها كمقروءة على الخادم، ونعوّض العدّاد العام (App.vue يزيده تلقائياً).
+			// المحادثة مفتوحة الآن ⇒ الرسالة مقروءة: نعلّمها على الخادم ولا نزيد
+			// شارة المحادثة. والعدّاد العام لا يُعوَّض من هنا — App.vue ابنٌ لا
+			// سلف، فـinject لا يصله؛ صار يقرّر بنفسه من المسار.
 			if (isChatFormOpen) {
 				markCurrentConversationRead(contact.value.uuid)
-				if (updateTotalUnreadMessages) updateTotalUnreadMessages(1)
 			} else {
 				currentContact.unread_messages = currentContact.unread_messages + 1
 			}

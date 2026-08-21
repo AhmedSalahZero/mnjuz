@@ -45,6 +45,7 @@ import { default as axios } from 'axios'
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
+import { shouldCountAsUnread, shouldPlaySound } from '@/Composables/unreadBadge'
 import { getOrJoinChatChannel } from '../../../echo'
 import MobileSidebar from "./MobileSidebar.vue"
 import Sidebar from "./Sidebar.vue"
@@ -152,8 +153,12 @@ onMounted(() => {
 	)
 	subscribe((event) => {
 		const chat = event.chat
-		if (chat[0].value.deleted_at == null && chat[0].value.type === 'inbound') {
+
+		if (shouldPlaySound(chat)) {
 			playSound()
+		}
+
+		if (shouldCountAsUnread(chat, window.location.pathname)) {
 			unreadMessages.value += 1
 		}
 	})
