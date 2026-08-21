@@ -2254,8 +2254,14 @@ class ApiController extends Controller
         $arr = $chat instanceof \Illuminate\Database\Eloquent\Model ? $chat->toArray() : (array) $chat;
 
         $user = null;
+            // اسم المُرسِل كاملاً وحده: التطبيق يعرضه كما هو ولا يُركّب شيئاً،
+            // فالحقلان المنفصلان لا مستهلك لهما ووجودهما يُغري بتركيب مختلف
+            // عمّا يعرضه الداشبورد.
         if (!empty($arr['user']) && is_array($arr['user'])) {
-            $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
+            $user = [
+                'full_name' => trim((string) ($arr['user']['full_name']
+                    ?? (($arr['user']['first_name'] ?? '') . ' ' . ($arr['user']['last_name'] ?? '')))),
+            ];
         }
 
         $media = null;
@@ -2644,8 +2650,14 @@ class ApiController extends Controller
         $arr = $chat instanceof \Illuminate\Database\Eloquent\Model ? $chat->toArray() : (array) $chat;
 
         $user = null;
+            // اسم المُرسِل كاملاً وحده: التطبيق يعرضه كما هو ولا يُركّب شيئاً،
+            // فالحقلان المنفصلان لا مستهلك لهما ووجودهما يُغري بتركيب مختلف
+            // عمّا يعرضه الداشبورد.
         if (!empty($arr['user']) && is_array($arr['user'])) {
-            $user = array_intersect_key($arr['user'], array_flip(['first_name', 'last_name']));
+            $user = [
+                'full_name' => trim((string) ($arr['user']['full_name']
+                    ?? (($arr['user']['first_name'] ?? '') . ' ' . ($arr['user']['last_name'] ?? '')))),
+            ];
         }
 
         $media = null;
