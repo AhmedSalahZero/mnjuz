@@ -17,6 +17,17 @@ const sharedChannelEntries = new Map();
  */
 export function getEchoInstance(broadcast) {
     if (!echoInstance) {
+        // مفتاح غائب = اتصال يُبنى ويفشل بلا خطأ ظاهر: تُحفظ الرسائل ولا تصل
+        // لحظياً فيبدو النظام بطيئاً لا معطّلاً. حدث هذا فعلاً حين مُرِّر
+        // المفتاح نصّاً بدل كائن الإعداد، فصار الغياب يُعلَن.
+        if (!broadcast?.key) {
+            console.error(
+                '[Echo] إعداد البثّ ناقص — لن تصل الرسائل لحظياً.',
+                'المتوقَّع كائن {key, host?, port?, cluster?}، والوارد:',
+                broadcast,
+            );
+        }
+
         window.Pusher = Pusher;
 
         const options = {

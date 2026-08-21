@@ -54,6 +54,9 @@ const { rtlClass, isRtl } = useRtl()
 const viewTopBar = ref(true)
 const user = computed(() => usePage().props.auth.user)
 const config = computed(() => usePage().props.config)
+// إعداد البثّ يشاركه HandleInertiaRequests مع كل صفحة، فيتبع مفتاح التبديل
+// بلا إعادة بناء. قراءته من هنا تُبقي كل نقاط الاتصال على مصدر واحد.
+const broadcast = computed(() => usePage().props.broadcast)
 const organization = computed(() => usePage().props.organization)
 const organizations = computed(() => usePage().props.organizations)
 const adminOrganizationImpersonation = computed(() => usePage().props.admin_organization_impersonation)
@@ -92,11 +95,6 @@ watch(
 
 const toggleTopBar = () => {
 	viewTopBar.value = !viewTopBar.value
-}
-
-const getValueByKey = (key) => {
-	const found = config.value.find(item => item.key === key)
-	return found ? found.value : ''
 }
 
 const setupSound = () => {
@@ -150,8 +148,7 @@ onMounted(() => {
 	const { subscribe } = getOrJoinChatChannel(
 		organization.value.id,
 		user.value.id,
-		getValueByKey('pusher_app_key'),
-		getValueByKey('pusher_app_cluster')
+		broadcast.value,
 	)
 	subscribe((event) => {
 		const chat = event.chat

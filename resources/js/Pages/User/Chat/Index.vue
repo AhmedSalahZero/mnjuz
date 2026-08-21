@@ -63,6 +63,7 @@ import ChatHeader from '@/Components/ChatComponents/ChatHeader.vue'
 import ChatTable from '@/Components/ChatComponents/ChatTable.vue'
 import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
+import { usePage } from '@inertiajs/vue3'
 import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
 import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -554,7 +555,9 @@ onMounted(() => {
 		const { subscribe } = getOrJoinChatChannel(
 			props.organizationId,
 			props.user.id,
-			props.pusherSettings,
+			// المشتركة لا prop الصفحة: ChatController لا يمرّر pusherSettings،
+			// فكانت undefined — واتصال بلا مفتاح يفشل صامتاً.
+			usePage().props.broadcast,
 		)
 		unsubscribeChatChannel.value = subscribe((event) => {
 			updateSidePanel(event.chat, event.statusChanged)
