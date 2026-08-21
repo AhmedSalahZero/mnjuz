@@ -2,61 +2,51 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Config;
 use App\Models\Setting;
 use App\Services\Broadcasting\BroadcastProvider;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\ServiceProvider;
 
 class BroadcastConfigServiceProvider extends ServiceProvider
 {
-    /**
-     * Register services.
-     */
     public function register(): void
     {
         //
     }
 
-    /**
-     * Bootstrap services.
-     */
-    public function boot()
+    public function boot(): void
     {
+        // إعداد البثّ يُطبَّق دائماً، خارج بوّابة ENABLE_DATABASE_CONFIG.
+        //
+        // كان داخلها، والبوّابة مغلقة — فلم تُطبَّق قطّ. المواضع الثلاثة التي
+        // تستدعي apply() (خدمة واتساب، الويب هوك، PayPal) لا يعمل أيٌّ منها
+        // داخل وظيفة البثّ المُطابَرة، فكان العامل يبثّ إلى ما في .env مهما قال
+        // جدول الإعدادات: بُدّل المزوّد إلى Reverb، وظلّ الوارد يُبثّ إلى سحابة
+        // Pusher بينما المتصفّح يستمع إلى Reverb — تُحفظ الرسالة ولا تصل.
+        //
+        // التطبيق هنا آمن: BroadcastProvider يرتدّ إلى .env عند غياب الصفوف
+        // أو تعذّر القاعدة، فالبيئة غير المضبوطة تبقى كما كانت.
+        BroadcastProvider::apply();
+
+        // عامل الطابور عملية طويلة العمر تقرأ الإعدادات مرّة وتحتفظ بها. بلا
+        // هذا السطر يبقى على المزوّد القديم حتى يُعاد تشغيله يدوياً — تبديل
+        // نصفيّ: الداشبورد ينتقل والرسائل الخلفية لا. استعلام صغير قبل كل
+        // وظيفة ثمنٌ زهيد مقابل أن يكون التبديل لحظياً وكاملاً.
+        Queue::looping(function () {
+            BroadcastProvider::forget();
+            BroadcastProvider::apply();
+        });
+
         if (!env('ENABLE_DATABASE_CONFIG', false)) {
             return;
         }
 
-        // كان هنا ضبطٌ لمفاتيح Pusher مفردةً من جدول الإعدادات. صار عبر
-        // BroadcastProvider ليتشارك المصدر نفسه مع بقية المواضع، وليحمل
-        // العنوان والمنفذ — وهما ما يجعل التبديل إلى Reverb ممكناً.
+        // السائق الافتراضي (pusher / log / null) يبقى خلف البوّابة: تعطيل البثّ
+        // كلّياً من جدول الإعدادات قرار مختلف عن اختيار وجهته.
         $driver = trim((string) (Setting::where('key', 'broadcast_driver')->value('value') ?? ''));
         if ($driver !== '') {
             Config::set('broadcasting.default', $driver);
-        }
-
-        BroadcastProvider::apply();
-    }
-
-    /**
-     * Fetch Pusher settings from the database.
-     *
-     * @return array
-     */
-    private function getPusherSettings()
-    {
-        if (env('ENABLE_DATABASE_CONFIG', false)) {
-            // Fetch Pusher settings from the database
-            // Adjust this query based on your database schema
-            $broadcastSettings = Setting::whereIn('key', [
-                'broadcast_driver',
-                'pusher_app_key',
-                'pusher_app_secret',
-                'pusher_app_id',
-                'pusher_app_cluster',
-                // Add other Pusher settings keys as needed
-            ])->pluck('value', 'key')->toArray();
-
-            return $broadcastSettings;
         }
     }
 }

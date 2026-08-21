@@ -3,6 +3,8 @@
 namespace App\Services\Broadcasting;
 
 use App\Models\Setting;
+use Illuminate\Contracts\Broadcasting\Broadcaster as BroadcasterContract;
+use Illuminate\Contracts\Broadcasting\Factory as BroadcastingFactory;
 use Illuminate\Support\Facades\Config;
 
 /**
@@ -80,10 +82,42 @@ class BroadcastProvider
 
     /**
      * تطبيق الإعداد على وقت التشغيل. تستدعيها المواضع التي كانت تكتبه بنفسها.
+     *
+     * ولا يكفي ضبط الإعداد: مدير البثّ يبني عميل Pusher عند أوّل استعمال
+     * ويحتفظ به، فأي تغيير بعده يُتجاهَل بصمت. في php-fpm لا يظهر الأثر لأن كل
+     * طلب عملية جديدة، أمّا عامل الطابور فعملية طويلة العمر — يبني العميل مرّة
+     * ويظلّ يبثّ إلى الوجهة القديمة مهما بُدّل المزوّد. لذلك نُسقط العميل
+     * المحفوظ كلّما تغيّر الإعداد فعلاً.
      */
     public static function apply(): void
     {
-        Config::set(self::SLOT, self::connection());
+        $connection = self::connection();
+
+        // مقارنة قبل الكتابة: بلا تغيير لا نُسقط عميلاً يعمل — والدالّة
+        // تُستدعى مع كل إنشاء لخدمة واتساب.
+        if (Config::get(self::SLOT) === $connection) {
+            return;
+        }
+
+        Config::set(self::SLOT, $connection);
+
+        self::purgeDriver();
+    }
+
+    /** إسقاط عميل البثّ المحفوظ ليُبنى من جديد بالإعداد الحالي. */
+    private static function purgeDriver(): void
+    {
+        try {
+            $app = app();
+
+            // الوظيفة المُطابِرة تحلّ المُذيع عبر المدير، فإسقاطه من هناك هو
+            // ما يهمّ للبثّ. والمُفرَدة في الحاوية تخدم مسار المصادقة على
+            // القنوات — تُسقَط معها لئلّا يتناقض المساران.
+            $app->make(BroadcastingFactory::class)->purge('pusher');
+            $app->forgetInstance(BroadcasterContract::class);
+        } catch (\Throwable $e) {
+            // البثّ ميزة مساعدة: تعذّر إسقاط العميل لا يصحّ أن يُسقط ما حوله.
+        }
     }
 
     /**

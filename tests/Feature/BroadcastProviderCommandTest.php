@@ -196,16 +196,15 @@ class BroadcastProviderCommandTest extends TestCase
     }
 
     /**
-     * عامل الطابور عملية طويلة العمر تحتفظ بأول قراءة، فيبقى على المزوّد
-     * القديم حتى يُعاد تشغيله. التبديل بلا هذا التنبيه نصفيّ: الداشبورد ينتقل
-     * والرسائل الخلفية لا.
+     * ما لا يتبع التبديل وحده هو الصفحة المفتوحة: بنت اتصالها عند تحميلها.
+     * ذكره صراحةً يمنع تشخيصاً خاطئاً — «بدّلتُ ولم يصل شيء» وسببها تبويب قديم.
      */
-    public function test_it_reminds_to_restart_the_queue(): void
+    public function test_it_says_what_still_needs_a_reload(): void
     {
         $this->completeReverb();
 
         $this->artisan('broadcast:provider', ['provider' => 'reverb', '--no-test' => true])
-            ->expectsOutputToContain('queue:restart')
+            ->expectsOutputToContain('المتصفّحات المفتوحة تحتاج إعادة تحميل')
             ->assertExitCode(0);
     }
 
