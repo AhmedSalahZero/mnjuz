@@ -114,6 +114,7 @@
     </AppLayout>
 </template>
 <script setup>
+import { getEchoInstance } from '../../../echo';
     import AppLayout from "./../Layout/App.vue";
     import BillingTable from '@/Components/Tables/BillingTable.vue';
     import { Link, useForm, router } from "@inertiajs/vue3";
@@ -123,7 +124,6 @@
     import { redirectToPaymentGateway } from '@/Composables/usePaymentGatewayRedirect';
     import { ref, onMounted } from 'vue';
     import Echo from 'laravel-echo';
-    import Pusher from 'pusher-js';
 
     const props = defineProps([
         'subscription',
@@ -173,18 +173,12 @@
     };
 
     onMounted(() => {
-        //Pusher.logToConsole = true;
-        if(props.pusherSettings['pusher_app_key'] != null && props.pusherSettings['pusher_app_cluster'] != null){
-            window.Pusher = Pusher;
+        // نفس بنّاء المحادثات: اتصال واحد يتبع مفتاح التبديل. بناء Echo هنا
+        // بمفتاح وتجميعة كان يُبقي هذه الصفحة على السحابة بعد تبديل الباقي.
+        if (props.pusherSettings?.key) {
+            const echo = getEchoInstance(props.pusherSettings)
 
-            window.Echo = new Echo({
-                broadcaster: 'pusher',
-                key: props.pusherSettings['pusher_app_key'],
-                cluster: props.pusherSettings['pusher_app_cluster'],
-                encrypted: true,
-            });
-
-            window.Echo.channel('payments.ch' + props.organizationId).listen('NewPaymentEvent', (event) => {
+            echo.channel('payments.ch' + props.organizationId).listen('NewPaymentEvent', () => {
                 router.visit('/billing', {});
             });
         }

@@ -7,6 +7,7 @@ use App\Models\BillingPayment;
 use App\Models\BillingTransaction;
 use App\Models\PaymentGateway;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Models\User;
 use App\Services\SubscriptionService;
 use App\Traits\ConsumesExternalServices;
@@ -39,15 +40,9 @@ class PayPalService
         $this->clientId = $this->config->client_id;
         $this->clientSecret = $this->config->secret;
 
-        Config::set('broadcasting.connections.pusher', [
-            'driver' => 'pusher',
-            'key' => Setting::where('key', 'pusher_app_key')->value('value'),
-            'secret' => Setting::where('key', 'pusher_app_secret')->value('value'),
-            'app_id' => Setting::where('key', 'pusher_app_id')->value('value'),
-            'options' => [
-                'cluster' => Setting::where('key', 'pusher_app_cluster')->value('value'),
-            ],
-        ]);
+        // مصدر واحد يحمل المزوّد الفعّال بإعداده كاملاً — العنوان والمنفذ
+        // معه، فلا يعود البثّ إلى سحابة Pusher بمجرّد إعادة كتابة الإعداد.
+        BroadcastProvider::apply();
     }
 
     public function resolveAccessToken()

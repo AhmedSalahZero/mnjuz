@@ -13,6 +13,7 @@ use App\Models\ChatStatusLog;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Models\Template;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -43,20 +44,9 @@ class WhatsappService
         $this->phoneNumberId = $phoneNumberId;
         $this->wabaId = $wabaId;
         $this->organizationId = $organizationId;
-		$configs = [];
-		Setting::whereIn('key', ['pusher_app_key', 'pusher_app_secret', 'pusher_app_id', 'pusher_app_cluster'])->get()->each(function($setting) use (&$configs){
-			$configs[$setting->key] = $setting->value;
-		});
-
-        Config::set('broadcasting.connections.pusher', [
-            'driver' => 'pusher',
-            'key' => $configs['pusher_app_key'],
-            'secret' => $configs['pusher_app_secret'],
-            'app_id' => $configs['pusher_app_id'],
-            'options' => [
-                'cluster' => $configs['pusher_app_cluster'],
-            ],
-        ]);
+        // مصدر واحد يحمل المزوّد الفعّال بإعداده كاملاً — العنوان والمنفذ
+        // معه، فلا يعود البثّ إلى سحابة Pusher بمجرّد إعادة كتابة الإعداد.
+        BroadcastProvider::apply();
     }
 
 	/** نوع رسالة طلب الموقع كما نمرّره داخلياً إلى sendMessage. */

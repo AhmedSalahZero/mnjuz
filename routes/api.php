@@ -133,6 +133,9 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::post('/performance/heartbeat', [App\Http\Controllers\ApiController::class, 'performanceHeartbeat']);
 	Route::get('/list-teams', [App\Http\Controllers\ApiController::class, 'listTeamMembers']);
 
+	// إعداد البثّ: يسأله التطبيق عند كل فتح فيتبع تبديل المزوّد بلا إصدار جديد.
+	Route::get('/broadcast-config', [App\Http\Controllers\Api\BroadcastConfigController::class, 'show']);
+
 	Route::get('/shortcuts/available', [App\Http\Controllers\ApiController::class, 'listShortcutsAvailable']);
 	Route::get('/shortcuts', [App\Http\Controllers\ApiController::class, 'listShortcuts']);
 	Route::post('/shortcuts', [App\Http\Controllers\ApiController::class, 'storeShortcut']);

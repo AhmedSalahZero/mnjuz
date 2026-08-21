@@ -19,6 +19,7 @@ use App\Models\ContactField;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
@@ -234,10 +235,10 @@ class ChatService
 			$rowCount = $contactsPaginated->total();
 			$hasMoreContacts = $contactsPaginated->hasMorePages();
 			$nextContactsPage = $hasMoreContacts ? (int)$contactPage + 1 : null;
-			$pusherSettings = Setting::whereIn('key', [
-				'pusher_app_key',
-				'pusher_app_cluster',
-			])->pluck('value', 'key')->toArray();
+        // إعداد البثّ كما يحتاجه العميل: المفتاح والعنوان لا السرّ. يأتي من
+        // BroadcastProvider فيتبع مفتاح التبديل تلقائياً — تغيير المزوّد يظهر
+        // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء.
+			$pusherSettings = BroadcastProvider::clientConfig();
 			
 		}
 

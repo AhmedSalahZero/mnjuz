@@ -554,8 +554,7 @@ onMounted(() => {
 		const { subscribe } = getOrJoinChatChannel(
 			props.organizationId,
 			props.user.id,
-			props.pusherSettings.pusher_app_key,
-			props.pusherSettings.pusher_app_cluster,
+			props.pusherSettings,
 		)
 		unsubscribeChatChannel.value = subscribe((event) => {
 			updateSidePanel(event.chat, event.statusChanged)

@@ -6,21 +6,46 @@ let echoInstance = null;
 /** قنوات مشتركة: اسم القناة → { channel, handlers } — اشتراك فيزيائي واحد = طلب auth واحد */
 const sharedChannelEntries = new Map();
 
-export function getEchoInstance(pusherKey, pusherCluster) {
+/**
+ * اتصال البثّ. يقبل إعداد المزوّد كما يبنيه الخادم بدل مفتاح وتجميعة.
+ *
+ * السائق يبقى pusher مع المزوّدَين: Reverb يتكلّم بروتوكول Pusher. الفارق أن
+ * السحابة تشتقّ عنوانها من التجميعة، وReverb يحتاج عنواناً صريحاً — فتمرير
+ * التجميعة وحدها كان يجعل التبديل إليه مستحيلاً من الواجهة.
+ *
+ * @param {{key: string, cluster?: ?string, host?: ?string, port?: number, force_tls?: boolean}} broadcast
+ */
+export function getEchoInstance(broadcast) {
     if (!echoInstance) {
         window.Pusher = Pusher;
-        echoInstance = new Echo({
+
+        const options = {
             broadcaster: 'pusher',
-			authEndpoint: '/broadcasting/auth',
-			auth: {
-				headers: {
-					'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-				}
-			},
-            key: pusherKey,
-            cluster: pusherCluster,
+            authEndpoint: '/broadcasting/auth',
+            auth: {
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content,
+                },
+            },
+            key: broadcast?.key,
+            cluster: broadcast?.cluster ?? 'mt1',
             encrypted: true,
-        });
+        };
+
+        // عنوان صريح = خادمنا. غيابه يعني السحابة، فنترك المكتبة تشتقّ عنوانها
+        // من التجميعة كما كانت — تمرير عنوان مُخترَع هناك يكسر الاتصال.
+        if (broadcast?.host) {
+            const port = broadcast.port ?? 443;
+            const forceTLS = broadcast.force_tls !== false;
+
+            options.wsHost = broadcast.host;
+            options.wsPort = port;
+            options.wssPort = port;
+            options.forceTLS = forceTLS;
+            options.enabledTransports = ['ws', 'wss'];
+        }
+
+        echoInstance = new Echo(options);
     }
     return echoInstance;
 }
@@ -29,11 +54,10 @@ export function getEchoInstance(pusherKey, pusherCluster) {
  * اشتراك مشترك في قناة المحادثات: طلب auth واحد، ومعالجات متعددة.
  * @param {number} organizationId
  * @param {number} userId
- * @param {string} pusherKey
- * @param {string} pusherCluster
+ * @param {{key: string, cluster?: ?string, host?: ?string, port?: number, force_tls?: boolean}} broadcast
  * @returns {{ subscribe: (handler: (event: any) => void) => () => void }}
  */
-export function getOrJoinChatChannel(organizationId, userId, pusherKey, pusherCluster) {
+export function getOrJoinChatChannel(organizationId, userId, broadcast) {
     const name = `chats.ch${organizationId}.${userId}`;
     if (sharedChannelEntries.has(name)) {
         const entry = sharedChannelEntries.get(name);
@@ -45,7 +69,7 @@ export function getOrJoinChatChannel(organizationId, userId, pusherKey, pusherCl
         };
     }
 
-    const echo = getEchoInstance(pusherKey, pusherCluster);
+    const echo = getEchoInstance(broadcast);
     const channel = echo
         .join(name)
         .here(() => {})

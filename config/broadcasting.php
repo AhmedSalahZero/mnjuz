@@ -47,6 +47,29 @@ return [
             ],
         ],
 
+        /*
+         * خادم Reverb الخاص بنا. سائقه pusher لا reverb: Reverb يتكلّم بروتوكول
+         * Pusher، وسائق reverb يأتي مع حزمة laravel/reverb المخصّصة لتشغيل
+         * الخادم — وخادمنا منفصل فلا حاجة لها هنا.
+         *
+         * الاختيار بين هذا وPusher يجري في BroadcastProvider لا هنا.
+         */
+        'reverb' => [
+            'driver' => 'pusher',
+            'key' => env('REVERB_APP_KEY'),
+            'secret' => env('REVERB_APP_SECRET'),
+            'app_id' => env('REVERB_APP_ID'),
+            'options' => [
+                // Reverb لا يعرف التجميعات، لكن مكتبة pusher تشترط المفتاح.
+                'cluster' => 'mt1',
+                'host' => env('REVERB_HOST'),
+                'port' => env('REVERB_PORT', 443),
+                'scheme' => env('REVERB_SCHEME', 'https'),
+                'encrypted' => true,
+                'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
+            ],
+        ],
+
         'ably' => [
             'driver' => 'ably',
             'key' => env('ABLY_KEY'),

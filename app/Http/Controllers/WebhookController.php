@@ -12,6 +12,7 @@ use App\Jobs\ProcessTemplateStatusJob;
 
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Models\Template;
 use App\Resolvers\PaymentPlatformResolver;
 
@@ -34,15 +35,9 @@ class WebhookController extends BaseController
     {
         $this->paymentPlatformResolver = new PaymentPlatformResolver();
 
-        Config::set('broadcasting.connections.pusher', [
-            'driver' => 'pusher',
-            'key' => Setting::where('key', 'pusher_app_key')->value('value'),
-            'secret' => Setting::where('key', 'pusher_app_secret')->value('value'),
-            'app_id' => Setting::where('key', 'pusher_app_id')->value('value'),
-            'options' => [
-                'cluster' => Setting::where('key', 'pusher_app_cluster')->value('value'),
-            ],
-        ]);
+        // مصدر واحد يحمل المزوّد الفعّال بإعداده كاملاً — العنوان والمنفذ
+        // معه، فلا يعود البثّ إلى سحابة Pusher بمجرّد إعادة كتابة الإعداد.
+        BroadcastProvider::apply();
     }
 
     public function whatsappWebhook(Request $request)

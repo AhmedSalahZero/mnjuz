@@ -10,6 +10,7 @@ use App\Models\BillingPayment;
 use App\Models\Organization;
 use App\Models\PaymentGateway;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Models\Subscription;
 use App\Resolvers\PaymentPlatformResolver;
 use App\Services\BillingService;
@@ -47,10 +48,10 @@ class BillingController extends BaseController
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
         $data['title'] = __('Billing');
         $data['isPaymentLoading'] = false;
-        $data['pusherSettings'] = Setting::whereIn('key', [
-            'pusher_app_key',
-            'pusher_app_cluster',
-        ])->pluck('value', 'key')->toArray();
+        // إعداد البثّ كما يحتاجه العميل: المفتاح والعنوان لا السرّ. يأتي من
+        // BroadcastProvider فيتبع مفتاح التبديل تلقائياً — تغيير المزوّد يظهر
+        // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء.
+        $data['pusherSettings'] = BroadcastProvider::clientConfig();
         $data['setting'] = Setting::whereIn('key', ['enable_custom_payment'])->pluck('value', 'key')->toArray();
         $data['organizationId'] = $organizationId;
 

@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Config;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 
 class BroadcastConfigServiceProvider extends ServiceProvider
 {
@@ -21,19 +22,19 @@ class BroadcastConfigServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        if (env('ENABLE_DATABASE_CONFIG', false)) {
-            $broadcastSettings = $this->getPusherSettings();
-
-            Config::set('broadcasting.default', $broadcastSettings['broadcast_driver']);
-            Config::set('broadcasting.connections.pusher.key', $broadcastSettings['pusher_app_key']);
-            Config::set('broadcasting.connections.pusher.secret', $broadcastSettings['pusher_app_secret']);
-            Config::set('broadcasting.connections.pusher.app_id', $broadcastSettings['pusher_app_id']);
-            Config::set('broadcasting.connections.pusher.options.cluster', $broadcastSettings['pusher_app_cluster']);
-            // Set other pusher options as needed
-
-            // You can set other configuration values here
+        if (!env('ENABLE_DATABASE_CONFIG', false)) {
+            return;
         }
 
+        // كان هنا ضبطٌ لمفاتيح Pusher مفردةً من جدول الإعدادات. صار عبر
+        // BroadcastProvider ليتشارك المصدر نفسه مع بقية المواضع، وليحمل
+        // العنوان والمنفذ — وهما ما يجعل التبديل إلى Reverb ممكناً.
+        $driver = trim((string) (Setting::where('key', 'broadcast_driver')->value('value') ?? ''));
+        if ($driver !== '') {
+            Config::set('broadcasting.default', $driver);
+        }
+
+        BroadcastProvider::apply();
     }
 
     /**

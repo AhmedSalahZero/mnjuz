@@ -8,6 +8,7 @@ use App\Models\Chat;
 use App\Models\Language;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Models\Team;
 use App\Services\SubscriptionService;
 use Illuminate\Http\Request;
@@ -168,6 +169,8 @@ class HandleInertiaRequests extends Middleware
             'applicationVersion' => fn () => Config::get('version.version'),
             'applicationReleaseDate' => fn () => Config::get('version.release_date'),
             'config' => $config,
+            // إعداد البثّ للعميل — يتبع مفتاح التبديل بلا إعادة بناء.
+            'broadcast' => BroadcastProvider::clientConfig(),
             // أقصى حجم يقبله الخادم فعلاً. الملف الأكبر يرفضه PHP قبل بلوغ
             // Laravel، فتصل حمولة بلا ملف ويظنّ المستخدم أن الإرسال نجح.
             // نمرّره للواجهة لتردّ الملف مبكّراً برسالة تذكر الحدّ الحقيقي.
