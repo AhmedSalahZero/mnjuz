@@ -60,7 +60,20 @@ class BroadcastProvider
      */
     public static function connection(): array
     {
-        return self::active() === self::REVERB
+        return self::connectionFor(self::active());
+    }
+
+    /**
+     * إعداد مزوّد بعينه لا الفعّال — للعرض والمقارنة والتحقّق قبل التبديل.
+     *
+     * بلا هذه الدالّة كان لا بدّ من تبديل الصفّ مؤقتاً للاطّلاع على الوجهة
+     * الأخرى، وأي انقطاع بين الكتابتين يترك النظام مبدَّلاً بلا قصد.
+     *
+     * @return array<string, mixed>
+     */
+    public static function connectionFor(string $provider): array
+    {
+        return strtolower(trim($provider)) === self::REVERB
             ? self::reverbConnection()
             : self::pusherConnection();
     }
