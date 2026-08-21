@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Setting;
 use App\Providers\BroadcastConfigServiceProvider;
 use App\Services\Broadcasting\BroadcastProvider;
+use Illuminate\Broadcasting\Broadcasters\PusherBroadcaster;
 use Illuminate\Contracts\Broadcasting\Factory as BroadcastingFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Queue\Events\Looping;
@@ -123,11 +124,63 @@ class BroadcastRuntimeConfigTest extends TestCase
 
     // ------------------------------------------------- العطل الثاني
 
+    /** عنوان عميل Pusher داخل مُذيع محفوظ. */
+    private function clientHost(PusherBroadcaster $driver): ?string
+    {
+        $pusher = $driver->getPusher();
+        $settings = new \ReflectionProperty($pusher, 'settings');
+        $settings->setAccessible(true);
+
+        return $settings->getValue($pusher)['host'] ?? null;
+    }
+
     /**
-     * العميل المحفوظ يُسقَط عند تغيّر الإعداد، وإلّا ظلّ العامل يبثّ إلى
-     * الوجهة القديمة إلى أن يُعاد تشغيله.
+     * المُذيع المحفوظ يتبع الوجهة الجديدة، وإلّا ظلّ العامل يبثّ إلى القديمة
+     * إلى أن يُعاد تشغيله.
      */
-    public function test_a_cached_broadcast_client_is_dropped_when_the_connection_changes(): void
+    public function test_a_cached_broadcaster_follows_the_new_destination(): void
+    {
+        $this->usePusher();
+        BroadcastProvider::apply();
+
+        $driver = Broadcast::connection('pusher');
+        $this->assertSame('api-us2.pusher.com', $this->clientHost($driver));
+
+        $this->useReverb();
+        BroadcastProvider::apply();
+
+        $this->assertSame('reverb.mnjz.net', $this->clientHost(Broadcast::connection('pusher')));
+    }
+
+    /**
+     * الانحدار الذي أوقع 403: Broadcast::channel تُسجّل التفويض على كائن
+     * المُذيع، و BroadcastServiceProvider يفعل ذلك قبل هذا المزوّد. فإسقاط
+     * المُذيع عند التبديل كان يمحو كل القنوات — فلا تُطابق قناة، ويردّ
+     * /broadcasting/auth بـ403، ويفشل اشتراك المتصفّح بصمت.
+     */
+    public function test_switching_keeps_the_registered_channel_authorizations(): void
+    {
+        $this->usePusher();
+        BroadcastProvider::apply();
+
+        $driver = Broadcast::connection('pusher');
+        $driver->channel('probe.{id}', fn () => true);
+
+        $this->useReverb();
+        BroadcastProvider::apply();
+
+        $channels = new \ReflectionProperty(Broadcast::connection('pusher'), 'channels');
+        $channels->setAccessible(true);
+
+        $this->assertArrayHasKey(
+            'probe.{id}',
+            $channels->getValue(Broadcast::connection('pusher')),
+            'ضاع تفويض القناة عند التبديل — كل مصادقة ستردّ 403.'
+        );
+    }
+
+    /** والمُذيع نفسه يبقى كائناً واحداً: ما سُجّل عليه يبقى مسجّلاً. */
+    public function test_the_broadcaster_instance_survives_a_switch(): void
     {
         $this->usePusher();
         BroadcastProvider::apply();
@@ -137,13 +190,11 @@ class BroadcastRuntimeConfigTest extends TestCase
         $this->useReverb();
         BroadcastProvider::apply();
 
-        $after = Broadcast::connection('pusher');
-
-        $this->assertNotSame($before, $after, 'عميل البثّ لم يُعَد بناؤه — العامل سيبثّ إلى الوجهة القديمة.');
+        $this->assertSame($before, Broadcast::connection('pusher'));
     }
 
     /**
-     * وبلا تغيير لا يُسقَط شيء: apply() تُستدعى مع كل إنشاء لخدمة واتساب،
+     * وبلا تغيير لا يُلمَس شيء: apply() تُستدعى مع كل إنشاء لخدمة واتساب،
      * وإعادة بناء العميل في كل مرّة إهدارٌ لاتصال يعمل.
      */
     public function test_an_unchanged_connection_keeps_the_existing_client(): void
@@ -151,33 +202,12 @@ class BroadcastRuntimeConfigTest extends TestCase
         $this->usePusher();
         BroadcastProvider::apply();
 
-        $before = Broadcast::connection('pusher');
+        $before = Broadcast::connection('pusher')->getPusher();
 
         BroadcastProvider::forget();
         BroadcastProvider::apply();
 
-        $this->assertSame($before, Broadcast::connection('pusher'));
-    }
-
-    /** والمُفرَدة في الحاوية تُسقَط معها — مسار مصادقة القنوات يستعملها. */
-    public function test_the_container_singleton_is_dropped_too(): void
-    {
-        // المُفرَدة تحلّ الاتصال الافتراضي؛ في بيئة الاختبار هو null بينما هو
-        // pusher على الخوادم. بلا هذا السطر يقيس الاختبار مُذيعاً صامتاً.
-        Config::set('broadcasting.default', 'pusher');
-
-        $this->usePusher();
-        BroadcastProvider::apply();
-
-        $before = $this->app->make(\Illuminate\Contracts\Broadcasting\Broadcaster::class);
-
-        $this->useReverb();
-        BroadcastProvider::apply();
-
-        $this->assertNotSame(
-            $before,
-            $this->app->make(\Illuminate\Contracts\Broadcasting\Broadcaster::class)
-        );
+        $this->assertSame($before, Broadcast::connection('pusher')->getPusher());
     }
 
     // ------------------------------------------------ عامل الطابور

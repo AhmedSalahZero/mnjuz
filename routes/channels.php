@@ -2,6 +2,7 @@
 
 use App\Models\Team;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Log;
 
 /*
 |--------------------------------------------------------------------------
@@ -25,16 +26,34 @@ use Illuminate\Support\Facades\Broadcast;
  * User must be subscribing to their own channel and belong to the organization.
  */
 Broadcast::channel('chats.ch{organizationId}.{userId}', function ($user, $organizationId, $userId) {
-	if ((int) $user->id !== (int) $userId) {
+	// الرفض هنا يصل المتصفّح كـ403 عارٍ، والاشتراك يفشل بلا أثر: تُحفظ
+	// الرسائل ولا تصل لحظياً. تسجيل السبب يجعل العطل قابلاً للتشخيص بدل
+	// الاستدلال عليه من غياب الرسائل.
+	$refuse = function (string $reason) use ($user, $organizationId, $userId) {
+		Log::warning('Broadcast channel authorization refused', [
+			'reason'          => $reason,
+			'channel'         => 'chats.ch' . $organizationId . '.' . $userId,
+			'auth_user_id'    => $user->id,
+			'requested_user'  => $userId,
+			'organization_id' => $organizationId,
+		]);
+
 		return false;
+	};
+
+	if ((int) $user->id !== (int) $userId) {
+		return $refuse('requested another user\'s channel');
 	}
+
 	$belongsToOrg = Team::where('organization_id', (int) $organizationId)
 		->where('user_id', $user->id)
 		->whereNull('deleted_at')
 		->exists();
+
 	if (!$belongsToOrg) {
-		return false;
+		return $refuse('not a member of the organization');
 	}
+
 	return [
 		'id' => $user->id,
 	];

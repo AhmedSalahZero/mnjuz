@@ -3,7 +3,7 @@
 namespace App\Services\Broadcasting;
 
 use App\Models\Setting;
-use Illuminate\Contracts\Broadcasting\Broadcaster as BroadcasterContract;
+use Illuminate\Broadcasting\Broadcasters\PusherBroadcaster;
 use Illuminate\Contracts\Broadcasting\Factory as BroadcastingFactory;
 use Illuminate\Support\Facades\Config;
 
@@ -101,22 +101,39 @@ class BroadcastProvider
 
         Config::set(self::SLOT, $connection);
 
-        self::purgeDriver();
+        self::refreshDriver($connection);
     }
 
-    /** إسقاط عميل البثّ المحفوظ ليُبنى من جديد بالإعداد الحالي. */
-    private static function purgeDriver(): void
+    /**
+     * تحديث وجهة المُذيع المحفوظ — بتبديل عميله لا بإسقاطه.
+     *
+     * الإسقاط كان يبدو أنظف وكان عطلاً: Broadcast::channel تُسجّل تفويض القنوات
+     * على كائن المُذيع نفسه، و BroadcastServiceProvider يفعل ذلك عند الإقلاع
+     * قبل هذا المزوّد. فإسقاط المُذيع يمحو التسجيلات معه، فلا تُطابق أي قناة
+     * ويردّ /broadcasting/auth بـ403 — والمتصفّح يفشل اشتراكه بصمت: تُحفظ
+     * الرسائل ولا تصل لحظياً.
+     *
+     * تبديل العميل داخله يُبقي التسجيلات ويغيّر الوجهة.
+     *
+     * @param  array<string, mixed>  $connection
+     */
+    private static function refreshDriver(array $connection): void
     {
         try {
-            $app = app();
+            $manager = app(BroadcastingFactory::class);
 
-            // الوظيفة المُطابِرة تحلّ المُذيع عبر المدير، فإسقاطه من هناك هو
-            // ما يهمّ للبثّ. والمُفرَدة في الحاوية تخدم مسار المصادقة على
-            // القنوات — تُسقَط معها لئلّا يتناقض المساران.
-            $app->make(BroadcastingFactory::class)->purge('pusher');
-            $app->forgetInstance(BroadcasterContract::class);
+            // لا نطلب المُذيع إن لم يُنشأ بعد: إنشاؤه هنا قد يسبق تسجيل السائق
+            // المخصّص فيُحفَظ مُذيع بلا إعادة المحاولة. وغيابه لا يضرّ أصلاً —
+            // سيُبنى لاحقاً بالإعداد الذي كُتب للتوّ.
+            $drivers = new \ReflectionProperty($manager, 'drivers');
+            $drivers->setAccessible(true);
+            $driver = ($drivers->getValue($manager))['pusher'] ?? null;
+
+            if ($driver instanceof PusherBroadcaster) {
+                $driver->setPusher($manager->pusher($connection));
+            }
         } catch (\Throwable $e) {
-            // البثّ ميزة مساعدة: تعذّر إسقاط العميل لا يصحّ أن يُسقط ما حوله.
+            // البثّ ميزة مساعدة: تعذّر التحديث لا يصحّ أن يُسقط ما حوله.
         }
     }
 

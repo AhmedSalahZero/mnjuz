@@ -86,7 +86,15 @@ export function getOrJoinChatChannel(organizationId, userId, broadcast) {
         .here(() => {})
         .joining(() => {})
         .leaving(() => {})
-        .error(() => {});
+        // قناة حضور: الاشتراك يمرّ بـ/broadcasting/auth. ابتلاع خطئه كان يخفي
+        // الفشل تماماً — لا رسائل لحظية ولا سبب ظاهر، فيبدو النظام بطيئاً.
+        .error((error) => {
+            console.error('[Echo] فشل الاشتراك في ' + name, error);
+        });
+
+    echo.connector?.pusher?.connection?.bind('error', (error) => {
+        console.error('[Echo] خطأ اتصال البثّ', error);
+    });
 
     const handlers = new Set();
     channel.listen('NewChatEvent', (event) => {
