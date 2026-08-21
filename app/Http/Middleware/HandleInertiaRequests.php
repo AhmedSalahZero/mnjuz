@@ -61,7 +61,7 @@ class HandleInertiaRequests extends Middleware
         }
         
         $language = app()->getLocale();
-        $unreadMessages = 0;
+        $unreadMessages = fn () => 0;
         $tfaActive = false;
 
         if ($user) {
@@ -100,7 +100,11 @@ class HandleInertiaRequests extends Middleware
                 unset($organizationArray['metadata']);
                 $organization = $organizationArray;
             }
-            $unreadMessages = Chat::where('organization_id', $organizationId)
+            // العدّ مؤجَّل عمداً: Inertia تستدعي share() قبل المتحكّم، وفتح
+            // محادثة يعلّم رسائلها مقروءة داخله. الحساب هنا مباشرةً كان يُرجع
+            // عدد ما قبل القراءة، فيكتب فوق النقصان المتفائل في الواجهة ويبقى
+            // العدّاد ثابتاً حتى الطلب التالي. الإغلاق يُنفَّذ عند بناء الردّ.
+            $unreadMessages = fn () => Chat::where('organization_id', $organizationId)
                 ->where('type', 'inbound')
                 ->where('deleted_at', NULL)
                 ->where('is_read', 0)
