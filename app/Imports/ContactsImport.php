@@ -11,6 +11,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Services\PhoneService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
@@ -385,19 +386,52 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         return '-';
     }
 
+    /**
+     * قيم الحقول المخصّصة من صفّ الملف.
+     *
+     * المطابقة تحتاج أكثر من تهجئة واحدة: مكتبة الاستيراد تُمرّر عناوين
+     * الأعمدة على مُنسّق «slug» الذي **ينقل غير اللاتيني حرفياً** — فيصير عمود
+     * «الرقم القومي» مفتاحاً باسم alrkm_alkomy. وكنّا نبحث عن «الرقم_القومي»،
+     * فلا يُطابَق شيء: يرفع المستخدم ملفاً صحيحاً وتُهمَل كل حقوله العربية
+     * بصمت — بلا خطأ ولا سطر فاشل، وكأنه أخطأ في الإدخال.
+     *
+     * نجرّب التهجئتين: ما تُنتجه المكتبة فعلاً، والصيغة القديمة لمن كان يعمل.
+     */
     private function buildMetadataFromRow(array $row, array $contactFields): array
     {
         $metadata = [];
 
         foreach ($contactFields as $field) {
-            $normalizedField = strtolower(str_replace([' ', '-'], '_', $field));
-
-            if (isset($row[$normalizedField])) {
-                $metadata[$field] = $row[$normalizedField];
+            foreach (self::fieldColumnKeys($field) as $key) {
+                if (array_key_exists($key, $row)) {
+                    $metadata[$field] = $row[$key];
+                    continue 2;
+                }
             }
         }
 
         return $metadata;
+    }
+
+    /**
+     * تهجئات مفتاح العمود الممكنة لاسم حقل.
+     *
+     * ملاحظة: النقل الحرفي فاقد — «الهويه» و«الهوية» تُعطيان المفتاح نفسه.
+     * حقلان بالاسم نفسه بعد النقل يقرآن العمود ذاته، وهذا أفضل ما يمكن بلا
+     * تغيير مُنسّق العناوين عالمياً (وتغييره يكسر بقيّة المستوردات).
+     *
+     * @return array<int, string>
+     */
+    public static function fieldColumnKeys(string $field): array
+    {
+        $field = trim($field);
+
+        $keys = [
+            Str::slug($field, '_'),
+            strtolower(str_replace([' ', '-'], '_', $field)),
+        ];
+
+        return array_values(array_filter(array_unique($keys), static fn ($key) => $key !== ''));
     }
 
     /**

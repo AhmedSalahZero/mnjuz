@@ -198,11 +198,27 @@ class ProcessIncomingMessageJob implements ShouldQueue
         return [$contact, $contact->wasRecentlyCreated];
     }
 
+    /**
+     * اسم واتساب الظاهر يملأ الاسم الغائب.
+     *
+     * كان الشرط `=== null` وحده، وجهات الاتصال تُنشأ من مسارات شتّى: بعضها
+     * يترك الحقل NULL وبعضها يكتب سلسلة فارغة (الاستيراد، الإنشاء اليدوي).
+     * فمن وقع اسمه فارغاً بقي بلا اسم أبداً مهما راسلنا — يظهر «—» في
+     * المحادثات والتقييمات ولا شيء يصلحه. الفراغ غيابٌ لا قيمة.
+     */
     private function updateContactNameIfNull(Contact $contact): void
     {
-        if ($contact->first_name === null && isset($this->contactData['profile']['name'])) {
-            $contact->update(['first_name' => $this->contactData['profile']['name']]);
+        if (trim((string) $contact->first_name) !== '') {
+            return;
         }
+
+        $profileName = trim((string) ($this->contactData['profile']['name'] ?? ''));
+
+        if ($profileName === '') {
+            return;
+        }
+
+        $contact->update(['first_name' => $profileName]);
     }
 
     private function createChat($contact)

@@ -366,10 +366,10 @@ class Contact extends Model
         $firstName = $this->decodeUnicodeBytes($firstName);
         $lastName = $this->decodeUnicodeBytes($lastName);
 
-        // Return the full name combining first name and last name
-        return $firstName . ' ' . $lastName;
-
-        //return "{$this->first_name} {$this->last_name}";
+        // الاسمان فارغان ⇒ مسافة واحدة، وهي «اسم» يمرّ كل فحوص الفراغ: تظهر
+        // المحادثة بلا عنوان ويظنّ العارض أن للعميل اسماً. التشذيب يجعل
+        // الغياب غياباً صريحاً فيصحّ الارتداد إلى الرقم.
+        return trim($firstName . ' ' . $lastName);
     }
 
     public function getFormattedPhoneNumberAttribute($value)

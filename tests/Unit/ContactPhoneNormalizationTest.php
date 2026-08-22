@@ -101,6 +101,11 @@ class ContactPhoneNormalizationTest extends TestCase
      * حارس null «التنظيفي» في decodeUnicodeBytes حوّل "" إلى null، فرفض تطبيق
      * الموبايل تحويلها إلى نصّ وانكسر البحث في جهات الاتصال. المخرَج جزء من
      * العقد لا تفصيل داخلي.
+     *
+     * والاسم الكامل نصٌّ كذلك — لكنه فارغ لا مسافة. كان يُرجع ' ' فيمرّ كل
+     * فحوص الفراغ: يُعرض «اسماً» غير مرئي، ويمنع الارتداد إلى رقم الهاتف،
+     * ويظهر العميل بلا عنوان في المحادثات والتقييمات. العقد أنه نصّ غير معدوم،
+     * والمسافة كانت أثراً جانبياً لا مطلباً.
      */
     public function test_a_nameless_contact_returns_empty_strings_not_null(): void
     {
@@ -109,7 +114,18 @@ class ContactPhoneNormalizationTest extends TestCase
 
         $this->assertSame('', $contact->first_name);
         $this->assertSame('', $contact->last_name);
-        $this->assertSame(' ', $contact->full_name);
+
+        $this->assertIsString($contact->full_name);
+        $this->assertSame('', $contact->full_name);
+    }
+
+    /** واسمٌ واحد لا يجرّ خلفه مسافة تُفسد المطابقة والعرض. */
+    public function test_a_single_name_carries_no_trailing_space(): void
+    {
+        $contact = new Contact();
+        $contact->setRawAttributes(['id' => 1, 'first_name' => 'أحمد', 'last_name' => null]);
+
+        $this->assertSame('أحمد', $contact->full_name);
     }
 
     /** وحين يغيب المفتاح أصلاً: نصّ فارغ أيضاً، لا انهيار ولا null. */

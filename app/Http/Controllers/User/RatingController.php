@@ -58,11 +58,18 @@ class RatingController extends BaseController
             });
         }
 
-        $rows = (clone $query)->orderByDesc('submitted_at')->paginate(25)->withQueryString();
+        // العميل يُحمَّل مع الصفحة: قراءته صفّاً صفّاً تعني ٢٥ استعلاماً إضافياً.
+        $rows = (clone $query)
+            ->with('contact:id,first_name,last_name')
+            ->orderByDesc('submitted_at')
+            ->paginate(25)
+            ->withQueryString();
 
         $rows->getCollection()->transform(fn ($row) => [
             'uuid' => $row->uuid,
-            'contact_name' => $row->contact_name,
+            // اللقطة تُحفظ لحظة الطلب لتبقى بعد حذف العميل. لكن عميلاً بلا اسم
+            // وقتها قد يكون سُمّي بعدها — فنعرض اسمه الحالي بدل «—» بلا داعٍ.
+            'contact_name' => $row->contact_name ?: (trim((string) optional($row->contact)->full_name) ?: null),
             'contact_phone' => $row->contact_phone,
             'agent_name' => $row->agent_name,
             'rating' => $row->rating,
