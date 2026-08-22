@@ -22,6 +22,9 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 {
     private const MAX_FAILED_DETAILS = 500;
 
+    /** @var array<string, array<int, string>> اسم حقل الاختيار ← خياراته المسموحة */
+    private array $selectOptions = [];
+
     protected int $organizationId;
 
     protected int $userId;
@@ -53,9 +56,26 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     {
         $this->organizationId = (int) ($organizationId ?? session()->get('current_organization'));
         $this->userId = (int) ($userId ?? auth()->id() ?? 0);
-        $this->contactFields = ContactField::where('organization_id', $this->organizationId)
-            ->pluck('name')
-            ->toArray();
+        $definitions = ContactField::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->get(['name', 'type', 'value']);
+
+        $this->contactFields = $definitions->pluck('name')->toArray();
+
+        foreach ($definitions as $definition) {
+            if ($definition->type !== 'select') {
+                continue;
+            }
+
+            $options = array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) $definition->value)
+            ), static fn ($option) => $option !== ''));
+
+            if ($options !== []) {
+                $this->selectOptions[$definition->name] = $options;
+            }
+        }
         $this->contactLimit = $this->contactSubscriptionLimit($this->organizationId);
 
         if ($this->contactLimit > 0) {
@@ -135,6 +155,20 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             $existingContact = $this->findExistingContact($this->organizationId, $formattedPhone);
 
             $metadata = $this->buildMetadataFromRow($row, $this->contactFields);
+
+            // قيمة اختيار مجهولة تُحفظ ولا تُعرض، ويمحوها أوّل حفظ. نردّ الصفّ
+            // بسببٍ يذكر المسموح، فيُصحَّح ويُعاد رفعه بدل أن يُظنّ أنه نجح.
+            $unknownOptions = $this->unknownSelectValues($metadata);
+            if ($unknownOptions !== []) {
+                $this->recordFailedImport(
+                    $this->rowIdentifier($row, $formattedPhone),
+                    implode(' | ', $unknownOptions),
+                    'format'
+                );
+
+                return null;
+            }
+
             $address = json_encode([
                 'street'  => $this->nullableString($row['street'] ?? null),
                 'city'    => $this->nullableString($row['city'] ?? null),
@@ -404,13 +438,70 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         foreach ($contactFields as $field) {
             foreach (self::fieldColumnKeys($field) as $key) {
                 if (array_key_exists($key, $row)) {
-                    $metadata[$field] = $row[$key];
+                    $metadata[$field] = $this->normalizeFieldValue($field, $row[$key]);
                     continue 2;
                 }
             }
         }
 
         return $metadata;
+    }
+
+    /**
+     * قيمة حقل الاختيار مردودة إلى خيارٍ حقيقي حين تقاربه.
+     *
+     * الخيار يُطابَق تجاهلاً للمسافات وحالة الأحرف: «نعم » و«نعم» شيء واحد
+     * لمن يكتب في إكسل، ورفضهما تفريقاً بلا معنى. أمّا ما لا يطابق شيئاً فيبقى
+     * كما هو — ويُبلَّغ عنه في {@see model()} بدل أن يُحفظ بصمت.
+     */
+    private function normalizeFieldValue(string $field, mixed $value): mixed
+    {
+        $options = $this->selectOptions[$field] ?? null;
+
+        if ($options === null || $value === null || $value === '') {
+            return $value;
+        }
+
+        $needle = mb_strtolower(trim((string) $value));
+
+        foreach ($options as $option) {
+            if (mb_strtolower(trim($option)) === $needle) {
+                return $option;
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * قيم اختيار لا توجد بين خيارات حقلها.
+     *
+     * تُحفظ اليوم وتختفي: شاشة التعديل لا تجد خياراً يطابقها فتبدو فارغة،
+     * وأوّل حفظ يمحوها. فالسكوت عنها يخسر البيانات مرّتين — مرّة بلا علم
+     * ومرّة بلا أثر.
+     *
+     * @param  array<string, mixed>  $metadata
+     * @return array<int, string>
+     */
+    private function unknownSelectValues(array $metadata): array
+    {
+        $problems = [];
+
+        foreach ($this->selectOptions as $field => $options) {
+            $value = $metadata[$field] ?? null;
+
+            if ($value === null || $value === '' || in_array($value, $options, true)) {
+                continue;
+            }
+
+            $problems[] = __(':field: ":value" is not one of :options', [
+                'field' => $field,
+                'value' => (string) $value,
+                'options' => implode('، ', $options),
+            ]);
+        }
+
+        return $problems;
     }
 
     /**

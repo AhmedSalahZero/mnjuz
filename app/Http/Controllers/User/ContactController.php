@@ -10,6 +10,11 @@ use App\Jobs\ProcessContactsImportJob;
 use App\Models\Contact;
 use App\Models\ContactCategory;
 use App\Models\ContactField;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Services\SubscriptionService;
@@ -223,10 +228,11 @@ class ContactController extends BaseController
         $organizationId = $this->getCurrentOrganizationId();
         
         // Get custom contact fields for this organization
-        $customFields = ContactField::where('organization_id', $organizationId)
+        $fieldDefinitions = ContactField::where('organization_id', $organizationId)
             ->where('deleted_at', null)
-            ->pluck('name')
-            ->toArray();
+            ->get(['name', 'type', 'value']);
+
+        $customFields = $fieldDefinitions->pluck('name')->toArray();
 
         // Define the standard columns in the order specified
         $standardColumns = [
@@ -253,7 +259,10 @@ class ContactController extends BaseController
                 'last_name' => 'Doe',
                 'phone' => '+1234567890',
                 'email' => 'john.doe@example.com',
-                'group_name' => 'Customers',
+                // المجموعات تُفصَل بـ| لا بفاصلة: أسماء المجموعات تحتوي فواصل
+                // فعلاً في بيانات العملاء («Analysis, IT»)، فقبول الفاصلة كان
+                // يشطر مجموعة قائمة إلى اثنتين. المثال يُظهر الفاصل الصحيح.
+                'group_name' => 'Customers|VIP',
                 // مثال بتصنيفين: العمود اختياري، ويُترك فارغاً عند عدم الرغبة.
                 'category' => 'عميل محتمل، عميل خاص',
                 'street' => '123 Main St',
@@ -264,36 +273,118 @@ class ContactController extends BaseController
             ]
         ];
 
-        // Add custom field values to sample data
-        foreach ($customFields as $field) {
-            $sampleData[0][strtolower(str_replace(' ', '_', $field))] = 'Sample ' . $field;
-        }
-
-        // Create a temporary file
-        $tempFile = tempnam(sys_get_temp_dir(), 'contacts_template_');
-        
-        // Open file for writing
-        $handle = fopen($tempFile, 'w');
-
-        // UTF-8 BOM so Excel preserves Arabic characters when editing CSV
-        fwrite($handle, "\xEF\xBB\xBF");
-        
-        // Write headers
-        fputcsv($handle, $allColumns);
-        
-        // Write sample data
-        foreach ($sampleData as $row) {
-            $csvRow = [];
-            foreach ($allColumns as $column) {
-                $csvRow[] = $row[$column] ?? '';
+        // خيارات كل حقل اختيار، مفهرسة باسم العمود.
+        $selectOptions = [];
+        foreach ($fieldDefinitions as $definition) {
+            if ($definition->type !== 'select') {
+                continue;
             }
-            fputcsv($handle, $csvRow);
-        }
-        
-        fclose($handle);
 
-        // Return the file as download
-        return response()->download($tempFile, 'contacts_template.csv')->deleteFileAfterSend(true);
+            $options = array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) $definition->value)
+            ), static fn ($option) => $option !== ''));
+
+            if ($options !== []) {
+                $selectOptions[$definition->name] = $options;
+            }
+        }
+
+        // المثال يجب أن يكون قابلاً للرفع كما هو. «Sample …» في حقل اختيار قيمةٌ
+        // لا توجد بين خياراته: تُحفظ ولا تُعرض في شاشة التعديل — قيمة تختفي.
+        foreach ($customFields as $field) {
+            $sampleData[0][$field] = $selectOptions[$field][0] ?? ('Sample ' . $field);
+        }
+
+        $rows = [];
+        foreach ($sampleData as $row) {
+            $rows[] = array_map(static fn ($column) => $row[$column] ?? '', $allColumns);
+        }
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'contacts_template_') . '.xlsx';
+
+        self::writeTemplateWorkbook($tempFile, $allColumns, $rows, $selectOptions);
+
+        return response()->download($tempFile, 'contacts_template.xlsx')->deleteFileAfterSend(true);
+    }
+
+    /** عدد الصفوف التي تحمل قائمة منسدلة جاهزة في القالب. */
+    private const TEMPLATE_VALIDATED_ROWS = 500;
+
+    /**
+     * كتابة قالب الاستيراد بقوائم منسدلة حقيقية لحقول الاختيار.
+     *
+     * كان القالب CSV، وCSV نصٌّ خام لا يحمل قيوداً: يكتب المستخدم في عمود
+     * «هل العميل قام بالشراء» ما شاء — فتُحفظ قيمة ليست بين خيارات الحقل،
+     * ولا تُعرض في شاشة التعديل لأن لا خيار يطابقها. قيمة موجودة وغير مرئية،
+     * وهذا أسوأ من قيمة مرفوضة.
+     *
+     * الخيارات تُكتب في ورقة مخفية لا في صيغة مضمّنة: الصيغة المضمّنة محدودة
+     * بـ255 حرفاً وتنكسر عند الفاصلة، والخيارات العربية تتجاوزها سريعاً.
+     *
+     * @param  array<int, string>  $headers
+     * @param  array<int, array<int, string>>  $rows
+     * @param  array<string, array<int, string>>  $selectOptions اسم العمود ← خياراته
+     */
+    private static function writeTemplateWorkbook(string $path, array $headers, array $rows, array $selectOptions): void
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('contacts');
+        $sheet->setRightToLeft(app()->getLocale() === 'ar');
+
+        $sheet->fromArray($headers, null, 'A1');
+        if ($rows !== []) {
+            $sheet->fromArray($rows, null, 'A2');
+        }
+
+        $sheet->getStyle('A1:' . Coordinate::stringFromColumnIndex(count($headers)) . '1')
+            ->getFont()->setBold(true);
+
+        foreach ($headers as $index => $header) {
+            $sheet->getColumnDimensionByColumn($index + 1)->setAutoSize(true);
+        }
+
+        if ($selectOptions !== []) {
+            $lists = $spreadsheet->createSheet();
+            $lists->setTitle('options');
+
+            $listColumn = 0;
+            foreach ($selectOptions as $header => $options) {
+                $columnIndex = array_search($header, $headers, true);
+                if ($columnIndex === false) {
+                    continue;
+                }
+
+                $listColumn++;
+                $listLetter = Coordinate::stringFromColumnIndex($listColumn);
+                foreach ($options as $offset => $option) {
+                    $lists->setCellValue($listLetter . ($offset + 1), $option);
+                }
+
+                $source = sprintf("'options'!\$%s\$1:\$%s\$%d", $listLetter, $listLetter, count($options));
+                $letter = Coordinate::stringFromColumnIndex($columnIndex + 1);
+
+                for ($row = 2; $row <= self::TEMPLATE_VALIDATED_ROWS; $row++) {
+                    $validation = $sheet->getCell($letter . $row)->getDataValidation();
+                    $validation->setType(DataValidation::TYPE_LIST);
+                    $validation->setErrorStyle(DataValidation::STYLE_STOP);
+                    $validation->setAllowBlank(true);
+                    $validation->setShowDropDown(true);
+                    $validation->setShowErrorMessage(true);
+                    $validation->setErrorTitle(__('Invalid value'));
+                    $validation->setError(__('Choose one of the listed options.'));
+                    $validation->setFormula1($source);
+                }
+            }
+
+            // الورقة أداةٌ للقائمة لا بيانات؛ إظهارها يدعو إلى تحريرها.
+            $lists->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+            $spreadsheet->setActiveSheetIndex(0);
+        }
+
+        (new Xlsx($spreadsheet))->save($path);
+        $spreadsheet->disconnectWorksheets();
     }
 
     public function import(Request $request) {

@@ -44,14 +44,17 @@ class ContactPlaceholderService
         $transformedMetadata = [];
         if ($metadata) {
             foreach ($metadata as $key => $value) {
-                $transformedKey = strtolower(str_replace(' ', '_', $key));
+                $transformedKey = mb_strtolower(str_replace(' ', '_', trim((string) $key)));
                 $transformedMetadata[$transformedKey] = $value;
             }
         }
 
         $mergedData = array_merge($data, $transformedMetadata);
 
-        $message = preg_replace_callback('/\{url:(\w+)\}/', function ($matches) use ($mergedData) {
+        // المُعدِّل u ضروري: بدونه \w حروفٌ لاتينية فقط، فحقلٌ مخصّص باسم عربي
+        // مثل «عدد الطلبات» لا يُطابَق أبداً — يكتبه المستخدم {عدد_الطلبات}
+        // فيصل العميل الرمز كما هو، بلا خطأ يشير إلى السبب.
+        $message = preg_replace_callback('/\{url:([\w\x{0600}-\x{06FF}]+)\}/u', function ($matches) use ($mergedData) {
             $key = $matches[1];
             if (isset($mergedData[$key])) {
                 return rawurlencode((string) $mergedData[$key]);
@@ -60,7 +63,7 @@ class ContactPlaceholderService
             return $matches[0];
         }, $message);
 
-        return preg_replace_callback('/\{(\w+)\}/', function ($matches) use ($mergedData) {
+        return preg_replace_callback('/\{([\w\x{0600}-\x{06FF}]+)\}/u', function ($matches) use ($mergedData) {
             $key = $matches[1];
             if (isset($mergedData[$key])) {
                 return (string) $mergedData[$key];

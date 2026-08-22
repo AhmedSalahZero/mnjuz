@@ -232,14 +232,30 @@ class ContactCategoryImportExportTest extends TestCase
 
     // ------------------------------------------------ القالب
 
+    /**
+     * القالب صار مصنّف xlsx ليحمل قوائم منسدلة لحقول الاختيار — وCSV نصّ خام
+     * لا يحمل قيوداً. عمود التصنيفات ومثاله يجب أن يبقيا كما كانا.
+     */
     public function test_the_downloadable_template_shows_the_category_format(): void
     {
         $response = $this->get('/contacts/template');
         $response->assertOk();
 
-        $csv = file_get_contents($response->baseResponse->getFile()->getPathname());
+        $sheet = \PhpOffice\PhpSpreadsheet\IOFactory::load(
+            $response->baseResponse->getFile()->getPathname()
+        )->getSheetByName('contacts');
 
-        $this->assertStringContainsString('category', $csv, 'العمود يجب أن يكون في القالب');
-        $this->assertStringContainsString('عميل محتمل، عميل خاص', $csv, 'المثال يوضّح تعدّد التصنيفات');
+        $headers = array_values(array_filter($sheet->rangeToArray('A1:BZ1')[0]));
+        $index = array_search('category', $headers, true);
+
+        $this->assertNotFalse($index, 'العمود يجب أن يكون في القالب');
+
+        $letter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+
+        $this->assertSame(
+            'عميل محتمل، عميل خاص',
+            $sheet->getCell($letter . '2')->getValue(),
+            'المثال يوضّح تعدّد التصنيفات'
+        );
     }
 }

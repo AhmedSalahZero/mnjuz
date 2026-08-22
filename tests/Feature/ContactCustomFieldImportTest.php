@@ -45,16 +45,36 @@ class ContactCustomFieldImportTest extends TestCase
         $this->organization = Organization::factory()->create(['created_by' => $this->owner->id]);
     }
 
-    private function field(string $name): ContactField
+    private function field(string $name, string $type = 'text', ?string $value = null): ContactField
     {
         return ContactField::create([
             'uuid' => (string) Str::uuid(),
             'organization_id' => $this->organization->id,
             'name' => $name,
-            'type' => 'text',
+            'type' => $type,
+            'value' => $value,
             'required' => 0,
         ]);
     }
+
+    private const PURCHASE = 'هل العميل قام بالشراء';
+    private const PURCHASE_OPTIONS = 'نعم قام بالشراء, لا لم يقم بالشراء';
+
+    private function selectField(): ContactField
+    {
+        return $this->field(self::PURCHASE, 'select', self::PURCHASE_OPTIONS);
+    }
+
+    private function importRow(array $headersToValues): ?Contact
+    {
+        $import = new ContactsImport($this->organization->id, $this->owner->id);
+        $model = $import->model($this->rowFromHeaders($headersToValues));
+        $this->lastImport = $import;
+
+        return $model;
+    }
+
+    private ?ContactsImport $lastImport = null;
 
     /** الصفّ كما تسلّمه المكتبة: مفاتيحه عناوين مرّت على المُنسّق. */
     private function rowFromHeaders(array $headersToValues): array
@@ -209,5 +229,105 @@ class ContactCustomFieldImportTest extends TestCase
         $this->assertSame('1', $stored['هل العميل قام بالشراء']);
         $this->assertSame('1213654789', $stored['رقم الهويه مطعم صبا الفته']);
         $this->assertSame('1111111', $stored['الرقم القومي']);
+    }
+
+    // ------------------------------------------------ حقول الاختيار
+
+    /**
+     * جوهر المشكلة الثانية: قيمة خارج الخيارات كانت تُحفظ ثم تختفي — شاشة
+     * التعديل لا تجد خياراً يطابقها فتبدو فارغة، وأوّل حفظ يمحوها.
+     */
+    public function test_a_value_outside_the_options_is_rejected_with_its_reason(): void
+    {
+        $this->selectField();
+
+        $contact = $this->importRow([
+            'first_name' => 'John',
+            'phone' => '201025894987',
+            self::PURCHASE => '1',
+        ]);
+
+        $this->assertNull($contact, 'قيمة اختيار مجهولة مرّت بصمت.');
+
+        $failure = $this->lastImport->getFailedImports()[0]['error'] ?? '';
+        $this->assertStringContainsString('1', $failure);
+        $this->assertStringContainsString('نعم قام بالشراء', $failure, 'الرفض لا يذكر المسموح.');
+    }
+
+    public function test_a_listed_option_is_accepted(): void
+    {
+        $this->selectField();
+
+        $contact = $this->importRow([
+            'first_name' => 'John',
+            'phone' => '201025894987',
+            self::PURCHASE => 'نعم قام بالشراء',
+        ]);
+
+        $this->assertNotNull($contact);
+        $contact->save();
+
+        $stored = json_decode(Contact::find($contact->id)->metadata, true);
+        $this->assertSame('نعم قام بالشراء', $stored[self::PURCHASE]);
+    }
+
+    /** مسافات زائدة ليست خطأً: من يكتب في إكسل يتركها بلا قصد. */
+    public function test_surrounding_whitespace_still_matches_an_option(): void
+    {
+        $this->selectField();
+
+        $contact = $this->importRow([
+            'first_name' => 'John',
+            'phone' => '201025894987',
+            self::PURCHASE => '  نعم قام بالشراء  ',
+        ]);
+
+        $this->assertNotNull($contact);
+        $contact->save();
+
+        $stored = json_decode(Contact::find($contact->id)->metadata, true);
+        $this->assertSame('نعم قام بالشراء', $stored[self::PURCHASE], 'القيمة لم تُردّ إلى الخيار الحقيقي.');
+    }
+
+    public function test_case_differences_still_match_an_option(): void
+    {
+        $this->field('Status', 'select', 'Yes, No');
+
+        $contact = $this->importRow([
+            'first_name' => 'John',
+            'phone' => '201025894987',
+            'Status' => 'yes',
+        ]);
+
+        $this->assertNotNull($contact);
+        $contact->save();
+
+        $this->assertSame('Yes', json_decode(Contact::find($contact->id)->metadata, true)['Status']);
+    }
+
+    /** عمود اختيار متروك فارغاً لا يمنع الصفّ: الحقل غير مطلوب. */
+    public function test_an_empty_select_column_does_not_fail_the_row(): void
+    {
+        $this->selectField();
+
+        $this->assertNotNull($this->importRow([
+            'first_name' => 'John',
+            'phone' => '201025894987',
+            self::PURCHASE => '',
+        ]));
+    }
+
+    /** والحقول النصّية تقبل ما يُكتب فيها كما كانت. */
+    public function test_free_text_fields_are_not_constrained(): void
+    {
+        $this->field('الرقم القومي');
+
+        $contact = $this->importRow([
+            'first_name' => 'John',
+            'phone' => '201025894987',
+            'الرقم القومي' => '1111111',
+        ]);
+
+        $this->assertNotNull($contact);
     }
 }
