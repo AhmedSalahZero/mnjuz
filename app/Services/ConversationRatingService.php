@@ -30,6 +30,17 @@ class ConversationRatingService
 
     public const DEFAULT_MESSAGE = 'شكراً لتواصلك معنا 🌟 يسعدنا تقييمك لمستوى الخدمة: {rating_link}';
 
+    /** نصّ الزرّ الذي يفتح صفحة التقييم. */
+    public const DEFAULT_BUTTON_LABEL = 'تقييم مستوى الخدمة';
+
+    /**
+     * حدود واتساب لرسالة cta_url. تجاوزها يجعل Meta ترفض الطلب كلّه، فالقصّ
+     * هنا أفضل من استبيان لا يصل.
+     * https://developers.facebook.com/docs/whatsapp/cloud-api/messages/interactive-cta-url-button-messages
+     */
+    public const BUTTON_LABEL_MAX = 20;
+    public const BODY_MAX = 1024;
+
     /** التهدئة الافتراضية بالأيام بين طلبَي تقييم للعميل نفسه. 0 = بلا تهدئة. */
     public const DEFAULT_COOLDOWN_DAYS = 30;
 
@@ -64,9 +75,14 @@ class ConversationRatingService
             }
 
             $rating = self::createPending($contact, $agentId);
-            $message = self::buildMessage($organizationId, $contact, $rating, $settings);
 
-            $sent = self::send($organizationId, $contact, $message);
+            $sent = self::send(
+                $organizationId,
+                $contact,
+                self::buildBody($organizationId, $contact, $settings),
+                $settings['button_label'],
+                self::linkFor($rating)
+            );
             if (!$sent) {
                 // لا نُبقي رمزاً حيّاً لرابط لم يصل صاحبه أبداً.
                 $rating->forceDelete();
@@ -100,8 +116,21 @@ class ConversationRatingService
         return [
             'active' => !empty($ratings['active']),
             'message' => trim((string) ($ratings['message'] ?? '')) ?: self::DEFAULT_MESSAGE,
+            'button_label' => self::normalizeButtonLabel($ratings['button_label'] ?? null),
             'cooldown_days' => self::normalizeCooldown($ratings['cooldown_days'] ?? null),
         ];
+    }
+
+    /** نصّ الزرّ بعد القصّ إلى حدّ واتساب. الفارغ يعود إلى الافتراضي. */
+    public static function normalizeButtonLabel($value): string
+    {
+        $label = trim((string) ($value ?? ''));
+
+        if ($label === '') {
+            return self::DEFAULT_BUTTON_LABEL;
+        }
+
+        return mb_substr($label, 0, self::BUTTON_LABEL_MAX);
     }
 
     public static function normalizeCooldown($value): int
@@ -209,22 +238,39 @@ class ConversationRatingService
         return rtrim(config('app.url'), '/') . '/rate/' . $rating->token;
     }
 
-    private static function buildMessage(int $organizationId, Contact $contact, ConversationRating $rating, array $settings): string
+    /**
+     * متن الرسالة بلا الرابط — الرابط صار زرّاً.
+     *
+     * إبقاؤه نصّاً بجانب الزرّ يُكرّره ويُفقد الزرّ معناه، ويترك العميل أمام
+     * رابط طويل هو ما أردنا إخفاءه. ونحذف معه علامة الترقيم المعلّقة التي كانت
+     * تسبقه («… لمستوى الخدمة:») كي لا ينتهي المتن بنقطتين بلا ما بعدهما.
+     */
+    public static function buildBody(int $organizationId, Contact $contact, array $settings): string
     {
         $message = ContactPlaceholderService::replace($organizationId, $contact->uuid, $settings['message']);
+        $message = str_replace('{rating_link}', '', $message);
 
-        // نضع الرابط بعد بقية المتغيّرات كي لا يمرّ على ترميز الروابط.
-        $message = str_replace('{rating_link}', self::linkFor($rating), $message);
+        // روابط مكتوبة يدوياً في النصّ تبقى — قد تكون مقصودة لغرض آخر.
+        $message = preg_replace('/[ \t]+/u', ' ', (string) $message);
+        $message = trim((string) preg_replace('/\s*[:：\-–—]\s*$/u', '', trim((string) $message)));
 
-        // نصٌّ بلا رابط استبيانٌ بلا فائدة — نُلحقه بدل أن نُرسل رسالة عرجاء.
-        if (!str_contains($message, self::linkFor($rating))) {
-            $message = rtrim($message) . "\n" . self::linkFor($rating);
+        // متنٌ فارغ يجعل Meta ترفض الرسالة، فنعود إلى النصّ الافتراضي.
+        if ($message === '') {
+            $message = trim(str_replace('{rating_link}', '', self::DEFAULT_MESSAGE));
+            $message = trim((string) preg_replace('/\s*[:：]\s*$/u', '', $message));
         }
 
-        return $message;
+        return mb_substr($message, 0, self::BODY_MAX);
     }
 
-    private static function send(int $organizationId, Contact $contact, string $message): bool
+    /**
+     * إرسال الاستبيان زرّاً يفتح صفحة التقييم.
+     *
+     * كان نصّاً يحمل رابطاً طويلاً؛ الزرّ يخفي الرابط ويجعل الضغط خطوة واحدة.
+     * وإن رفضت Meta الرسالة التفاعلية لأي سبب نرتدّ إلى النصّ: استبيانٌ أقلّ
+     * أناقة خيرٌ من استبيان لا يصل، والارتداد يقع فقط بعد فشل مُعلَن.
+     */
+    private static function send(int $organizationId, Contact $contact, string $body, string $buttonLabel, string $link): bool
     {
         $config = Organization::find($organizationId)?->metadata;
         $config = $config ? json_decode($config, true) : [];
@@ -245,7 +291,36 @@ class ConversationRatingService
             $organizationId
         );
 
-        $response = $service->sendMessage($contact->uuid, $message, null, 'text');
+        $sentAsButton = self::succeeded($service->sendMessage(
+            $contact->uuid,
+            $body,
+            null,
+            self::INTERACTIVE_CTA_URL,
+            ['display_text' => $buttonLabel, 'url' => $link]
+        ));
+
+        if ($sentAsButton) {
+            return true;
+        }
+
+        Log::info('Conversation rating: CTA button rejected, falling back to text', [
+            'organization_id' => $organizationId,
+            'contact_id' => $contact->id,
+        ]);
+
+        return self::succeeded($service->sendMessage(
+            $contact->uuid,
+            rtrim($body) . "\n" . $link,
+            null,
+            'text'
+        ));
+    }
+
+    /** نوع الرسالة التفاعلية كما يسمّيه WhatsappService. */
+    private const INTERACTIVE_CTA_URL = 'interactive call to action url';
+
+    private static function succeeded($response): bool
+    {
         $payload = is_object($response) && method_exists($response, 'getData')
             ? (array) $response->getData(true)
             : (array) $response;

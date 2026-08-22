@@ -258,39 +258,15 @@ class WhatsappService
 			// خلافاً لبقية الأنواع التفاعلية، وإرسالهما يجعل Meta ترفض الطلب.
 			// https://developers.facebook.com/documentation/business-messaging/whatsapp/messages/location-request-messages/
 			$requestData = array_merge($requestData, self::buildLocationRequestPayload($contact->phone, clean($messageContent)));
-		} else if ($type == 'interactive buttons' || $type == 'interactive call to action url' || $type == 'interactive list') {
-			$requestData['type'] = 'interactive';
-			if ($type == 'interactive buttons') {
-				$requestData['interactive']['type'] = 'button';
-			} else if ($type == 'interactive call to action url') {
-				$requestData['interactive']['type'] = 'cta_url';
-			} else if ($type == 'interactive list') {
-				$requestData['interactive']['type'] = 'list';
-			}
-			if ($type == 'interactive buttons') {
-				foreach ($buttons as $button) {
-					$requestData['interactive']['action']['buttons'][] = [
-						'type' => 'reply',
-						'reply' => [
-							'id' => $button['id'],
-							'title' => $button['title'],
-						],
-					];
-				}
-			} else if ($type == 'interactive call to action url') {
-				$requestData['interactive']['action']['name'] = 'cta_url';
-				$requestData['interactive']['action']['parameters'] = $buttons;
-			} else if ($type == 'interactive list') {
-				$requestData['interactive']['action']['sections'] = $buttons;
-				$requestData['interactive']['action']['button'] = $buttonLabel;
-			}
-			if (!empty($header)) {
-				$requestData['interactive']['header'] = $header;
-			}
-			$requestData['interactive']['body']['text'] = clean($messageContent);
-			if ($footer != null) {
-				$requestData['interactive']['footer'] = ['text' => clean($footer)];
-			}
+		} else if (in_array($type, self::INTERACTIVE_TYPES, true)) {
+			$requestData = array_merge($requestData, self::buildInteractivePayload(
+				$type,
+				clean($messageContent),
+				$buttons,
+				$header,
+				$footer !== null ? clean($footer) : null,
+				$buttonLabel
+			));
 		}
 
 		$responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
@@ -302,6 +278,9 @@ class WhatsappService
 			$response = ['text' => ['body' => clean($messageContent)], 'type' => 'text'];
 			if ($type === self::TYPE_LOCATION_REQUEST) {
 				$response['location_request'] = true;
+			}
+			if ($type === self::CTA_URL) {
+				$response = self::ctaUrlMetadata(clean($messageContent), $buttons) ?? $response;
 			}
 			if ($type === self::TYPE_LOCATION) {
 				// نفس شكل الموقع الوارد بالضبط (ChatMetadataHelper) — الفقاعة
@@ -2178,6 +2157,90 @@ class WhatsappService
     }
 
     // Private method to send an HTTP request
+	/** أنواع الرسائل التفاعلية التي تُبنى بالشكل نفسه. */
+	public const INTERACTIVE_TYPES = ['interactive buttons', 'interactive call to action url', 'interactive list'];
+
+	public const CTA_URL = 'interactive call to action url';
+
+	/**
+	 * حمولة الرسالة التفاعلية كما ترسلها Meta.
+	 *
+	 * ساكنة ومنفصلة عن الإرسال — كبنّاءات الموقع — ليُختبر ما يصل واتساب فعلاً
+	 * بلا شبكة. الشكل حسّاس: مفتاح زائد أو ناقص يجعل Meta ترفض الطلب كلّه،
+	 * ورفضها يمرّ صامتاً في مسار لا يراقبه أحد.
+	 *
+	 * @param  array<string, mixed>  $buttons أزرار ردّ، أو معاملات cta_url، أو أقسام قائمة
+	 * @return array<string, mixed>
+	 */
+	public static function buildInteractivePayload(
+		string $type,
+		string $body,
+		array $buttons = [],
+		array $header = [],
+		?string $footer = null,
+		?string $buttonLabel = null
+	): array {
+		$interactive = [];
+
+		if ($type === 'interactive buttons') {
+			$interactive['type'] = 'button';
+			foreach ($buttons as $button) {
+				$interactive['action']['buttons'][] = [
+					'type' => 'reply',
+					'reply' => [
+						'id' => $button['id'],
+						'title' => $button['title'],
+					],
+				];
+			}
+		} elseif ($type === self::CTA_URL) {
+			$interactive['type'] = 'cta_url';
+			$interactive['action']['name'] = 'cta_url';
+			$interactive['action']['parameters'] = $buttons;
+		} elseif ($type === 'interactive list') {
+			$interactive['type'] = 'list';
+			$interactive['action']['sections'] = $buttons;
+			$interactive['action']['button'] = $buttonLabel;
+		}
+
+		if (!empty($header)) {
+			$interactive['header'] = $header;
+		}
+
+		$interactive['body']['text'] = $body;
+
+		if ($footer !== null) {
+			$interactive['footer'] = ['text' => $footer];
+		}
+
+		return ['type' => 'interactive', 'interactive' => $interactive];
+	}
+
+	/**
+	 * ما يُحفظ في سجلّ المحادثة عن رسالة زرّ الرابط.
+	 *
+	 * العميل يستلم متناً وزرّاً؛ حفظ المتن وحده يترك الموظّف أمام رسالة ناقصة
+	 * لا يعرف إلى أين تُفضي. نُلحق الوجهة بالمتن ونحفظ الزرّ في علامة مستقلّة.
+	 *
+	 * @param  array<string, mixed>  $parameters معاملات cta_url
+	 * @return array<string, mixed>|null
+	 */
+	public static function ctaUrlMetadata(string $body, array $parameters): ?array
+	{
+		$url = trim((string) ($parameters['url'] ?? ''));
+		if ($url === '') {
+			return null;
+		}
+
+		$label = trim((string) ($parameters['display_text'] ?? ''));
+
+		return [
+			'type' => 'text',
+			'text' => ['body' => trim($body) . "\n\n" . ($label !== '' ? $label . ': ' : '') . $url],
+			'cta_url' => ['display_text' => $label, 'url' => $url],
+		];
+	}
+
     private function sendHttpRequest($method, $url, $data = [], $headers = [])
     {
         $client = new Client();

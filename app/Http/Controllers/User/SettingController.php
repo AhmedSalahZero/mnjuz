@@ -257,6 +257,7 @@ class SettingController extends BaseController
                 'settings' => $settings,
                 'modules' => Addon::get(),
                 'ratingSurvey' => \App\Services\ConversationRatingService::settings((int) session()->get('current_organization')),
+                'ratingButtonLabelMax' => \App\Services\ConversationRatingService::BUTTON_LABEL_MAX,
                 'ratingLinkValidDays' => \App\Models\ConversationRating::LINK_VALID_DAYS,
                 'ratingMaxCooldownDays' => \App\Services\ConversationRatingService::MAX_COOLDOWN_DAYS,
             ]);
@@ -281,6 +282,9 @@ class SettingController extends BaseController
             $metadataArray['ratings']['message'] = $ratingMessage !== ''
                 ? $ratingMessage
                 : \App\Services\ConversationRatingService::DEFAULT_MESSAGE;
+            $metadataArray['ratings']['button_label'] = \App\Services\ConversationRatingService::normalizeButtonLabel(
+                $request->input('rating_survey_button_label')
+            );
             $metadataArray['ratings']['cooldown_days'] = \App\Services\ConversationRatingService::normalizeCooldown(
                 $request->input('rating_survey_cooldown_days')
             );

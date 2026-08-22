@@ -198,10 +198,21 @@
                   rows="3"
                   class="block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 text-sm"></textarea>
                 <div class="text-xs text-slate-500 mt-1">
-                  {{ $t('Use {rating_link} where the link should appear. Contact fields such as {first_name} work too.') }}
+                  {{ $t('The link is sent as a button, so {rating_link} is not needed in the text. Contact fields such as {first_name} work.') }}
                 </div>
                 <div class="text-xs text-slate-500">
                   {{ $t('The link works once and expires after {days} days.', { days: props.ratingLinkValidDays }) }}
+                </div>
+
+                <label class="block text-sm text-gray-900 mt-4 mb-1">{{ $t('Button text') }}</label>
+                <input
+                  v-model="form.rating_survey_button_label"
+                  type="text"
+                  :maxlength="props.ratingButtonLabelMax"
+                  :placeholder="props.ratingSurvey?.button_label"
+                  class="block w-full sm:w-72 rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 text-sm" />
+                <div class="text-xs text-slate-500 mt-1">
+                  {{ $t('WhatsApp allows :max characters at most.').replace(':max', props.ratingButtonLabelMax) }}
                 </div>
 
                 <label class="block text-sm text-gray-900 mt-4 mb-1">{{ $t('Days before the same customer is asked again') }}</label>
@@ -236,7 +247,7 @@ import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
-const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays'])
+const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays', 'ratingButtonLabelMax'])
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 
@@ -278,6 +289,7 @@ const form = useForm({
   encrypt_contacts_for_agents: settings.value?.tickets?.encrypt_contacts_for_agents ?? false,
   rating_survey_active: props.ratingSurvey?.active ?? false,
   rating_survey_message: props.ratingSurvey?.message ?? '',
+  rating_survey_button_label: props.ratingSurvey?.button_label ?? '',
   rating_survey_cooldown_days: props.ratingSurvey?.cooldown_days ?? 30,
 })
 
