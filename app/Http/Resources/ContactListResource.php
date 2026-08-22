@@ -86,7 +86,19 @@ class ContactListResource extends JsonResource
             } else {
                 $out['interactive'] = $i;
             }
-        } elseif (in_array($type, ['image', 'document', 'video', 'audio', 'sticker', 'location'], true)) {
+        } elseif ($type === 'document') {
+            // المستند وحده يحتاج تفصيلاً: المعاينة تعرض صيغته. الوارد يحفظ
+            // filename والصادر يحفظ mime_type، فنُبقي الاثنين — إسقاطهما كان
+            // يجعل كل مستند يظهر «Unknown ملف» مهما كان نوعه.
+            $out = ['type' => $type];
+            $document = $decoded['document'] ?? [];
+            if (! empty($document['mime_type'])) {
+                $out['document']['mime_type'] = $document['mime_type'];
+            }
+            if (! empty($document['filename'])) {
+                $out['document']['filename'] = mb_substr((string) $document['filename'], 0, self::PREVIEW_MAX_LENGTH);
+            }
+        } elseif (in_array($type, ['image', 'video', 'audio', 'sticker', 'location'], true)) {
             $out = ['type' => $type];
         } elseif ($type === 'contacts' && isset($decoded['contacts'])) {
             $out['contacts'] = $decoded['contacts'];

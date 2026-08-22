@@ -1,4 +1,5 @@
 <script setup>
+import { documentPreviewLabel } from '@/Composables/documentPreview'
 import Pagination from '@/Components/Pagination.vue'
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
@@ -137,6 +138,7 @@ const contentType = (metadata) => {
 	}
 }
 
+// تسمية المستند: منطقٌ مشترك ومُختبَر بدل قراءة مباشرة داخل القالب.
 const content = (metadata) => {
 	try {
 		if (metadata == null || typeof metadata !== 'string') return {}
@@ -146,20 +148,7 @@ const content = (metadata) => {
 	}
 }
 
-const getExtension = (fileFormat) => {
-	const formatMap = {
-		'text/plain': 'TXT',
-		'application/pdf': 'PDF',
-		'application/vnd.ms-powerpoint': 'PPT',
-		'application/msword': 'DOC',
-		'application/vnd.ms-excel': 'XLS',
-		'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-		'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-		'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-	}
 
-	return formatMap[fileFormat] || 'Unknown'
-}
 
 const getContactDisplayName = (metadata) => {
 	try {
@@ -572,7 +561,7 @@ watch(
 											<path fill="currentColor"
 												d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
 										</svg>
-										<span class="ml-2">{{ getExtension(item.contact?.last_chat?.metadata?.type) }}
+										<span class="ml-2">{{ documentPreviewLabel(content(item.contact?.last_chat?.metadata)) }}
 											{{ $t('File') }}</span>
 									</div>
 								</div>
