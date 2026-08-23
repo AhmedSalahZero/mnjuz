@@ -4,6 +4,8 @@ import axios from 'axios'
 import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourComposeBanner.vue'
+import UploadProgressIndicator from '@/Components/ChatComponents/UploadProgressIndicator.vue'
+import { initUploadQueue } from '@/Composables/uploadQueue'
 import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
 import LocationPicker from '@/Components/LocationPicker.vue'
 import { usePage } from '@inertiajs/vue3'
@@ -13,6 +15,11 @@ import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 
 const trans = useTrans()
+
+// الطابور مشترك على مستوى الوحدة: يبقى حيّاً بعد أن يترك الموظّف هذه المحادثة،
+// فيكمل الرفع بدل أن يموت مع المكوّن.
+const uploads = initUploadQueue({ post: (url, data, config) => axios.post(url, data, config) })
+const uploadsExpanded = ref(false)
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
 const processingForm = ref(null)
@@ -518,7 +525,6 @@ const pendingAttachments = ref([])
 /** المرفق المعروض كبيراً. شريط المصغّرات أسفله ينقّل بينها. */
 const activeAttachmentIndex = ref(0)
 const attachmentCaption = ref('')
-const sendingAttachments = ref(false)
 let dragDepth = 0
 
 /** نوع الملف من امتداده لا من MIME: المتصفّحات تختلف في MIME الملفات المكتبية. */
@@ -614,11 +620,18 @@ const removeAttachment = (index) => {
  * الإرسال تتابعاً لا تفرّعاً: الخادم يبني رسالة لكل ملف، وإرسالها معاً يقلب
  * ترتيبها في المحادثة حسب أيّها انتهى أولاً.
  */
-const sendAttachments = async () => {
-	if (!pendingAttachments.value.length || sendingAttachments.value) return
+/**
+ * تسليم المرفقات إلى طابور الخلفية.
+ *
+ * كانت تنتظر بـawait والنافذة مفتوحة فوق الشاشة، فيبقى الموظّف محبوساً حتى
+ * يرتفع آخر بايت: لا يفتح محادثة أخرى ولا يردّ على عميل ينتظر. الآن تُنشئ
+ * الفقاعات التفاؤلية، تُسلّم الملفات للطابور، وتُغلق النافذة فوراً — والرفع
+ * يكمل في الخلفية ويتابعه المؤشّر عند صندوق الرسائل.
+ */
+const sendAttachments = () => {
+	if (!pendingAttachments.value.length) return
 	if (!isInboundChatWithin24Hours.value) return
 
-	sendingAttachments.value = true
 	const queue = [...pendingAttachments.value]
 	const caption = attachmentCaption.value.trim()
 
@@ -634,35 +647,50 @@ const sendAttachments = async () => {
 		appendMessageIntoBody(form)
 	})
 
-	const formData = new FormData()
-	formData.append('uuid', form.value.uuid)
-	if (caption !== '') {
-		formData.append('message', caption)
-	}
-	queue.forEach((item, index) => {
-		formData.append('files[]', item.file)
-		formData.append('types[]', item.type)
-		formData.append('tempMessageIds[]', tempIds[index])
+	// طلب واحد لكل المرفقات: كل ملف كان يستهلك رحلة HTTP كاملة، فثلاثة ملفات
+	// ثلاث رحلات متعاقبة. ورحلة واحدة تضمن ترتيب الإرسال أيضاً.
+	uploads.enqueue({
+		contactUuid: form.value.uuid,
+		contactName: props.contact?.full_name || props.contact?.phone || '',
+		files: queue.map((item) => ({ file: item.file, type: item.type })),
+		caption,
+		tempIds,
+		// الإخفاق يُزيل الفقاعات: إبقاؤها يوهم الموظّف أن الملف وصل العميل.
+		onFailure: (ids) => ids.forEach((id) => emit('removeMessage', id)),
 	})
 
-	try {
-		// طلب واحد لكل المرفقات: كل ملف كان يستهلك رحلة HTTP كاملة، فثلاثة
-		// ملفات ثلاث رحلات متعاقبة. ورحلة واحدة تضمن ترتيب الإرسال أيضاً.
-		await axios.post('/chats', formData)
-		formTextInput.value = null
-		closeAttachmentPreview()
-	} catch (error) {
-		const message = error.response?.data?.message
-		if (message) toast.error(trans(message))
-		// نُزيل الفقاعات المتفائلة: لم يصل شيء.
-		tempIds.forEach((id) => emit('removeMessage', id))
-	} finally {
-		sendingAttachments.value = false
-		form.value.file = null
-		form.value.type = 'text'
-		form.value.message = null
-		form.value.tempMessageId = null
-	}
+	formTextInput.value = null
+	closeAttachmentPreview()
+
+	form.value.file = null
+	form.value.type = 'text'
+	form.value.message = null
+	form.value.tempMessageId = null
+}
+
+/** إعادة محاولة مهمّة أخفقت: فقاعات جديدة ثم تسليمها للطابور من جديد. */
+const retryUpload = (job) => {
+	// الطلب الأصلي من المخزن لا من المهمّة: ملفاته غير ملفوفة بوكيل تفاعلي.
+	const request = uploads.requestFor(job.id)
+	const tempIds = job.fileNames.map(() => crypto.randomUUID())
+
+	job.fileNames.forEach((name, index) => {
+		const source = request?.files?.[index]
+		if (!source) return
+
+		form.value.file = source.file
+		form.value.type = source.type
+		form.value.message = index === 0 && job.caption !== '' ? job.caption : null
+		form.value.tempMessageId = tempIds[index]
+		appendMessageIntoBody(form)
+	})
+
+	form.value.file = null
+	form.value.type = 'text'
+	form.value.message = null
+	form.value.tempMessageId = null
+
+	uploads.retry(job.id, tempIds)
 }
 
 /**
@@ -965,6 +993,16 @@ onBeforeUnmount(() => {
 				@view-template="viewTemplate()"
 				@send-auth-template="sendAuthTemplate()"
 			/>
+			<UploadProgressIndicator
+				:jobs="uploads.jobs.value"
+				:percent="uploads.percent.value"
+				:file-count="uploads.fileCount.value"
+				:expanded="uploadsExpanded"
+				@toggle="uploadsExpanded = !uploadsExpanded"
+				@retry="retryUpload"
+				@cancel="(job) => uploads.cancel(job.id)"
+				@dismiss="(job) => uploads.dismiss(job.id)"
+			/>
 			<div
 				class="flex items-center py-4 md:py-2 pl-2 pr-2"
 				:class="[
@@ -1113,6 +1151,16 @@ onBeforeUnmount(() => {
 				:sending-auth-template="sendingAuthTemplate"
 				@view-template="viewTemplate()"
 				@send-auth-template="sendAuthTemplate()"
+			/>
+			<UploadProgressIndicator
+				:jobs="uploads.jobs.value"
+				:percent="uploads.percent.value"
+				:file-count="uploads.fileCount.value"
+				:expanded="uploadsExpanded"
+				@toggle="uploadsExpanded = !uploadsExpanded"
+				@retry="retryUpload"
+				@cancel="(job) => uploads.cancel(job.id)"
+				@dismiss="(job) => uploads.dismiss(job.id)"
 			/>
 			<div class="p-4" :class="!isInboundChatWithin24Hours ? 'pointer-events-none opacity-40' : ''">
 			<div>
@@ -1468,17 +1516,12 @@ onBeforeUnmount(() => {
 							@keydown.enter.prevent="sendAttachments()" />
 						<button type="button"
 							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white transition hover:opacity-90 disabled:opacity-40"
-							:disabled="sendingAttachments" @click="sendAttachments()"
+							@click="sendAttachments()"
 							:aria-label="$t('Send')" :title="$t('Send')">
-							<svg v-if="!sendingAttachments" xmlns="http://www.w3.org/2000/svg" width="18" height="18"
+							<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
 								viewBox="0 0 16 16">
 								<path fill="currentColor"
 									d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.69.953c.268.053.268.437 0 .49l-5.69.953a.5.5 0 0 0-.397.354l-1.403 4.85a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5Z" />
-							</svg>
-							<svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="18" height="18"
-								viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity="0.25" />
-								<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
 							</svg>
 						</button>
 					</div>

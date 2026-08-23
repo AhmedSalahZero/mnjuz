@@ -2,8 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Http\Middleware\HandleInertiaRequests;
-use ReflectionMethod;
+use App\Helpers\ChatMediaUploadHelper;
 use Tests\TestCase;
 
 /**
@@ -19,21 +18,24 @@ class ChatAttachmentUploadTest extends TestCase
 {
     private string $composer;
 
+    /**
+     * الرفع انتقل إلى طابور خلفيّ ليكفّ عن حجب الشاشة، فبناء الطلب صار هناك.
+     * النيّة المحروسة لم تتغيّر — طلب واحد، وترتيب محفوظ — وموضعها تغيّر.
+     */
+    private string $uploadQueue;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->composer = file_get_contents(
-            dirname(__DIR__, 2) . '/resources/js/Components/ChatComponents/ChatForm.vue'
-        );
+        $root = dirname(__DIR__, 2);
+        $this->composer = file_get_contents($root . '/resources/js/Components/ChatComponents/ChatForm.vue');
+        $this->uploadQueue = file_get_contents($root . '/resources/js/Composables/uploadQueue.js');
     }
 
     private function maxUploadBytes(): int
     {
-        $method = new ReflectionMethod(HandleInertiaRequests::class, 'maxUploadBytes');
-        $method->setAccessible(true);
-
-        return $method->invoke(null);
+        return ChatMediaUploadHelper::phpMaxUploadBytes();
     }
 
     // ------------------------------------------------- حدّ الرفع
@@ -77,7 +79,7 @@ class ChatAttachmentUploadTest extends TestCase
         $source = file_get_contents(base_path('app/Http/Middleware/HandleInertiaRequests.php'));
 
         $this->assertStringContainsString(
-            "'max_upload_bytes' => self::maxUploadBytes()",
+            "'max_upload_bytes' => \\App\\Helpers\\ChatMediaUploadHelper::phpMaxUploadBytes()",
             $source,
             'بلا تمريره تظلّ الواجهة تقبل ملفاً يرفضه الخادم صامتاً'
         );
@@ -199,8 +201,8 @@ class ChatAttachmentUploadTest extends TestCase
      */
     public function test_the_batch_travels_in_a_single_request(): void
     {
-        $this->assertStringContainsString("await axios.post('/chats', formData)", $this->composer);
-        $this->assertStringContainsString("formData.append('files[]', item.file)", $this->composer);
+        $this->assertStringContainsString("post('/chats', formData", $this->uploadQueue);
+        $this->assertStringContainsString("formData.append('files[]', item.file)", $this->uploadQueue);
 
         $this->assertDoesNotMatchRegularExpression(
             '/for \(const \[index, item\] of queue\.entries\(\)\) \{[^}]*await sendMessage\(\)/s',
@@ -213,8 +215,8 @@ class ChatAttachmentUploadTest extends TestCase
     public function test_files_and_their_ids_stay_aligned(): void
     {
         $this->assertMatchesRegularExpression(
-            "/queue\.forEach\(\(item, index\) => \{\s*\n\s*formData\.append\('files\[\]', item\.file\)\s*\n\s*formData\.append\('types\[\]', item\.type\)\s*\n\s*formData\.append\('tempMessageIds\[\]', tempIds\[index\]\)/",
-            $this->composer,
+            "/files\.forEach\(\(item, index\) => \{\s*\n\s*formData\.append\('files\[\]', item\.file\)\s*\n\s*formData\.append\('types\[\]', item\.type\)\s*\n\s*formData\.append\('tempMessageIds\[\]', job\.tempIds\[index\]\)/",
+            $this->uploadQueue,
             'الملف ونوعه ومعرّفه المؤقّت يُرفَقون معاً بنفس الفهرس'
         );
     }
@@ -230,12 +232,20 @@ class ChatAttachmentUploadTest extends TestCase
         );
     }
 
-    /** النافذة المغلقة لا يجوز أن تقبل الإرسال، والمرسِل لا يُستدعى مرّتين. */
+    /**
+     * النافذة الفارغة لا تُرسِل، والضغط المزدوج لا يُرسل مرّتين.
+     *
+     * حارس الإرسال المزدوج كان راية `sendingAttachments`، ولزمته يوم كانت
+     * الدالّة تنتظر الشبكة. الآن هي متزامنة تماماً: أوّل نداء يُفرغ المرفقات
+     * قبل أن يعود، فالنداء الثاني يخرج على الفراغ. الحارس صار الفراغ نفسه —
+     * والرمي بالراية مع بقاء الانتظار هو ما يجب ألّا يحدث.
+     */
     public function test_sending_is_guarded_against_empty_and_double_submission(): void
     {
         $this->assertMatchesRegularExpression(
-            '/if \(!pendingAttachments\.value\.length \|\| sendingAttachments\.value\) return/',
-            $this->composer
+            '/const sendAttachments = \(\) => \{\s*\n\s*if \(!pendingAttachments\.value\.length\) return/',
+            $this->composer,
+            'الإرسال إمّا متزامن ويحرسه الفراغ، وإمّا ينتظر ويحتاج راية'
         );
         $this->assertMatchesRegularExpression(
             '/if \(!isInboundChatWithin24Hours\.value\) return/',

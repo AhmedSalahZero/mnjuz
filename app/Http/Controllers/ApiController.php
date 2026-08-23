@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ChatMediaUploadHelper;
 use App\Helpers\MessagingWindowHelper;
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\Api\StoreContactRequest;
@@ -1309,8 +1310,7 @@ class ApiController extends Controller
         // ترفضه كلّه فيفشل الإرسال بأكمله. نقبل الشكلين ونعامل المفرد كقائمة
         // من عنصر واحد.
         $isBatch = is_array($request->file('file'));
-        $fileRule = 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp,svg,ico,heic,heif,mp4,avi,mov,wmv,flv,mkv,webm,3gp,mpeg,mpg,mp3,wav,ogg,aac,m4a,flac,wma,amr,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,rtf,odt,ods,odp|max:'
-            . (int) config('chat.max_upload_kb', 16384);
+        $fileRule = 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp,svg,ico,heic,heif,mp4,avi,mov,wmv,flv,mkv,webm,3gp,mpeg,mpg,mp3,wav,ogg,aac,m4a,flac,wma,amr,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,rtf,odt,ods,odp';
 
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
@@ -1337,6 +1337,21 @@ class ApiController extends Controller
                 'message' => __('The provided data is invalid.'),
                 'errors' => $validator->errors()
             ], 400);
+        }
+
+        $filesToCheck = $isBatch ? array_values($request->file('file')) : [$request->file('file')];
+        foreach ($filesToCheck as $file) {
+            $mediaType = self::getFileTypeFromExtension($file->getClientOriginalExtension());
+            $maxBytes = ChatMediaUploadHelper::maxUploadBytesForType($mediaType);
+            if ($file->getSize() > $maxBytes) {
+                return response()->json([
+                    'statusCode' => 400,
+                    'success' => false,
+                    'message' => __('File is larger than the :size limit.', [
+                        'size' => ChatMediaUploadHelper::humanMaxSizeForType($mediaType),
+                    ]),
+                ], 400);
+            }
         }
         if (!SubscriptionService::isSubscriptionActive($organizationId)) {
             return response()->json([

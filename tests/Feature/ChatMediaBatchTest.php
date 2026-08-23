@@ -286,17 +286,27 @@ class ChatMediaBatchTest extends TestCase
     // ------------------------------------------- الواجهة
 
     /** الطلب الواحد شرط التحسين: العودة إلى حلقة طلبات تُلغيه. */
+    /**
+     * الرفع صار في طابور خلفيّ كي لا يحجب الشاشة، فبناء الطلب انتقل إليه.
+     * الشرط لم يتغيّر: دفعة واحدة في طلب واحد لا حلقة متعاقبة.
+     */
     public function test_the_composer_uploads_the_batch_in_one_request(): void
     {
         $composer = file_get_contents(
             base_path('resources/js/Components/ChatComponents/ChatForm.vue')
         );
+        $queue = file_get_contents(base_path('resources/js/Composables/uploadQueue.js'));
 
-        $this->assertStringContainsString("formData.append('files[]', item.file)", $composer);
+        $this->assertStringContainsString("formData.append('files[]', item.file)", $queue);
         $this->assertMatchesRegularExpression(
-            '/const sendAttachments = async \(\) => \{(?:(?!\n\}).)*?await axios\.post\(\x27\/chats\x27, formData\)/s',
-            $composer,
+            '/post\(\x27\/chats\x27, formData/',
+            $queue,
             'الإرسال يجب أن يكون طلباً واحداً لا حلقة'
+        );
+        $this->assertMatchesRegularExpression(
+            '/const sendAttachments = \(\) => \{(?:(?!\n\}).)*?uploads\.enqueue\(/s',
+            $composer,
+            'الملحن يُسلّم للطابور ولا ينتظر'
         );
         $this->assertDoesNotMatchRegularExpression(
             '/for \(const \[index, item\] of queue\.entries\(\)\) \{\s*\n[^}]*await sendMessage\(\)/s',
@@ -320,30 +330,42 @@ class ChatMediaBatchTest extends TestCase
     }
 
     /** ترتيب العرض يتحدّد بالفقاعات المتفائلة لا بترتيب وصول الردود. */
+    /** الفقاعات تُنشأ قبل التسليم للطابور: يراها المرسِل قبل أن يبدأ الرفع. */
     public function test_optimistic_bubbles_are_created_before_the_request(): void
     {
         $composer = file_get_contents(
             base_path('resources/js/Components/ChatComponents/ChatForm.vue')
         );
 
-        $bubbles = strpos($composer, 'appendMessageIntoBody(form)\n\t})');
         $this->assertMatchesRegularExpression(
-            '/queue\.forEach\(\(item, index\) => \{.*?appendMessageIntoBody\(form\).*?\}\).*?await axios\.post/s',
+            '/queue\.forEach\(\(item, index\) => \{.*?appendMessageIntoBody\(form\).*?\}\).*?uploads\.enqueue\(/s',
             $composer,
             'الفقاعات تُنشأ قبل الطلب لا بعده'
         );
     }
 
-    /** فشل الطلب يجب أن يُزيل الفقاعات المتفائلة، وإلا بقيت رسائل لم تُرسَل. */
+    /**
+     * فشل الطلب يجب أن يُزيل الفقاعات المتفائلة، وإلا بقيت رسائل لم تُرسَل
+     * تبدو مُرسَلة. الإخفاق صار يقع في الطابور، فهو يُبلّغ الملحن ليزيلها.
+     */
     public function test_a_failed_batch_removes_its_optimistic_bubbles(): void
     {
         $composer = file_get_contents(
             base_path('resources/js/Components/ChatComponents/ChatForm.vue')
         );
+        $queue = file_get_contents(base_path('resources/js/Composables/uploadQueue.js'));
 
         $this->assertMatchesRegularExpression(
-            "/catch \(error\) \{.*?tempIds\.forEach\(\(id\) => emit\('removeMessage', id\)\)/s",
-            $composer
+            "/onFailure: \(ids\) => ids\.forEach\(\(id\) => emit\('removeMessage', id\)\)/",
+            $composer,
+            'الملحن لا يُزيل الفقاعات عند إبلاغه بالإخفاق'
+        );
+        // مقيّد بما بعد تعليم الإخفاق: النمط الأوسع كان يُطابق فرع الإلغاء
+        // في نفس الـcatch، فيمرّ ولو حُذف الإبلاغ عن الإخفاق كلّياً.
+        $this->assertMatchesRegularExpression(
+            "/job\.state = 'failed'.*?request\.onFailure\?\.\(job\.tempIds\)/s",
+            $queue,
+            'الطابور لا يُبلّغ بالإخفاق'
         );
     }
 }
