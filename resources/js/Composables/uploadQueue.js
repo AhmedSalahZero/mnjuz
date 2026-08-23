@@ -186,6 +186,25 @@ export function createUploadQueue({ post, onError } = {}) {
         return true
     }
 
+    /**
+     * مهامّ محادثة بعينها.
+     *
+     * المؤشّر خاصّ بمحادثته: من انتقل إلى عميل آخر لا يعنيه رفعٌ يخصّ عميلاً
+     * سابقاً، وعرضه هناك ضجيج يربك أكثر ممّا يُطمئن. والرفع يكمل في الخلفية
+     * على أي حال، فيراه صاحبه حين يعود.
+     */
+    const jobsFor = (contactUuid) =>
+        contactUuid ? state.jobs.filter((job) => job.contactUuid === contactUuid) : []
+
+    const uploadingFor = (contactUuid) =>
+        jobsFor(contactUuid).filter((job) => job.state === 'uploading')
+
+    const fileCountFor = (contactUuid) =>
+        uploadingFor(contactUuid).reduce((sum, job) => sum + job.fileNames.length, 0)
+
+    /** نسبة محادثة واحدة — موزونة بالبايتات كالنسبة العامّة. */
+    const percentFor = (contactUuid) => weighted(uploadingFor(contactUuid))
+
     const jobs = computed(() => state.jobs)
     const uploading = computed(() => state.jobs.filter((job) => job.state === 'uploading'))
     const failed = computed(() => state.jobs.filter((job) => job.state === 'failed'))
@@ -200,19 +219,28 @@ export function createUploadQueue({ post, onError } = {}) {
      * النسبة الإجمالية موزونة بالبايتات لا بعدد المهامّ: مهمّة صغيرة اكتملت
      * لا تقفز بالمؤشّر إلى النصف بينما الملف الكبير في أوّله.
      */
-    const percent = computed(() => {
-        const active = uploading.value
-        if (active.length === 0) return 0
+    const percent = computed(() => weighted(uploading.value))
 
-        const total = active.reduce((sum, job) => sum + (job.total || 0), 0)
-        if (total <= 0) return 0
+    return {
+        jobs, uploading, failed, isBusy, fileCount, percent,
+        jobsFor, uploadingFor, fileCountFor, percentFor,
+        enqueue, retry, cancel, dismiss, requestFor, jobPercent,
+    }
+}
 
-        const loaded = active.reduce((sum, job) => sum + Math.min(job.loaded, job.total || 0), 0)
+/**
+ * نسبة مجموعة مهامّ، موزونة بالبايتات لا بعددها: مهمّة صغيرة اكتملت لا تقفز
+ * بالمؤشّر إلى النصف بينما الملف الكبير في أوّله.
+ */
+function weighted(jobs) {
+    if (jobs.length === 0) return 0
 
-        return Math.min(100, Math.round((loaded / total) * 100))
-    })
+    const total = jobs.reduce((sum, job) => sum + (job.total || 0), 0)
+    if (total <= 0) return 0
 
-    return { jobs, uploading, failed, isBusy, fileCount, percent, enqueue, retry, cancel, dismiss, requestFor, jobPercent }
+    const loaded = jobs.reduce((sum, job) => sum + Math.min(job.loaded, job.total || 0), 0)
+
+    return Math.min(100, Math.round((loaded / total) * 100))
 }
 
 /** نسبة مهمّة واحدة. */

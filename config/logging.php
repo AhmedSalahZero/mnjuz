@@ -54,7 +54,10 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['single', 'sentry_logs'],
+            // warning قناة مستقلّة بجوار single لا بدلاً منها: كلٌّ تلتقط ما
+            // يخصّها، فالتحذير يذهب إلى warning.log وحده وبقيّة المستويات إلى
+            // laravel.log وحده.
+            'channels' => ['single', 'warning', 'sentry_logs'],
             'ignore_exceptions' => false,
         ],
 
@@ -67,6 +70,25 @@ return [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            // التحذيرات لها ملفّها؛ بلا هذا المرشِّح تُكتب هنا أيضاً فيصير
+            // الفصل تكراراً.
+            'tap' => [App\Logging\WithoutWarnings::class],
+            'replace_placeholders' => true,
+        ],
+
+        /*
+        | التحذيرات وحدها في ملف مستقلّ.
+        |
+        | إعداد level يقبل المستوى وما فوقه، فقناة عند warning تبتلع error و
+        | critical معها. المرشِّح يقصرها على WARNING بالضبط — وهو المقصود:
+        | ملفٌّ تُقرأ فيه التحذيرات بلا أن تغرق بين آلاف أسطر debug ولا أن
+        | تختلط بالأخطاء الحقيقية.
+        */
+        'warning' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/warning.log'),
+            'level' => 'warning',
+            'tap' => [App\Logging\WarningsOnly::class],
             'replace_placeholders' => true,
         ],
 

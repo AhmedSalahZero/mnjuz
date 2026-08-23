@@ -255,6 +255,48 @@ is(jobPercent(null), 0, 'مهمّة معدومة');
     is(q.requestFor(99999), null, 'طلب مهمّة غير موجودة');
 }
 
+// ------------------------------------------- المؤشّر خاصّ بمحادثته
+
+/**
+ * الرفع يكمل في الخلفية أيّاً كانت المحادثة المعروضة، لكن **عرضه** خاصّ
+ * بمحادثته: من انتقل إلى عميل آخر لا يعنيه رفعٌ يخصّ عميلاً سابقاً، وعرضه
+ * هناك ضجيج. ويعود المؤشّر كما هو حين يرجع صاحبه.
+ */
+{
+    const { t, q } = queueWith();
+    q.enqueue({ contactUuid: 'A', contactName: 'أحمد', files: [file('a.pdf', 100)], tempIds: ['a'] });
+    q.enqueue({ contactUuid: 'B', contactName: 'سارة', files: [file('b.pdf', 200), file('c.pdf', 200)], tempIds: ['b1', 'b2'] });
+
+    is(q.jobsFor('A').length, 1, 'محادثة A ترى مهمّتها وحدها');
+    is(q.jobsFor('B').length, 1, 'ومحادثة B كذلك');
+    is(q.jobsFor('C').length, 0, 'ومحادثة بلا رفع لا ترى شيئاً — المؤشّر يختفي');
+    is(q.jobsFor(undefined).length, 0, 'وبلا محادثة معروضة: لا شيء');
+
+    is(q.fileCountFor('A'), 1, 'عدد ملفات A');
+    is(q.fileCountFor('B'), 2, 'عدد ملفات B');
+    is(q.fileCountFor('C'), 0, 'لا ملفات في C');
+
+    // التقدّم لكلٍّ على حدة، لا مجموع الكل.
+    t.calls[0].config.onUploadProgress({ loaded: 50, total: 100 });
+    is(q.percentFor('A'), 50, 'نصف A');
+    is(q.percentFor('B'), 0, 'وB لم تبدأ');
+    is(q.percentFor('C'), 0, 'ومحادثة بلا رفع: صفر لا انهيار');
+
+    // والرفع نفسه لم يتوقّف: المهمّتان ما زالتا جاريتين.
+    is(q.isBusy.value, true, 'الرفع يكمل في الخلفية مهما كانت المحادثة المعروضة');
+    is(q.jobs.value.length, 2, 'الطابور يحتفظ بالمهمّتين');
+}
+
+/** والعودة إلى المحادثة تُرجع المؤشّر كما تركه صاحبه. */
+{
+    const { t, q } = queueWith();
+    q.enqueue({ contactUuid: 'A', files: [file('a.pdf', 100)], tempIds: ['a'] });
+    t.last().config.onUploadProgress({ loaded: 70, total: 100 });
+
+    is(q.jobsFor('B').length, 0, 'غاب عند الانتقال');
+    is(q.percentFor('A'), 70, 'وعاد بنسبته عند الرجوع');
+}
+
 // -------------------------------------------------------- النتيجة
 
 if (fail.length) {

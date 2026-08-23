@@ -1077,6 +1077,28 @@ class ApiController extends Controller
      * * دي هستخدمها مه عالموبايل بحيث ابعت التمبلت بمعرفه الاي دي الخاص به علي العكس اللي معمولة قبل كدا
      * * وكمان هنا هستخدم ال Queue للارسال
      */
+    /**
+     * المنظّمة التي يعمل فيها صاحب الطلب الآن.
+     *
+     * الجلسة أوّلاً حين توجد: مجموعة api لا تُشغّل StartSession، فالجلسة موجودة
+     * في طلب الداشبورد وحده، وقيمتها هي المنظّمة المعروضة على الشاشة.
+     *
+     * وكان الترتيب معكوساً — يُقرأ عمود منظّمة الجوال أوّلاً حتى في طلب ويب،
+     * والعمود يحمل آخر منظّمة اختارها المستخدم في التطبيق. فمن يملك أكثر من
+     * منظّمة (وهو حال كل صاحب حساب) كان يُبحث عن قالبه في منظّمة أخرى تماماً،
+     * فيُقال له «القالب غير موجود» وهو موجود ومعتمَد أمامه.
+     */
+    public static function resolveOrganizationId(Request $request): int
+    {
+        if ($request->hasSession() && $request->session()->has('current_organization')) {
+            return (int) $request->session()->get('current_organization');
+        }
+
+        $user = $request->user();
+
+        return (int) ($user?->current_mobile_organization_id ?: $user?->current_web_organization_id);
+    }
+
     public function sendTemplateMessageByUUID(Request $request)
     {
         $rules = [
@@ -1100,14 +1122,8 @@ class ApiController extends Controller
                 'errors' => $validator->errors()
             ], 400);
         }
-        $organizationId = $request->user()?->current_mobile_organization_id
-            ?: $request->user()?->current_web_organization_id;
+        $organizationId = self::resolveOrganizationId($request);
 
-        if(!$organizationId){
-            $organizationId =  session()->get('current_organization');
-        }
-     
-     
         $sendByQueue = true;
         $template = Template::where('uuid', $request->template_uuid)->where('organization_id', $organizationId)->first();
         if (!$template) {

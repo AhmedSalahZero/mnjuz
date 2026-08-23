@@ -20,6 +20,11 @@ const trans = useTrans()
 // فيكمل الرفع بدل أن يموت مع المكوّن.
 const uploads = initUploadQueue({ post: (url, data, config) => axios.post(url, data, config) })
 const uploadsExpanded = ref(false)
+
+// المؤشّر خاصّ بالمحادثة المعروضة: يختفي عند الانتقال ويعود عند الرجوع إليها.
+const currentUploadJobs = computed(() => uploads.jobsFor(props.contact?.uuid))
+const currentUploadPercent = computed(() => uploads.percentFor(props.contact?.uuid))
+const currentUploadFileCount = computed(() => uploads.fileCountFor(props.contact?.uuid))
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
 const processingForm = ref(null)
@@ -994,9 +999,9 @@ onBeforeUnmount(() => {
 				@send-auth-template="sendAuthTemplate()"
 			/>
 			<UploadProgressIndicator
-				:jobs="uploads.jobs.value"
-				:percent="uploads.percent.value"
-				:file-count="uploads.fileCount.value"
+				:jobs="currentUploadJobs"
+				:percent="currentUploadPercent"
+				:file-count="currentUploadFileCount"
 				:expanded="uploadsExpanded"
 				@toggle="uploadsExpanded = !uploadsExpanded"
 				@retry="retryUpload"
@@ -1153,9 +1158,9 @@ onBeforeUnmount(() => {
 				@send-auth-template="sendAuthTemplate()"
 			/>
 			<UploadProgressIndicator
-				:jobs="uploads.jobs.value"
-				:percent="uploads.percent.value"
-				:file-count="uploads.fileCount.value"
+				:jobs="currentUploadJobs"
+				:percent="currentUploadPercent"
+				:file-count="currentUploadFileCount"
 				:expanded="uploadsExpanded"
 				@toggle="uploadsExpanded = !uploadsExpanded"
 				@retry="retryUpload"

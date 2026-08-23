@@ -69,8 +69,11 @@ const indicatorUses = (form.match(/<UploadProgressIndicator/g) || []).length;
 ok(indicatorUses === 2,
    `المؤشّر معروض في ${indicatorUses} موضع لا 2 — إحدى صيغتَي صندوق الرسائل بلا مؤشّر`);
 
-ok(/:percent="uploads\.percent\.value"/.test(form), 'المؤشّر لا يقرأ النسبة');
-ok(/:jobs="uploads\.jobs\.value"/.test(form), 'المؤشّر لا يقرأ الطابور');
+// المؤشّر خاصّ بمحادثته: قراءة الطابور كلّه تعرض رفع عميل آخر في شاشة هذا.
+ok(/:percent="currentUploadPercent"/.test(form), 'المؤشّر لا يقرأ نسبة محادثته');
+ok(/:jobs="currentUploadJobs"/.test(form), 'المؤشّر لا يقرأ مهامّ محادثته');
+ok(!/:jobs="uploads\.jobs\.value"/.test(form), 'المؤشّر يعرض مهامّ كل المحادثات');
+ok(/uploads\.jobsFor\(props\.contact\?\.uuid\)/.test(form), 'التقييد ليس بالمحادثة المعروضة');
 ok(/@retry="retryUpload"/.test(form), 'لا إعادة محاولة موصولة');
 ok(/@cancel=/.test(form) && /@dismiss=/.test(form), 'لا إلغاء أو إخفاء موصول');
 
