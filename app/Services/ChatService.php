@@ -727,18 +727,28 @@ class ChatService
 			$tempMessageId = Request()->get('tempMessageId');
 			$fileName = $file->getClientOriginalName();
 
-			// Compress oversized images before upload so they pass WhatsApp's 5MB limit.
+			// الصور تُهيَّأ لواتساب قبل الرفع: الكبيرة تُضغط، وغير المقبولة
+			// تُطبَّع. الحجم وحده لم يكن كافياً — صورة صغيرة بمساحة CMYK أو
+			// بعمق 16 بت ترفضها Meta بالخطأ 131053 وهي تحت الحدّ بكثير.
 			$uploadBytes = file_get_contents($file->getRealPath());
-			if ($fileType === 'image' && $file->getSize() > ImageCompressionService::IMAGE_MAX_BYTES) {
-				$compressed = ImageCompressionService::compressToLimit($file->getRealPath(), $file->getMimeType());
-				if ($compressed === null) {
+			if ($fileType === 'image') {
+				$prepared = ImageCompressionService::prepareForWhatsapp(
+					$file->getRealPath(),
+					$file->getMimeType(),
+					(int) $file->getSize()
+				);
+
+				if ($prepared === false) {
 					return response()->json([
 						'success' => false,
 						'message' => __('Image is too large to send. Please use a smaller image.'),
 					], 422);
 				}
-				$uploadBytes = $compressed['contents'];
-				$fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.' . $compressed['extension'];
+
+				if ($prepared !== null) {
+					$uploadBytes = $prepared['contents'];
+					$fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.' . $prepared['extension'];
+				}
 			}
 
 			if ($tempMessageId) {
@@ -846,17 +856,25 @@ class ChatService
 
             $uploadBytes = file_get_contents($file->getRealPath());
 
-            // الصور فوق حدّ واتساب تُضغط قبل الرفع — نفس منطق الملف المفرد.
-            if ($fileType === 'image' && $file->getSize() > ImageCompressionService::IMAGE_MAX_BYTES) {
-                $compressed = ImageCompressionService::compressToLimit($file->getRealPath(), $file->getMimeType());
-                if ($compressed === null) {
+            // الصور تُهيَّأ لواتساب قبل الرفع — نفس منطق الملف المفرد.
+            if ($fileType === 'image') {
+                $prepared = ImageCompressionService::prepareForWhatsapp(
+                    $file->getRealPath(),
+                    $file->getMimeType(),
+                    (int) $file->getSize()
+                );
+
+                if ($prepared === false) {
                     return response()->json([
                         'success' => false,
                         'message' => __('Image is too large to send. Please use a smaller image.'),
                     ], 422);
                 }
-                $uploadBytes = $compressed['contents'];
-                $fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.' . $compressed['extension'];
+
+                if ($prepared !== null) {
+                    $uploadBytes = $prepared['contents'];
+                    $fileName = pathinfo($fileName, PATHINFO_FILENAME) . '.' . $prepared['extension'];
+                }
             }
 
             $extension = pathinfo($fileName, PATHINFO_EXTENSION);

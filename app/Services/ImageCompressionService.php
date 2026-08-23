@@ -10,6 +10,186 @@ class ImageCompressionService
     const TARGET_BYTES    = 4800 * 1024; // 4.8 MB — safe margin below WhatsApp's 5MB limit
 
     /**
+     * تهيئة صورة للإرسال عبر واتساب.
+     *
+     * ثلاث نتائج مقصودة ومتمايزة:
+     *   • null  ⇒ الصورة مقبولة كما هي، تُرسَل بلا مساس (لا فقدان جودة).
+     *   • مصفوفة ⇒ نسخة مُطبَّعة و/أو مضغوطة تُرسَل بدلاً منها.
+     *   • false ⇒ تعذّر إنزالها تحت حدّ واتساب، فالرفض بيّن للمستخدم.
+     *
+     * كان الشرط الحجم وحده، فمرّت صور صغيرة بمساحة CMYK أو عمق 16 بت أو WebP
+     * متحرّك — تُفتح عندنا بلا مشكلة وترفضها Meta بالخطأ 131053، فيقرأ
+     * الموظّف رسالة عن «خصائص الصورة» لا يعرف ما يفعل بها.
+     *
+     * @return array{contents: string, extension: string, mime: string}|null|false
+     */
+    public static function prepareForWhatsapp(string $sourcePath, ?string $mime, int $size)
+    {
+        $tooLarge = $size > static::IMAGE_MAX_BYTES;
+        $accepted = static::isAcceptedByWhatsapp($sourcePath, $mime);
+
+        if (!$tooLarge && $accepted) {
+            return null;
+        }
+
+        $result = $tooLarge
+            ? static::compressToLimit($sourcePath, $mime)
+            : static::normalizeForWhatsapp($sourcePath, $mime);
+
+        return $result ?? false;
+    }
+
+    /**
+     * هل تقبلها واتساب كما هي؟
+     *
+     * ترفض Meta بالخطأ 131053 كل ما خرج عن: JPEG/PNG بمساحة ألوان RGB أو
+     * تدرّج رمادي و8 بت للقناة، أو WebP ثابت. والمرفوض شائع أكثر ممّا يبدو —
+     * صورة CMYK خارجة من برنامج تصميم، أو PNG بعمق 16 بت، أو WebP متحرّك،
+     * وكلّها تُفتح عندنا بلا مشكلة فلا يشكّ أحد فيها.
+     *
+     * الفحص قبل التحويل مقصود: إعادة الترميز تُفقد الشفافية وتُنقص الجودة،
+     * فلا تُفرَض على صورة سليمة أصلاً.
+     */
+    public static function isAcceptedByWhatsapp(string $sourcePath, ?string $mime = null): bool
+    {
+        try {
+            if (!extension_loaded('imagick')) {
+                // بلا Imagick لا نستطيع قراءة مساحة اللون ولا العمق، فنكتفي
+                // بفحص النوع: أضعف، لكنه لا يُعطّل الإرسال.
+                return in_array(static::sniffFormat($sourcePath, $mime), ['jpeg', 'png', 'webp'], true);
+            }
+
+            $img = new \Imagick($sourcePath);
+
+            try {
+                $format = strtolower($img->getImageFormat());
+                $accepted = ['jpeg' => true, 'jpg' => true, 'png' => true, 'webp' => true];
+
+                if (!isset($accepted[$format])) {
+                    return false;
+                }
+
+                // الإطار الواحد شرط: WebP وGIF المتحرّكان مرفوضان.
+                if ($img->getNumberImages() > 1) {
+                    return false;
+                }
+
+                if ($img->getImageDepth() > 8) {
+                    return false;
+                }
+
+                return in_array($img->getImageColorspace(), [
+                    \Imagick::COLORSPACE_SRGB,
+                    \Imagick::COLORSPACE_RGB,
+                    \Imagick::COLORSPACE_GRAY,
+                ], true);
+            } finally {
+                $img->destroy();
+            }
+        } catch (\Throwable $e) {
+            // ملف لا يُفتح ليس صورة سليمة؛ نتركه للتطبيع ليحاول أو يفشل بوضوح.
+            return false;
+        }
+    }
+
+    /**
+     * تحويل الصورة إلى ما تقبله واتساب: JPEG بمساحة sRGB و8 بت وإطار واحد.
+     *
+     * @return array{contents: string, extension: string, mime: string}|null
+     */
+    public static function normalizeForWhatsapp(string $sourcePath, ?string $mime = null): ?array
+    {
+        try {
+            if (extension_loaded('imagick')) {
+                return static::normalizeWithImagick($sourcePath);
+            }
+
+            // GD يفكّ الصورة إلى RGB بثمانية بتات دائماً، فإعادة ترميزها به
+            // تُطبّعها ضمناً.
+            if (extension_loaded('gd')) {
+                return static::compressWithGd($sourcePath, $mime);
+            }
+
+            Log::warning('ImageCompressionService: neither Imagick nor GD is available.');
+
+            return null;
+        } catch (\Throwable $e) {
+            Log::error('ImageCompressionService normalize error: ' . $e->getMessage(), ['file' => $sourcePath]);
+
+            return null;
+        }
+    }
+
+    /** @return array{contents: string, extension: string, mime: string}|null */
+    private static function normalizeWithImagick(string $sourcePath): ?array
+    {
+        $img = new \Imagick($sourcePath);
+
+        try {
+            $img->transformImageColorspace(\Imagick::COLORSPACE_SRGB);
+            $img->setImageDepth(8);
+
+            if ($img->getImageAlphaChannel()) {
+                $bg = new \Imagick();
+                $bg->newImage($img->getImageWidth(), $img->getImageHeight(), new \ImagickPixel('white'), 'jpeg');
+                $bg->compositeImage($img, \Imagick::COMPOSITE_OVER, 0, 0);
+                $img->destroy();
+                $img = $bg;
+                $img->transformImageColorspace(\Imagick::COLORSPACE_SRGB);
+                $img->setImageDepth(8);
+            }
+
+            $img->setImageFormat('jpeg');
+            // ملفّات ICC هي مصدر شائع لمساحات ألوان غريبة؛ نزعها مع بقيّة
+            // البيانات الوصفية يجعل الناتج قابلاً للتنبّؤ.
+            $img->stripImage();
+            $img->setImageCompressionQuality(90);
+
+            // getImageBlob المفردة لا getImagesBlob: الثانية تكتب الإطارات
+            // كلّها، فصورة متحرّكة تخرج ملفاً متعدّد الإطارات ترفضه Meta من
+            // جديد. المفردة تكتب الإطار الحالي — الأوّل — وهو المطلوب.
+            $blob = $img->getImageBlob();
+
+            if (strlen($blob) > static::TARGET_BYTES) {
+                foreach ([85, 75, 65, 55, 45] as $quality) {
+                    $img->setImageCompressionQuality($quality);
+                    $blob = $img->getImageBlob();
+                    if (strlen($blob) <= static::TARGET_BYTES) {
+                        break;
+                    }
+                }
+            }
+
+            if (strlen($blob) > static::TARGET_BYTES) {
+                return null;
+            }
+
+            return ['contents' => $blob, 'extension' => 'jpg', 'mime' => 'image/jpeg'];
+        } finally {
+            // $img يُعاد إسناده أثناء التسطيح؛ الإتلاف هنا يطال الأخير أيّاً كان.
+            $img->destroy();
+        }
+    }
+
+    /** نوع الصورة من توقيعها لا من امتدادها. */
+    private static function sniffFormat(string $path, ?string $mime): string
+    {
+        $info = @getimagesize($path);
+
+        if (is_array($info) && isset($info['mime'])) {
+            $mime = $info['mime'];
+        }
+
+        return match (strtolower((string) $mime)) {
+            'image/jpeg', 'image/jpg' => 'jpeg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            default => 'other',
+        };
+    }
+
+    /**
      * Compress an image file to under TARGET_BYTES.
      *
      * Returns an array ['contents' => binary, 'extension' => 'jpg', 'mime' => 'image/jpeg']
