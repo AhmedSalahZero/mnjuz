@@ -977,7 +977,19 @@ class WhatsappService
             }
         }
 
-        //\Log::info(json_encode($responseObject, true));
+        // فشل الإرسال كان يمرّ بلا أثر: لا صفّ يُنشأ ولا سطر يُكتب، فيرى
+        // الموظّف «فشل» بلا سبب ولا نجد نحن شيئاً نشخّصه. الرسالة من Meta هي
+        // ما يحتاجه الطرفان — 131053 مثلاً تقول إن خصائص الملف مرفوضة.
+        if ($responseObject->success !== true) {
+            Log::error('WhatsApp media send rejected', [
+                'organization_id' => $this->organizationId,
+                'contact_uuid'    => $contactUuId,
+                'media_type'      => $mediaType,
+                'file_name'       => $mediaFileName,
+                'media_url'       => $mediaUrl,
+                'error'           => self::describeSendError($responseObject),
+            ]);
+        }
 
         // Trigger webhook
         WebhookHelper::triggerWebhookEvent('message.sent', [
@@ -985,6 +997,31 @@ class WhatsappService
         ], $contact->organization_id);
 
         return $responseObject;
+    }
+
+    /**
+     * رسالة خطأ Meta بشكل مقروء.
+     *
+     * الردّ يأتي بأشكال مختلفة — error.message أو error.error_data.details أو
+     * نصّاً خاماً — فقراءة مفتاح واحد كانت تُعطي null في الحالات المهمّة.
+     *
+     * @return array<string, mixed>
+     */
+    public static function describeSendError($responseObject): array
+    {
+        $error = $responseObject->data->error ?? null;
+
+        if ($error === null) {
+            return ['message' => 'Unknown error', 'raw' => json_encode($responseObject->data ?? null)];
+        }
+
+        return array_filter([
+            'code'    => $error->code ?? null,
+            'title'   => $error->error_data->messaging_product ?? ($error->type ?? null),
+            'message' => $error->message ?? null,
+            'details' => $error->error_data->details ?? null,
+            'trace'   => $error->fbtrace_id ?? null,
+        ], static fn ($value) => $value !== null && $value !== '');
     }
 
     function getContentTypeFromUrl($url) {

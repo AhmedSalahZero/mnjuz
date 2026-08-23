@@ -123,7 +123,7 @@ class SendMediaJob implements ShouldQueue
 
         $caption = $this->fileType === 'audio' ? null : $this->caption;
 
-        $whatsappService->sendMedia(
+        $response = $whatsappService->sendMedia(
             $this->uuid,
             $this->fileType,
             $fileName,
@@ -136,5 +136,17 @@ class SendMediaJob implements ShouldQueue
             $this->tempMessageId,
             $this->messageUUID
         );
+
+        // النتيجة كانت تُهمَل تماماً: يفشل الإرسال فلا صفّ يُنشأ ولا وظيفة
+        // تُعلَن فاشلة — يرى الموظّف «فشل» بلا سبب، ولا نجد نحن أثراً.
+        // الرمي هنا يُسجّل الوظيفة في failed_jobs بسببها كاملاً وبإعادة محاولة.
+        if (($response->success ?? false) !== true) {
+            throw new \RuntimeException(
+                'WhatsApp media send failed: ' . json_encode(
+                    WhatsappService::describeSendError($response),
+                    JSON_UNESCAPED_UNICODE
+                )
+            );
+        }
     }
 }

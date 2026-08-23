@@ -63,9 +63,22 @@ class ImageCompressionService
 
             try {
                 $format = strtolower($img->getImageFormat());
-                $accepted = ['jpeg' => true, 'jpg' => true, 'png' => true, 'webp' => true];
+
+                // رسائل الصور في واتساب تقبل JPEG و PNG وحدهما. WebP مخصّص
+                // للملصقات، وإرساله صورةً تردّه Meta بالخطأ 131053.
+                $accepted = ['jpeg' => 'image/jpeg', 'jpg' => 'image/jpeg', 'png' => 'image/png'];
 
                 if (!isset($accepted[$format])) {
+                    return false;
+                }
+
+                // النوع المُعلَن يجب أن يطابق البايتات.
+                //
+                // ملفٌّ اسمه ‎.jpg‎ ومحتواه WebP شائع أكثر ممّا يبدو — أدوات
+                // تحميل الصور من مواقع التواصل تفعل ذلك. ونحن نُعلن النوع من
+                // الاسم لا من المحتوى، فنرسل «هذه JPEG» وبداخلها WebP، فترفضها
+                // Meta بلا أن يفهم أحد لماذا: الصورة تُفتح في كل برنامج.
+                if ($mime !== null && $mime !== '' && $accepted[$format] !== strtolower(trim($mime))) {
                     return false;
                 }
 

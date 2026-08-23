@@ -67,6 +67,30 @@ class WhatsappImageAcceptanceTest extends TestCase
         return $path;
     }
 
+    /**
+     * ملف بصيغة محدّدة وامتداد قد يخالفها.
+     *
+     * writeImage تشتقّ الصيغة من الامتداد فتتجاهل setImageFormat — وهو ما
+     * يجعل كتابة «WebP باسم ‎.jpg‎» مستحيلة عبرها. الكتابة من البايتات مباشرةً
+     * تُنتج الحالة الحقيقية التي وقعت.
+     */
+    private function fileWithFormat(string $format, string $extension): string
+    {
+        $path = $this->path($extension);
+
+        $img = new \Imagick();
+        $img->newPseudoImage(300, 300, 'gradient:red-blue');
+        // sRGB وثمانية بتات صراحةً: التدرّج يُكتب بعمق 16 افتراضياً، فيُرفَض
+        // الملف لعمقه لا لنوعه — فينجح الاختبار وهو لا يقيس ما جاء لأجله.
+        $img->transformImageColorspace(\Imagick::COLORSPACE_SRGB);
+        $img->setImageDepth(8);
+        $img->setImageFormat($format);
+        file_put_contents($path, $img->getImageBlob());
+        $img->destroy();
+
+        return $path;
+    }
+
     private function describe(string $blob): array
     {
         $img = new \Imagick();
@@ -145,6 +169,69 @@ class WhatsappImageAcceptanceTest extends TestCase
         $this->assertSame('jpeg', $this->describe($prepared['contents'])['format']);
         $this->assertSame('jpg', $prepared['extension']);
         $this->assertSame('image/jpeg', $prepared['mime']);
+    }
+
+    // ----------------------------- الامتداد يكذب على المحتوى
+
+    /**
+     * الحالة التي أوقعت العطل على الديف: ملف اسمه ‎.jpg‎ ونوعه المسجَّل
+     * image/jpeg، ومحتواه WebP. أدوات تحميل الصور من مواقع التواصل تُنتجه
+     * كثيراً، ويُفتح في كل برنامج فلا يشكّ فيه أحد — ونحن نُعلن نوعه من اسمه
+     * فنقول لـMeta «هذه JPEG» وبداخلها WebP.
+     */
+    public function test_a_webp_disguised_as_jpeg_is_normalized(): void
+    {
+        $path = $this->fileWithFormat('webp', 'jpg');
+
+        $this->assertSame('WEBP', (new \Imagick($path))->getImageFormat(), 'العيّنة ليست WebP.');
+
+        $this->assertFalse(
+            ImageCompressionService::isAcceptedByWhatsapp($path, 'image/jpeg'),
+            'ملف WebP مُعلَن JPEG مرّ كما هو — سترفضه Meta بالخطأ 131053.'
+        );
+
+        $prepared = ImageCompressionService::prepareForWhatsapp($path, 'image/jpeg', filesize($path));
+
+        $this->assertIsArray($prepared);
+        $this->assertSame('jpeg', $this->describe($prepared['contents'])['format']);
+        $this->assertSame('image/jpeg', $prepared['mime']);
+    }
+
+    /**
+     * وWebP الصريح كذلك: رسائل الصور تقبل JPEG و PNG وحدهما، وWebP للملصقات.
+     */
+    public function test_a_plain_webp_is_not_accepted_as_an_image(): void
+    {
+        $path = $this->fileWithFormat('webp', 'webp');
+
+        $this->assertFalse(ImageCompressionService::isAcceptedByWhatsapp($path, 'image/webp'));
+        $this->assertIsArray(ImageCompressionService::prepareForWhatsapp($path, 'image/webp', filesize($path)));
+    }
+
+    /** والعكس: PNG حقيقي مُعلَن JPEG يُطبَّع كذلك. */
+    public function test_a_png_disguised_as_jpeg_is_normalized(): void
+    {
+        $path = $this->fileWithFormat('png', 'jpg');
+
+        // العيّنة سليمة في كل شيء عدا التطابق: PNG حقيقي بعمق 8 و sRGB.
+        // فالرفض هنا لا يقع إلّا بسبب النوع المُعلَن.
+        $this->assertTrue(
+            ImageCompressionService::isAcceptedByWhatsapp($path, 'image/png'),
+            'العيّنة نفسها مرفوضة لسبب آخر — الاختبار لا يقيس التطابق.'
+        );
+
+        $this->assertFalse(ImageCompressionService::isAcceptedByWhatsapp($path, 'image/jpeg'));
+    }
+
+    /** والمطابق لا يُمَسّ: PNG حقيقي مُعلَن PNG. */
+    public function test_a_matching_declaration_passes(): void
+    {
+        $path = $this->image('png', function ($img) {
+            $img->transformImageColorspace(\Imagick::COLORSPACE_SRGB);
+            $img->setImageDepth(8);
+        });
+
+        $this->assertTrue(ImageCompressionService::isAcceptedByWhatsapp($path, 'image/png'));
     }
 
     // ------------------------------------------ المقبول لا يُمَسّ

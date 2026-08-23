@@ -402,6 +402,10 @@ const generateNewMessage = (form) => {
 				user: {
 					first_name: props.user.first_name,
 					last_name: props.user.last_name,
+					// نفس شكل البثّ: الفقاعة تُستبدل بحمولة الخادم لحظة وصولها،
+					// فاختلاف الشكلين يجعل الاسم يظهر ثم يختفي.
+					full_name: [props.user.first_name, props.user.last_name]
+						.filter(Boolean).join(' ').trim(),
 				},
 				wam_id: form.value.tempMessageId,
 			},

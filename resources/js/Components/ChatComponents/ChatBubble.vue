@@ -1,4 +1,5 @@
 <script setup>
+import { senderName } from '@/Composables/senderName'
 import Modal from '@/Components/Modal.vue'
 import { usePage } from '@inertiajs/vue3'
 import { computed, ref } from 'vue'
@@ -778,9 +779,9 @@ async function handleMediaDownload(event, content) {
 				<span class="text-xs">{{ $t('This message type cannot be displayed here.') }}</span>
 			</div>
 			<!--Timestamp-->
-			<div v-if="props.type === 'outbound' && content.user" class="mt-2 mb--2">
+			<div v-if="props.type === 'outbound' && senderName(content.user)" class="mt-2 mb--2">
 				<span class="text-gray-500 text-xs text-right leading-none">{{ $t('Sent By:') }}
-					<u>{{ content.user?.first_name + ' ' + content.user?.last_name }}</u></span>
+					<u>{{ senderName(content.user) }}</u></span>
 			</div>
 			<div class="flex items-center justify-between space-x-4"
 				:class="props.type === 'outbound' && content.user ? '' : 'mt-2'">
