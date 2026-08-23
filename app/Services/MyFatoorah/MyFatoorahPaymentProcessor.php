@@ -34,6 +34,7 @@ class MyFatoorahPaymentProcessor
         $organizationId = (int) ($context['organization_id'] ?? 0);
         $userId = (int) ($context['user_id'] ?? 0);
         $planId = $context['plan_id'] ?? null;
+        $couponCode = $context['coupon_code'] ?? null;
 
         if ($paymentId === '' || $organizationId <= 0) {
             Log::warning('MyFatoorah payment context incomplete', $context);
@@ -59,7 +60,8 @@ class MyFatoorahPaymentProcessor
             $paymentStatus,
             $organizationId,
             $userId,
-            $planId
+            $planId,
+            $couponCode
         ) {
             $payment = BillingPayment::create([
                 'organization_id' => $organizationId,
@@ -84,14 +86,28 @@ class MyFatoorahPaymentProcessor
 
             $invoice = ($planId === null || $planId === '' || $planId === 'topup')
                 ? $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId)
-                : $this->subscriptionService->updateSubscriptionPlan($organizationId, (int) $planId, $userId);
+                : $this->subscriptionService->updateSubscriptionPlan($organizationId, (int) $planId, $userId, $couponCode);
 
             // الفاتورة تصدر بعد الدفعة في نفس المعاملة، فنربطها الآن. بلا ذلك
             // تبقى الدفعة بلا فاتورة فلا تُرحَّل إلى منصة الفوترة.
             if ($invoice instanceof BillingInvoice) {
                 $payment->invoice_id = $invoice->id;
                 $payment->save();
+
+                return;
             }
+
+            // دفعةٌ بلا فاتورة: المال دخل والخدمة لم تُسلَّم. كان هذا يمرّ
+            // صامتاً فلا يُكتشف إلّا حين يشتكي العميل — وكثيرون لا يشتكون.
+            Log::error('Payment processed without producing an invoice', [
+                'payment_id' => $payment->id,
+                'organization_id' => $organizationId,
+                'plan_id' => $planId,
+                'coupon_code' => $couponCode,
+                'amount' => $amount,
+                'currency' => $currency,
+                'gateway_invoice_id' => $gatewayInvoiceId,
+            ]);
         });
 
         return (object) ['success' => true, 'duplicate' => false];
@@ -146,6 +162,14 @@ class MyFatoorahPaymentProcessor
                 'plan_id' => $planSegment,
                 'requested_amount' => round($amount, 2),
                 'requested_currency' => $config['currency'],
+                // الكوبون يُحفظ مع نيّة الشراء لا في الجلسة.
+                //
+                // السعر يُحسب مرّتين: هنا عند التحويل إلى البوّابة، وثانيةً عند
+                // العودة لتفعيل الاشتراك. والكوبون كان يُقرأ من الجلسة، والعودة
+                // من البوّابة قد تصل بلا جلسة — فيختلف الحسابان: يُحصَّل مبلغ
+                // مخفَّض ثم يُطلَب الكامل، فيبدو العميل مديناً بالفرق ويسقط
+                // التفعيل صامتاً. حِفظه هنا يجعل الحسابين يريان الشيء نفسه.
+                'coupon_code' => session('applied_coupon') ?: null,
             ]),
             'CallBackUrl' => url('/payment/myfatoorah/success'),
             'ErrorUrl' => url('/payment/myfatoorah/error'),

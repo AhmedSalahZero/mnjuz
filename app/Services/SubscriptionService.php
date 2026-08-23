@@ -112,7 +112,16 @@ class SubscriptionService
 
         // تُستدعى الآن من أمر مجدوَل يمرّ على كل المنشآت، فصفّ ناقص عند واحدة
         // لا يصحّ أن يُسقط الدفعة كلّها.
-        if (!$subscription || !$subscription->plan_id || $subscription->valid_until >= now()) {
+        if (!$subscription || !$subscription->plan_id) {
+            return false;
+        }
+
+        // الاشتراك السارِي لا يُجدَّد قبل أوانه — إلّا التجربة.
+        //
+        // كان الشرط `valid_until >= now()` وحده، فأي دفعة أثناء تجربة سارية
+        // تسقط: ومن يشترك يفعل ذلك **قبل** انتهاء تجربته لا بعدها. النتيجة أن
+        // الحالة الطبيعية كانت هي الحالة المرفوضة.
+        if ($subscription->status !== 'trial' && $subscription->valid_until >= now()) {
             return false;
         }
 
@@ -150,17 +159,34 @@ class SubscriptionService
     /**
      * @return \App\Models\BillingInvoice|null الفاتورة الصادرة إن صدرت.
      */
-    public static function updateSubscriptionPlan($organizationId, $planId, $userId)
+    public static function updateSubscriptionPlan($organizationId, $planId, $userId, ?string $couponCode = null)
     {
         $plan = SubscriptionPlan::where('id', $planId)->first();
 
         if (!$plan) {
+            Log::error('Subscription activation aborted: plan not found', [
+                'organization_id' => $organizationId,
+                'plan_id' => $planId,
+            ]);
+
             return null;
         }
 
-        $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $planId);
+        $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $planId, $couponCode);
 
+        // الخروج هنا يعني: أُخذ المال ولم تُسلَّم الخدمة. كان يمرّ بلا أثر —
+        // لا سطر في السجلّ ولا تنبيه — فلا يُكتشف إلّا بشكوى العميل.
         if ($billingDetails['amountDue'] != 0) {
+            Log::error('Subscription activation aborted: balance does not cover the plan', [
+                'organization_id' => $organizationId,
+                'plan_id' => $planId,
+                'coupon_code' => $couponCode,
+                'net_amount' => $billingDetails['netAmount'] ?? null,
+                'account_balance' => $billingDetails['accountBalance'] ?? null,
+                'amount_due' => $billingDetails['amountDue'],
+                'setup_fee' => $billingDetails['setupFee'] ?? null,
+            ]);
+
             return null;
         }
 
@@ -269,7 +295,7 @@ class SubscriptionService
         });
     }
 
-    public static function calculateSubscriptionBillingDetails($organizationId, $selectedPlanId)
+    public static function calculateSubscriptionBillingDetails($organizationId, $selectedPlanId, ?string $couponCode = null)
     {
         $currentSubscription = Subscription::where('organization_id', $organizationId)->first();
         $subscriptionStatus = $currentSubscription->status;
@@ -322,15 +348,29 @@ class SubscriptionService
         // Calculate amount due considering credits, debits, taxes and the one-time setup fee.
         // Setup fee is added before subtracting the account balance so that, after payment is
         // recorded as a credit, the recomputed amountDue nets to 0 and the invoice is created.
-        $amountDue = $grossAmount + $taxCalculationResult['totalTaxAmount'] + $setupFee - $proratedCreditAmount - $accountBalance;
+        // السعر المستحقّ قبل خصم الرصيد. الخصم يُطبَّق عليه لا على ما تبقّى
+        // بعد الرصيد.
+        //
+        // كان الترتيب معكوساً: يُطرَح الرصيد أوّلاً ثم تُحسب النسبة على الباقي —
+        // فتتغيّر قيمة الخصم بتغيّر رصيد العميل. صاحب الرصيد الكبير ينال خصماً
+        // ضئيلاً على نفس الباقة، والفاتورة تُصدَر بخصمٍ يخالف ما حُصِّل.
+        //
+        // ويؤكّده أن إصدار الفاتورة كان يفترض الترتيب الصحيح أصلاً:
+        // chargedAmount = netAmount - discount. فالتصحيح يُوفّق بين الحسابين.
+        $chargeableAmount = max(
+            0,
+            $grossAmount + $taxCalculationResult['totalTaxAmount'] + $setupFee - $proratedCreditAmount
+        );
 
-        // Ensure that amount due is not negative
-        $amountDue = max(0, $amountDue);
-
-        //Apply coupon is amount due > 0
         $coupon = [];
-        if($amountDue > 0){
-            $couponCode = session('applied_coupon');
+        if ($chargeableAmount > 0) {
+            // الكوبون الصريح يسبق الجلسة.
+            //
+            // الجلسة تحيا مع المتصفّح وتموت مع العودة من بوّابة الدفع، فالحساب
+            // عند التفعيل كان يراها فارغة ويطلب السعر كاملاً بينما حُصِّل
+            // المخفَّض — فيظهر فرقٌ يُسقط التفعيل بلا خطأ. تمريره صراحةً يجعل
+            // الحسابين متطابقين مهما اختلف السياق.
+            $couponCode = $couponCode ?: session('applied_coupon');
             $couponData = \App\Models\Coupon::where('code', $couponCode)
                 ->where('status', 'active')
                 ->whereNull('deleted_at')
@@ -338,8 +378,8 @@ class SubscriptionService
 
             if ($couponData) {
                 if ($couponData->quantity_redeemed < $couponData->quantity) {
-                    $discount = ($amountDue * $couponData->percentage) / 100;
-                    $discount = min($discount, $amountDue);
+                    $discount = ($chargeableAmount * $couponData->percentage) / 100;
+                    $discount = min($discount, $chargeableAmount);
 
                     $coupon = [
                         // المعرّف يُحفظ على الفاتورة، فبدونه لا يُعرف أي كوبون خُصم.
@@ -350,10 +390,13 @@ class SubscriptionService
                         'discount' => number_format($discount, 2)
                     ];
 
-                    $amountDue = max(0, $amountDue - $discount);
+                    $chargeableAmount = max(0, $chargeableAmount - $discount);
                 }
             }
         }
+
+        // الرصيد يُطرح أخيراً: هو تسديدٌ جزئي للسعر بعد الخصم لا وعاءٌ للخصم.
+        $amountDue = max(0, $chargeableAmount - $accountBalance);
 
         $response = [
             'isTaxInclusive' => $isTaxInclusive,

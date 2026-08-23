@@ -266,6 +266,9 @@ class MyFatoorahService
             $reference['plan_id'] = ($userDefined['plan_id'] ?? null) === 'topup'
                 ? null
                 : ($userDefined['plan_id'] ?? $reference['plan_id']);
+            // ما حُصِّل فعلاً وبأي كوبون — لا ما تقوله جلسةٌ قد لا تكون موجودة.
+            $reference['coupon_code'] = $userDefined['coupon_code'] ?? null;
+            $reference['requested_amount'] = $userDefined['requested_amount'] ?? null;
         }
 
         $transaction = null;
