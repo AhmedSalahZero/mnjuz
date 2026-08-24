@@ -47,6 +47,34 @@ class ChatMediaUploadHelper
     }
 
     /**
+     * سقف الطلب الواحد — لا سقف الملف الواحد.
+     *
+     * post_max_size يحكم الحمولة كلّها، وupload_max_filesize يحكم كل ملف على
+     * حدة. ورفع عدّة ملفات معاً يذهب في طلب واحد، فمجموعها هو ما يُقاس.
+     *
+     * كان المعروض للواجهة أصغرَهما وحده، فتُفحص الملفات فرادى ويمرّ مجموعها
+     * بلا فحص: ثلاثة ملفات كلٌّ منها مقبول تصير حمولةً يرفضها الخادم — ويقف
+     * الرفع عند ٢٪ بلا رسالة، لأن الرفض يقع قبل أن يبلغ PHP.
+     */
+    public static function phpMaxPostBytes(): int
+    {
+        $value = trim((string) ini_get('post_max_size'));
+
+        if ($value === '' || $value === '-1' || $value === '0') {
+            return PHP_INT_MAX;
+        }
+
+        $number = (int) $value;
+
+        return match (strtolower(substr($value, -1))) {
+            'g' => $number * 1024 * 1024 * 1024,
+            'm' => $number * 1024 * 1024,
+            'k' => $number * 1024,
+            default => $number,
+        };
+    }
+
+    /**
      * الحدّ الفعلي بالبايت لنوع الوسيط — min(حدّ النوع، حدّ PHP).
      *
      * الصور وGIF: حدّ PHP فقط (الضغط يتولى حدّ واتساب لاحقاً).

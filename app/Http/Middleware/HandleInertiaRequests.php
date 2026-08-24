@@ -179,6 +179,8 @@ class HandleInertiaRequests extends Middleware
             // Laravel، فتصل حمولة بلا ملف ويظنّ المستخدم أن الإرسال نجح.
             // نمرّره للواجهة لتردّ الملف مبكّراً برسالة تذكر الحدّ الحقيقي.
             'max_upload_bytes' => \App\Helpers\ChatMediaUploadHelper::phpMaxUploadBytes(),
+            // سقف الطلب الواحد: مجموع الدفعة يُقاس به لا بسقف الملف.
+            'max_post_bytes' => \App\Helpers\ChatMediaUploadHelper::phpMaxPostBytes(),
             'admin_organization_impersonation' => (bool) session('admin_org_impersonation', false),
             'admin_impersonation_org_name' => session('admin_impersonation_org_name'),
             'auth' => [

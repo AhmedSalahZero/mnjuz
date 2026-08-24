@@ -6,6 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect
 import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourComposeBanner.vue'
 import UploadProgressIndicator from '@/Components/ChatComponents/UploadProgressIndicator.vue'
 import { initUploadQueue } from '@/Composables/uploadQueue'
+import { splitIntoBatches } from '@/Composables/uploadBatches'
 import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
 import LocationPicker from '@/Components/LocationPicker.vue'
 import { usePage } from '@inertiajs/vue3'
@@ -525,6 +526,12 @@ const ACCEPTED_MEDIA = {
  */
 const serverMaxUploadBytes = computed(() => usePage().props.max_upload_bytes ?? Infinity)
 
+/**
+ * سقف الطلب الواحد. مجموع الدفعة يُقاس به لا سقفُ الملف — والفرق هو ما جعل
+ * ثلاثة ملفات مقبولة فرادى تقف عند ٢٪ حين أُرسلت معاً.
+ */
+const serverMaxPostBytes = computed(() => usePage().props.max_post_bytes ?? Infinity)
+
 const isDraggingFile = ref(false)
 const pendingAttachments = ref([])
 /** المرفق المعروض كبيراً. شريط المصغّرات أسفله ينقّل بينها. */
@@ -652,17 +659,29 @@ const sendAttachments = () => {
 		appendMessageIntoBody(form)
 	})
 
-	// طلب واحد لكل المرفقات: كل ملف كان يستهلك رحلة HTTP كاملة، فثلاثة ملفات
-	// ثلاث رحلات متعاقبة. ورحلة واحدة تضمن ترتيب الإرسال أيضاً.
-	uploads.enqueue({
-		contactUuid: form.value.uuid,
-		contactName: props.contact?.full_name || props.contact?.phone || '',
-		files: queue.map((item) => ({ file: item.file, type: item.type })),
-		caption,
-		tempIds,
-		// الإخفاق يُزيل الفقاعات: إبقاؤها يوهم الموظّف أن الملف وصل العميل.
-		onFailure: (ids) => ids.forEach((id) => emit('removeMessage', id)),
-	})
+	// طلب واحد لكل ما يسع في طلب: كل ملف كان يستهلك رحلة HTTP كاملة، فثلاثة
+	// ملفات ثلاث رحلات متعاقبة. لكن الطلب محكوم بـpost_max_size، فنُقسّم على
+	// قدره بدل أن نُرسل حمولة يرفضها الخادم قبل أن تبلغ PHP — وهو رفضٌ يقف
+	// بالمؤشّر بلا رسالة.
+	const batches = splitIntoBatches(queue, serverMaxPostBytes.value)
+	let offset = 0
+
+	for (const batch of batches) {
+		const batchTempIds = tempIds.slice(offset, offset + batch.length)
+		// التعليق مع الدفعة الأولى وحدها — تكراره يُغرق المحادثة.
+		const batchCaption = offset === 0 ? caption : ''
+		offset += batch.length
+
+		uploads.enqueue({
+			contactUuid: form.value.uuid,
+			contactName: props.contact?.full_name || props.contact?.phone || '',
+			files: batch.map((item) => ({ file: item.file, type: item.type })),
+			caption: batchCaption,
+			tempIds: batchTempIds,
+			// الإخفاق يُزيل الفقاعات: إبقاؤها يوهم الموظّف أن الملف وصل العميل.
+			onFailure: (ids) => ids.forEach((id) => emit('removeMessage', id)),
+		})
+	}
 
 	formTextInput.value = null
 	closeAttachmentPreview()
