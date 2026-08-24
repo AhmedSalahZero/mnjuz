@@ -44,6 +44,8 @@ return [
             'after_commit' => false,
         ],
 
+		
+		
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => 'localhost',
