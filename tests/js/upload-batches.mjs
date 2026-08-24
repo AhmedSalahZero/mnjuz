@@ -10,7 +10,7 @@
  *
  * والتقسيم أولى من الرفض: المستخدم أراد إرسال ملفاته ولا شأن له بحدود الخادم.
  */
-import { splitIntoBatches, totalBytes } from '../../resources/js/Composables/uploadBatches.js';
+import { OVERHEAD_BYTES, splitIntoBatches, totalBytes } from '../../resources/js/Composables/uploadBatches.js';
 
 const MB = 1024 * 1024;
 
@@ -110,6 +110,45 @@ is(splitIntoBatches(null, 50 * MB), [], 'مرفقات معدومة');
 is(totalBytes([]), 0, 'مجموع فارغ');
 is(totalBytes(null), 0, 'مجموع معدوم');
 
+// ------------------------------------- سقف الوكيل الأمامي
+
+/**
+ * الحالة الحقيقية على الإنتاج: Cloudflare يرفض ما تجاوز ١٠٠ ميغابايت ويقطع
+ * الاتصال قبل أن تبلغ الحمولة الخادم — فلا 413 في سجلّ nginx بل 499، ولا خطأ
+ * يصل المتصفّح. الشريط يتجمّد عند النسبة التي بلغها، وهي 100÷المجموع.
+ *
+ * ورفع post_max_size لا يُصلح شيئاً: الحدّ خارج PHP ولا سبيل إلى قراءته،
+ * فالتقسيم يجب أن يقيس على السقف المُعلَن لا على حدّ الخادم.
+ */
+{
+    const files = [f('a', 45), f('b', 45), f('c', 45)];
+    const batches = splitIntoBatches(files, 90 * MB);
+
+    is(names(batches), [['a'], ['b'], ['c']], 'ثلاثة ملفات ٤٥ م.ب لم تُفرَّد على سقف ٩٠');
+
+    for (const batch of batches) {
+        const bytes = totalBytes(batch);
+        checks++;
+        if (bytes > 90 * MB - OVERHEAD_BYTES) {
+            fail.push(`دفعة بحجم ${Math.round(bytes / MB)} م.ب تتجاوز السقف`);
+        }
+    }
+}
+
+/** ولا دفعة تتجاوز السقف مهما كان الخليط. */
+{
+    const mixed = [f('a', 12), f('b', 70), f('c', 3), f('d', 40), f('e', 40)];
+    for (const batch of splitIntoBatches(mixed, 90 * MB)) {
+        checks++;
+        if (batch.length > 1 && totalBytes(batch) > 90 * MB - OVERHEAD_BYTES) {
+            fail.push('دفعة مختلطة تجاوزت السقف');
+        }
+    }
+}
+
+/** الهامش مُصدَّر ليستعمله الملحن نفسه — رقمان مختلفان يعنيان تناقضاً. */
+is(OVERHEAD_BYTES, 256 * 1024, 'الهامش تغيّر');
+
 // ------------------------------------------------------ الأسلاك
 
 import fs from 'fs';
@@ -128,6 +167,14 @@ ok(/max_post_bytes/.test(form),
 
 ok(!/uploads\.enqueue\(\{[\s\S]{0,200}files: queue\.map/.test(form),
    'ما زال يُرسل الدفعة كلّها في طلب واحد');
+
+// ملفٌ لا يسع في طلب واحد لا يُنقذه تقسيم: يُردّ مبكّراً برسالة مقروءة بدل
+// أن يقطع الوكيل الأمامي الاتصال فيتجمّد الشريط.
+ok(/file\.size > requestBudget/.test(form),
+   'الملحن لا يردّ الملف الأكبر من سقف الطلب');
+
+ok(/REQUEST_OVERHEAD_BYTES/.test(form) && /uploadBatches/.test(form),
+   'الهامش غير مشترك بين الملحن والمقسّم — رقمان مختلفان يعنيان تناقضاً');
 
 if (fail.length) {
     console.error('❌ ' + fail.length + ' إخفاق:');

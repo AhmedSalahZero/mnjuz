@@ -7,7 +7,7 @@ import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourCompo
 import ChatAttachMenu from '@/Components/ChatComponents/ChatAttachMenu.vue'
 import UploadProgressIndicator from '@/Components/ChatComponents/UploadProgressIndicator.vue'
 import { initUploadQueue } from '@/Composables/uploadQueue'
-import { splitIntoBatches } from '@/Composables/uploadBatches'
+import { OVERHEAD_BYTES as REQUEST_OVERHEAD_BYTES, splitIntoBatches } from '@/Composables/uploadBatches'
 import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
 import LocationPicker from '@/Components/LocationPicker.vue'
 import { usePage } from '@inertiajs/vue3'
@@ -557,6 +557,7 @@ const resolveMediaType = (file) => {
 
 const humanSize = (bytes) => `${Math.round(bytes / (1024 * 1024))} MB`
 
+
 /** @returns {{file: File, type: string, previewUrl: ?string}|null} */
 const buildAttachment = (file) => {
 	const type = resolveMediaType(file)
@@ -568,6 +569,15 @@ const buildAttachment = (file) => {
 	// حدّ الخادم أوّلاً: هو السقف الحقيقي مهما سمحت واتساب.
 	if (file.size > serverMaxUploadBytes.value) {
 		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(serverMaxUploadBytes.value)))
+		return null
+	}
+
+	// وسقف الطلب ثانياً: ملفٌ لا يسع في طلب واحد لا يُنقذه أي تقسيم، لأنه
+	// يُرسَل منفرداً على أي حال. ردّه هنا يجعل السبب مقروءاً — وبلا ذلك يقطع
+	// الوكيل الأمامي (Cloudflare) الاتصال بلا خطأ، فيتجمّد الشريط في منتصفه.
+	const requestBudget = serverMaxPostBytes.value - REQUEST_OVERHEAD_BYTES
+	if (file.size > requestBudget) {
+		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(requestBudget)))
 		return null
 	}
 

@@ -11,7 +11,7 @@
  */
 
 /** هامش للحقول الأخرى في الحمولة — المعرّفات والتعليق وحدود multipart. */
-const OVERHEAD_BYTES = 256 * 1024
+export const OVERHEAD_BYTES = 256 * 1024
 
 /**
  * @param {Array<{file: {size?: number}}>} attachments

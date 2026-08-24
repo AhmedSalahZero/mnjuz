@@ -56,6 +56,24 @@ class ChatMediaUploadHelper
      * بلا فحص: ثلاثة ملفات كلٌّ منها مقبول تصير حمولةً يرفضها الخادم — ويقف
      * الرفع عند ٢٪ بلا رسالة، لأن الرفض يقع قبل أن يبلغ PHP.
      */
+    /**
+     * سقف الطلب الفعلي: أصغر ما بين حدّ PHP وحدّ الطريق إليه.
+     *
+     * رفعُ post_max_size لا يرفع سقف Cloudflare أو أي وكيل أمامي — وقياسُ
+     * الدفعة بحدّ PHP وحده كان يُنتج طلباً يمرّ من كل فحوصنا ثم يُقطَع في
+     * الطريق بلا أثر.
+     */
+    public static function maxRequestBytes(): int
+    {
+        $configured = (int) config('chat.max_request_bytes', 0);
+
+        if ($configured <= 0) {
+            return self::phpMaxPostBytes();
+        }
+
+        return min(self::phpMaxPostBytes(), $configured);
+    }
+
     public static function phpMaxPostBytes(): int
     {
         $value = trim((string) ini_get('post_max_size'));
