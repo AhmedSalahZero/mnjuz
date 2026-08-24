@@ -173,9 +173,20 @@ const queue = strip(fs.readFileSync('resources/js/Composables/uploadQueue.js', '
 const ok = (cond, msg) => { checks++; if (!cond) fail.push(msg); };
 
 ok(/uploadInChunks\(/.test(queue), 'الطابور لا يستعمل الرفع المجزّأ');
-ok(/> CHUNK_BYTES/.test(queue), 'لا حدّ يقرّر متى يُجزَّأ');
+ok(/CHUNK_BYTES/.test(queue), 'لا حدّ يقرّر متى يُجزَّأ');
 ok(/uploadId: randomId\(\)/.test(queue), 'لا معرّف رفع ثابت — الخادم لن يجمع القطع');
-ok(/request\.files\.length === 1/.test(queue), 'التجزئة تُطبَّق على دفعة لا على ملف مفرد');
+// القياس على الحمولة لا على العدد: مهلة الوكيل على الطلب، فملفان صغيران
+// في طلب واحد يتجاوزانها كما يتجاوزها ملفٌ كبير.
+ok(!/request\.files\.length === 1/.test(queue),
+   'التجزئة ما زالت مشروطة بعدد الملفات — دفعةٌ من ملفين ستعود للمسار القديم');
+
+ok(/total <= CHUNK_BYTES/.test(queue), 'لا فحص لحجم الحمولة كلّها');
+
+ok(/upload_id: job\.uploadId \+ '-' \+ index/.test(queue),
+   'معرّف الرفع مشترك بين الملفات — ستختلط قطعها في مجلّد واحد');
+
+ok(/sentTempIds/.test(queue),
+   'إخفاق ملف يُزيل فقاعات ملفات وصلت فعلاً');
 
 if (fail.length) {
     console.error('❌ ' + fail.length + ' إخفاق:');

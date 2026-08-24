@@ -84,6 +84,8 @@ export function createUploadQueue({ post, onError } = {}) {
             error: null,
             // معرّف ثابت للرفع المجزّأ: القطع تُجمَّع تحته على الخادم.
             uploadId: randomId(),
+            /** ما أُرسل فعلاً — لا تُزال فقاعاته عند إخفاق ما بعده. */
+            sentTempIds: [],
         })
 
         state.jobs.push(job)
@@ -92,10 +94,15 @@ export function createUploadQueue({ post, onError } = {}) {
         return job.id
     }
 
+    /** المعرّفات التي لم تُرسَل بعد — إزالة فقاعة رسالة وصلت تُخفي الحقيقة. */
+    const pendingTempIds = (job) =>
+        job.tempIds.filter((id) => !job.sentTempIds.includes(id))
+
     const start = (job, request) => {
         job.state = 'uploading'
         job.error = null
         job.loaded = 0
+        job.sentTempIds = []
 
         const controller = typeof AbortController === 'function' ? new AbortController() : null
         controllers.set(job.id, controller)
@@ -116,7 +123,7 @@ export function createUploadQueue({ post, onError } = {}) {
             .catch((error) => {
                 if (isAborted(error)) {
                     remove(job.id)
-                    request.onFailure?.(job.tempIds)
+                    request.onFailure?.(pendingTempIds(job))
 
                     return
                 }
@@ -125,7 +132,7 @@ export function createUploadQueue({ post, onError } = {}) {
                 job.loaded = 0
                 job.error = readErrorMessage(error)
                 // الفقاعات التفاؤلية تُزال فوراً: إبقاؤها يوهم أن الملف وصل.
-                request.onFailure?.(job.tempIds)
+                request.onFailure?.(pendingTempIds(job))
                 onError?.(job.error)
             })
     }
@@ -141,30 +148,49 @@ export function createUploadQueue({ post, onError } = {}) {
      * الشريط في منتصفه. والصغير يبقى في طلب واحد: التجزئة تُضاعف الرحلات بلا
      * فائدة حين يكفي طلبٌ قصير.
      */
-    const send = (request, job, controller, progress) => {
-        const single = request.files.length === 1 ? request.files[0] : null;
+    const send = async (request, job, controller, progress) => {
+        const files = request.files
+        const total = files.reduce((sum, item) => sum + Number(item.file?.size ?? 0), 0)
 
-        if (single && Number(single.file?.size ?? 0) > CHUNK_BYTES) {
-            return uploadInChunks({
-                post,
-                file: single.file,
+        // القياس على الحمولة لا على عدد الملفات.
+        //
+        // مهلة الوكيل الأمامي على **الطلب**، فعشرة ملفات صغيرة في طلب واحد
+        // تتجاوزها على خطّ بطيء كما يتجاوزها ملفٌ كبير. وربط التجزئة بعدد
+        // الملفات كان يُسقط الدفعة إلى المسار القديم: ملفٌ واحد يمرّ، وملفان
+        // يعودان إلى طلبٍ واحد بحجمهما معاً فيموت كما كان.
+        if (total <= CHUNK_BYTES) {
+            return post('/chats', buildFormData(request, job), {
                 signal: controller?.signal,
-                onProgress: progress,
-                fields: {
-                    upload_id: job.uploadId,
-                    contact_uuid: request.contactUuid,
-                    file_name: single.file.name,
-                    file_type: single.type,
-                    caption: job.caption,
-                    temp_message_id: job.tempIds[0],
-                },
+                onUploadProgress: (event) => progress(event.loaded ?? 0, event.total),
             })
         }
 
-        return post('/chats', buildFormData(request, job), {
-            signal: controller?.signal,
-            onUploadProgress: (event) => progress(event.loaded ?? 0, event.total),
-        })
+        let uploaded = 0
+
+        for (const [index, item] of files.entries()) {
+            await uploadInChunks({
+                post,
+                file: item.file,
+                signal: controller?.signal,
+                onProgress: (loaded) => progress(uploaded + loaded, total),
+                fields: {
+                    // معرّف مستقلّ لكل ملف: الخادم يبني منه اسم مجلّد القطع،
+                    // فمعرّفٌ مشترك يخلط قطع ملفين في مجلّد واحد ويُتلفهما معاً.
+                    upload_id: job.uploadId + '-' + index,
+                    contact_uuid: request.contactUuid,
+                    file_name: item.file.name,
+                    file_type: item.type,
+                    // التعليق مع الأوّل وحده — تكراره يُغرق المحادثة.
+                    caption: index === 0 ? job.caption : '',
+                    temp_message_id: job.tempIds[index],
+                },
+            })
+
+            uploaded += Number(item.file?.size ?? 0)
+            // ما وصل صار رسالةً فعلاً: فقاعته لا تُزال لو أخفق ما بعده.
+            job.sentTempIds.push(job.tempIds[index])
+            progress(uploaded, total)
+        }
     }
 
     const buildFormData = (request, job) => {

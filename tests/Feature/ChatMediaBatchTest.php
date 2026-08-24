@@ -365,8 +365,12 @@ class ChatMediaBatchTest extends TestCase
         );
         // مقيّد بما بعد تعليم الإخفاق: النمط الأوسع كان يُطابق فرع الإلغاء
         // في نفس الـcatch، فيمرّ ولو حُذف الإبلاغ عن الإخفاق كلّياً.
+        //
+        // والمُبلَّغ عنه هو المعلّق وحده لا الكلّ: الملفات تُرفع واحداً بعد آخر،
+        // فإزالة فقاعة ملفٍ وصل تُخفي رسالةً استلمها العميل — فيُعيد الموظّف
+        // إرسالها وتصل مكرَّرة.
         $this->assertMatchesRegularExpression(
-            "/job\.state = 'failed'.*?request\.onFailure\?\.\(job\.tempIds\)/s",
+            "/job\.state = 'failed'.*?request\.onFailure\?\.\(pendingTempIds\(job\)\)/s",
             $queue,
             'الطابور لا يُبلّغ بالإخفاق'
         );

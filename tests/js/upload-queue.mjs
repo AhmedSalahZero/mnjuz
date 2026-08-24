@@ -34,6 +34,45 @@ function transport() {
 
 const file = (name, size) => ({ file: { name, size, type: 'application/pdf' }, type: 'document' });
 
+const MB = 1024 * 1024;
+
+/** ملف كبير: slice تُرجع Blob حقيقياً — FormData لا تقبل غيره. */
+const bigFile = (name, mb) => ({
+    file: { name, size: mb * MB, type: 'application/pdf', slice: (a, b) => new Blob([new Uint8Array(b - a)]) },
+    type: 'document',
+});
+
+/**
+ * ناقل يحلّ فوراً — لازم للقطع المتتابعة.
+ *
+ * الناقل الأصلي في هذا الملف مُتحكَّم به عمداً: يحتفظ بـresolve ليُستدعى يدوياً.
+ * وسلسلة القطع تنتظر كل قطعة، فتقف عند الأولى إلى الأبد.
+ */
+function autoTransport() {
+    const calls = [];
+    const post = (url, formData) => {
+        calls.push({ url, formData });
+
+        return Promise.resolve({ data: {} });
+    };
+
+    return { calls, post };
+}
+
+/**
+ * انتظار سلسلة القطع حتى تهدأ فعلاً.
+ *
+ * مهلة ثابتة تُنتج اختباراً يمرّ أو يسقط بحسب سرعة الجهاز — نستطلع الطابور
+ * حتى يفرغ بدل التخمين.
+ */
+const settle = async (q, timeoutMs = 5000) => {
+    const until = Date.now() + timeoutMs;
+
+    while (q.isBusy.value && Date.now() < until) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+};
+
 function queueWith(t = transport()) {
     return { t, q: createUploadQueue({ post: t.post }) };
 }
@@ -295,6 +334,84 @@ is(jobPercent(null), 0, 'مهمّة معدومة');
 
     is(q.jobsFor('B').length, 0, 'غاب عند الانتقال');
     is(q.percentFor('A'), 70, 'وعاد بنسبته عند الرجوع');
+}
+
+// ------------------------------- الدفعة الكبيرة تُجزَّأ لا تُحزَم
+
+/**
+ * العطل الذي وقع على الإنتاج بعد تفعيل التجزئة: ملفٌ واحد مرّ على أربع قطع
+ * ونجح، ثم ملفان معاً عادا إلى طلبٍ واحد بـ٧٦٫٥ ميغابايت فمات عند ١٢٥ ثانية —
+ * نفس الرقم الذي كان يفشل قبل التجزئة.
+ *
+ * السبب أن التجزئة كانت مشروطة بأن يكون الملف واحداً. ومهلة الوكيل على
+ * **الطلب** لا على الملف، فالقياس يجب أن يكون على الحمولة كلّها.
+ */
+{
+    const t = autoTransport();
+    const q = createUploadQueue({ post: t.post });
+    q.enqueue({
+        contactUuid: 'c',
+        files: [bigFile('a.pdf', 30), bigFile('b.pdf', 46)],
+        tempIds: ['t1', 't2'],
+    });
+
+    await settle(q);
+
+    is(t.calls.filter((c) => c.url === '/chats').length, 0,
+       'دفعة من ملفين عادت إلى طلبٍ واحد كامل — سيقتلها الوكيل كما كان');
+
+    const chunked = t.calls.filter((c) => c.url === '/chats/upload/chunk');
+    is(chunked.length > 0, true, 'لم تُجزَّأ');
+
+    // مجلّد مستقلّ لكل ملف: المشترك يخلط القطع ويُتلف الملفين معاً.
+    const folders = [...new Set(chunked.map((c) => c.formData.get('upload_id')))];
+    is(folders.length, 2, 'الملفان يتقاسمان مجلّد قطع واحداً');
+}
+
+/**
+ * إخفاقٌ في منتصف الدفعة لا يمحو ما وصل.
+ *
+ * الملفات تُرفع واحداً بعد آخر، وكلٌّ يصير رسالة عند اكتماله. فلو أخفق
+ * الثاني، إزالةُ فقاعة الأوّل تُخفي رسالةً وصلت العميل فعلاً — يظنّ الموظّف
+ * أنه لم يُرسل شيئاً فيُعيد، فتصل مكرَّرة.
+ */
+{
+    const calls = [];
+    let failFrom = null;
+    const post = (url, formData) => {
+        calls.push({ url, formData });
+        const id = formData.get?.('upload_id') ?? '';
+
+        return failFrom && id.endsWith(failFrom)
+            ? Promise.reject(new Error('انقطع الاتصال'))
+            : Promise.resolve({ data: {} });
+    };
+
+    failFrom = '-1';   // الملف الثاني
+    const q = createUploadQueue({ post });
+    let removed = null;
+
+    q.enqueue({
+        contactUuid: 'c',
+        files: [bigFile('a.pdf', 6), bigFile('b.pdf', 6)],
+        tempIds: ['t1', 't2'],
+        onFailure: (ids) => { removed = ids; },
+    });
+
+    await settle(q);
+
+    // is في هذا الملف مقارنةٌ صارمة، والمصفوفات لا تتساوى بالهوية.
+    is(removed?.join(','), 't2', 'أُزيلت فقاعة ملفٍ وصل العميل — سيُعيد الموظّف إرساله');
+}
+
+/** والدفعة الصغيرة تبقى في طلب واحد — التجزئة بلا فائدة حين يكفي طلب قصير. */
+{
+    const t = autoTransport();
+    const q = createUploadQueue({ post: t.post });
+    q.enqueue({ contactUuid: 'c', files: [file('a.pdf', 10), file('b.pdf', 20)], tempIds: ['t1', 't2'] });
+
+    is(t.calls.length, 1, 'دفعة صغيرة جُزّئت بلا داعٍ');
+    is(t.calls[0].url, '/chats', 'مسار خاطئ للدفعة الصغيرة');
 }
 
 // -------------------------------------------------------- النتيجة
