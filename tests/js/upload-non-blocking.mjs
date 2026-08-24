@@ -37,6 +37,14 @@ ok(!/const sendAttachments = async/.test(form),
 ok(/uploads\.enqueue\(/.test(sendAttachments),
    'المرفقات لا تُسلَّم للطابور');
 
+// مهمّة لكل ملف: الجمع يجعل الإلغاء يطال المجموعة كلّها، فمن أراد التراجع
+// عن ملف واحد اضطرّ إلى إلغاء الباقي معه.
+ok(/queue\.forEach\(\(item, index\) => \{[\s\S]{0,400}files: \[\{ file: item\.file/.test(sendAttachments),
+   'الملفات تُجمَع في مهمّة واحدة — الإلغاء لن يكون لكل ملف');
+
+ok(!/splitIntoBatches\(queue/.test(sendAttachments),
+   'ما زال يُقسّم دفعات بدل مهمّة لكل ملف');
+
 ok(/closeAttachmentPreview\(\)/.test(sendAttachments),
    'النافذة لا تُغلق بعد التسليم');
 

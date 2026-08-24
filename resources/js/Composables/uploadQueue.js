@@ -80,7 +80,7 @@ export function createUploadQueue({ post, onError } = {}) {
             loaded: 0,
             // مجموع الأحجام تقديرٌ أوّليّ حتى يصل أوّل تقرير تقدّم من الشبكة.
             total: request.files.reduce((sum, item) => sum + (item.file?.size ?? 0), 0),
-            state: 'uploading',
+            state: 'pending',
             error: null,
             // معرّف ثابت للرفع المجزّأ: القطع تُجمَّع تحته على الخادم.
             uploadId: randomId(),
@@ -89,9 +89,29 @@ export function createUploadQueue({ post, onError } = {}) {
         })
 
         state.jobs.push(job)
-        start(job, request)
+        requests.set(job.id, request)
+        pump()
 
         return job.id
+    }
+
+    /**
+     * تشغيل مهمّة واحدة في كل مرّة.
+     *
+     * التوازي لا يُسرِّع شيئاً — الملفات تتقاسم نفس عرض النطاق — ويُضيّع
+     * الترتيب فتصل الملفات مقلوبة. والأهمّ أنه يجعل «الإلغاء قبل الرفع»
+     * مستحيلاً: ما بدأ فعلاً لا يُلغى إلّا بقطع اتصال قائم.
+     */
+    const pump = () => {
+        if (state.jobs.some((job) => job.state === 'uploading')) {
+            return
+        }
+
+        const next = state.jobs.find((job) => job.state === 'pending')
+
+        if (next) {
+            start(next, requests.get(next.id))
+        }
     }
 
     /** المعرّفات التي لم تُرسَل بعد — إزالة فقاعة رسالة وصلت تُخفي الحقيقة. */
@@ -119,11 +139,13 @@ export function createUploadQueue({ post, onError } = {}) {
                 // النجاح يُزيل المهمّة: الرسالة صارت في المحادثة، وإبقاء سطر
                 // «اكتمل» يحوّل المؤشّر إلى أرشيف يحتاج تنظيفاً يدوياً.
                 remove(job.id)
+                pump()
             })
             .catch((error) => {
                 if (isAborted(error)) {
                     remove(job.id)
                     request.onFailure?.(pendingTempIds(job))
+                    pump()
 
                     return
                 }
@@ -134,6 +156,7 @@ export function createUploadQueue({ post, onError } = {}) {
                 // الفقاعات التفاؤلية تُزال فوراً: إبقاؤها يوهم أن الملف وصل.
                 request.onFailure?.(pendingTempIds(job))
                 onError?.(job.error)
+                pump()
             })
     }
 
@@ -237,9 +260,12 @@ export function createUploadQueue({ post, onError } = {}) {
             return true
         }
 
+        // منتظِرٌ لم يبدأ: يُحذف فوراً بلا لمس الشبكة — وهذا هو الغرض من
+        // الطابور المتتابع.
         const request = requests.get(job.id)
         remove(job.id)
-        request?.onFailure?.(job.tempIds)
+        request?.onFailure?.(pendingTempIds(job))
+        pump()
 
         return true
     }
@@ -264,7 +290,7 @@ export function createUploadQueue({ post, onError } = {}) {
         contactUuid ? state.jobs.filter((job) => job.contactUuid === contactUuid) : []
 
     const uploadingFor = (contactUuid) =>
-        jobsFor(contactUuid).filter((job) => job.state === 'uploading')
+        jobsFor(contactUuid).filter((job) => job.state === 'uploading' || job.state === 'pending')
 
     const fileCountFor = (contactUuid) =>
         uploadingFor(contactUuid).reduce((sum, job) => sum + job.fileNames.length, 0)
@@ -273,7 +299,8 @@ export function createUploadQueue({ post, onError } = {}) {
     const percentFor = (contactUuid) => weighted(uploadingFor(contactUuid))
 
     const jobs = computed(() => state.jobs)
-    const uploading = computed(() => state.jobs.filter((job) => job.state === 'uploading'))
+    const uploading = computed(() =>
+        state.jobs.filter((job) => job.state === 'uploading' || job.state === 'pending'))
     const failed = computed(() => state.jobs.filter((job) => job.state === 'failed'))
     const isBusy = computed(() => uploading.value.length > 0)
 

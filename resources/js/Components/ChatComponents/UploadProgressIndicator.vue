@@ -24,7 +24,8 @@ const emit = defineEmits(['toggle', 'retry', 'cancel', 'dismiss'])
 
 const trans = useTrans()
 
-const uploading = computed(() => props.jobs.filter((job) => job.state === 'uploading'))
+const uploading = computed(() =>
+	props.jobs.filter((job) => job.state === 'uploading' || job.state === 'pending'))
 const failed = computed(() => props.jobs.filter((job) => job.state === 'failed'))
 
 const summary = computed(() => {
@@ -75,8 +76,11 @@ const summary = computed(() => {
 				<span v-if="job.state === 'uploading'" class="shrink-0 tabular-nums text-slate-500">
 					{{ jobPercent(job) }}%
 				</span>
+				<span v-else-if="job.state === 'pending'" class="shrink-0 text-slate-400">
+					{{ $t('Waiting') }}
+				</span>
 
-				<button v-if="job.state === 'uploading'" type="button" class="shrink-0 text-slate-400 hover:text-red-600"
+				<button v-if="job.state !== 'failed'" type="button" class="shrink-0 text-slate-400 hover:text-red-600"
 					@click="emit('cancel', job)">{{ $t('Cancel') }}</button>
 
 				<template v-else>

@@ -146,13 +146,48 @@ is(jobPercent(null), 0, 'مهمّة معدومة');
 
 // ---------------------------------------------- محادثات متوازية
 
+/**
+ * الطابور متتابع لا متوازٍ.
+ *
+ * التوازي لا يُسرِّع شيئاً — الملفات تتقاسم نفس عرض النطاق — ويُضيّع الترتيب.
+ * والأهمّ أنه يجعل «الإلغاء قبل الرفع» مستحيلاً: ما بدأ لا يُلغى إلّا بقطع
+ * اتصال قائم، بينما المنتظِر يُحذف فوراً بلا لمس الشبكة.
+ */
 {
     const { t, q } = queueWith();
     q.enqueue({ contactUuid: 'uuid-A', contactName: 'أحمد', files: [file('a.pdf', 10)], tempIds: ['a'] });
     q.enqueue({ contactUuid: 'uuid-B', contactName: 'سارة', files: [file('b.pdf', 10)], tempIds: ['b'] });
 
-    is(t.calls.length, 2, 'رفعان متوازيان لمحادثتين');
-    is(q.uploading.value.map((j) => j.contactUuid).join(','), 'uuid-A,uuid-B', 'كلٌّ يحمل محادثته');
+    is(t.calls.length, 1, 'انطلق أكثر من رفع معاً');
+    is(q.jobs.value.map((j) => j.state).join(','), 'uploading,pending', 'الثاني لم ينتظر دوره');
+    is(q.uploading.value.map((j) => j.contactUuid).join(','), 'uuid-A,uuid-B',
+       'المنتظِر لا يظهر في المؤشّر — سيظنّ الموظّف أنه ضاع');
+
+    // انتهاء الأوّل يُشغّل الثاني.
+    t.calls[0].resolve({});
+    await tick();
+
+    is(t.calls.length, 2, 'الثاني لم ينطلق بعد انتهاء الأوّل');
+    is(t.last().formData.get('uuid'), 'uuid-B', 'انطلق الخطأ');
+}
+
+/** والمنتظِر يُلغى بلا أن يُرفع منه بايت — وهذا كل الغرض. */
+{
+    const { t, q } = queueWith();
+    let removed = null;
+    q.enqueue({ contactUuid: 'c', files: [file('a.pdf', 10)], tempIds: ['a'] });
+    const second = q.enqueue({
+        contactUuid: 'c', files: [file('b.pdf', 10)], tempIds: ['b'],
+        onFailure: (ids) => { removed = ids; },
+    });
+
+    is(t.calls.length, 1, 'الثاني بدأ قبل دوره');
+
+    q.cancel(second);
+
+    is(t.calls.length, 1, 'الإلغاء لمس الشبكة');
+    is(q.jobs.value.length, 1, 'المنتظِر لم يُحذف');
+    is(removed?.join(','), 'b', 'فقاعة المنتظِر بقيت');
 }
 
 // -------------------------------------------------------- النجاح

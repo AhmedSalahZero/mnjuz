@@ -7,7 +7,7 @@ import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourCompo
 import ChatAttachMenu from '@/Components/ChatComponents/ChatAttachMenu.vue'
 import UploadProgressIndicator from '@/Components/ChatComponents/UploadProgressIndicator.vue'
 import { initUploadQueue } from '@/Composables/uploadQueue'
-import { OVERHEAD_BYTES as REQUEST_OVERHEAD_BYTES, splitIntoBatches } from '@/Composables/uploadBatches'
+import { OVERHEAD_BYTES as REQUEST_OVERHEAD_BYTES } from '@/Composables/uploadBatches'
 import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
 import LocationPicker from '@/Components/LocationPicker.vue'
 import { usePage } from '@inertiajs/vue3'
@@ -670,29 +670,23 @@ const sendAttachments = () => {
 		appendMessageIntoBody(form)
 	})
 
-	// طلب واحد لكل ما يسع في طلب: كل ملف كان يستهلك رحلة HTTP كاملة، فثلاثة
-	// ملفات ثلاث رحلات متعاقبة. لكن الطلب محكوم بـpost_max_size، فنُقسّم على
-	// قدره بدل أن نُرسل حمولة يرفضها الخادم قبل أن تبلغ PHP — وهو رفضٌ يقف
-	// بالمؤشّر بلا رسالة.
-	const batches = splitIntoBatches(queue, serverMaxPostBytes.value)
-	let offset = 0
-
-	for (const batch of batches) {
-		const batchTempIds = tempIds.slice(offset, offset + batch.length)
-		// التعليق مع الدفعة الأولى وحدها — تكراره يُغرق المحادثة.
-		const batchCaption = offset === 0 ? caption : ''
-		offset += batch.length
-
+	// مهمّة لكل ملف لا دفعة تجمعها.
+	//
+	// الجمع كان يجعل الإلغاء يطال المجموعة كلّها: من أراد التراجع عن ملف واحد
+	// اضطرّ إلى إلغاء الثلاثة. والطابور يُشغّل واحداً في كل مرّة، فالمنتظِر
+	// يُلغى فوراً بلا أن يُرفع منه بايت.
+	queue.forEach((item, index) => {
 		uploads.enqueue({
 			contactUuid: form.value.uuid,
 			contactName: props.contact?.full_name || props.contact?.phone || '',
-			files: batch.map((item) => ({ file: item.file, type: item.type })),
-			caption: batchCaption,
-			tempIds: batchTempIds,
-			// الإخفاق يُزيل الفقاعات: إبقاؤها يوهم الموظّف أن الملف وصل العميل.
+			files: [{ file: item.file, type: item.type }],
+			// التعليق مع الأوّل وحده — تكراره يُغرق المحادثة.
+			caption: index === 0 ? caption : '',
+			tempIds: [tempIds[index]],
+			// الإخفاق يُزيل الفقاعة: إبقاؤها يوهم الموظّف أن الملف وصل العميل.
 			onFailure: (ids) => ids.forEach((id) => emit('removeMessage', id)),
 		})
-	}
+	})
 
 	formTextInput.value = null
 	closeAttachmentPreview()
