@@ -449,6 +449,66 @@ is(jobPercent(null), 0, 'مهمّة معدومة');
     is(t.calls[0].url, '/chats', 'مسار خاطئ للدفعة الصغيرة');
 }
 
+// ------------------------------- النسبة الإجمالية لا ترتدّ
+
+/**
+ * كانت المهمّة المكتملة تُحذف فوراً، فتخرج بايتاتها من الحساب: يصغر المقام
+ * ويعود البسط للصفر — فترتدّ النسبة إلى الصفر مع نهاية **كل** ملف. يرى
+ * الموظّف تقدّماً يُمحى ثلاث مرّات فيظنّ الرفع يُعاد من أوّله.
+ *
+ * المكتملة تبقى محسوبة حتى تفرغ الجولة: هي ما أُنجز فعلاً.
+ */
+{
+    const { t, q } = queueWith();
+    const sizes = [46, 27, 19];
+
+    sizes.forEach((size, i) =>
+        q.enqueue({ contactUuid: 'c', files: [file(`f${i}.pdf`, size)], tempIds: ['t' + i] }));
+
+    const seen = [q.percent.value];
+
+    for (const [i, size] of sizes.entries()) {
+        const call = t.calls[i];
+        call.config.onUploadProgress({ loaded: size / 2, total: size });
+        seen.push(q.percent.value);
+        call.config.onUploadProgress({ loaded: size, total: size });
+        call.resolve({});
+        await tick();
+        // آخر ملف يُفرغ الطابور فتختفي النسبة مع المؤشّر — لا تُحسب ارتداداً.
+        if (i < sizes.length - 1) seen.push(q.percent.value);
+    }
+
+    checks++;
+    for (let i = 1; i < seen.length; i++) {
+        if (seen[i] < seen[i - 1]) {
+            fail.push(`النسبة ارتدّت: ${seen.join(' → ')}`);
+            break;
+        }
+    }
+
+    is(seen[0], 0, 'البداية ليست صفراً');
+    is(seen[2], 50, 'انتهاء أوّل ملف من ثلاثة (٤٦ من ٩٢) ليس ٥٠٪');
+    is(q.jobs.value.length, 0, 'الطابور لم يُطوَ بعد انتهاء الجولة');
+}
+
+/**
+ * والمخفق يخرج من الحساب: بقاؤه فيه يُجمّد النسبة عند سقفٍ لا تتجاوزه أبداً،
+ * فيظنّ الموظّف أن الرفع متوقّف وهو ماضٍ.
+ */
+{
+    const { t, q } = queueWith();
+    q.enqueue({ contactUuid: 'c', files: [file('a.pdf', 50)], tempIds: ['a'] });
+    q.enqueue({ contactUuid: 'c', files: [file('b.pdf', 50)], tempIds: ['b'] });
+
+    t.calls[0].reject(new Error('فشل'));
+    await tick();
+
+    // الثاني وحده هو الجولة الآن: نصفه = ٥٠٪ لا ٢٥٪.
+    t.calls[1].config.onUploadProgress({ loaded: 25, total: 50 });
+
+    is(q.percent.value, 50, 'المخفق ما زال محسوباً في المقام');
+}
+
 // -------------------------------------------------------- النتيجة
 
 if (fail.length) {

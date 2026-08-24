@@ -6,8 +6,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect
 import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourComposeBanner.vue'
 import ChatAttachMenu from '@/Components/ChatComponents/ChatAttachMenu.vue'
 import UploadProgressIndicator from '@/Components/ChatComponents/UploadProgressIndicator.vue'
+import { CHUNK_BYTES } from '@/Composables/chunkedUpload'
 import { initUploadQueue } from '@/Composables/uploadQueue'
-import { OVERHEAD_BYTES as REQUEST_OVERHEAD_BYTES } from '@/Composables/uploadBatches'
 import ShortcutsDropdown from '@/Components/ChatComponents/ShortcutsDropdown.vue'
 import LocationPicker from '@/Components/LocationPicker.vue'
 import { usePage } from '@inertiajs/vue3'
@@ -527,11 +527,6 @@ const ACCEPTED_MEDIA = {
  */
 const serverMaxUploadBytes = computed(() => usePage().props.max_upload_bytes ?? Infinity)
 
-/**
- * سقف الطلب الواحد. مجموع الدفعة يُقاس به لا سقفُ الملف — والفرق هو ما جعل
- * ثلاثة ملفات مقبولة فرادى تقف عند ٢٪ حين أُرسلت معاً.
- */
-const serverMaxPostBytes = computed(() => usePage().props.max_post_bytes ?? Infinity)
 
 const isDraggingFile = ref(false)
 const pendingAttachments = ref([])
@@ -566,18 +561,13 @@ const buildAttachment = (file) => {
 		return null
 	}
 
-	// حدّ الخادم أوّلاً: هو السقف الحقيقي مهما سمحت واتساب.
-	if (file.size > serverMaxUploadBytes.value) {
+	// حدّ الخادم يخصّ ما يُرسَل في طلب واحد.
+	//
+	// الملف الكبير يُرفَع على قطع، فما يبلغ الخادم قطعةٌ لا الملف كلّه — ولا
+	// شأن لحجمه بحدّ upload_max_filesize. أمّا الصغير فيذهب في طلب واحد،
+	// فيُقاس به. وفحص الملف كلّه كان يردّ ملفات صار الرفع المجزّأ يقبلها.
+	if (file.size <= CHUNK_BYTES && file.size > serverMaxUploadBytes.value) {
 		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(serverMaxUploadBytes.value)))
-		return null
-	}
-
-	// وسقف الطلب ثانياً: ملفٌ لا يسع في طلب واحد لا يُنقذه أي تقسيم، لأنه
-	// يُرسَل منفرداً على أي حال. ردّه هنا يجعل السبب مقروءاً — وبلا ذلك يقطع
-	// الوكيل الأمامي (Cloudflare) الاتصال بلا خطأ، فيتجمّد الشريط في منتصفه.
-	const requestBudget = serverMaxPostBytes.value - REQUEST_OVERHEAD_BYTES
-	if (file.size > requestBudget) {
-		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(requestBudget)))
 		return null
 	}
 

@@ -79,11 +79,13 @@ const summary = computed(() => {
 				<span v-else-if="job.state === 'pending'" class="shrink-0 text-slate-400">
 					{{ $t('Waiting') }}
 				</span>
+				<span v-else-if="job.state === 'done'" class="shrink-0 text-green-600" :aria-label="$t('Sent')">✓</span>
 
-				<button v-if="job.state !== 'failed'" type="button" class="shrink-0 text-slate-400 hover:text-red-600"
+				<button v-if="job.state === 'uploading' || job.state === 'pending'" type="button"
+					class="shrink-0 text-slate-400 hover:text-red-600"
 					@click="emit('cancel', job)">{{ $t('Cancel') }}</button>
 
-				<template v-else>
+				<template v-else-if="job.state === 'failed'">
 					<button type="button" class="shrink-0 text-primary hover:underline"
 						@click="emit('retry', job)">{{ $t('Retry') }}</button>
 					<button type="button" class="shrink-0 text-slate-400 hover:text-slate-600"

@@ -85,13 +85,20 @@ class ChatAttachmentUploadTest extends TestCase
         );
     }
 
+    /**
+     * حدّ الخادم يخصّ ما يُرسَل في طلب واحد.
+     *
+     * كان يُفحَص على الملف كلّه — وهو الصواب يوم كان الملف يذهب في طلب واحد.
+     * أمّا بعد الرفع المجزّأ فما يبلغ الخادم قطعةٌ لا الملف، ففحص الحجم الكلّي
+     * صار يردّ ملفات صار الرفع يقبلها. والصغير وحده يذهب في طلب واحد فيُقاس به.
+     */
     public function test_the_composer_rejects_files_above_the_server_limit_first(): void
     {
         $this->assertStringContainsString('serverMaxUploadBytes', $this->composer);
         $this->assertMatchesRegularExpression(
-            '/if \(file\.size > serverMaxUploadBytes\.value\)/',
+            '/if \(file\.size <= CHUNK_BYTES && file\.size > serverMaxUploadBytes\.value\)/',
             $this->composer,
-            'حدّ الخادم يجب أن يُفحَص قبل حدود واتساب — هو السقف الحقيقي'
+            'حدّ الخادم يجب أن يُفحَص على ما يُرسَل في طلب واحد لا على الملف كلّه'
         );
     }
 

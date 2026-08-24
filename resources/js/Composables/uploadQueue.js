@@ -111,7 +111,15 @@ export function createUploadQueue({ post, onError } = {}) {
 
         if (next) {
             start(next, requests.get(next.id))
+
+            return
         }
+
+        // لا جاري ولا منتظِر: انتهت الجولة، فتُطوى المكتملة ويختفي المؤشّر.
+        // إبقاؤها يحوّله إلى أرشيف يحتاج تنظيفاً يدوياً.
+        state.jobs
+            .filter((job) => job.state === 'done')
+            .forEach((job) => remove(job.id))
     }
 
     /** المعرّفات التي لم تُرسَل بعد — إزالة فقاعة رسالة وصلت تُخفي الحقيقة. */
@@ -136,9 +144,13 @@ export function createUploadQueue({ post, onError } = {}) {
 
         Promise.resolve(send(request, job, controller, progress))
             .then(() => {
-                // النجاح يُزيل المهمّة: الرسالة صارت في المحادثة، وإبقاء سطر
-                // «اكتمل» يحوّل المؤشّر إلى أرشيف يحتاج تنظيفاً يدوياً.
-                remove(job.id)
+                // المكتملة تُعلَّم ولا تُحذف حتى يفرغ الطابور.
+                //
+                // حذفها فوراً كان يُخرج بايتاتها من الحساب: يصغر المقام ويعود
+                // البسط للصفر، فترتدّ النسبة الإجمالية إلى الصفر مع نهاية كل
+                // ملف — يرى الموظّف تقدّماً يُمحى ثلاث مرّات ويظنّ الرفع يُعاد.
+                job.state = 'done'
+                job.loaded = job.total
                 pump()
             })
             .catch((error) => {
@@ -296,11 +308,15 @@ export function createUploadQueue({ post, onError } = {}) {
         uploadingFor(contactUuid).reduce((sum, job) => sum + job.fileNames.length, 0)
 
     /** نسبة محادثة واحدة — موزونة بالبايتات كالنسبة العامّة. */
-    const percentFor = (contactUuid) => weighted(uploadingFor(contactUuid))
+    const percentFor = (contactUuid) => weighted(inRound(jobsFor(contactUuid)))
 
     const jobs = computed(() => state.jobs)
+    /** ما يعمل الآن أو ينتظر دوره — لا المكتمل ولا المخفق. */
     const uploading = computed(() =>
         state.jobs.filter((job) => job.state === 'uploading' || job.state === 'pending'))
+
+    /** ما تُحسب عليه النسبة: الجولة كلّها بما أُنجز منها. */
+    const inRound = (jobs) => jobs.filter((job) => job.state !== 'failed')
     const failed = computed(() => state.jobs.filter((job) => job.state === 'failed'))
     const isBusy = computed(() => uploading.value.length > 0)
 
@@ -313,7 +329,7 @@ export function createUploadQueue({ post, onError } = {}) {
      * النسبة الإجمالية موزونة بالبايتات لا بعدد المهامّ: مهمّة صغيرة اكتملت
      * لا تقفز بالمؤشّر إلى النصف بينما الملف الكبير في أوّله.
      */
-    const percent = computed(() => weighted(uploading.value))
+    const percent = computed(() => weighted(inRound(state.jobs)))
 
     return {
         jobs, uploading, failed, isBusy, fileCount, percent,
