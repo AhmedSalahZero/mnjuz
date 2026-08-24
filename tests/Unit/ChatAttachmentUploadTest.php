@@ -199,9 +199,16 @@ class ChatAttachmentUploadTest extends TestCase
      * رحلات متعاقبة. صارت رحلة واحدة تحمل الملفات مرتّبةً، والخادم يُلقيها في
      * الطابور بنفس الترتيب، فاجتمع الاختصار وضمان الترتيب.
      */
+    /**
+     * الدفعة الصغيرة تبقى في طلب واحد.
+     *
+     * الملف الكبير صار يُرفَع على قطع لأن الوكيل الأمامي يقطع أي طلب تجاوز
+     * ١٢٥ ثانية — لكن ذلك مسارٌ آخر. أمّا الدفعة التي تسع في طلب قصير فتبقى
+     * كما كانت: التجزئة تُضاعف الرحلات بلا فائدة حين يكفي طلبٌ واحد.
+     */
     public function test_the_batch_travels_in_a_single_request(): void
     {
-        $this->assertStringContainsString("post('/chats', formData", $this->uploadQueue);
+        $this->assertStringContainsString("post('/chats', buildFormData(", $this->uploadQueue);
         $this->assertStringContainsString("formData.append('files[]', item.file)", $this->uploadQueue);
 
         $this->assertDoesNotMatchRegularExpression(

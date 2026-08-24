@@ -170,6 +170,11 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::post('/chats/open-by-phone', [App\Http\Controllers\User\ChatController::class, 'openByPhone']);
                 Route::post('/chats/{uuid}/read', [App\Http\Controllers\User\ChatController::class, 'markAsRead']);
+
+                // الرفع المجزّأ: كل قطعة طلب قصير، فلا يبلغ أي طلب مهلة
+                // الوكيل الأمامي مهما كبر الملف أو بطؤت الشبكة.
+                Route::post('/chats/upload/chunk', [App\Http\Controllers\User\ChunkedUploadController::class, 'store']);
+                Route::delete('/chats/upload/chunk', [App\Http\Controllers\User\ChunkedUploadController::class, 'destroy']);
                 Route::get('/shortcuts/available', [App\Http\Controllers\User\ShortcutController::class, 'available']);
                 Route::get('/performance', [App\Http\Controllers\User\AgentPerformanceController::class, 'index']);
                 Route::get('/activity-log', [App\Http\Controllers\User\ActivityLogController::class, 'index']);

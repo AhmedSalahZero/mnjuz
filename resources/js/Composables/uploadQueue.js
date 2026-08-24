@@ -1,4 +1,5 @@
 import { computed, reactive } from 'vue'
+import { CHUNK_BYTES, uploadInChunks } from './chunkedUpload.js'
 
 /**
  * طابور رفع المرفقات — خارج دورة حياة المكوّن عمداً.
@@ -15,6 +16,15 @@ import { computed, reactive } from 'vue'
  */
 
 let nextId = 1
+
+/** معرّف رفع: حروف وأرقام فقط — الخادم يبني منه مساراً. */
+function randomId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID()
+    }
+
+    return 'u' + Math.abs(Date.now()).toString(36) + Math.floor(Math.random() * 1e9).toString(36)
+}
 
 /**
  * @typedef {object} UploadJob
@@ -72,6 +82,8 @@ export function createUploadQueue({ post, onError } = {}) {
             total: request.files.reduce((sum, item) => sum + (item.file?.size ?? 0), 0),
             state: 'uploading',
             error: null,
+            // معرّف ثابت للرفع المجزّأ: القطع تُجمَّع تحته على الخادم.
+            uploadId: randomId(),
         })
 
         state.jobs.push(job)
@@ -89,18 +101,13 @@ export function createUploadQueue({ post, onError } = {}) {
         controllers.set(job.id, controller)
         requests.set(job.id, request)
 
-        const formData = buildFormData(request, job)
+        const progress = (loaded, total) => {
+            if (job.state !== 'uploading') return
+            job.loaded = loaded
+            if (total) job.total = total
+        }
 
-        Promise.resolve(
-            post('/chats', formData, {
-                signal: controller?.signal,
-                onUploadProgress: (event) => {
-                    if (job.state !== 'uploading') return
-                    job.loaded = event.loaded ?? 0
-                    if (event.total) job.total = event.total
-                },
-            })
-        )
+        Promise.resolve(send(request, job, controller, progress))
             .then(() => {
                 // النجاح يُزيل المهمّة: الرسالة صارت في المحادثة، وإبقاء سطر
                 // «اكتمل» يحوّل المؤشّر إلى أرشيف يحتاج تنظيفاً يدوياً.
@@ -125,6 +132,40 @@ export function createUploadQueue({ post, onError } = {}) {
 
     /** الطلب الأصلي بملفاته غير الملفوفة — لإعادة المحاولة وإعادة بناء الفقاعات. */
     const requestFor = (id) => requests.get(id) ?? null
+
+    /**
+     * اختيار طريق الإرسال.
+     *
+     * الملف الكبير يُرفَع على قطع: الوكيل الأمامي يقطع أي طلب تجاوز ١٢٥ ثانية،
+     * فطلبٌ واحد لملف كبير على شبكة بطيئة يموت دائماً — بلا رسالة، ويتجمّد
+     * الشريط في منتصفه. والصغير يبقى في طلب واحد: التجزئة تُضاعف الرحلات بلا
+     * فائدة حين يكفي طلبٌ قصير.
+     */
+    const send = (request, job, controller, progress) => {
+        const single = request.files.length === 1 ? request.files[0] : null;
+
+        if (single && Number(single.file?.size ?? 0) > CHUNK_BYTES) {
+            return uploadInChunks({
+                post,
+                file: single.file,
+                signal: controller?.signal,
+                onProgress: progress,
+                fields: {
+                    upload_id: job.uploadId,
+                    contact_uuid: request.contactUuid,
+                    file_name: single.file.name,
+                    file_type: single.type,
+                    caption: job.caption,
+                    temp_message_id: job.tempIds[0],
+                },
+            })
+        }
+
+        return post('/chats', buildFormData(request, job), {
+            signal: controller?.signal,
+            onUploadProgress: (event) => progress(event.loaded ?? 0, event.total),
+        })
+    }
 
     const buildFormData = (request, job) => {
         const formData = new FormData()

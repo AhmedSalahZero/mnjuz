@@ -15,6 +15,15 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
+
+        // القطع المتروكة تُحذف يومياً: من يُغلق صفحته في منتصف الرفع يترك
+        // قطعاً لا شيء يحذفها، فتتراكم حتى يمتلئ القرص — وامتلاؤه يُسقط
+        // النظام كلّه لا الرفع وحده.
+        $schedule->call(fn () => \App\Services\Chat\ChunkedUploadService::pruneStale())
+            ->dailyAt('03:20')
+            ->name('prune-chunked-uploads')
+            ->withoutOverlapping();
+
         $schedule->job(new CreateCampaignLogsJob(), 'campaign-logs')
             ->everyMinute()
             ->withoutOverlapping();

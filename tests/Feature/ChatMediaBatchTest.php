@@ -299,10 +299,13 @@ class ChatMediaBatchTest extends TestCase
 
         $this->assertStringContainsString("formData.append('files[]', item.file)", $queue);
         $this->assertMatchesRegularExpression(
-            '/post\(\x27\/chats\x27, formData/',
+            '/post\(\x27\/chats\x27, buildFormData\(/',
             $queue,
             'الإرسال يجب أن يكون طلباً واحداً لا حلقة'
         );
+
+        // والملف الكبير له مسار آخر: قطعٌ قصيرة لا طلب طويل يقطعه الوكيل.
+        $this->assertStringContainsString('uploadInChunks(', $queue);
         $this->assertMatchesRegularExpression(
             '/const sendAttachments = \(\) => \{(?:(?!\n\}).)*?uploads\.enqueue\(/s',
             $composer,
