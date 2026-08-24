@@ -4,6 +4,7 @@ import axios from 'axios'
 import MicRecorder from 'mic-recorder-to-mp3-fixed'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import Chat24HourComposeBanner from '@/Components/ChatComponents/Chat24HourComposeBanner.vue'
+import ChatAttachMenu from '@/Components/ChatComponents/ChatAttachMenu.vue'
 import UploadProgressIndicator from '@/Components/ChatComponents/UploadProgressIndicator.vue'
 import { initUploadQueue } from '@/Composables/uploadQueue'
 import { splitIntoBatches } from '@/Composables/uploadBatches'
@@ -778,6 +779,30 @@ const getAcceptedFileTypes = () => {
 	}
 }
 
+const handleAttachAction = (action) => {
+	switch (action) {
+		case 'image':
+		case 'document':
+		case 'video':
+		case 'audio':
+			form.value.type = action
+			nextTick(() => document.getElementById('file-upload')?.click())
+			break
+		case 'request-location':
+			requestLocation()
+			break
+		case 'send-location':
+			openLocationModal()
+			break
+		case 'templates':
+			viewTemplate()
+			break
+		case 'ai-assist':
+			getSuggestion()
+			break
+	}
+}
+
 const toggleEmojiPicker = (e) => {
 	e.stopPropagation()
 	emojiPicker.value = !emojiPicker.value
@@ -804,10 +829,18 @@ const addEmoji = (emoji) => {
 	}, 0)
 }
 
+const emojiPickerContains = (target) => {
+	const ref = emojiPickerRef.value
+	if (!ref) return false
+	if (Array.isArray(ref)) return ref.some((el) => el?.contains?.(target))
+	return ref.contains?.(target) ?? false
+}
+
 const handleClickOutside = (event) => {
 	if (
-		emojiPickerRef.value &&
-		!emojiPickerRef.value.contains(event.target) &&
+		emojiPicker.value &&
+		!emojiPickerContains(event.target) &&
+		textInputRef.value &&
 		!textInputRef.value.contains(event.target)
 	) {
 		closeEmojiPicker()
@@ -1047,6 +1080,16 @@ onBeforeUnmount(() => {
       </textarea>
 				<input type="file" class="sr-only" :accept="getAcceptedFileTypes()" id="file-upload"
 					@change="handleFileUpload($event)" />
+				<div class="shrink-0 md:hidden">
+					<ChatAttachMenu
+						:show-ai-assist="false"
+						:requesting-location="requestingLocation"
+						:sending-location="sendingLocation"
+						:disabled="!isInboundChatWithin24Hours"
+						@action="handleAttachAction"
+					/>
+				</div>
+				<div class="hidden md:contents">
 				<label @click="form.type = 'image'" for="file-upload" class="text-slate-500 mr-2 cursor-pointer">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 						<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -1080,7 +1123,7 @@ onBeforeUnmount(() => {
 					</svg>
 				</label>
 				<button type="button" @click="requestLocation()" :disabled="requestingLocation"
-					class="text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
+					class="hidden md:inline-flex text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
 					:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
 					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
 						<g fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1091,7 +1134,7 @@ onBeforeUnmount(() => {
 				</button>
 				<button type="button" @click="openLocationModal()"
 					:disabled="sendingLocation || !isInboundChatWithin24Hours"
-					class="text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
+					class="hidden md:inline-flex text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
 					:title="$t('Send our location')" :aria-label="$t('Send our location')">
 					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
 						<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -1102,14 +1145,15 @@ onBeforeUnmount(() => {
 						</g>
 					</svg>
 				</button>
-				<label @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer">
+				<label @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer hidden md:inline-flex">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
 						<path fill="currentColor"
 							d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z">
 						</path>
 					</svg>
 				</label>
-				<button class="flex items-center" type="submit"
+				</div>
+				<button class="flex shrink-0 items-center" type="submit"
 					:disabled="formTextInput === null || formTextInput.trim() === '' || processingForm || !isInboundChatWithin24Hours">
 					<svg v-if="!processingForm" :class="formTextInput === null || formTextInput.trim() === '' || !isInboundChatWithin24Hours ? 'text-slate-300' : 'text-black'
 						" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16">
@@ -1248,7 +1292,7 @@ onBeforeUnmount(() => {
 				</div>
 				<audio ref="audioPlayer" :src="audioPreviewUrl" @ended="isPlaying = false" class="hidden" />
 			</div>
-			<div class="flex gap-x-4 items-center text-gray-600">
+			<div class="hidden md:flex gap-x-4 items-center text-gray-600">
 				<div @click="viewTemplate()" class="flex gap-x-1 text-sm items-center">
 					<span>
 						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
@@ -1319,7 +1363,7 @@ onBeforeUnmount(() => {
 							</svg>
 						</label>
 					</div>
-					<div>
+					<div class="flex items-center gap-1">
 						<button type="button" class="py-1 cursor-pointer disabled:opacity-40"
 							@click="requestLocation()" :disabled="requestingLocation"
 							:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
@@ -1330,7 +1374,7 @@ onBeforeUnmount(() => {
 								</g>
 							</svg>
 						</button>
-						<button type="button" class="py-1 ms-2 cursor-pointer disabled:opacity-40"
+						<button type="button" class="py-1 cursor-pointer disabled:opacity-40"
 							@click="openLocationModal()" :disabled="sendingLocation || !isInboundChatWithin24Hours"
 							:title="$t('Send our location')" :aria-label="$t('Send our location')">
 							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
@@ -1449,6 +1493,69 @@ onBeforeUnmount(() => {
 								</circle>
 							</svg>
 						</div>
+					</button>
+				</div>
+			</div>
+
+			<!-- شريط الموبايل: emoji + مرفق + mic + إرسال -->
+			<div class="flex md:hidden items-center gap-1 border-t border-slate-100 px-2 py-2 text-gray-600">
+				<div class="relative shrink-0">
+					<button type="button" class="flex h-9 w-9 items-center justify-center rounded-full hover:bg-slate-100"
+						@click="toggleEmojiPicker" :aria-label="$t('Emoji')">
+						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 16 16" class="text-slate-600">
+							<path fill="currentColor" fill-rule="evenodd"
+								d="M4.111 2.18a7 7 0 1 1 7.778 11.64A7 7 0 0 1 4.11 2.18zm.556 10.809a6 6 0 1 0 6.666-9.978a6 6 0 0 0-6.666 9.978M6.5 7a1 1 0 1 1-2 0a1 1 0 0 1 2 0m5 0a1 1 0 1 1-2 0a1 1 0 0 1 2 0M8 11a3 3 0 0 1-2.65-1.58l-.87.48a4 4 0 0 0 7.12-.16l-.9-.43A3 3 0 0 1 8 11"
+								clip-rule="evenodd" />
+						</svg>
+					</button>
+					<div v-if="emojiPicker" class="absolute left-0 bottom-full z-10" ref="emojiPickerRef">
+						<EmojiPicker :native="true" @select="addEmoji" />
+					</div>
+				</div>
+
+				<ChatAttachMenu
+					class="shrink-0"
+					:show-ai-assist="true"
+					:requesting-location="requestingLocation"
+					:sending-location="sendingLocation"
+					:disabled="!isInboundChatWithin24Hours"
+					@action="handleAttachAction"
+				/>
+
+				<button
+					v-if="!isRecording && !audioPreviewUrl"
+					type="button"
+					class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-slate-100"
+					@click="startRecording"
+					:aria-label="$t('Record audio')"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 1024 1024" class="text-slate-600">
+						<path fill="currentColor"
+							d="M842 454c0-4.4-3.6-8-8-8h-60c-4.4 0-8 3.6-8 8c0 140.3-113.7 254-254 254S258 594.3 258 454c0-4.4-3.6-8-8-8h-60c-4.4 0-8 3.6-8 8c0 168.7 126.6 307.9 290 327.6V884H326.7c-13.7 0-24.7 14.3-24.7 32v36c0 4.4 2.8 8 6.2 8h407.6c3.4 0 6.2-3.6 6.2-8v-36c0-17.7-11-32-24.7-32H548V782.1c165.3-18 294-158 294-328.1M512 624c93.9 0 170-75.2 170-168V232c0-92.8-76.1-168-170-168s-170 75.2-170 168v224c0 92.8 76.1 168 170 168m-94-392c0-50.6 41.9-92 94-92s94 41.4 94 92v224c0 50.6-41.9 92-94 92s-94-41.4-94-92z" />
+					</svg>
+				</button>
+
+				<div class="ml-auto shrink-0">
+					<button
+						type="submit"
+						class="flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 disabled:opacity-40"
+						:disabled="(((formTextInput === null || formTextInput.trim() === '') && !form2.file) || !isInboundChatWithin24Hours)"
+						:aria-label="$t('Send')"
+					>
+						<svg v-if="!processingForm" :class="((formTextInput === null || formTextInput.trim() === '') && !form2.file) || !isInboundChatWithin24Hours
+							? 'text-slate-300'
+							: 'text-black'
+							" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 16 16">
+							<path fill="currentColor"
+								d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.69.953c.268.053.268.437 0 .49l-5.69.953a.5.5 0 0 0-.397.354l-1.403 4.85a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5Z" />
+						</svg>
+						<svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+							<circle cx="12" cy="2" r="0" fill="currentColor">
+								<animate attributeName="r" begin="0" calcMode="spline" dur="1s"
+									keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+									values="0;2;0;0" />
+							</circle>
+						</svg>
 					</button>
 				</div>
 			</div>
