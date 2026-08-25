@@ -1,684 +1,267 @@
-# أنواع الرسائل لتطبيق الموبايل
+# رسائل الشات — الأعمدة وقيمها لتطبيق الموبايل
 
-تقرير لمطور التطبيق: شكل كل نوع كما يصل من الـ API / Pusher، والحقول التي قد تكون `null` أو غائبة.
+## 0) أي قناة يتكلّم عنها هذا التقرير؟
 
-المصدر: التخزين في `chats.metadata` + تنسيق `ApiController` / `ChatBroadcastPayloadBuilder`.
-
----
-
-## 1) قواعد يجب الالتزام بها
-
-### نوع المحتوى ≠ اتجاه الرسالة
-
-| الحقل | المعنى | القيم |
+| القناة | ماذا تحمل | هل هي موضوع هذا التقرير؟ |
 |---|---|---|
-| `value.type` | اتجاه الرسالة | `"inbound"` أو `"outbound"` |
-| `JSON.parse(value.metadata).type` | نوع المحتوى | `"interactive"` / `"image"` / `"video"` / … |
+| `GET /api/v1/list-messages-from-uuid-to-end` (و v2) | الرسالة كاملة | ✅ |
+| **Pusher** — `NewChatEvent` على `chats.ch{orgId}.{userId}` | نفس الرسالة كاملة | ✅ |
+| **Firebase (FCM)** — إشعار الجوال | عنوان + نصّ + معرّفات فقط | ❌ (انظر آخر التقرير، القسم 8) |
 
-الفرع في الواجهة يكون دائمًا على **`metadata.type`** بعد فك JSON، وليس على `value.type`.
+كل الأمثلة في هذا التقرير هي **`value` الرسالة** كما تصل من REST ومن Pusher.
+تحقّقنا من تطابق المسارين: `ApiController::formatChatValue` (REST) و`ChatBroadcastPayloadBuilder::buildMinimalValue` (Pusher) يُخرجان **نفس المفاتيح ونفس القيم** بايتاً ببايت. الفارق الوحيد أن حمولة Pusher قد **تُقلَّص** إن تجاوزت 10KB (تُحذف `contact_full_name` ثم `phone` ثم تُقصّ `logs` ثم `metadata`)، بينما REST لا تُقلَّص أبداً.
 
-### `metadata` نص JSON وليس object
-
-يصل الحقل **string**. يجب `jsonDecode` قبل القراءة.
-
-```dart
-final Map<String, dynamic> meta =
-    jsonDecode(message.metadata ?? '{}') as Map<String, dynamic>;
-final String contentType = meta['type'] as String? ?? '';
-```
-
-لا تفترض أن المفتاح الخاص بالنوع موجود أو أنه Map. قد يكون:
-
-- object فيه حقول
-- `null` (الـ API يحوّل المصفوفة الفارغة `[]` إلى `null`)
-- غائب تمامًا
-
-### الميديا ليست داخل `metadata`
-
-للأنواع `image` / `video` / `audio` / `document` / `sticker`:
-
-- الملف في `value.media` (`path`, `name`, `type` mime, `size`)
-- `metadata` يحمل فقط caption / filename / voice
-- لا تعتمد على `id` / `url` / `sha256` / `mime_type` داخل كتلة الميديا في `metadata` (الوارد يُزال قبل الحفظ)
-
-`media` نفسه قد يكون `null` (التحميل لم يكتمل بعد، أو فشل، أو النوع بلا ملف مثل location).
-
-### سلسلة `"null"` ليست قيمة صالحة
-
-بعض الصفوف القديمة تحمل caption = `"null"` كنص. اعتبرها فارغة مثل الداشبورد:
-
-```dart
-String captionOf(dynamic value) {
-  if (value == null) return '';
-  final text = value.toString().trim();
-  if (text.isEmpty || text.toLowerCase() == 'null') return '';
-  return text;
-}
-```
+**إشعار Firebase ليس رسالة** — لا يحمل `metadata` ولا `media` ولا `id` الرسالة. لا تبنِ عليه فقاعة؛ استخدمه لإيقاظ التطبيق ثم اقرأ الرسالة من REST أو Pusher.
 
 ---
 
-## 2) غلاف الرسالة (كما يصل)
+## 1) الغلاف
 
-### REST — مزامنة المحادثات (v1)
+**REST:** `data[]` عنصر لكل جهة اتصال:
 
-كل عنصر في `messages`:
-
-```json
-{
-  "type": "chat",
-  "value": { "...حقول الرسالة..." }
-}
-```
-
-### Pusher — `NewChatEvent`
-
-```json
-{
-  "chat": [
-    {
-      "type": "chat",
-      "value": { "...حقول الرسالة..." },
-      "tempMessageId": "اختياري — عند الإرسال من التطبيق"
-    }
-  ]
-}
-```
-
-قد يصل الغلاف بدون مصفوفة: `{ "type": "chat", "value": { ... } }`.
-
-### حقول `value` المشتركة
-
-| الحقل | النوع | قد يكون null؟ | ملاحظات |
-|---|---|---|---|
-| `id` | int | لا (إن وصل بدون id لا يُبث) | معرّف الصف |
-| `uuid` | string | نعم | معرّف العميل عند الإرسال من الموبايل |
-| `contact_uuid` | string | نعم | v1 فقط |
-| `contact_id` | int | نعم | v1 فقط |
-| `phone` | string | نعم | v1 — قد يُحذف تحت ضغط حجم Pusher |
-| `formatted_phone_number` | string | نعم | v1 |
-| `contact_full_name` | string | نعم | v1 — قد يُحذف تحت ضغط Pusher |
-| `organization_id` | int | نادرًا | |
-| `is_new_contact` | bool | — | v1؛ في المزامنة دائمًا `false` |
-| `is_blocked` / `is_favorite` | bool | نعم | |
-| `unread_messages_count` | int | — | 0 إذا غاب |
-| `latest_chat_created_at` | string | نعم | |
-| `created_at` | string | نادرًا | |
-| `deleted_at` | string | **نعم غالبًا** | رسالة محذوفة إن وُجد |
-| `metadata` | **string JSON** أو `null` | نعم | تحت ضغط Pusher قد يصير `"{}"` ثم `null` |
-| `type` | string | — | `"inbound"` / `"outbound"` فقط |
-| `wam_id` | string | نعم | معرّف واتساب |
-| `status` | string | نعم | فقط: `accepted` · `sent` · `delivered` · `read` · `failed`. `played` تُترجم إلى `delivered`. أي قيمة أخرى تُحذف (`null`) |
-| `media` | object | **نعم** | انظر الجدول التالي |
-| `logs` | array | — | قد تكون `[]` |
-| `user` | object | **نعم دائمًا للوارد** | الصادر: `{ "first_name", "last_name" }` وكلاهما قد ينقص |
-
-في **v2** (`list-messages-from-uuid-to-end-v2`) حقول جهة الاتصال **لا تُكرَّر** داخل الرسالة؛ تأتي مرة واحدة في كائن `contact` فوق المصفوفة.
-
-### `media` عند وجوده
-
-```json
-{
-  "type": "image/jpeg",
-  "size": 245760,
-  "path": "https://…",
-  "name": "photo.jpg"
-}
-```
-
-| الحقل | قد يكون null؟ | ملاحظات |
+| العمود | القيمة | nullable |
 |---|---|---|
-| `type` | نعم | MIME مثل `image/jpeg` / `video/mp4` / `audio/ogg` |
-| `size` | نعم | بايت |
-| `path` | قد يكون `""` | رابط كامل. في البث يُقص إلى **200 بايت** — الروابط الطويلة قد تُقطع |
-| `name` | قد يكون `"N/A"` | يُقص إلى **80 بايت**. للملصق/الصوت الوارد غالبًا `N/A` |
+| `contact_id` | int | لا |
+| `last_inbound_chat_created_at` | `"2026-08-24 10:00:00"` | **نعم** |
+| `is_blocked` | bool | نعم |
+| `ticket_status` | `open` / `pending` / `closed` | **نعم** (لا تذكرة) |
+| `ticket_assigned_to` | int (user id) | **نعم** |
+| `unread_messages_count` | int | لا |
+| `contact_categories` | `[{id, name, background_color, text_color}]` | لا (قد تكون `[]`) |
+| `messages` | `[{type, value}]` | لا |
+| `pagination` | `{page, per_page, total_contacts, last_page}` | **يغيب كلياً** بدون `per_page` |
 
-عرض الملف: `media.path`. إن كان `media == null` أو `path` فارغًا → «المحتوى غير متاح».
+`messages[i].type` = `chat` أو `ticket` أو `notes`. **الرسالة الفعلية = `chat` فقط**، وباقي هذا التقرير عنها.
 
-### `logs`
-
-آخر 6 سجلات كحد أقصى:
-
-```json
-[
-  { "metadata": "{\"id\":\"wamid.xxx\",\"status\":\"delivered\"}" }
-]
-```
-
-`logs[i].metadata` أيضًا **string**. الحقول المحتفظ بها: `status`, `errors`, `id`.
+**Pusher:** `{ "chat": [ { "type": "chat", "value": {...}, "tempMessageId": "..." } ] }`
+قد يصل بدون مصفوفة: `{ "chat": { "type": "chat", "value": {...} } }`. `tempMessageId` يظهر عند الإرسال من التطبيق فقط.
 
 ---
 
-## 3) ملخص الأنواع المطلوبة
+## 2) أعمدة `value` — مشتركة لكل الأنواع
 
-| `metadata.type` | اتجاه شائع | أين المحتوى | أين الملف |
-|---|---|---|---|
-| `interactive` | وارد (رد العميل) | `interactive.button_reply` أو `list_reply` | لا |
-| `button` | وارد (زر قالب) | `button.text` / `button.payload` | لا |
-| `image` | وارد وصادر | `image.caption` | `media.path` |
-| `video` | وارد وصادر | `video.caption` | `media.path` |
-| `audio` | وارد وصادر | `audio.voice` + `transcript` | `media.path` |
-| `document` | وارد وصادر | `document.filename` | `media.path` + `media.name` |
-| `sticker` | وارد وصادر | لا نص | `media.path` |
-| `location` | وارد وصادر | `location.latitude/longitude` | لا |
-| `contacts` | وارد | `contacts[]` | لا |
-
----
-
-## 4) التفاصيل + أمثلة
-
-في الأمثلة أدناه `metadata` معروض **بعد** `jsonDecode`. على السلك هو string.
-
----
-
-### 4.1 `interactive` — رد على أزرار / قائمة
-
-يصل عندما يضغط العميل زر رد تفاعلي أو عنصر قائمة. **ليس** الرسالة التفاعلية الصادرة من النشاط (تلك تُحفظ حاليًا كـ `type: "text"`).
-
-#### أ) رد زر — `button_reply`
-
-```json
-{
-  "type": "interactive",
-  "interactive": {
-    "type": "button_reply",
-    "button_reply": {
-      "id": "btn_yes",
-      "title": "أوافق"
-    }
-  }
-}
-```
-
-| المسار | مطلوب؟ | قد يكون null؟ |
+| العمود | القيمة | nullable |
 |---|---|---|
-| `interactive` | يفترض وجوده | **نعم** — إن كان فارغًا يصبح `null` |
-| `interactive.type` | للتفريع | نعم |
-| `interactive.button_reply` | إذا النوع `button_reply` | نعم |
-| `interactive.button_reply.id` | لا للعرض | نعم |
-| `interactive.button_reply.title` | النص المعروض | نعم — اعرض عنوانًا احتياطيًا |
+| `id` | int — معرّف الرسالة | لا |
+| `uuid` | string — معرّف الرسالة عندنا، أو `msg_uuid` المرسل من التطبيق إن أُرسل | لا (العمود NOT NULL) |
+| `contact_uuid` | string | نعم |
+| `contact_id` | int | نعم |
+| `is_new_contact` | bool — دائماً `false` في REST | لا |
+| `phone` | `"9665XXXXXXX"` | **نعم** (يُحذف عند ضغط حجم Pusher) |
+| `formatted_phone_number` | `"+966 5X XXX XXXX"` | **نعم** (نفس السبب) |
+| `contact_full_name` | string ≤120 بايت | **نعم** |
+| `organization_id` | int | نادراً |
+| `latest_chat_created_at` | datetime | نعم |
+| `is_blocked` / `is_favorite` | **يصل `0` / `1` كأرقام لا `true`/`false`** | نعم |
+| `unread_messages_count` | int | لا |
+| `created_at` | `"2026-08-24 10:00:04"` | نادراً |
+| `deleted_at` | datetime — غير null ⇒ الرسالة محذوفة | **نعم غالباً** |
+| `metadata` | **string JSON** (محتوى الرسالة) | **نعم** (قد يصل `"{}"` أو `null` عند الضغط) |
+| `type` | `inbound` / `outbound` — **اتجاه لا نوع** | لا |
+| `wam_id` | `"wamid.…"` | نعم |
+| `status` | `accepted` · `sent` · `delivered` · `read` · `failed` فقط | **نعم** (أي قيمة أخرى تُحوَّل null، و`played` ⇒ `delivered`) |
+| `media` | object (جدول 3) | **نعم** |
+| `logs` | array (جدول 4) | لا (قد تكون `[]`) |
+| `user` | `{"full_name": "..."}` — المُرسِل | **نعم** (دائماً null في الوارد) |
 
-**للعرض:** `interactive?.button_reply?.title`
+> `user.full_name` هو الحقل الوحيد. `first_name` / `last_name` لم يعودا يخرجان، وقد يصل `""`.
 
-#### ب) رد قائمة — `list_reply`
-
-```json
-{
-  "type": "interactive",
-  "interactive": {
-    "type": "list_reply",
-    "list_reply": {
-      "id": "opt_2",
-      "title": "فرع جدة",
-      "description": "التوصيل خلال ساعتين"
-    }
-  }
-}
-```
-
-| المسار | قد يكون null؟ |
-|---|---|
-| `interactive.list_reply` | نعم |
-| `interactive.list_reply.id` | نعم |
-| `interactive.list_reply.title` | نعم |
-| `interactive.list_reply.description` | **نعم غالبًا** — العنصر قد بلا وصف |
-
-**للعرض:** العنوان، ثم الوصف إن وُجد.
-
-#### ج) أنواع تفاعلية أخرى
-
-الكتلة تُحفظ كما وصلت من واتساب. قد ترى:
-
-- `nfm_reply` (واتساب فلو)
-- أشكال غير معروفة لاحقًا
-
-إن لم يكن `button_reply` ولا `list_reply`: اعرض فقاعة «رسالة تفاعلية» ولا تلمس حقولًا غير موجودة.
-
-#### الصادر من النشاط
-
-إرسال أزرار/قائمة يُحفظ كـ:
-
-```json
-{ "type": "text", "text": { "body": "نص الجسم" } }
-```
-
-طلب الموقع الصادر:
-
-```json
-{
-  "type": "text",
-  "text": { "body": "شاركنا موقعك" },
-  "location_request": true
-}
-```
-
-`location_request` اختياري. العملاء القدامى يتجاهلونه ويعرضون نصًا عاديًا.
+في **v2** حقول جهة الاتصال (`contact_uuid`, `contact_id`, `phone`, `formatted_phone_number`, `contact_full_name`, `is_blocked`, `is_favorite`, `unread_messages_count`, `latest_chat_created_at`, `is_new_contact`, `organization_id`) لا تتكرّر داخل الرسالة — تأتي مرة واحدة في كائن `contact`.
 
 ---
 
-### 4.2 `button` — رد على زر قالب (Quick Reply)
+## 3) `value.media` — للأنواع image/video/audio/document/sticker فقط
 
-مختلف عن `interactive`. العميل ضغط زر **قالب** (template).
-
-```json
-{
-  "type": "button",
-  "button": {
-    "text": "نعم",
-    "payload": "YES"
-  }
-}
-```
-
-| المسار | قد يكون null؟ | ملاحظات |
+| العمود | القيمة | nullable |
 |---|---|---|
-| `button` | نعم (`null` إن فُرغ) | |
-| `button.text` | نعم | النص المعروض |
-| `button.payload` | نعم | القيمة الداخلية؛ قد تساوي النص أو تختلف |
+| `type` | MIME: `image/jpeg` · `video/mp4` · `audio/ogg` · `application/pdf` | نعم |
+| `size` | بايت — **قد يصل string لا int** | نعم |
+| `path` | رابط كامل، مقصوص لـ200 بايت | نعم / قد يكون `""` |
+| `name` | اسم الملف، مقصوص لـ80 بايت — غالباً `"N/A"` في الوارد | نعم |
 
-**للعرض:** `button?.text ?? button?.payload ?? ''`
-
-لا تخلط بين هذا و`metadata.buttons` (مصفوفة أزرار القالب **الصادر** على رسالة `text`/`image`).
-
----
-
-### 4.3 `image`
-
-```json
-{
-  "type": "image",
-  "image": {
-    "caption": "الفاتورة المرفقة"
-  }
-}
-```
-
-بدون تعليق (الوارد بعد التقليص):
-
-```json
-{
-  "type": "image",
-  "image": {
-    "caption": null
-  }
-}
-```
-
-الصادر قد يحمل حقولًا إضافية لا تستخدم للعرض:
-
-```json
-{
-  "id": "wamid.HBgN...",
-  "type": "image",
-  "image": {
-    "mime_type": "image/jpeg",
-    "caption": "اختيارية"
-  }
-}
-```
-
-ومع أزرار قالب:
-
-```json
-{
-  "type": "image",
-  "image": { "caption": "نص القالب" },
-  "buttons": [
-    { "type": "URL", "text": "افتح الموقع", "value": "https://…" },
-    { "type": "QUICK_REPLY", "text": "تواصل معنا", "value": null }
-  ]
-}
-```
-
-| المسار | قد يكون null؟ |
-|---|---|
-| `image` | نعم |
-| `image.caption` | **نعم غالبًا** + قد يكون `""` أو `"null"` |
-| `image.mime_type` | نعم — لا تعتمد عليه؛ MIME في `media.type` |
-| `buttons` | **نعم غالبًا غائب** | فقط قوالب صادرة |
-| `media` | **نعم** حتى يكتمل التحميل |
-| `media.path` | نعم / فارغ |
-
-**للعرض:** صورة من `media.path` + `captionOf(image?.caption)`.
+`media == null` أو `path` فارغ ⇒ اعرض «المحتوى غير متاح».
 
 ---
 
-### 4.4 `video`
+## 4) `value.logs` — آخر 6 (أو 2 عند ضغط Pusher)
 
-نفس صورة الصورة.
-
-```json
-{
-  "type": "video",
-  "video": {
-    "caption": "شاهد الفيديو"
-  }
-}
-```
-
-بدون تعليق:
-
-```json
-{ "type": "video", "video": { "caption": null } }
-```
-
-| المسار | قد يكون null؟ |
-|---|---|
-| `video` | نعم |
-| `video.caption` | **نعم غالبًا** |
-| `media` / `media.path` | نعم |
-
-الصادر قيد إعادة الترميز قد يحمل:
-
-```json
-{
-  "type": "video",
-  "video": { "caption": null },
-  "transcode_retry_status": "retrying",
-  "transcode_retry_count": 1
-}
-```
-
-`transcode_retry_status`: `"retrying"` | `"failed"` | غائب. عند `retrying` أظهر حالة إعادة المحاولة لا فشلًا نهائيًا.
-
----
-
-### 4.5 `document`
-
-**وارد** (بعد التقليص) — يُحفظ `filename` فقط، **بدون caption**:
-
-```json
-{
-  "type": "document",
-  "document": {
-    "filename": "invoice.pdf"
-  }
-}
-```
-
-بدون اسم:
-
-```json
-{ "type": "document", "document": { "filename": null } }
-```
-
-**صادر** قد يشمل caption:
-
-```json
-{
-  "id": "wamid.…",
-  "type": "document",
-  "document": {
-    "mime_type": "application/pdf",
-    "caption": "العقد الموقّع"
-  }
-}
-```
-
-اسم الملف للعرض من **`media.name`** أولًا، ثم `document.filename`.
-
-| المسار | قد يكون null؟ |
-|---|---|
-| `document` | نعم |
-| `document.filename` | نعم (الوارد بلا اسم) |
-| `document.caption` | **نعم دائمًا تقريبًا في الوارد** — غير محفوظ عند التقليص |
-| `media.name` | نعم / `"N/A"` |
-| `media.type` | نعم — MIME لأيقونة PDF/DOC/… |
-| `media.size` | نعم |
-| `media.path` | نعم |
-
----
-
-### 4.6 `audio`
-
-رسالة صوتية أو ملف صوتي.
-
-ملاحظة صوتية (وارد):
-
-```json
-{
-  "type": "audio",
-  "audio": {
-    "voice": true
-  }
-}
-```
-
-ملف صوتي عادي (بعد التقليص إن غاب `voice`):
-
-```json
-{
-  "type": "audio",
-  "audio": {
-    "voice": null
-  }
-}
-```
-
-مع تفريغ نصي (مستوى `metadata` وليس داخل `audio`):
-
-```json
-{
-  "type": "audio",
-  "audio": { "voice": true },
-  "transcript": "السلام عليكم، أريد إلغاء الطلب"
-}
-```
-
-| المسار | قد يكون null؟ | ملاحظات |
+| العمود | القيمة | nullable |
 |---|---|---|
-| `audio` | نعم | |
-| `audio.voice` | **نعم** | `true` = ملاحظة صوتية. `null` / غائب = ملف صوتي |
-| `transcript` | **نعم غالبًا** | نص التفريغ إن وُجد |
-| `audio.caption` | لا يُرسل | واتساب لا يدعم تعليقًا على الصوت |
-| `media` | نعم | |
-
-**للعرض:** مشغّل من `media.path`. إن `voice == true` اعرض أيقونة ملاحظة صوتية. `status: played` من واتساب يصل للتطبيق كـ `delivered`.
+| `logs[i].metadata` | **string JSON** يحوي `status` / `errors` / `id` فقط | لا |
 
 ---
 
-### 4.7 `sticker`
 
-لا نص للعرض. الملف في `media`.
-
-بعد مرور الرسالة من الـ API غالبًا:
+**مثال كامل — رسالة صادرة مقروءة بثلاثة سجلات حالة:**
 
 ```json
 {
-  "type": "sticker",
-  "sticker": null
-}
-```
-
-أحيانًا (صفوف قديمة أو قبل تحويل `[]` → `null`):
-
-```json
-{ "type": "sticker", "sticker": [] }
-```
-
-أو:
-
-```json
-{ "type": "sticker", "sticker": {} }
-```
-
-| المسار | قد يكون null؟ |
-|---|---|
-| `sticker` | **نعم — الحالة الشائعة** |
-| `media` / `media.path` | نعم |
-
-**لا تقرأ حقولًا داخل `sticker`.** الفرع على `metadata.type == "sticker"` ثم اعرض `media.path` كصورة صغيرة.
-
----
-
-### 4.8 `location`
-
-لا يوجد `media`. الإحداثيات داخل `metadata`.
-
-نقطة خام (الحد الأدنى الصالح):
-
-```json
-{
-  "type": "location",
-  "location": {
-    "latitude": 21.485811,
-    "longitude": 39.192505
-  }
-}
-```
-
-مكان مسمّى (وارد أو صادر):
-
-```json
-{
-  "type": "location",
-  "location": {
-    "latitude": 21.485811,
-    "longitude": 39.192505,
-    "name": "ليديز",
-    "address": "الروضة، جدة",
-    "url": "https://maps.google.com/?q=21.485811,39.192505"
-  }
-}
-```
-
-رد على «طلب الموقع» — يحمل `context.id` (معرّف رسالة الطلب):
-
-```json
-{
-  "type": "location",
-  "location": {
-    "latitude": 21.485811,
-    "longitude": 39.192505
-  },
-  "context": {
-    "id": "wamid.HBgMOTY2NTk2NzcxNzE4FQIAEhgJNTMzNjQ5OTc4AA=="
-  }
-}
-```
-
-| المسار | قد يكون null / غائب؟ | ملاحظات |
-|---|---|---|
-| `location` | نادرًا نعم | إن فُرغ يصبح `null` — لا ترسم خريطة |
-| `location.latitude` | يجب وجوده للعرض | رقم (int أو double). الصادر float مقوّم لـ 8 خانات |
-| `location.longitude` | يجب وجوده للعرض | نفس الشيء |
-| `location.name` | **نعم غالبًا** | يُحذف إن كان فارغًا عند الإرسال |
-| `location.address` | **نعم غالبًا** | |
-| `location.url` | **نعم غالبًا** | وارد من واتساب أحيانًا؛ الصادر لا يضمّه |
-| `context` | **نعم غالبًا غائب** | موجود فقط إن كان ردًا على طلب موقع |
-| `context.id` | إن وُجد `context` | wamid رسالة الطلب |
-
-**للعرض:** خريطة على `(latitude, longitude)`. لا تستخدم `name`/`address` كبديل عن الإحداثيات.
-
-افتح الاتجاهات:
-
-`https://www.google.com/maps/search/?api=1&query={lat},{lng}`
-
----
-
-### 4.9 `contacts` — مشاركة جهات اتصال
-
-مصفوفة. ملف `vcard` **يُحذف** قبل الحفظ (يُبنى من الحقول إن لزم).
-
-```json
-{
-  "type": "contacts",
-  "contacts": [
-    {
-      "name": {
-        "formatted_name": "محمد أحمد",
-        "first_name": "محمد",
-        "last_name": "أحمد",
-        "middle_name": null,
-        "prefix": null,
-        "suffix": null
-      },
-      "phones": [
-        { "phone": "+9665XXXXXXX", "wa_id": "9665XXXXXXX", "type": "CELL" }
-      ],
-      "emails": [
-        { "email": "m@example.com", "type": "WORK" }
-      ],
-      "org": {
-        "company": "شركة النور",
-        "department": null,
-        "title": null
-      },
-      "addresses": [],
-      "urls": [],
-      "birthday": null
-    }
-  ]
-}
-```
-
-قد تصل **عدة** جهات في المصفوفة.
-
-إن كانت المصفوفة فارغة يحوّلها الـ API إلى:
-
-```json
-{ "type": "contacts", "contacts": null }
-```
-
-| المسار | قد يكون null؟ | ملاحظات |
-|---|---|---|
-| `contacts` | نعم (`null` أو `[]`) | تعامل `null` كـ `[]` |
-| `contacts[i].name` | نعم | |
-| `name.formatted_name` | نعم | أفضل اسم للعرض |
-| `name.first_name` / `last_name` | نعم | احتياطي: دمجهما |
-| `phones` | نعم أو `[]` | |
-| `phones[i].phone` | نعم | استخدم `phone ?? wa_id` |
-| `phones[i].wa_id` | نعم | رقم واتساب بلا `+` |
-| `phones[i].type` | نعم | مثل `CELL` / `WORK` |
-| `emails` | نعم أو `[]` | |
-| `emails[i].email` | نعم | |
-| `org` | نعم | |
-| `org.company` | نعم | |
-| `addresses` / `urls` / `birthday` | نعم | |
-| `vcard` | **لا يصل** | محذوف عمدًا |
-
-**اسم العرض:**
-
-```dart
-String contactName(Map c) {
-  final name = (c['name'] as Map?) ?? {};
-  final formatted = (name['formatted_name'] as String?)?.trim();
-  if (formatted != null && formatted.isNotEmpty) return formatted;
-  return '${name['first_name'] ?? ''} ${name['last_name'] ?? ''}'.trim();
-}
-```
-
----
-
-## 5) كائن الرسالة الكامل — مثال وارد صورة
-
-كما في v1 / Pusher `value`:
-
-```json
-{
-  "id": 1845221,
-  "uuid": null,
-  "contact_uuid": "3c1e…",
-  "contact_id": 88210,
+  "id": 3279809,
+  "uuid": "22fd78ee-c759-4a6e-9036-65bb805fddb8",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
   "is_new_contact": false,
-  "phone": "9665XXXXXXX",
-  "formatted_phone_number": "+966 5X XXX XXXX",
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
   "organization_id": 211,
-  "latest_chat_created_at": "2026-08-20 21:10:00",
-  "is_blocked": false,
-  "is_favorite": false,
-  "contact_full_name": "سارة علي",
-  "unread_messages_count": 3,
-  "created_at": "2026-08-20 21:10:04",
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:15:48",
   "deleted_at": null,
-  "metadata": "{\"type\":\"image\",\"image\":{\"caption\":\"الفاتورة\"}}",
+  "metadata": "{\"type\":\"text\",\"text\":{\"body\":\"وعليكم السلام، تفضّل كيف أقدر أساعدك؟\"}}",
+  "type": "outbound",
+  "wam_id": "wamid.SEED.841936A668FF",
+  "status": "read",
+  "media": null,
+  "logs": [
+    {
+      "metadata": "{\"id\":\"wamid.SEED.841936A668FF\",\"status\":\"sent\"}"
+    },
+    {
+      "metadata": "{\"id\":\"wamid.SEED.841936A668FF\",\"status\":\"delivered\"}"
+    },
+    {
+      "metadata": "{\"id\":\"wamid.SEED.841936A668FF\",\"status\":\"read\"}"
+    }
+  ],
+  "user": {
+    "full_name": "غاليه الدوسري"
+  }
+}
+```
+
+## 5) `metadata` حسب النوع
+
+`metadata` نص JSON. بعد فكّه: `metadata.type` هو نوع المحتوى، والكتلة الداخلية `metadata[type]` **قد تكون `null`** (الخادم يحوّل الفارغ إلى null صراحةً).
+
+> كل «مثال كامل» أدناه هو **مخرَج حقيقي** من نفس الكود الذي يبني رد الـAPI والبثّ (`ChatBroadcastPayloadBuilder`)، مأخوذ من محادثة الاختبار في القسم 7 — منسوخ كما هو بلا تحرير. لاحظ أن `metadata` فيه **نصّ** لا object.
+
+### 5.1 `text`
+
+```json
+{"type":"text","text":{"body":"مرحباً"}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `text` | object | نعم |
+| `text.body` | نصّ الرسالة | نعم |
+| `text.footer` | نصّ تذييل القالب | نعم غالباً |
+| `header.text` | عنوان القالب | نعم غالباً |
+| `buttons` | `[{type,text,value,parameters}]` أزرار قالب صادر | نعم (غائب غالباً) |
+| `buttons[i].type` | `URL` · `QUICK_REPLY` · `PHONE_NUMBER` · `COPY_CODE` | نعم |
+| `buttons[i].text` | نصّ الزر | نعم |
+| `buttons[i].value` | الرابط/الرقم/الكود | نعم |
+| `location_request` | `true` = رسالة «شاركنا موقعك» | نعم (غائب غالباً) |
+
+
+**مثال كامل — نصّ وارد:**
+
+```json
+{
+  "id": 3279808,
+  "uuid": "97014b05-c8b2-44fb-8354-12c816e80982",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:13:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"text\",\"text\":{\"body\":\"السلام عليكم، عندي استفسار عن الطلب.\"}}",
   "type": "inbound",
-  "wam_id": "wamid.HBgN…",
+  "wam_id": "wamid.SEED.58CFDFD716D4",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+
+**مثال كامل — قالب صادر بعنوان وأزرار:**
+
+```json
+{
+  "id": 3279810,
+  "uuid": "0f8bc72f-3297-4f11-bba8-33f15fcfdafe",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:17:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"text\",\"header\":{\"text\":\"تأكيد الطلب\"},\"text\":{\"body\":\"طلبك رقم 12345 قيد التجهيز.\",\"footer\":\"منجز\"},\"buttons\":[{\"type\":\"URL\",\"text\":\"تتبّع الطلب\",\"value\":\"https://example.com/track/12345\"},{\"type\":\"QUICK_REPLY\",\"text\":\"إلغاء الطلب\",\"value\":null},{\"type\":\"PHONE_NUMBER\",\"text\":\"اتصل بنا\",\"value\":\"+966500000001\"},{\"type\":\"COPY_CODE\",\"text\":\"نسخ الكود\",\"value\":\"MNJZ2026\"}]}",
+  "type": "outbound",
+  "wam_id": "wamid.SEED.646555274060",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": {
+    "full_name": "غاليه الدوسري"
+  }
+}
+```
+
+### 5.2 `image`
+
+```json
+{"type":"image","image":{"caption":"الفاتورة"}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `image` | object | نعم |
+| `image.caption` | التعليق — قد يصل `""` أو `"null"` (عاملها فارغة) | **نعم غالباً** |
+| `image.mime_type` | صادر فقط؛ استخدم `media.type` بدله | نعم |
+| `buttons` | نفس جدول text | نعم (غائب غالباً) |
+
+الملف: `value.media.path`.
+
+
+**مثال كامل — صورة واردة بتعليق:**
+
+```json
+{
+  "id": 3279812,
+  "uuid": "2325bf4b-53b7-4899-a64b-4a54b29b187e",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:21:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"image\",\"image\":{\"caption\":\"الفاتورة المرفقة\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.7964BF61FE2B",
   "status": "delivered",
   "media": {
     "type": "image/jpeg",
-    "size": 198433,
-    "path": "https://cdn.example.com/uploads/media/received/211/abc.jpg",
+    "size": "6080",
+    "path": "http://127.0.0.1:8000/media/public/seed-message-types/photo.jpg",
     "name": "N/A"
   },
   "logs": [],
@@ -686,92 +269,713 @@ String contactName(Map c) {
 }
 ```
 
-نفس الرسالة **قبل** اكتمال تحميل الميديا: كل شيء كما فوق مع `"media": null`. سيأتي بث لاحق بنفس `id` بعد إرفاق الملف.
+### 5.3 `video`
 
----
+```json
+{"type":"video","video":{"caption":null}}
+```
 
-## 6) تفريع العرض المقترح (Dart)
+| العمود | القيمة | nullable |
+|---|---|---|
+| `video` | object | نعم |
+| `video.caption` | التعليق | **نعم غالباً** |
+| `buttons` | نفس جدول text | نعم (غائب غالباً) |
+| `transcode_retry_status` | `"retrying"` / `"failed"` — أثناء إعادة الإرسال | نعم (غائب غالباً) |
+| `transcode_retry_count` | `1` | نعم (غائب غالباً) |
 
-```dart
-final meta = jsonDecode(message.metadata ?? '{}') as Map<String, dynamic>;
-final kind = meta['type'] as String? ?? '';
-final block = meta[kind]; // قد يكون Map أو List أو null
+`retrying` ⇒ اعرض «يُعاد الإرسال» لا «فشل».
 
-switch (kind) {
-  case 'interactive':
-    final i = block is Map ? block : const {};
-    switch (i['type']) {
-      case 'button_reply':
-        showText(i['button_reply']?['title']);
-      case 'list_reply':
-        showText(i['list_reply']?['title']);
-        showSub(i['list_reply']?['description']);
-      default:
-        showPlaceholder('رسالة تفاعلية');
-    }
-  case 'button':
-    final b = block is Map ? block : const {};
-    showText(b['text'] ?? b['payload']);
-  case 'image':
-    showImage(message.media?.path);
-    showCaption(captionOf((block as Map?)?['caption']));
-  case 'video':
-    showVideo(message.media?.path);
-    showCaption(captionOf((block as Map?)?['caption']));
-  case 'audio':
-    showAudio(message.media?.path, isVoice: (block as Map?)?['voice'] == true);
-    showTranscript(meta['transcript']);
-  case 'document':
-    showFile(
-      url: message.media?.path,
-      name: message.media?.name ?? (block as Map?)?['filename'],
-      mime: message.media?.type,
-      size: message.media?.size,
-    );
-  case 'sticker':
-    showSticker(message.media?.path);
-  case 'location':
-    final loc = block is Map ? block : const {};
-    final lat = (loc['latitude'] as num?)?.toDouble();
-    final lng = (loc['longitude'] as num?)?.toDouble();
-    if (lat != null && lng != null) showMap(lat, lng, loc['name'], loc['address']);
-  case 'contacts':
-    final list = block is List ? block : const [];
-    showContactCards(list.whereType<Map>().toList());
-  default:
-    // text / system / edit / revoke / template / unknown
-    break;
+
+**مثال كامل — فيديو وارد:**
+
+```json
+{
+  "id": 3279815,
+  "uuid": "8a30716a-d0c8-47b2-8bf2-7e5ae854289b",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:27:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"video\",\"video\":{\"caption\":\"شاهد المشكلة في الفيديو\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.27440AD5C9D1",
+  "status": "delivered",
+  "media": {
+    "type": "video/mp4",
+    "size": "43136",
+    "path": "http://127.0.0.1:8000/media/public/seed-message-types/clip.mp4",
+    "name": "N/A"
+  },
+  "logs": [],
+  "user": null
 }
 ```
 
-لا تستخدم `!` على أي حقل متداخل. التطبيق ينهار حاليًا على `createdAt!` إن وصلت حمولة فارغة — الخادم لم يعد يبث رسائل بلا `id`، لكن الحقول الداخلية تبقى اختيارية.
+
+**مثال كامل — فيديو صادر فشل وتُعاد محاولته:**
+
+```json
+{
+  "id": 3279816,
+  "uuid": "92bfbd9e-3d1f-4633-a219-c99e4eb1a636",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:29:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"video\",\"video\":{\"caption\":null},\"transcode_retry_status\":\"retrying\",\"transcode_retry_count\":1}",
+  "type": "outbound",
+  "wam_id": "wamid.SEED.658FC08C38FF",
+  "status": "failed",
+  "media": {
+    "type": "video/mp4",
+    "size": "43136",
+    "path": "http://127.0.0.1:8000/media/public/seed-message-types/clip.mp4",
+    "name": "clip.mp4"
+  },
+  "logs": [
+    {
+      "metadata": "{\"id\":\"wamid.SEED.658FC08C38FF\",\"status\":\"failed\",\"errors\":[{\"code\":131053,\"title\":\"Media upload error\"}]}"
+    }
+  ],
+  "user": {
+    "full_name": "غاليه الدوسري"
+  }
+}
+```
+
+### 5.4 `audio`
+
+```json
+{"type":"audio","audio":{"voice":true}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `audio` | object | نعم |
+| `audio.voice` | `true` = ملاحظة صوتية، غيرها = ملف صوتي | **نعم** |
+| `audio.mime_type` | صادر فقط | نعم |
+| `transcript` | تفريغ نصّي — على مستوى `metadata` لا داخل `audio` | نعم (غائب غالباً) |
+
+لا يوجد caption للصوت إطلاقاً.
+
+
+**مثال كامل — ملاحظة صوتية واردة:**
+
+```json
+{
+  "id": 3279817,
+  "uuid": "11abbb23-f432-4356-a919-37661e4c096d",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:31:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"audio\",\"audio\":{\"voice\":true}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.ACD1AB5D8487",
+  "status": "delivered",
+  "media": {
+    "type": "audio/ogg",
+    "size": "37671",
+    "path": "http://127.0.0.1:8000/media/public/seed-message-types/voice.ogg",
+    "name": "N/A"
+  },
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.5 `document`
+
+```json
+{"type":"document","document":{"filename":"invoice.pdf"}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `document` | object | نعم |
+| `document.filename` | اسم الملف (وارد) | نعم |
+| `document.caption` | صادر فقط | **نعم دائماً في الوارد** |
+| `document.mime_type` | صادر فقط | نعم |
+
+الاسم للعرض: `media.name` ثم `document.filename`.
+
+
+**مثال كامل — مستند وارد:**
+
+```json
+{
+  "id": 3279819,
+  "uuid": "d47ff47c-2006-4268-b9c1-1262e3305c6c",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:35:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"document\",\"document\":{\"filename\":\"invoice.pdf\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.B921BE2CA460",
+  "status": "delivered",
+  "media": {
+    "type": "application/pdf",
+    "size": "544",
+    "path": "http://127.0.0.1:8000/media/public/seed-message-types/offer.pdf",
+    "name": "invoice.pdf"
+  },
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.6 `sticker`
+
+```json
+{"type":"sticker","sticker":null}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `sticker` | **دائماً فارغ عملياً** — لا تقرأ داخله | **نعم (الحالة الطبيعية)** |
+
+المحتوى كله = `media.path` (webp).
+
+
+**مثال كامل — ملصق وارد:**
+
+```json
+{
+  "id": 3279821,
+  "uuid": "8a1217d5-43ca-4cdc-8fc3-87cca911beb5",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:39:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"sticker\",\"sticker\":null}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.29F49D28E9D1",
+  "status": "delivered",
+  "media": {
+    "type": "image/webp",
+    "size": "2052",
+    "path": "http://127.0.0.1:8000/media/public/seed-message-types/sticker.webp",
+    "name": "N/A"
+  },
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.7 `location`
+
+```json
+{"type":"location","location":{"latitude":21.485811,"longitude":39.192505}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `location` | object | نادراً نعم |
+| `location.latitude` | رقم — **قد يصل int أو double** | لا (بدونه لا خريطة) |
+| `location.longitude` | رقم | لا |
+| `location.name` | اسم المكان | **نعم غالباً** |
+| `location.address` | العنوان | **نعم غالباً** |
+| `location.url` | رابط خرائط (وارد أحياناً) | **نعم غالباً** |
+| `context.id` | wamid رسالة «طلب الموقع» التي يردّ عليها | نعم (غائب غالباً) |
+
+لا يوجد `media` لهذا النوع.
+
+
+**مثال كامل — موقع وارد ردّاً على طلب موقع:**
+
+```json
+{
+  "id": 3279822,
+  "uuid": "14a0e319-de47-47dd-b6c1-8fee27111085",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:41:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"location\",\"location\":{\"latitude\":21.485811,\"longitude\":39.192505,\"name\":\"فرع الروضة\",\"address\":\"الروضة، جدة\",\"url\":\"https://maps.google.com/?q=21.485811,39.192505\"},\"context\":{\"id\":\"wamid.SEED.LOCREQ\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.1E65D76BC9A0",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+
+**مثال كامل — موقع صادر:**
+
+```json
+{
+  "id": 3279823,
+  "uuid": "02906abb-a229-4371-b1b5-809925e728a4",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:43:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"location\",\"location\":{\"latitude\":24.774265,\"longitude\":46.738586}}",
+  "type": "outbound",
+  "wam_id": "wamid.SEED.6609A6F83775",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": {
+    "full_name": "غاليه الدوسري"
+  }
+}
+```
+
+### 5.8 `contacts`
+
+```json
+{"type":"contacts","contacts":[{"name":{"formatted_name":"محمد أحمد"},"phones":[{"phone":"+9665X","wa_id":"9665X","type":"CELL"}]}]}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `contacts` | array (قد تحوي أكثر من جهة) | **نعم** (`null` أو `[]`) |
+| `contacts[i].name.formatted_name` | الاسم الجاهز | نعم |
+| `contacts[i].name.first_name` / `last_name` | الاحتياطي | نعم |
+| `contacts[i].phones[j].phone` | الرقم | نعم |
+| `contacts[i].phones[j].wa_id` | رقم واتساب بلا `+` | نعم |
+| `contacts[i].phones[j].type` | `CELL` / `WORK` | نعم |
+| `contacts[i].emails[j].email` | البريد | نعم |
+| `contacts[i].org.company` | الشركة | نعم |
+| `contacts[i].addresses` / `urls` / `birthday` | كما وصلت | نعم |
+| `vcard` | **محذوف — لا يصل** | — |
+
+
+**مثال كامل — مشاركة جهتَي اتصال:**
+
+```json
+{
+  "id": 3279824,
+  "uuid": "c2b33afc-f634-471b-9557-a4cabce136e5",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:45:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"contacts\",\"contacts\":[{\"name\":{\"formatted_name\":\"محمد أحمد\",\"first_name\":\"محمد\",\"last_name\":\"أحمد\",\"middle_name\":null,\"prefix\":null,\"suffix\":null},\"phones\":[{\"phone\":\"+966551112233\",\"wa_id\":\"966551112233\",\"type\":\"CELL\"}],\"emails\":[{\"email\":\"m@example.com\",\"type\":\"WORK\"}],\"org\":{\"company\":\"شركة النور\",\"department\":null,\"title\":null},\"addresses\":[],\"urls\":[],\"birthday\":null},{\"name\":{\"first_name\":\"سالم\",\"last_name\":null},\"phones\":[{\"wa_id\":\"966554445566\"}]}]}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.F50D9B8CDC8D",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.9 `interactive` — وارد فقط (ردّ العميل على زر/قائمة)
+
+```json
+{"type":"interactive","interactive":{"type":"button_reply","button_reply":{"id":"btn_yes","title":"أوافق"}}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `interactive` | object | **نعم** |
+| `interactive.type` | `button_reply` / `list_reply` / غيرها | نعم |
+| `interactive.button_reply.id` | معرّف الزر | نعم |
+| `interactive.button_reply.title` | النصّ المعروض | نعم |
+| `interactive.list_reply.id` | معرّف العنصر | نعم |
+| `interactive.list_reply.title` | العنوان | نعم |
+| `interactive.list_reply.description` | الوصف | **نعم غالباً** |
+
+نوع غير معروف ⇒ اعرض «رسالة تفاعلية».
+
+
+**مثال كامل — ردّ على زر:**
+
+```json
+{
+  "id": 3279826,
+  "uuid": "02566310-1665-4ae2-b9c3-d26b554721ac",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:49:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"interactive\",\"interactive\":{\"type\":\"button_reply\",\"button_reply\":{\"id\":\"btn_yes\",\"title\":\"أوافق\"}}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.F2F0F72F075D",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.10 `button` — وارد فقط (ردّ على زر قالب)
+
+```json
+{"type":"button","button":{"text":"نعم","payload":"YES"}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `button` | object | نعم |
+| `button.text` | النصّ المعروض | نعم |
+| `button.payload` | القيمة الداخلية | نعم |
+
+
+**مثال كامل — ردّ على زر قالب:**
+
+```json
+{
+  "id": 3279830,
+  "uuid": "880a671e-0266-4476-9c90-32ec5637e674",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:57:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"button\",\"button\":{\"text\":\"نعم\",\"payload\":\"YES\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.6A3DDAD9EADE",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.11 `system` — وارد (تغيّر رقم العميل)
+
+```json
+{"type":"system","system":{"body":"changed to +9665Y","type":"user_changed_number","wa_id":"9665YYYYYYY"}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `system` | object | نعم |
+| `system.body` | نصّ جاهز للعرض | نعم |
+| `system.type` | `user_changed_number` | نعم |
+| `system.wa_id` | الرقم الجديد | نعم |
+
+
+**مثال كامل — تغيّر رقم العميل:**
+
+```json
+{
+  "id": 3279831,
+  "uuid": "011470af-cff9-4275-89e7-eb1850f4e74f",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 18:59:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"system\",\"system\":{\"body\":\"تم تغيير الرقم إلى +966500000009\",\"type\":\"user_changed_number\",\"wa_id\":\"966500000009\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.BDAC9DBB7B2E",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.12 `edit` — وارد (العميل عدّل رسالته)
+
+```json
+{"type":"edit","edit":{"original_message_id":"wamid.…","message":{"type":"text","text":{"body":"النصّ الجديد"}}}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `edit` | object | نعم |
+| `edit.original_message_id` | wamid الأصلية | نعم |
+| `edit.message.text.body` | النصّ بعد التعديل | نعم |
+
+
+**مثال كامل — رسالة معدَّلة:**
+
+```json
+{
+  "id": 3279832,
+  "uuid": "9d5be5ef-7a3d-4086-abd2-81f1667ecacd",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 19:01:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"edit\",\"edit\":{\"original_message_id\":\"wamid.SEED.ORIGINAL\",\"message\":{\"type\":\"text\",\"text\":{\"body\":\"النصّ بعد التعديل\"}}}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.3760B01D68F7",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.13 `revoke` — وارد (حذف للجميع)
+
+```json
+{"type":"revoke","revoke":{"original_message_id":"wamid.…"}}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `revoke` | object | نعم |
+| `revoke.original_message_id` | wamid الأصلية | نعم |
+
+لا محتوى — اعرض «تم حذف هذه الرسالة». (غير `value.deleted_at` وهو حذف من داخل نظامنا.)
+
+
+**مثال كامل — رسالة محذوفة للجميع:**
+
+```json
+{
+  "id": 3279833,
+  "uuid": "f25f743f-c5fd-4262-807b-ffcc5c18873c",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 19:03:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"revoke\",\"revoke\":{\"original_message_id\":\"wamid.SEED.ORIGINAL\"}}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.2B5A32CD3A94",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+### 5.14 `unsupported` — وارد
+
+```json
+{"type":"unsupported","errors":[{"code":131051,"error_data":{"details":"Message type is not currently supported."}}]}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `errors` | array | **نعم** (احرسها قبل `[0]`) |
+| `errors[0].code` | رقم خطأ Meta | نعم |
+| `errors[0].error_data.details` | وصف الخطأ | نعم |
 
 ---
 
-## 7) ما الذي لا يصل / يُتجاهل
 
-| النوع | السلوك |
+**مثال كامل — رسالة غير مدعومة:**
+
+```json
+{
+  "id": 3279834,
+  "uuid": "ef50c30c-c6ce-43cf-8b0f-cd51dfa6f709",
+  "contact_uuid": "4895c0cc-0366-4650-8aa9-ff83e6e36160",
+  "contact_id": 839286,
+  "is_new_contact": false,
+  "phone": "+966500000000",
+  "formatted_phone_number": "+966 50 000 0000",
+  "organization_id": 211,
+  "latest_chat_created_at": "2026-08-24 16:15:48",
+  "is_blocked": 0,
+  "is_favorite": 0,
+  "contact_full_name": "اختبار أنواع الرسائل",
+  "unread_messages_count": 1,
+  "created_at": "2026-08-24 19:05:48",
+  "deleted_at": null,
+  "metadata": "{\"type\":\"unsupported\",\"errors\":[{\"code\":131051,\"title\":\"Message type not supported\",\"error_data\":{\"details\":\"Message type is not currently supported.\"}}]}",
+  "type": "inbound",
+  "wam_id": "wamid.SEED.212D7D7B358A",
+  "status": "delivered",
+  "media": null,
+  "logs": [],
+  "user": null
+}
+```
+
+## 6) أنواع لن تصل / غير معروضة
+
+| النوع | الحالة |
 |---|---|
-| `reaction` | **لا يُرسل** للتطبيق (يُستبعد من الاستعلام والبث) |
-| `metadata.id` / `url` / `sha256` داخل الميديا الواردة | محذوفة؛ الملف في `media` |
-| `contacts[].vcard` | محذوف |
-| حالات واتساب غير المدعومة | `played` → `delivered`؛ غيرها → `status: null` |
-
-أنواع أخرى قد تصل (`text`, `template`, `system`, `edit`, `revoke`, `unsupported`) خارج نطاق هذا التقرير، لكنها تستخدم نفس الغلاف.
+| `reaction` | **مستبعَد من كل الاستعلامات والبثّ** — لن يصل التطبيق أبداً |
+| `template` | القوالب الصادرة تُخزَّن `text`/`image`/`video`/`document`؛ وصول `template` نادر وغير مدعوم |
+| أي نوع جديد من واتساب | يصل خاماً — التعامل معه في `default`: «لا يمكن عرض هذا النوع» |
 
 ---
 
-## 8) قائمة تحقق سريعة للمطور
+## 7) محادثة اختبار فيها كل الأنواع
 
-- [ ] فك `metadata` كـ JSON string في كل رسالة وكل `log`
-- [ ] التفريع على `metadata.type` لا على `value.type`
-- [ ] `media == null` → محتوى غير متاح، لا crash
-- [ ] `image`/`video`/`document`/`audio`/`sticker`: الكتلة الداخلية قد تكون `null`
-- [ ] `caption` يعامل `null` و`""` و`"null"` كفارغ
-- [ ] `interactive.list_reply.description` اختياري
-- [ ] `location.name` / `address` / `url` / `context` اختيارية
-- [ ] `contacts` قد تكون `null`؛ كل من `name` / `phones` / `emails` / `org` اختياري
-- [ ] `sticker` لا محتوى سوى `media.path`
-- [ ] `audio.voice === true` لتمييز الملاحظة الصوتية
-- [ ] `user` للوارد = `null`
-- [ ] لا تفترض وجود `latitude` كـ double؛ قد يأتي int
+لا توجد في الإنتاج جهة اتصال واحدة تجمع الأنواع كلها (أقصى تغطية 9 من 14)، فيوجد seeder يبنيها:
+
+```bash
+SEED_ORG_ID=211 SEED_MEDIA_BASE_URL=http://127.0.0.1:8000 \
+  php artisan db:seed --class=ChatMessageTypesSeeder
+```
+
+- ينشئ جهة اتصال `+966500000000` ويضع عليها **32 رسالة** تغطّي الـ14 نوعاً + الحالات الحافّة.
+- يولّد ملفات ميديا حقيقية (jpg · mp4 · ogg · pdf · webp) تحت `storage/app/public/seed-message-types`.
+- إعادة التشغيل تمسح وتبني من جديد (لا تُكرّر).
+- متغيّرات: `SEED_ORG_ID` · `SEED_TEST_PHONE` · `SEED_MEDIA_BASE_URL`.
+
+حالات مقصودة داخل المحادثة يجب أن يتعامل معها التطبيق:
+
+| الحالة | المتوقَّع |
+|---|---|
+| `image` بلا `media` | «المحتوى غير متاح» لا انهيار |
+| `video` بـ`transcode_retry_status: retrying` | «يُعاد الإرسال» لا «فشل» |
+| `contacts: []` | يصل `null` — يُعامل كقائمة فارغة |
+| `interactive.type = nfm_reply` | فقاعة عامّة «رسالة تفاعلية» |
+| `unsupported` بلا `errors` | نصّ عام بلا قراءة `errors[0]` |
+| `reaction` | **لا يظهر في رد الـAPI إطلاقاً** |
+| `order` (نوع مجهول) | يقع في `default` |
+| رسالة بـ`deleted_at` | تُعرض كمحذوفة |
+
+---
+
+## 8) إشعار Firebase (FCM) — للتفريق فقط
+
+يُرسَل بجانب البثّ لا بدلاً منه (`SendNewChatPushNotificationJob`)، وشكله مختلف تماماً:
+
+```json
+{
+  "message": {
+    "token": "<device_token>",
+    "notification": {
+      "title": "اختبار أنواع الرسائل",
+      "body": "📷 صورة: الفاتورة المرفقة"
+    },
+    "android": { "notification": { "sound": "on_notification.wav", "color": "#0A0A0A" } },
+    "apns":    { "payload": { "aps": { "sound": "on_notification.wav" } } },
+    "data": {
+      "contactFullName": "اختبار أنواع الرسائل",
+      "phone": "+966500000000",
+      "chatId": "839286",
+      "organizationId": "211",
+      "createdAt": "2026-08-24 21:15:00",
+      "userId": "1234"
+    }
+  }
+}
+```
+
+| العمود | القيمة | nullable |
+|---|---|---|
+| `notification.title` | اسم جهة الاتصال، أو رقمها إن لم يوجد اسم | لا (قد يكون `"Unknown"`) |
+| `notification.body` | نصّ الرسالة، أو `<إيموجي> <نوع>: <caption>` للميديا | لا (قد يكون `""`) |
+| `data.contactFullName` | نفس الاسم | قد يكون `""` |
+| `data.phone` | رقم جهة الاتصال | قد يكون `""` |
+| `data.chatId` | **`contact_id` وليس `chat.id`** — نصّ لا رقم | قد يكون `""` |
+| `data.organizationId` | نصّ لا رقم | لا |
+| `data.createdAt` | وقت إرسال الإشعار لا وقت الرسالة | لا |
+| `data.userId` | الموظّف المستلِم للإشعار | لا |
+
+**كل قيم `data` نصوص (strings)** — هذا شرط FCM.
+
+ما **لا** يحمله الإشعار: `metadata` · `media` · `wam_id` · `status` · `logs` · معرّف الرسالة نفسه.
+الاستخدام الصحيح: الإشعار يفتح المحادثة على `chatId` (= contact_id)، والمحتوى يأتي من `list-messages-from-uuid-to-end` أو من Pusher.

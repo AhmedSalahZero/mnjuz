@@ -19,12 +19,12 @@ class ChatLog extends Model {
     public function getCreatedAtAttribute($value)
     {
         // Convert the stored UTC timestamp to the organization's timezone
-        return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
+        return DateTimeHelper::toOrganizationTimeString($value);
     }
 
     public function getUpdatedAtAttribute($value)
     {
-        return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
+        return DateTimeHelper::toOrganizationTimeString($value);
     }
 
     public function entity()

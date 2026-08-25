@@ -2603,7 +2603,17 @@ class ApiController extends Controller
                 ->whereNull('deleted_at')
                 ->when($createdAt, fn ($q) => $q->where('created_at', '>=', $createdAt))
                 ->when(!empty($entityTypes), fn ($q) => $q->whereIn('entity_type', $entityTypes))
-                ->orderBy('created_at', 'asc'),
+                // الترتيب بـ contact_id أولاً يطابق مقدّمة الـ index الجديد،
+                // فتُقرأ الصفوف مرتّبةً بدل فرزٍ في الذاكرة لمئات الآلاف منها.
+                // الردّ لا يتغيّر: النتيجة تُجمَّع بـ contact_id بعد قليل،
+                // وترتيب المجموعات لا أثر له، وداخل المجموعة يبقى created_at.
+                ->orderBy('contact_id', 'asc')
+                ->orderBy('created_at', 'asc')
+                // فاصل قاطع عند تساوي created_at — وهو يقع فعلاً: قِسنا 54
+                // رسالة تتقاسم الثانية نفسها مع أخرى في 28 محادثة من 150.
+                // الترتيب القديم لم يكن يفصل بينها أصلاً، فيتركه لاجتهاد
+                // MySQL. وid آخر أعمدة الـ index ضمناً، فلا يكلّف شيئاً.
+                ->orderBy('id', 'asc'),
             'contact_id',
             $contactIds
         );
@@ -2616,8 +2626,16 @@ class ApiController extends Controller
         return [
             'contactsById' => $contacts->keyBy('id'),
             'logsByContact' => $allChatLogs->groupBy('contact_id'),
+            // أعمدة العلاقات محصورة بما يُستهلك فعلاً في التنسيق. الحذف المهمّ
+            // هو created_at: كل من ChatMedia وChatStatusLog وUser له accessor
+            // تاريخ يعمل عند toArray، ولا شيء في الردّ يقرأ نتيجته. سجلّ حالة
+            // واحد لكل رسالة يعني تحويل تاريخ لكل رسالة بلا مستهلك.
             'chatsMap' => $this->getModelsByIdsInChunks(
-                $this->visibleChatsQuery()->with('media', 'user', 'logs'),
+                $this->visibleChatsQuery()->with([
+                    'media:id,type,size,path,name',
+                    'user:id,first_name,last_name',
+                    'logs:id,chat_id,metadata',
+                ]),
                 'id',
                 $chatIds
             )->keyBy('id'),
@@ -2661,15 +2679,17 @@ class ApiController extends Controller
             return collect();
         }
 
-        $results = collect();
+        // تجميع في مصفوفة ثمّ لفّها مرّة واحدة. الـ merge داخل الحلقة كان
+        // ينسخ كل ما تراكم مع كل دفعة، فيصير النسخ تربيعياً مع عدد الدفعات.
+        $results = [];
 
         foreach (array_chunk($ids, $chunkSize) as $chunk) {
-            $results = $results->merge(
-                (clone $baseQuery)->whereIn($column, $chunk)->get()
-            );
+            foreach ((clone $baseQuery)->whereIn($column, $chunk)->get() as $model) {
+                $results[] = $model;
+            }
         }
 
-        return $results;
+        return collect($results);
     }
 
     /**

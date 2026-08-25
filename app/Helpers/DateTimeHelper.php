@@ -45,6 +45,44 @@ class DateTimeHelper
         return Carbon::parse($date)->setTimezone($timezone);
     }
 
+    /**
+     * نفس نتيجة convertToOrganizationTimezone(...)->toDateTimeString() بلا Carbon.
+     *
+     * الـ accessors في Chat وChatLog وChatMedia وغيرها تستدعي هذه الدالة مرّةً
+     * لكل صفّ لكل عمود تاريخ. وCarbon::parse يبني DateTime ثمّ يمرّ على محلّل
+     * التعابير الطبيعية ثمّ يُنشئ نسخةً أخرى عند setTimezone — عشرات الميكرو
+     * ثوانٍ للصفّ الواحد. مزامنة منشأة فيها مئة ألف رسالة تستدعيها مئات
+     * الآلاف من المرّات، فتلتهم وحدها عشرات الثواني من مهلة الطلب. لهذا يظهر
+     * Carbon\Traits\Date::setTimezone في أعلى أثر خطأ «تجاوز مهلة التنفيذ».
+     *
+     * التواريخ الآتية من MySQL نصٌّ ثابت الشكل 'Y-m-d H:i:s' بتوقيت UTC
+     * (config('app.timezone') = UTC)، فيكفيها DateTimeImmutable مباشرةً مع
+     * كائن DateTimeZone محفوظ. ما خرج عن هذا الشكل — null أو تنسيق آخر —
+     * يعود إلى Carbon كما كان، فلا يتغيّر سلوكه.
+     */
+    public static function toOrganizationTimeString($date, $organizationId = null): string
+    {
+        if (is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $date) === 1) {
+            $timezone = self::getCurrentTimeZone($organizationId);
+
+            static $zones = [];
+            if (!isset($zones[$timezone])) {
+                $zones[$timezone] = new \DateTimeZone($timezone);
+            }
+
+            static $utc = null;
+            if ($utc === null) {
+                $utc = new \DateTimeZone('UTC');
+            }
+
+            return (new \DateTimeImmutable($date, $utc))
+                ->setTimezone($zones[$timezone])
+                ->format('Y-m-d H:i:s');
+        }
+
+        return self::convertToOrganizationTimezone($date, $organizationId)->toDateTimeString();
+    }
+
     public static function convertToCompanyTimezone($date)
     {
         $timezone = Setting::where('key', 'timezone')->value('value') ?? 'UTC';
