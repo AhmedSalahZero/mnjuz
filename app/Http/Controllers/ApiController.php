@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\DateTimeHelper;
 use App\Helpers\ChatMediaUploadHelper;
 use App\Helpers\MessagingWindowHelper;
 use App\Helpers\WebhookHelper;
@@ -2063,7 +2064,8 @@ class ApiController extends Controller
                     $chat = $chatsMap->get($chatLog->entity_id);
                     if (!$chat) continue;
                     if ($isDev) {
-                        $meta = is_string($chat->metadata) ? json_decode($chat->metadata, true) : $chat->metadata;
+                        $raw = $chat['metadata'] ?? null;
+                        $meta = is_string($raw) ? json_decode($raw, true) : $raw;
                         if (isset($meta['buttons']) || isset($meta['context'])) continue;
                     }
                     $value = $this->formatChatValue($chat, $contact, $formattedPhone, $fullName);
@@ -2196,7 +2198,8 @@ class ApiController extends Controller
                     $chat = $chatsMap->get($chatLog->entity_id);
                     if (!$chat) continue;
                     if ($isDev) {
-                        $meta = is_string($chat->metadata) ? json_decode($chat->metadata, true) : $chat->metadata;
+                        $raw = $chat['metadata'] ?? null;
+                        $meta = is_string($raw) ? json_decode($raw, true) : $raw;
                         if (isset($meta['buttons']) || isset($meta['context'])) continue;
                     }
                     $value = $this->formatChatMessageV2($chat);
@@ -2598,8 +2601,14 @@ class ApiController extends Controller
         $contactIds = $contacts->pluck('id')->all();
 
         // Step 2: Load chat_logs in chunks (avoid MySQL "too many placeholders" on large orgs)
+        //
+        // صفوف خام لا Models: الردّ لا يقرأ من السطر إلا ثلاثة أعمدة، وبناء
+        // Model لكل سطر يُنشئ كائناً بأعمدة كاملة وaccessors تاريخ لا مستهلك
+        // لها. قِسناه على المنشأة 146: 48,365 سطراً تكلّف 1.61s كـModels
+        // مقابل 0.71s صفوفاً خاماً.
         $allChatLogs = $this->getModelsByIdsInChunks(
-            ChatLog::query()
+            DB::table('chat_logs')
+                ->select('contact_id', 'entity_type', 'entity_id')
                 ->whereNull('deleted_at')
                 ->when($createdAt, fn ($q) => $q->where('created_at', '>=', $createdAt))
                 ->when(!empty($entityTypes), fn ($q) => $q->whereIn('entity_type', $entityTypes))
@@ -2626,23 +2635,121 @@ class ApiController extends Controller
         return [
             'contactsById' => $contacts->keyBy('id'),
             'logsByContact' => $allChatLogs->groupBy('contact_id'),
-            // أعمدة العلاقات محصورة بما يُستهلك فعلاً في التنسيق. الحذف المهمّ
-            // هو created_at: كل من ChatMedia وChatStatusLog وUser له accessor
-            // تاريخ يعمل عند toArray، ولا شيء في الردّ يقرأ نتيجته. سجلّ حالة
-            // واحد لكل رسالة يعني تحويل تاريخ لكل رسالة بلا مستهلك.
-            'chatsMap' => $this->getModelsByIdsInChunks(
-                $this->visibleChatsQuery()->with([
-                    'media:id,type,size,path,name',
-                    'user:id,first_name,last_name',
-                    'logs:id,chat_id,metadata',
-                ]),
-                'id',
-                $chatIds
-            )->keyBy('id'),
+            'chatsMap' => $this->loadChatRows($chatIds),
             'ticketLogsMap' => $this->getModelsByIdsInChunks(ChatTicketLog::query(), 'id', $ticketIds)->keyBy('id'),
             'notesMap' => $this->getModelsByIdsInChunks(ChatNote::query(), 'id', $noteIds)->keyBy('id'),
             'pagination' => $pagination,
         ];
+    }
+
+    /**
+     * رسائل المزامنة كصفوف خام مع علاقاتها، بشكلٍ يطابق ما كان يُنتجه
+     * Chat::with('media','user','logs')->toArray() في الحقول التي يقرأها
+     * التنسيق.
+     *
+     * لماذا لا Models: مرحلة التحميل كانت 80% منها شغل PHP لا قاعدة بيانات —
+     * قِسنا على المنشأة 146 مزامنةَ ثلاثين يوماً: 17.39s تحميلاً منها 3.55s
+     * فقط SQL. وبناء الـModels وحده 3.53s لعشرين ألف رسالة بعلاقاتها مقابل
+     * 0.45s للصفوف الخام، أي ثمانية أضعاف. الصفّ الخام يكفي لأن التنسيق
+     * (formatChatValue / formatChatMessageV2) يقرأ مصفوفةً لا كائناً.
+     *
+     * الترشيح يبقى من {@see visibleChatsQuery()} — toBase() يحتفظ بشرط
+     * استبعاد التفاعلات ويُسقط طبقة الـEloquent وحدها.
+     *
+     * ما يجب أن يبقى مطابقاً حرفياً:
+     *  - created_at: كان يمرّ بـaccessor في Chat يحوّله لتوقيت المنشأة، فنُجري
+     *    التحويل نفسه هنا صراحةً. إغفاله يُرجع التوقيت خاماً بفارق ساعات.
+     *  - user: الـModel كان يُلحق full_name (appends)، والتنسيق يبنيه من
+     *    الاسمين عند غيابه بنفس النتيجة — فنمرّر الاسمين وحدهما.
+     *  - logs: ترتيب سجلّات الحالة كما كانت تُرجعه العلاقة (chat_id ثمّ id)،
+     *    لأن التنسيق يأخذ آخر ستّة منها.
+     *
+     * @param  array<int, mixed>  $chatIds
+     * @return \Illuminate\Support\Collection
+     */
+    private function loadChatRows(array $chatIds): \Illuminate\Support\Collection
+    {
+        if (empty($chatIds)) {
+            return collect();
+        }
+
+        $chats = $this->getModelsByIdsInChunks(
+            $this->visibleChatsQuery()->toBase()->select(
+                'id', 'uuid', 'organization_id', 'metadata', 'type',
+                'wam_id', 'status', 'media_id', 'user_id', 'created_at', 'deleted_at'
+            ),
+            'id',
+            $chatIds
+        );
+
+        if ($chats->isEmpty()) {
+            return collect();
+        }
+
+        $notNull = static fn ($value) => $value !== null;
+
+        $mediaIds = $chats->pluck('media_id')->filter($notNull)->unique()->values()->all();
+        $userIds  = $chats->pluck('user_id')->filter($notNull)->unique()->values()->all();
+        $ids      = $chats->pluck('id')->all();
+
+        $mediaById = empty($mediaIds) ? collect() : $this->getModelsByIdsInChunks(
+            DB::table('chat_media')->select('id', 'type', 'size', 'path', 'name'),
+            'id',
+            $mediaIds
+        )->keyBy('id');
+
+        $usersById = empty($userIds) ? collect() : $this->getModelsByIdsInChunks(
+            DB::table('users')->select('id', 'first_name', 'last_name'),
+            'id',
+            $userIds
+        )->keyBy('id');
+
+        $logsByChat = $this->getModelsByIdsInChunks(
+            DB::table('chat_status_logs')
+                ->select('chat_id', 'metadata')
+                ->orderBy('chat_id')
+                ->orderBy('id'),
+            'chat_id',
+            $ids
+        )->groupBy('chat_id');
+
+        $rows = [];
+
+        foreach ($chats as $chat) {
+            $media = $chat->media_id === null ? null : $mediaById->get($chat->media_id);
+            $user  = $chat->user_id === null ? null : $usersById->get($chat->user_id);
+            $logs  = $logsByChat->get($chat->id);
+
+            $rows[(int) $chat->id] = [
+                'id'         => (int) $chat->id,
+                'uuid'       => $chat->uuid,
+                'metadata'   => $chat->metadata,
+                'type'       => $chat->type,
+                'wam_id'     => $chat->wam_id,
+                'status'     => $chat->status,
+                'created_at' => DateTimeHelper::toOrganizationTimeString(
+                    $chat->created_at,
+                    $chat->organization_id
+                ),
+                'deleted_at' => $chat->deleted_at,
+                'media'      => $media === null ? null : [
+                    'type' => $media->type,
+                    'size' => $media->size,
+                    'path' => $media->path,
+                    'name' => $media->name,
+                ],
+                'user'       => $user === null ? null : [
+                    'first_name' => $user->first_name,
+                    'last_name'  => $user->last_name,
+                ],
+                'logs'       => $logs === null ? [] : $logs
+                    ->map(static fn ($log) => ['metadata' => $log->metadata])
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        return collect($rows);
     }
 
     /**
@@ -2662,10 +2769,14 @@ class ApiController extends Controller
     }
 
     /**
-     * Load models with whereIn in chunks to stay under MySQL's prepared-statement
+     * Load rows with whereIn in chunks to stay under MySQL's prepared-statement
      * placeholder limit (~65535). Preserves the base query's with()/where()/orderBy.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $baseQuery
+     * يقبل Eloquent\Builder وQuery\Builder معاً: القراءتان الكبيرتان في مسار
+     * المزامنة تمرّان عليه بصفوف خام توفيراً لبناء الـModels، والصغيرتان
+     * (التذاكر والملاحظات) تبقيان Models لأن الردّ يُخرجهما كما هما.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $baseQuery
      * @param  string  $column
      * @param  array<int, mixed>  $ids
      * @param  int  $chunkSize
