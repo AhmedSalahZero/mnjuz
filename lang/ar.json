@@ -1629,5 +1629,20 @@
     "working_hours_variable_modal_intro": "اختر عنصراً نائباً لإدراجه. يُستبدل ببيانات جهة الاتصال عند إرسال الرسالة.",
     "working_hours_weekly_schedule_heading": "أوقات العمل:",
     "yearly": "سنوياً",
-    "{count} stars": "{count} نجوم"
+    "{count} stars": "{count} نجوم",
+    "This field is required.": "هذا الحقل مطلوب.",
+    "The name field is required.": "حقل الاسم مطلوب.",
+    "The template field is required.": "حقل القالب مطلوب.",
+    "The contacts field is required.": "حقل جهات الاتصال مطلوب.",
+    "The value must not exceed :max characters.": "يجب ألّا تتجاوز القيمة :max حرفاً.",
+    "The value must be an image (PNG or JPG) and should not exceed 5MB.": "يجب أن تكون القيمة صورة (PNG أو JPG) لا تتجاوز 5 ميغابايت.",
+    "The value must be a video (MP4) and should not exceed 16MB.": "يجب أن تكون القيمة فيديو (MP4) لا يتجاوز 16 ميغابايت.",
+    "This value is not a valid url": "هذه القيمة ليست رابطاً صالحاً.",
+    "Choose a header image: upload a new one or pick a previously used file.": "اختر صورة الترويسة: ارفع صورة جديدة أو اضغط على ملف استُخدم سابقاً.",
+    "Choose a header video: upload a new one or pick a previously used file.": "اختر فيديو الترويسة: ارفع فيديو جديداً أو اضغط على ملف استُخدم سابقاً.",
+    "Choose a header document: upload a new one or pick a previously used file.": "اختر مستند الترويسة: ارفع مستنداً جديداً أو اضغط على ملف استُخدم سابقاً.",
+    "This file is no longer in the list. Refresh the page.": "هذا الملف لم يعد في القائمة. حدّث الصفحة.",
+    "Selected": "محدَّد",
+    "Click to use this file": "اضغط لاستخدام هذا الملف",
+    "Previously used file": "ملف استُخدم سابقاً"
 }

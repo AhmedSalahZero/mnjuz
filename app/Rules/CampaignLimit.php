@@ -4,7 +4,7 @@ namespace App\Rules;
 
 use Illuminate\Contracts\Validation\Rule;
 use App\Models\User;
-use app\Services\SubscriptionService;
+use App\Services\SubscriptionService;
 
 class CampaignLimit implements Rule
 {

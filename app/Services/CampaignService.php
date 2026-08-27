@@ -110,7 +110,7 @@ class CampaignService
                                     $chatMedia->id,
                                 );
                             } elseif ($parameter['selection'] === 'history') {
-                                $historyItem = $historyService->findForOrganization(
+                                $historyItem = $historyService->findByReferenceForOrganization(
                                     $organizationId,
                                     (string) $parameter['value']
                                 );

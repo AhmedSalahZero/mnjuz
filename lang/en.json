@@ -1353,5 +1353,20 @@
     "Resend :count failed message(s) for this campaign?": "Resend :count failed message(s) for this campaign?",
     "This campaign cannot be resent.": "This campaign cannot be resent.",
     "View invoice": "View invoice",
-    "Setup fees invoice": "Setup fees invoice"
+    "Setup fees invoice": "Setup fees invoice",
+    "This field is required.": "This field is required.",
+    "The name field is required.": "The name field is required.",
+    "The template field is required.": "The template field is required.",
+    "The contacts field is required.": "The contacts field is required.",
+    "The value must not exceed :max characters.": "The value must not exceed :max characters.",
+    "The value must be an image (PNG or JPG) and should not exceed 5MB.": "The value must be an image (PNG or JPG) and should not exceed 5MB.",
+    "The value must be a video (MP4) and should not exceed 16MB.": "The value must be a video (MP4) and should not exceed 16MB.",
+    "This value is not a valid url": "This value is not a valid url",
+    "Choose a header image: upload a new one or pick a previously used file.": "Choose a header image: upload a new one or pick a previously used file.",
+    "Choose a header video: upload a new one or pick a previously used file.": "Choose a header video: upload a new one or pick a previously used file.",
+    "Choose a header document: upload a new one or pick a previously used file.": "Choose a header document: upload a new one or pick a previously used file.",
+    "This file is no longer in the list. Refresh the page.": "This file is no longer in the list. Refresh the page.",
+    "Selected": "Selected",
+    "Click to use this file": "Click to use this file",
+    "Previously used file": "Previously used file"
 }

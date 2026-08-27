@@ -3,6 +3,7 @@ import axios from "axios"
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
+import { headerPreviewSource } from '@/Composables/templateMediaPreview'
 import { ref, computed, onMounted, watch } from 'vue'
 import { Link, useForm } from "@inertiajs/vue3"
 import 'vue3-toastify/dist/index.css'
@@ -58,6 +59,16 @@ const props = defineProps({
 const isLoading = ref(false)
 const mediaHistory = ref([])
 const selectedHistoryUuid = ref(null)
+
+/**
+ * رابط الوسائط الذي ترسمه المعاينة — و'' حين لا يوجد ما يُعرض.
+ *
+ * كان WhatsappTemplate يُستدعى بلا placeholder فيبقى على قيمته الافتراضية
+ * true، فترسم المعاينة العنصر النائب مهما اختار العميل. فلا شيء يتغيّر
+ * أمامه حين ينجح اختياره — وهذا وحده ما جعل ميزة «الملفات المستخدمة
+ * سابقاً» تبدو معطّلة.
+ */
+const headerPreview = computed(() => headerPreviewSource(form.header))
 const isHistoryLoading = ref(false)
 const contactGroupOptions = ref([
 	{ value: 'all', label: trans('all contacts') },
@@ -209,6 +220,14 @@ const loadMediaHistory = async () => {
 	}
 }
 
+/**
+ * اختيار ملف سبق استخدامه.
+ *
+ * نرسل uuid لا المسار: الخادم كان يبحث بمطابقة نصّية كاملة على الرابط،
+ * فأيّ اختلاف حرف — ترميز، مسافة، تغيّر شكل رابط S3 — يُنتج «الملف لم يعد
+ * متاحاً» على ملفٍ موجود. والـuuid معرّف ثابت وصلنا مع القائمة أصلاً.
+ * url يبقى المسار لأنه ما تعرضه المعاينة.
+ */
 const selectHistoryItem = (item) => {
 	if (!form.header.parameters[0]) {
 		return
@@ -216,7 +235,7 @@ const selectHistoryItem = (item) => {
 
 	selectedHistoryUuid.value = item.uuid
 	form.header.parameters[0].selection = 'history'
-	form.header.parameters[0].value = item.path
+	form.header.parameters[0].value = item.uuid
 	form.header.parameters[0].url = item.path
 }
 
@@ -236,7 +255,13 @@ const deleteHistoryItem = async (item) => {
 		}
 		await loadMediaHistory()
 	} catch (error) {
-		alert(trans('Something went wrong. Refresh the page and try again'))
+		// رسالة الخادم أوّلاً: «Not found» تعني قائمة قديمة أو ضغطة مكرّرة،
+		// والرسالة العامة وحدها كانت تُخفي ذلك عن العميل وعنّا معاً.
+		alert(
+			error?.response?.data?.message
+			|| trans('Something went wrong. Refresh the page and try again')
+		)
+		await loadMediaHistory()
 	}
 }
 
@@ -247,7 +272,8 @@ const selectedMediaLabel = (index) => {
 	}
 	if (param.selection === 'history') {
 		const item = mediaHistory.value.find((entry) => entry.uuid === selectedHistoryUuid.value)
-		return item?.name ?? param.value
+		// القيمة صارت uuid، وعرضه على العميل بلا معنى — نعود لاسم الملف.
+		return item?.name ?? trans('Previously used file')
 	}
 	if (param.selection === 'default') {
 		return param.value
@@ -528,27 +554,60 @@ watch(
 									<p v-else-if="mediaHistory.length === 0" class="text-xs text-gray-500">
 										{{ $t('No previous files for this media type') }}
 									</p>
-									<ul v-else class="space-y-2 max-h-40 overflow-y-auto">
+									<ul v-else class="space-y-2 max-h-52 overflow-y-auto">
 										<li
 											v-for="item in mediaHistory"
 											:key="item.uuid"
-											class="flex items-center gap-2 rounded-md border bg-white px-2 py-1.5"
-											:class="selectedHistoryUuid === item.uuid ? 'border-primary ring-1 ring-primary' : 'border-slate-200'"
+											class="flex items-center gap-2 rounded-md border bg-white p-1.5"
+											:class="selectedHistoryUuid === item.uuid ? 'border-primary ring-1 ring-primary bg-primary/5' : 'border-slate-200'"
 										>
+											<!--
+												الصفّ كلّه زرّ الاختيار: الاسم وحده كان هدفاً ضيّقاً لا يبدو
+												قابلاً للضغط، وبجواره «حذف» أحمر يبدو زرّاً أكثر منه — فمن
+												أراد الاختيار ضغط الحذف.
+											-->
 											<button
 												type="button"
-												class="flex-1 text-left text-xs truncate hover:underline"
+												class="flex flex-1 items-center gap-2 text-left min-w-0"
 												:title="item.name"
 												@click="selectHistoryItem(item)"
 											>
-												{{ item.name }}
+												<img
+													v-if="item.media_type === 'IMAGE'"
+													:src="item.path"
+													alt=""
+													class="h-10 w-10 shrink-0 rounded object-cover border border-slate-200 bg-slate-50"
+												/>
+												<span
+													v-else
+													class="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-50 text-[10px] text-slate-500"
+												>
+													{{ item.media_type === 'VIDEO' ? 'MP4' : 'DOC' }}
+												</span>
+												<span class="min-w-0 flex-1">
+													<span class="block text-xs truncate">{{ item.name }}</span>
+													<span
+														v-if="selectedHistoryUuid === item.uuid"
+														class="block text-[11px] font-medium text-primary"
+													>
+														✓ {{ $t('Selected') }}
+													</span>
+													<span v-else class="block text-[11px] text-slate-400">
+														{{ $t('Click to use this file') }}
+													</span>
+												</span>
 											</button>
 											<button
 												type="button"
-												class="text-xs text-red-600 hover:underline shrink-0"
-												@click="deleteHistoryItem(item)"
+												class="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+												:title="$t('Delete')"
+												:aria-label="$t('Delete')"
+												@click.stop="deleteHistoryItem(item)"
 											>
-												{{ $t('Delete') }}
+												<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+													<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
+														d="M4 7h16M10 11v6m4-6v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+												</svg>
 											</button>
 										</li>
 									</ul>
@@ -678,7 +737,8 @@ watch(
 		</form>
 		<div class="md:w-[50%] py-20 flex justify-center chat-bg" :class="isCampaignFlow ? 'px-20' : 'px-10'">
 			<div>
-				<WhatsappTemplate :parameters="form" :visible="form.template ? true : false" />
+				<WhatsappTemplate :parameters="form" :visible="form.template ? true : false"
+					:placeholder="!headerPreview" />
 			</div>
 		</div>
 	</div>

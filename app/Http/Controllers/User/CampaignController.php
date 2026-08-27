@@ -15,6 +15,7 @@ use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\CampaignMediaHistoryService;
+use Illuminate\Support\Facades\Log;
 use App\Services\CampaignRetryService;
 use App\Services\CampaignService;
 use Illuminate\Http\Request;
@@ -146,7 +147,17 @@ class CampaignController extends BaseController
         $deleted = app(CampaignMediaHistoryService::class)->deleteForOrganization($organizationId, $uuid);
 
         if (!$deleted) {
-            return response()->json(['message' => __('Not found')], 404);
+            // العميل كان يرى «حدث خطأ ما» ولا نرى نحن شيئاً إطلاقاً، فيتعذّر
+            // تمييز القائمة القديمة عن الضغطة المكرّرة عن اختلاف المنشأة.
+            Log::warning('Campaign media history delete missed', [
+                'organization_id' => $organizationId,
+                'uuid' => $uuid,
+                'user_id' => auth()->id(),
+            ]);
+
+            return response()->json([
+                'message' => __('This file is no longer in the list. Refresh the page.'),
+            ], 404);
         }
 
         return response()->json(['success' => true]);

@@ -51,7 +51,13 @@ class StoreCampaign extends FormRequest
             }
 
             if (in_array($format, ['IMAGE', 'DOCUMENT', 'VIDEO'], true)) {
-                if (in_array($selection, ['history', 'default'], true)) {
+                if ($selection === 'history') {
+                    // معرّف الملف السابق (uuid). نقبل النصّ عامّةً لا uuid حصراً:
+                    // الصفحات المفتوحة قبل النشر ما زالت ترسل المسار، ورفضها
+                    // بالتحقّق يُنتج «هذا الحقل مطلوب» على اختيار صحيح. الخدمة
+                    // تقبل الشكلين وتردّ برسالة مفهومة إن لم يوجد الملف.
+                    $rules['header.parameters.0.value'] = 'required|string|max:2048';
+                } elseif ($selection === 'default') {
                     $rules['header.parameters.0.value'] = 'required|url|max:2048';
                 } elseif ($format === 'IMAGE') {
                     $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg,jpeg|max:5120';
@@ -101,19 +107,38 @@ class StoreCampaign extends FormRequest
     public function messages()
     {
         return [
-            'name.required' => 'The name field is required.',
-            'template.required' => 'The template field is required.',
-            'contacts.required' => 'The contacts field is required.',
-            'header.parameters.0.value.required' => 'This field is required.',
-            'header.parameters.0.value.max' => 'The value must not exceed :max characters.',
-            'header.parameters.0.value.image' => 'The value must be an image (PNG or JPG) and should not exceed 5MB.',
-            'header.parameters.0.value.video' => 'The value must be a video (MP4) and should not exceed 16MB.',
-            'body.parameters.0.value.required' => 'This field is required.',
-            'body.parameters.0.value.max' => 'The value must not exceed :max characters.',
-            'buttons.*.parameters.*.value.required' => 'This field is required.',
-            'buttons.*.parameters.*.value.max' => 'The value must not exceed :max characters.',
-            'buttons.*.parameters.*.value.url' => 'This value is not a valid url',
+            'name.required' => __('The name field is required.'),
+            'template.required' => __('The template field is required.'),
+            'contacts.required' => __('The contacts field is required.'),
+            // رسائل مترجَمة لا نصوصاً إنجليزية ثابتة: العميلة رأت
+            // «This field is required.» وسط واجهة عربية ففهمتها «الصورة غير
+            // موجودة». والرسالة الآن تُسمّي المطلوب وتقول كيف يُنفَّذ.
+            'header.parameters.0.value.required' => $this->headerRequiredMessage(),
+            'header.parameters.0.value.max' => __('The value must not exceed :max characters.'),
+            'header.parameters.0.value.image' => __('The value must be an image (PNG or JPG) and should not exceed 5MB.'),
+            'header.parameters.0.value.video' => __('The value must be a video (MP4) and should not exceed 16MB.'),
+            'body.parameters.0.value.required' => __('This field is required.'),
+            'body.parameters.0.value.max' => __('The value must not exceed :max characters.'),
+            'buttons.*.parameters.*.value.required' => __('This field is required.'),
+            'buttons.*.parameters.*.value.max' => __('The value must not exceed :max characters.'),
+            'buttons.*.parameters.*.value.url' => __('This value is not a valid url'),
             // Add other custom messages as needed
         ];
+    }
+
+    /**
+     * رسالة الترويسة الفارغة، بحسب نوعها.
+     *
+     * «هذا الحقل مطلوب» لا تدلّ على شيء في نموذج فيه حقول كثيرة — ولا تقول
+     * إن أمام العميل طريقين: الرفع أو ملف استُخدم سابقاً.
+     */
+    private function headerRequiredMessage(): string
+    {
+        return match ($this->input('header.format')) {
+            'IMAGE' => __('Choose a header image: upload a new one or pick a previously used file.'),
+            'VIDEO' => __('Choose a header video: upload a new one or pick a previously used file.'),
+            'DOCUMENT' => __('Choose a header document: upload a new one or pick a previously used file.'),
+            default => __('This field is required.'),
+        };
     }
 }

@@ -75,6 +75,31 @@ class CampaignMediaHistoryService
         ]);
     }
 
+    /**
+     * الملف السابق كما يشير إليه النموذج: uuid أوّلاً ثم المسار.
+     *
+     * الواجهة صارت ترسل uuid — معرّف ثابت — بعد أن كان المسار وحده هو
+     * المفتاح، وأيّ اختلاف حرف فيه (ترميز، مسافة، تغيّر شكل رابط التخزين)
+     * يُسقط الاختيار برسالة «الملف لم يعد متاحاً» على ملفٍ موجود. والمسار
+     * يبقى مقبولاً للصفحات المفتوحة قبل النشر.
+     */
+    public function findByReferenceForOrganization(int $organizationId, string $reference): ?CampaignMediaHistory
+    {
+        $reference = trim($reference);
+
+        if ($reference === '') {
+            return null;
+        }
+
+        $byUuid = CampaignMediaHistory::query()
+            ->where('organization_id', $organizationId)
+            ->where('uuid', $reference)
+            ->whereNull('deleted_at')
+            ->first();
+
+        return $byUuid ?: $this->findForOrganization($organizationId, $reference);
+    }
+
     public function findForOrganization(int $organizationId, string $path): ?CampaignMediaHistory
     {
         return CampaignMediaHistory::query()
