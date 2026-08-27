@@ -3,7 +3,7 @@ import axios from "axios"
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
-import { headerPreviewSource } from '@/Composables/templateMediaPreview'
+import { chosenHeaderPreviewSource } from '@/Composables/templateMediaPreview'
 import { ref, computed, onMounted, watch } from 'vue'
 import { Link, useForm } from "@inertiajs/vue3"
 import 'vue3-toastify/dist/index.css'
@@ -67,8 +67,11 @@ const selectedHistoryUuid = ref(null)
  * true، فترسم المعاينة العنصر النائب مهما اختار العميل. فلا شيء يتغيّر
  * أمامه حين ينجح اختياره — وهذا وحده ما جعل ميزة «الملفات المستخدمة
  * سابقاً» تبدو معطّلة.
+ *
+ * ونقتصر على ما اختاره العميل: صورة مثال القالب (header_handle) رابط كامل،
+ * وعرضها هنا يوهم بأن الترويسة جاهزة قبل أن يُختار شيء.
  */
-const headerPreview = computed(() => headerPreviewSource(form.header))
+const headerPreview = computed(() => chosenHeaderPreviewSource(form.header))
 const isHistoryLoading = ref(false)
 const contactGroupOptions = ref([
 	{ value: 'all', label: trans('all contacts') },

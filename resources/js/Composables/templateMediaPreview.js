@@ -21,6 +21,17 @@
 /** الصيغ التي لها معاينة وسائط. */
 export const MEDIA_FORMATS = ['IMAGE', 'VIDEO', 'DOCUMENT']
 
+/**
+ * الاختيارات التي تعني «العميل اختار هذا الملف».
+ *
+ * default ليست منها: القالب يأتي من Meta ومعه example.header_handle، وهو
+ * رابط كامل لصورة المثال. فعرضه في نموذج الإنشاء يُظهر صورةً قبل أن يختار
+ * العميل شيئاً، فيظنّ أن الترويسة جاهزة ثم يُردّ عليه بأن الحقل مطلوب.
+ * أمّا صفحة عرض حملة محفوظة فتمرّر placeholder=false صراحةً، فتعرض ما
+ * أُرسل فعلاً أياً كان اختياره.
+ */
+export const CHOSEN_SELECTIONS = ['upload', 'history']
+
 /** هل النصّ صالح لأن يوضع في src/href؟ */
 const isRenderableSource = (value) => {
     if (typeof value !== 'string') {
@@ -74,4 +85,25 @@ export function headerPreviewSource(header) {
  */
 export function shouldShowPlaceholder(header) {
     return headerPreviewSource(header) === ''
+}
+
+/**
+ * رابط المعاينة لما اختاره العميل وحده — لا لمثال القالب.
+ *
+ * @param {object|null|undefined} header
+ * @returns {string}
+ */
+export function chosenHeaderPreviewSource(header) {
+    if (!header || !MEDIA_FORMATS.includes(header.format)) {
+        return ''
+    }
+
+    const parameters = Array.isArray(header.parameters) ? header.parameters : []
+    const parameter = parameters[0]
+
+    if (!parameter || !CHOSEN_SELECTIONS.includes(parameter.selection)) {
+        return ''
+    }
+
+    return mediaPreviewSource(parameter)
 }

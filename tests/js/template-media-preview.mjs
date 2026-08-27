@@ -7,6 +7,7 @@
  * المعاينة كانت تقرأ value — وهو عند الرفع كائن File لا رابطاً.
  */
 import {
+    chosenHeaderPreviewSource,
     headerPreviewSource,
     mediaPreviewSource,
     shouldShowPlaceholder,
@@ -64,6 +65,38 @@ is(shouldShowPlaceholder({ format: 'IMAGE', parameters: [{ value: null }] }), tr
    'لا وسائط ⇒ عنصر نائب')
 is(shouldShowPlaceholder({ format: 'IMAGE', parameters: [{ url: '4::aW1hZ2U=' }] }), true,
    'header_handle ⇒ عنصر نائب لا صورة مكسورة')
+
+// ------------------- ما اختاره العميل وحده (نموذج الإنشاء)
+
+// صورة مثال القالب تأتي من Meta برابط كامل — لا يجوز أن تُعرض قبل الاختيار،
+// وإلا ظنّ العميل أن الترويسة جاهزة ثم رُدّ عليه بأن الحقل مطلوب.
+const templateExample = {
+    type: 'IMAGE',
+    selection: 'default',
+    value: null,
+    url: 'https://scontent.whatsapp.net/v/t61.29466-34/698227777_1320044903541256.png?ccb=1-7',
+}
+
+is(chosenHeaderPreviewSource({ format: 'IMAGE', parameters: [templateExample] }), '',
+   'مثال القالب لا يُعرض قبل اختيار العميل')
+
+is(headerPreviewSource({ format: 'IMAGE', parameters: [templateExample] }),
+   templateExample.url, 'الدالّة العامّة تقبله — وصفحة العرض تعتمد عليها')
+
+is(chosenHeaderPreviewSource({
+    format: 'IMAGE',
+    parameters: [{ selection: 'history', value: 'uuid-1', url: 'https://s3.test/a.png' }],
+}), 'https://s3.test/a.png', 'الملف السابق يُعرض')
+
+is(chosenHeaderPreviewSource({
+    format: 'IMAGE',
+    parameters: [{ selection: 'upload', value: { name: 'a.png' }, url: 'data:image/png;base64,AA' }],
+}), 'data:image/png;base64,AA', 'الرفع الجديد يُعرض')
+
+is(chosenHeaderPreviewSource({ format: 'IMAGE', parameters: [] }), '', 'بلا معاملات')
+is(chosenHeaderPreviewSource({ format: 'TEXT', parameters: [{ selection: 'upload', url: 'https://x.test/a.png' }] }), '',
+   'ترويسة نصّية لا معاينة لها')
+is(chosenHeaderPreviewSource(null), '', 'ترويسة غائبة')
 
 if (fail.length) {
     console.error(fail.join('\n'))

@@ -51,7 +51,7 @@ class CampaignMediaPreviewTest extends TestCase
     {
         $form = file_get_contents(base_path('resources/js/Components/CampaignForm.vue'));
 
-        $this->assertStringContainsString('headerPreviewSource', $form, 'النموذج لا يستورد منطق المعاينة');
+        $this->assertStringContainsString('chosenHeaderPreviewSource', $form, 'النموذج لا يستورد منطق المعاينة');
         $this->assertMatchesRegularExpression(
             '/<WhatsappTemplate[^>]*:placeholder=/s',
             $form,
@@ -89,6 +89,31 @@ class CampaignMediaPreviewTest extends TestCase
             'form.header.parameters[0].url = item.path',
             $form,
             'المعاينة تحتاج المسار في url'
+        );
+    }
+
+    /**
+     * صورة مثال القالب (example.header_handle) رابط كامل من واتساب. عرضها في
+     * نموذج الإنشاء يُظهر ترويسةً جاهزة قبل أن يختار العميل شيئاً، ثم يُردّ
+     * عليه بأن الحقل مطلوب — تناقض أمام عينيه.
+     */
+    public function test_the_form_previews_only_what_the_user_picked(): void
+    {
+        $form = file_get_contents(base_path('resources/js/Components/CampaignForm.vue'));
+
+        $this->assertStringContainsString(
+            'chosenHeaderPreviewSource(form.header)',
+            $form,
+            'المعاينة تعرض مثال القالب قبل الاختيار'
+        );
+
+        $composable = file_get_contents(base_path('resources/js/Composables/templateMediaPreview.js'));
+
+        $this->assertStringContainsString("CHOSEN_SELECTIONS = ['upload', 'history']", $composable);
+        $this->assertStringNotContainsString(
+            "CHOSEN_SELECTIONS = ['upload', 'history', 'default']",
+            $composable,
+            'default تعني مثال القالب لا اختيار العميل'
         );
     }
 
