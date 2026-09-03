@@ -14,10 +14,6 @@
                         </Link>
                     </div>
                     <h1 class="text-2xl text-center">{{ $t('Login to your account') }}</h1>
-                    <div class="text-center text-sm text-slate-500">
-                        {{ $t('Don\'t have an account?') }} 
-                        <Link href="signup" class="text-sm text-primary-600 dark:text-primary-500 border-b hover:border-gray-500">{{ $t('Create one here') }}</Link>
-                    </div>
                     <form @submit.prevent="submitForm()" class="mt-5">
                         <div class="mt-5 space-y-4">
                             <div class="space-y-1">
@@ -49,6 +45,15 @@
                             </button>
                         </div>
                     </form>
+                    <div class="mt-5 text-center space-y-2">
+                        <p class="text-base font-medium text-slate-700">
+                            {{ $t('Don\'t have an account?') }}
+                        </p>
+                        <Link href="signup"
+                            class="block w-full rounded-md border-2 border-primary px-3 py-3 text-sm font-semibold text-primary hover:bg-primary hover:text-white transition-colors">
+                            {{ $t('Create one here') }}
+                        </Link>
+                    </div>
                     <div v-if="props.companyConfig?.allow_facebook_login === '1' || props.companyConfig?.allow_google_login === '1'" class="flex justify-center my-6">
                         <span class="text-sm text-gray-500 px-4 text-center">{{ $t('Or continue with') }}</span>
                     </div>

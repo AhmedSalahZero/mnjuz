@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Http\Resources\BillingResource;
 use App\Models\BillingCredit;
 use App\Models\BillingDebit;
+use App\Models\BillingInvoice;
 use App\Models\BillingPayment;
 use App\Models\BillingTransaction;
 use App\Models\Organization;
@@ -75,6 +76,22 @@ class BillingService
             //Activate organization's plan if credits cover cost of plan
             $subscriptionService = new SubscriptionService();
             $activate = $subscriptionService::activateSubscriptionIfInactiveAndExpiredWithCredits($organization->id, auth()->user()->id);
+
+            // الدفعة اليدوية تُربط بالفاتورة التي موّلتها.
+            //
+            // الرصيد يُفعّل الاشتراك فتصدر فاتورة، وكانت تُهمَل هنا: تبقى
+            // الدفعة بلا invoice_id، وWazSyncService::syncPayment يشترطه —
+            // فتُرحَّل الفاتورة إلى واز وتبقى «غير مدفوعة» أبداً، ويسوّيها
+            // المحاسب بيده. مسار بوّابة الدفع يفعل هذا الربط منذ البداية
+            // (MyFatoorahPaymentProcessor)، والمسار اليدوي وحده كان يفوته.
+            //
+            // الحفظ بعد الإنشاء لا داخله: الفاتورة لم تكن موجودة بعدُ حين
+            // أُنشئت الدفعة. ووظيفة المزامنة تُقرأ الصفّ من جديد عند التنفيذ
+            // (afterCommit) فترى الربط.
+            if ($request->type === 'payment' && $activate instanceof BillingInvoice) {
+                $entry->invoice_id = $activate->id;
+                $entry->save();
+            }
 
             return $transaction;
         });

@@ -1644,5 +1644,18 @@
     "This file is no longer in the list. Refresh the page.": "هذا الملف لم يعد في القائمة. حدّث الصفحة.",
     "Selected": "محدَّد",
     "Click to use this file": "اضغط لاستخدام هذا الملف",
-    "Previously used file": "ملف استُخدم سابقاً"
+    "Previously used file": "ملف استُخدم سابقاً",
+    "WhatsApp stopped sending for this account because of a billing problem. Check the payment method on the Meta Business account.": "أوقفت واتساب الإرسال من هذا الحساب بسبب مشكلة في الدفع. راجع وسيلة الدفع في حساب Meta Business.",
+    "WhatsApp did not deliver this marketing message to keep the recipient from receiving too many. Try again later, or wait for the customer to message you first.": "لم تُسلّم واتساب هذه الرسالة التسويقية كي لا يستقبل المستلِم رسائل كثيرة. أعد المحاولة لاحقاً، أو انتظر أن يراسلك العميل أولاً.",
+    "The message could not be delivered: the number may not be on WhatsApp, or it cannot receive messages right now.": "تعذّر تسليم الرسالة: قد يكون الرقم غير مسجَّل في واتساب، أو لا يستطيع استقبال الرسائل حالياً.",
+    "WhatsApp limited sending because the account quality rating dropped. Reduce marketing sends and wait for the rating to recover.": "حدّت واتساب الإرسال لانخفاض تقييم جودة الحساب. قلّل الرسائل التسويقية وانتظر تحسّن التقييم.",
+    "WhatsApp is running an experiment on this recipient and did not deliver marketing messages to them.": "هذا المستلِم ضمن تجربة تُجريها واتساب، فلم تُسلَّم إليه الرسائل التسويقية.",
+    "WhatsApp rejected the attached file. Check the file format and size.": "رفضت واتساب الملف المرفق. راجع صيغة الملف وحجمه.",
+    "The customer chose to stop receiving marketing messages from this account.": "اختار العميل إيقاف الرسائل التسويقية من هذا الحساب.",
+    "The WhatsApp business account is restricted or locked. Check the account status on Meta Business.": "حساب واتساب للأعمال مقيَّد أو موقوف. راجع حالة الحساب في Meta Business.",
+    "More than 24 hours passed since the customer last messaged, so only an approved template can be sent.": "مرّت أكثر من 24 ساعة على آخر رسالة من العميل، فلا يمكن الإرسال إلا بقالب معتمَد.",
+    "WhatsApp could not send the message for an unspecified reason. Try again.": "تعذّر على واتساب إرسال الرسالة لسبب غير محدَّد. أعد المحاولة.",
+    "WhatsApp temporarily blocked sending because of too many requests. Try again later.": "أوقفت واتساب الإرسال مؤقتاً لكثرة الطلبات. أعد المحاولة لاحقاً.",
+    "WhatsApp error code": "رمز الخطأ من واتساب",
+    "Technical details": "تفاصيل تقنية"
 }

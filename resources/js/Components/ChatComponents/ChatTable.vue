@@ -92,7 +92,7 @@ function buildChatsQuery(overrides = {}) {
 	return params.toString()
 }
 
-function visitChatsQuery(overrides = {}) {
+function visitChatsQuery(overrides = {}, options = {}) {
 	const qs = buildChatsQuery(overrides)
 	// الإبقاء على المحادثة المفتوحة حالياً (/chats/{uuid}) عند البحث أو تغيير
 	// الفلاتر حتى لا يُطرد المستخدم من المحادثة. نعيد تحميل قائمة المحادثات فقط
@@ -104,6 +104,7 @@ function visitChatsQuery(overrides = {}) {
 		only: ['rows', 'rowCount', 'filters', 'flash'],
 		preserveState: true,
 		preserveScroll: true,
+		onFinish: options.onFinish,
 	})
 }
 
@@ -250,16 +251,26 @@ const params = ref({
 	search: props.filters.search,
 })
 
+let searchVisitId = 0
+
 const search = debounce(() => {
-	isSearching.value = true
 	runSearch()
 }, 1000)
 
 const runSearch = () => {
-	visitChatsQuery({ search: params.value.search || null })
+	const visitId = ++searchVisitId
+	isSearching.value = true
+	visitChatsQuery({ search: params.value.search || null }, {
+		onFinish: () => {
+			if (visitId === searchVisitId) {
+				isSearching.value = false
+			}
+		},
+	})
 }
 
 const clearSearch = () => {
+	search.cancel()
 	params.value.search = null
 	runSearch()
 }

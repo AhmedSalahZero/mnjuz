@@ -1368,5 +1368,18 @@
     "This file is no longer in the list. Refresh the page.": "This file is no longer in the list. Refresh the page.",
     "Selected": "Selected",
     "Click to use this file": "Click to use this file",
-    "Previously used file": "Previously used file"
+    "Previously used file": "Previously used file",
+    "WhatsApp stopped sending for this account because of a billing problem. Check the payment method on the Meta Business account.": "WhatsApp stopped sending for this account because of a billing problem. Check the payment method on the Meta Business account.",
+    "WhatsApp did not deliver this marketing message to keep the recipient from receiving too many. Try again later, or wait for the customer to message you first.": "WhatsApp did not deliver this marketing message to keep the recipient from receiving too many. Try again later, or wait for the customer to message you first.",
+    "The message could not be delivered: the number may not be on WhatsApp, or it cannot receive messages right now.": "The message could not be delivered: the number may not be on WhatsApp, or it cannot receive messages right now.",
+    "WhatsApp limited sending because the account quality rating dropped. Reduce marketing sends and wait for the rating to recover.": "WhatsApp limited sending because the account quality rating dropped. Reduce marketing sends and wait for the rating to recover.",
+    "WhatsApp is running an experiment on this recipient and did not deliver marketing messages to them.": "WhatsApp is running an experiment on this recipient and did not deliver marketing messages to them.",
+    "WhatsApp rejected the attached file. Check the file format and size.": "WhatsApp rejected the attached file. Check the file format and size.",
+    "The customer chose to stop receiving marketing messages from this account.": "The customer chose to stop receiving marketing messages from this account.",
+    "The WhatsApp business account is restricted or locked. Check the account status on Meta Business.": "The WhatsApp business account is restricted or locked. Check the account status on Meta Business.",
+    "More than 24 hours passed since the customer last messaged, so only an approved template can be sent.": "More than 24 hours passed since the customer last messaged, so only an approved template can be sent.",
+    "WhatsApp could not send the message for an unspecified reason. Try again.": "WhatsApp could not send the message for an unspecified reason. Try again.",
+    "WhatsApp temporarily blocked sending because of too many requests. Try again later.": "WhatsApp temporarily blocked sending because of too many requests. Try again later.",
+    "WhatsApp error code": "WhatsApp error code",
+    "Technical details": "Technical details"
 }

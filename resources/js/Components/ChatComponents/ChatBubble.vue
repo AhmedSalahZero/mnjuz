@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import { GoogleMap, Marker } from 'vue3-google-map'
 import ImageLightbox from './ImageLightbox.vue'
 import ContactCardBubble from './ContactCardBubble.vue'
+import { explainWhatsappError } from '@/Composables/whatsappErrors'
 
 const props = defineProps({
 	content: Object,
@@ -183,6 +184,23 @@ const getErrors = (logIndex = 0) => {
 }
 
 const errors = getErrors()
+
+/**
+ * سبب الفشل بلغة الموظّف.
+ *
+ * الفقاعة كانت تعرض code/title/message/details كما تصل من واتساب — إنجليزية
+ * وبمصطلحات منصّتها. والموظّف يحتاج جملة واحدة تقول ما جرى وما العمل.
+ */
+const failureReason = computed(() => {
+	for (const log of props.content?.logs ?? []) {
+		const explained = explainWhatsappError(log?.metadata)
+		if (explained) {
+			return explained
+		}
+	}
+
+	return null
+})
 const copiedRef = ref(null)
 
 const copyItem = async (token) => {
@@ -825,7 +843,13 @@ async function handleMediaDownload(event, content) {
 			<div v-if="chatStatus(content.logs) === 'retrying'" class="bg-amber-50 rounded-md p-3 text-sm mt-4 text-amber-800">
 				{{ $t('WhatsApp rejected the video format. Retrying with a compatible version...') }}
 			</div>
+			<div v-if="failureReason" class="bg-red-50 border border-red-200 rounded-md p-3 text-sm mt-4 text-red-800">
+				<p class="font-medium">
+					{{ failureReason.translatable ? $t(failureReason.explanation) : failureReason.explanation }}
+				</p>
+			</div>
 			<div v-if="errors.length" class="bg-red-100 rounded-md p-3 text-sm mt-4">
+				<p class="mb-2 text-xs text-slate-500">{{ $t('Technical details') }}</p>
 				<div v-for="(error, index) in errors" :key="index">
 					<div class="flex">
 						<p class="truncate">{{ $t('Chat ID:') }} {{ JSON.parse(content.logs[0].metadata).id }}</p>

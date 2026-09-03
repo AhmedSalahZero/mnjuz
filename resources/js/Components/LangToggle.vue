@@ -13,9 +13,16 @@
     }
 
     const handleClickOutside = (event) => {
-        if (isOpen.value && !event.target.closest('.lang-dd')) {
+        if (isOpen.value && !event.target.closest('.lang-dd') && !event.target.closest('.lang-dd-menu')) {
             isOpen.value = false;
         }
+    }
+
+    const switchLanguage = (code) => {
+        if (typeof window.clearI18nCache === 'function') {
+            window.clearI18nCache();
+        }
+        window.location.href = '/language/' + code;
     }
 
     onMounted(() => {
@@ -37,11 +44,18 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M4.47 9.4a.75.75 0 0 1 1.06 0l6.364 6.364a.25.25 0 0 0 .354 0L18.612 9.4a.75.75 0 0 1 1.06 1.06l-6.364 6.364a1.75 1.75 0 0 1-2.475 0L4.47 10.46a.75.75 0 0 1 0-1.06" clip-rule="evenodd"/></svg>
             </div>
         </div>
-        <div v-if="isOpen" class="absolute bg-white z-10 px-1 py-2 mt-2 shadow w-full rounded-md min-w-[8em] text-black">
+        <div v-if="isOpen" class="lang-dd-menu absolute bg-white z-10 px-1 py-2 mt-2 shadow w-full rounded-md min-w-[8em] text-black">
             <div>
-                <a v-for="(item, index) in props.languages" :href="'/language/' + item.code" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <button
+                    v-for="item in props.languages"
+                    :key="item.code"
+                    type="button"
+                    role="button"
+                    @click.prevent="switchLanguage(item.code)"
+                    class="block w-full text-start px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md"
+                >
                     {{ item.name }}
-                </a>
+                </button>
             </div>
         </div>
     </div>

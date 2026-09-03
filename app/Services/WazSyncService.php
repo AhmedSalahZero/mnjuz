@@ -116,6 +116,7 @@ class WazSyncService
             // القراءة داخل القفل لا قبله، وإلا عملنا على نسخة سبقها غيرنا.
             $invoice->refresh();
             $this->createInvoicesFor($invoice);
+            $this->settleFromBalance($invoice);
         } finally {
             $lock->release();
         }
@@ -219,11 +220,65 @@ class WazSyncService
             return;
         }
 
-        // الدفعة عندنا واحدة، وفاتورتها هناك اثنتان (التأسيس والاشتراك) — فتُوزَّع
-        // عليهما بقدر استحقاق كلٍّ منهما. بلا توزيع تُسجَّل كاملة على واحدة
-        // فتظهر مدفوعة بأكثر من قيمتها والأخرى غير مدفوعة.
-        $remaining = round((float) $payment->amount, 2);
-        $method = $payment->payment_method ?: ($payment->processor ?: 'Online');
+        // الدفعة اليدوية بلا معرّف عملية، فنُولّد لها معرّفاً ثابتاً مشتقّاً من
+        // الفاتورة. بدونه يسقط فحص التكرار في addPayment — وهو مشروط بوجود
+        // معرّف — فتُسجَّل الدفعة مرّتين عند أي إعادة محاولة. والمعرّف نفسه
+        // تستعمله تسوية الرصيد، فلا يجتمع التسجيلان على فاتورة واحدة.
+        $this->recordPayment(
+            $invoice,
+            round((float) $payment->amount, 2),
+            $payment->payment_method ?: ($payment->processor ?: 'Online'),
+            $payment->transaction_id ?: $this->balanceReference($invoice)
+        );
+
+        $payment->waz_synced_at = now();
+        $payment->save();
+    }
+
+    /**
+     * فاتورة سُدّدت من رصيد الحساب لا بدفعة مباشرة.
+     *
+     * يقع هذا في مسارين: تجديد الاشتراك من الرصيد (شحنٌ سابق أو تحويل بنكي)،
+     * وتفعيلٌ يدوي يُدخله الدعم. في الحالتين تصدر الفاتورة بلا دفعة مرتبطة
+     * بها، فتُرحَّل إلى واز وتبقى «غير مدفوعة» حتى يسوّيها المحاسب بيده —
+     * وهذا ما كان يقع فعلاً على فواتير منشآت عدّة.
+     *
+     * الشرط: ألّا تكون هناك دفعة مرتبطة بالفاتورة. إن وُجدت فمسارها هو من
+     * يسجّلها، وتسجيلنا هنا يُضاعف المبلغ المُحصَّل في المحاسبة.
+     *
+     * @throws WazBusinessException
+     */
+    public function settleFromBalance(BillingInvoice $invoice): void
+    {
+        if (!$invoice->waz_invoice_id && !$invoice->waz_setup_invoice_id) {
+            return;
+        }
+
+        if (BillingPayment::where('invoice_id', $invoice->id)->exists()) {
+            return;
+        }
+
+        $amount = $this->chargedTotal($invoice);
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        $this->recordPayment($invoice, $amount, 'Account Balance', $this->balanceReference($invoice));
+    }
+
+    /**
+     * تسجيل مبلغ على فاتورة واز، موزَّعاً على فاتورتي التأسيس والاشتراك.
+     *
+     * الدفعة عندنا واحدة، وفاتورتها هناك اثنتان — فتُوزَّع عليهما بقدر استحقاق
+     * كلٍّ منهما. بلا توزيع تُسجَّل كاملة على واحدة فتظهر مدفوعة بأكثر من
+     * قيمتها والأخرى غير مدفوعة.
+     *
+     * @throws WazBusinessException
+     */
+    private function recordPayment(BillingInvoice $invoice, float $amount, string $method, ?string $transactionId): void
+    {
+        $remaining = round($amount, 2);
 
         $dues = [
             [$invoice->waz_setup_invoice_id, $this->setupGross($invoice), '-setup'],
@@ -248,24 +303,32 @@ class WazSyncService
 
             // المنصة تعتبر معرّف العملية فريداً عالمياً لا لكل فاتورة: إرسال
             // القسطين بمعرّف واحد يجعلها ترفض الثاني وتردّ duplicate. فنلحق
-            // لاحقة بقسط التأسيس ونُبقي معرّف البوابة كما هو لفاتورة الاشتراك.
-            $transactionId = $payment->transaction_id;
-            if ($split && $suffix && $transactionId) {
-                $transactionId .= $suffix;
+            // لاحقة بقسط التأسيس ونُبقي المعرّف كما هو لفاتورة الاشتراك.
+            $reference = $transactionId;
+            if ($split && $suffix && $reference) {
+                $reference .= $suffix;
             }
 
             $this->waz->addPayment([
                 'invoice_id' => (int) $wazInvoiceId,
                 'amount' => $share,
                 'payment_method' => $method,
-                'transaction_id' => $transactionId,
+                'transaction_id' => $reference,
             ]);
 
             $remaining = round($remaining - $share, 2);
         }
+    }
 
-        $payment->waz_synced_at = now();
-        $payment->save();
+    /**
+     * معرّف ثابت لتسوية فاتورة من الرصيد.
+     *
+     * واحدٌ للمسارين — الدفعة بلا معرّف عملية، والتسوية من الرصيد — كي يمنع
+     * فحصُ التكرار في المنصة تسجيلَ المبلغ مرّتين لو سلكت الفاتورة المسارين.
+     */
+    private function balanceReference(BillingInvoice $invoice): string
+    {
+        return 'mnjz-balance-' . $invoice->id;
     }
 
     /**

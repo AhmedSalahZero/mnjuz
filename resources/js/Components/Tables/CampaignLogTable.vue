@@ -1,4 +1,5 @@
 <script setup>
+import { explainWhatsappError } from '@/Composables/whatsappErrors'
 import Modal from '@/Components/Modal.vue'
 import Table from '@/Components/Table.vue'
 import TableBody from '@/Components/TableBody.vue'
@@ -74,6 +75,15 @@ const getAttemptStatusClass = (status) => {
 const getStatus = (metadata) => {
 	return JSON.parse(metadata).status
 }
+
+/**
+ * سبب الفشل بلغة صاحب الحساب.
+ *
+ * سجلّ الحملة كان يعرض «failed» وحدها: الحملة تُقبل من واتساب ثم تفشل عند
+ * التسليم لمستلِم بعينه، فيرى الموظّف كلمةً بلا سبب ويظنّ الخلل عندنا —
+ * بينما السبب مكتوب في السجلّ ذاته (كود 131049 مثلاً).
+ */
+const failureReason = (metadata) => explainWhatsappError(metadata)
 
 const getErrorDetails = (metadata) => {
 	try {
@@ -198,6 +208,16 @@ const getErrorMessage = (details) => {
 						<span>{{ $t(getStatus(log.metadata)) }}</span>
 					</div>
 					<div>{{ log.created_at }}</div>
+					<div v-if="failureReason(log.metadata)" class="mt-2 rounded bg-red-50 border border-red-200 p-2 text-red-800">
+						<div class="font-medium">
+							{{ failureReason(log.metadata).translatable
+								? $t(failureReason(log.metadata).explanation)
+								: failureReason(log.metadata).explanation }}
+						</div>
+						<div v-if="failureReason(log.metadata).code" class="mt-1 text-[11px] text-red-600">
+							{{ $t('WhatsApp error code') }}: {{ failureReason(log.metadata).code }}
+						</div>
+					</div>
 					<!-- Failed logs 
 					<span style="display: flex; flex-direction: column;"
 						v-if="JSON.parse(log.metadata).status === 'failed' && JSON.parse(log.metadata).errors">
@@ -213,6 +233,14 @@ const getErrorMessage = (details) => {
 					-->
 				</div>
 				<div v-else-if="messageStatus === 'failed'">
+					<div v-if="failureReason(logs)" class="text-sm mb-3 rounded bg-red-50 border border-red-200 p-2 text-red-800">
+						<div class="font-medium">
+							{{ failureReason(logs).translatable ? $t(failureReason(logs).explanation) : failureReason(logs).explanation }}
+						</div>
+						<div v-if="failureReason(logs).code" class="mt-1 text-[11px] text-red-600">
+							{{ $t('WhatsApp error code') }}: {{ failureReason(logs).code }}
+						</div>
+					</div>
 					<div class="text-sm mb-3 bg-red-800 p-2 rounded text-white">
 						{{ $t('Error') }}: {{ getErrorMessage(logs) }}
 					</div>
