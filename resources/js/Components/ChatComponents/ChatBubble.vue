@@ -24,8 +24,8 @@ function openLightbox(src) {
 	lightboxOpen.value = true
 }
 
-const openInGoogleMaps = (metadata) => {
-	const loc = location(metadata)
+const openInGoogleMaps = () => {
+	const loc = location()
 	const url = `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`
 	window.open(url, '_blank')
 }
@@ -61,8 +61,8 @@ const formatFileSize = (sizeInBytes) => {
 	return Math.round((sizeInBytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
 }
 
-const getContactDisplayName = (metadata) => {
-	const contacts = JSON.parse(metadata).contacts
+const getContactDisplayName = () => {
+	const contacts = meta.value.contacts ?? []
 	if (contacts.length === 1) {
 		const contact = contacts[0]
 		return contact.name.formatted_name || `${contact.name.first_name} ${contact.name.last_name}`
@@ -75,10 +75,10 @@ const getContactDisplayName = (metadata) => {
 	}
 }
 
-const location = (metadata) => {
-	const item = JSON.parse(metadata)
-	return { lat: item.location.latitude, lng: item.location.longitude }
-}
+const location = () => ({
+	lat: meta.value.location?.latitude,
+	lng: meta.value.location?.longitude,
+})
 
 /**
  * الأنواع التي لها فرع عرض فعلي في هذا المكوّن.
@@ -111,13 +111,26 @@ const parseMetadata = (metadata) => {
 }
 
 /** نوع وصل من واتساب ولا نعرف رسمه — نُخبر الموظّف بدل فقاعة فارغة. */
-const isUnrenderableType = (metadata) => {
-	const type = parseMetadata(metadata).type
+const isUnrenderableType = () => {
+	const type = meta.value.type
 	return !RENDERED_TYPES.includes(type) && !SILENT_TYPES.includes(type)
 }
 
+/**
+ * ميتاداتا الرسالة مفكوكةً مرّة واحدة.
+ *
+ * كان القالب ينادي meta خمساً وأربعين مرّة في
+ * الفقاعة الواحدة — مرّةً لكل شرط عرض ولكل حقل يُقرأ — ويُعاد ذلك مع كل
+ * إعادة رسم. الحقل نصّ JSON قد يبلغ عشرات الكيلوبايتات (الصور بتعليقاتها،
+ * وجهات الاتصال المشتركة)، فالتحليل نفسه هو أثقل ما في رسم المحادثة.
+ *
+ * وparseMetadata تُرجع {} عند التلف بدل أن ترمي: الصفّ التالف كان يُسقط
+ * المحادثة كلّها بيضاء، والآن يقع في فرع «لا يمكن عرض هذا النوع».
+ */
+const meta = computed(() => parseMetadata(props.content?.metadata))
+
 /** نصّ الرسالة بعد التعديل. الشكل نفسه في الصفوف القديمة الخام والجديدة المقلَّصة. */
-const editedBody = (metadata) => parseMetadata(metadata).edit?.message?.text?.body ?? ''
+const editedBody = () => meta.value.edit?.message?.text?.body ?? ''
 
 const getValueByKey = (key) => {
 	const config = computed(() => usePage().props.config)
@@ -127,13 +140,10 @@ const getValueByKey = (key) => {
 }
 
 const chatStatus = (logs) => {
-	try {
-		const meta = JSON.parse(props.content?.metadata || '{}')
-		if (meta.transcode_retry_status === 'retrying') {
-			return 'retrying'
-		}
-	} catch (error) {
-		// ignore malformed metadata
+	// من الحساب المشترك: هذه الدالّة تُنادى مرّاتٍ في القالب (أيقونة لكل
+	// حالة)، وكل نداء كان يفكّ الميتاداتا من جديد.
+	if (meta.value.transcode_retry_status === 'retrying') {
+		return 'retrying'
 	}
 
 	if (!logs?.length) {
@@ -167,6 +177,15 @@ const chatStatus = (logs) => {
 
 	return status
 }
+
+/**
+ * حالة الرسالة محسوبةً مرّة واحدة.
+ *
+ * القالب ينادي هذه الحالة ثماني مرّات (أيقونة لكل حالة، وشريط إعادة
+ * المحاولة، وفقاعة الخطأ)، وكل نداء كان يفكّ ميتاداتا كل سجلّ من جديد —
+ * ستّة سجلّات في ثمانية نداءات = ثمانٍ وأربعون عملية تحليل للفقاعة الواحدة.
+ */
+const status = computed(() => chatStatus(props.content?.logs))
 
 const isModalOpen = ref(false)
 
@@ -306,19 +325,19 @@ async function handleMediaDownload(event, content) {
 		">
 		<div>
 			<!--Text message formatting-->
-			<div v-if="JSON.parse(content.metadata).type === 'text'" style="overflow-wrap: break-word"
+			<div v-if="meta.type === 'text'" style="overflow-wrap: break-word"
 				class="max-w-[320px]">
 				<!-- Header -->
-				<div v-if="JSON.parse(content.metadata).header?.text">
+				<div v-if="meta.header?.text">
 					<p class="text-sm font-medium text-gray-900">
-						{{ JSON.parse(content.metadata).header.text }}
+						{{ meta.header.text }}
 					</p>
 				</div>
 				<!-- Body: الروابط تظهر كـ <a href target="_blank"> -->
-				<p class="normal-case whitespace-pre-wrap" v-html="linkifyText(JSON.parse(content.metadata).text?.body || '')"></p>
-				<div v-if="JSON.parse(content.metadata)?.buttons"
+				<p class="normal-case whitespace-pre-wrap" v-html="linkifyText(meta.text?.body || '')"></p>
+				<div v-if="meta?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
-					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
+					<div v-for="(item, index) in meta?.buttons" :key="index"
 						class="flex justify-center items-center space-x-2 rounded-lg bg-white h-10 my-[0.1em]">
 						<span>
 							<svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18"
@@ -344,7 +363,7 @@ async function handleMediaDownload(event, content) {
 				</div>
 			</div>
 			<!--Unsupported Messages-->
-			<div v-if="JSON.parse(content.metadata).type === 'unsupported'" style="overflow-wrap: break-word"
+			<div v-if="meta.type === 'unsupported'" style="overflow-wrap: break-word"
 				class="max-w-[320px]">
 				<span class="text-red-500">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -354,38 +373,38 @@ async function handleMediaDownload(event, content) {
 					</svg>
 				</span>
 				<p class="normal-case whitespace-pre-wrap">
-					{{ $t('Error code') }} : {{ JSON.parse(content.metadata).errors[0].code }}
+					{{ $t('Error code') }} : {{ meta.errors[0].code }}
 				</p>
 				<p class="normal-case whitespace-pre-wrap">
-					{{ JSON.parse(content.metadata).errors[0].error_data.details }}
+					{{ meta.errors[0].error_data.details }}
 				</p>
 			</div>
 			<!--Reply button formatting-->
-			<div v-if="JSON.parse(content.metadata).type === 'button'" style="overflow-wrap: break-word"
+			<div v-if="meta.type === 'button'" style="overflow-wrap: break-word"
 				class="max-w-[320px]">
 				<p class="normal-case whitespace-pre-wrap">
-					{{ JSON.parse(content.metadata).button.text }}
+					{{ meta.button.text }}
 				</p>
 			</div>
 			<!--Interactive button formatting-->
-			<div v-if="JSON.parse(content.metadata).type === 'interactive'" style="overflow-wrap: break-word"
+			<div v-if="meta.type === 'interactive'" style="overflow-wrap: break-word"
 				class="max-w-[320px]">
-				<div v-if="JSON.parse(content.metadata).interactive.type == 'button_reply'">
+				<div v-if="meta.interactive.type == 'button_reply'">
 					<p class="normal-case whitespace-pre-wrap">
-						{{ JSON.parse(content.metadata).interactive?.button_reply?.title }}
+						{{ meta.interactive?.button_reply?.title }}
 					</p>
 				</div>
-				<p v-if="JSON.parse(content.metadata).interactive.type == 'list_reply'"
+				<p v-if="meta.interactive.type == 'list_reply'"
 					class="normal-case whitespace-pre-wrap">
-					{{ JSON.parse(content.metadata).interactive?.list_reply?.title }}
+					{{ meta.interactive?.list_reply?.title }}
 				</p>
-				<p v-if="JSON.parse(content.metadata).interactive.type == 'list_reply'"
+				<p v-if="meta.interactive.type == 'list_reply'"
 					class="normal-case whitespace-pre-wrap">
-					{{ JSON.parse(content.metadata).interactive?.list_reply?.description }}
+					{{ meta.interactive?.list_reply?.description }}
 				</p>
 			</div>
 			<!--Image formatting-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'image'">
+			<div v-else-if="meta.type === 'image'">
 				<img v-if="content.media != null && !isMediaUnavailable(content)" :src="content?.media?.path"
 					alt="Image" class="mb-2 max-w-[320px] cursor-pointer" @click="openLightbox(content?.media?.path)"
 					@error="markMediaUnavailable(content)" />
@@ -400,11 +419,11 @@ async function handleMediaDownload(event, content) {
 					</svg>
 					{{ $t('Content not available') }}
 				</div>
-				<div v-if="mediaCaption(JSON.parse(content.metadata).image?.caption)" style="overflow-wrap: break-word"
-					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(mediaCaption(JSON.parse(content.metadata).image?.caption))"></div>
-				<div v-if="JSON.parse(content.metadata)?.buttons"
+				<div v-if="mediaCaption(meta.image?.caption)" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(mediaCaption(meta.image?.caption))"></div>
+				<div v-if="meta?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
-					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
+					<div v-for="(item, index) in meta?.buttons" :key="index"
 						class="flex justify-center items-center space-x-2 rounded-lg bg-white h-10 my-[0.1em]">
 						<span>
 							<svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18"
@@ -430,7 +449,7 @@ async function handleMediaDownload(event, content) {
 				</div>
 			</div>
 			<!--Document formatting-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'document'">
+			<div v-else-if="meta.type === 'document'">
 				<div v-if="content.media != null && !isMediaUnavailable(content)" class="relative w-[300px]">
 					<div class="flex space-x-2 w-full h-1/3 bg-white opacity-90 pt-2">
 						<div>
@@ -606,11 +625,11 @@ async function handleMediaDownload(event, content) {
 				<div v-else class="text-slate-500 flex justify-center items-center space-x-4 py-2">
 					{{ $t('Content not available') }}
 				</div>
-				<div v-if="mediaCaption(JSON.parse(content.metadata).document?.caption)" style="overflow-wrap: break-word"
-					class="max-w-[320px] whitespace-pre-wrap mt-2" v-html="linkifyText(mediaCaption(JSON.parse(content.metadata).document?.caption))"></div>
-				<div v-if="JSON.parse(content.metadata)?.buttons"
+				<div v-if="mediaCaption(meta.document?.caption)" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap mt-2" v-html="linkifyText(mediaCaption(meta.document?.caption))"></div>
+				<div v-if="meta?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
-					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
+					<div v-for="(item, index) in meta?.buttons" :key="index"
 						class="flex justify-center items-center space-x-2 rounded-lg bg-white h-10 my-[0.1em]">
 						<span>
 							<svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18"
@@ -636,23 +655,23 @@ async function handleMediaDownload(event, content) {
 				</div>
 			</div>
 			<!--Template formatting
-            <div v-else-if="JSON.parse(content.metadata).type === 'template'">
-                {{ JSON.parse(content.metadata) }}
+            <div v-else-if="meta.type === 'template'">
+                {{ meta }}
             </div>-->
 			<!--Location formatting-->
-			<!-- <div v-else-if="JSON.parse(content.metadata).type === 'location'">
-                <GoogleMap :api-key="getValueByKey('google_maps_api_key')" style="width: 300px; height: 200px" :center="location(content.metadata)" :zoom="15">
-                    <Marker :options="{ position: location(content.metadata) }" />
+			<!-- <div v-else-if="meta.type === 'location'">
+                <GoogleMap :api-key="getValueByKey('google_maps_api_key')" style="width: 300px; height: 200px" :center="location()" :zoom="15">
+                    <Marker :options="{ position: location() }" />
                 </GoogleMap>
 				<div>dd</div>
             </div> -->
-			<div v-else-if="JSON.parse(content.metadata).type === 'location'">
+			<div v-else-if="meta.type === 'location'">
 				<GoogleMap :api-key="getValueByKey('google_maps_api_key')" style="width: 300px; height: 200px"
-					:center="location(content.metadata)" :zoom="15">
-					<Marker :options="{ position: location(content.metadata) }" />
+					:center="location()" :zoom="15">
+					<Marker :options="{ position: location() }" />
 				</GoogleMap>
 				<!-- زر الاتجاهات -->
-				<button @click="openInGoogleMaps(content.metadata)"
+				<button @click="openInGoogleMaps()"
 					class="w-full mt-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm">
 					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
 						fill="currentColor">
@@ -665,7 +684,7 @@ async function handleMediaDownload(event, content) {
 				</button>
 			</div>
 			<!--Sticker formatting-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'sticker'">
+			<div v-else-if="meta.type === 'sticker'">
 				<img v-if="content.media != null && !isMediaUnavailable(content)" :src="content?.media?.path"
 					alt="Image" class="mb-2 max-w-[100px] cursor-pointer" @click="openLightbox(content?.media?.path)"
 					@error="markMediaUnavailable(content)" />
@@ -682,11 +701,11 @@ async function handleMediaDownload(event, content) {
 				</div>
 			</div>
 			<!--Contacts formatting-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'contacts'">
-				<ContactCardBubble :contacts="JSON.parse(content.metadata).contacts || []" />
+			<div v-else-if="meta.type === 'contacts'">
+				<ContactCardBubble :contacts="meta.contacts || []" />
 			</div>
 			<!--Audio formatting-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'audio'">
+			<div v-else-if="meta.type === 'audio'">
 				<audio v-if="content.media != null && !isMediaUnavailable(content)" controls
 					@error="markMediaUnavailable(content)">
 					<source :src="content?.media?.path" />
@@ -705,7 +724,7 @@ async function handleMediaDownload(event, content) {
 				</div>
 			</div>
 			<!--Video formatting-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'video'">
+			<div v-else-if="meta.type === 'video'">
 				<video v-if="content.media != null && !isMediaUnavailable(content)" controls width="300"
 					class="max-h-[350px]" @error="markMediaUnavailable(content)">
 					<source :src="content?.media?.path" type="video/mp4" />
@@ -722,11 +741,11 @@ async function handleMediaDownload(event, content) {
 					</svg>
 					{{ $t('Content not available') }}
 				</div>
-				<div v-if="mediaCaption(JSON.parse(content.metadata).video?.caption)" style="overflow-wrap: break-word"
-					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(mediaCaption(JSON.parse(content.metadata).video?.caption))"></div>
-				<div v-if="JSON.parse(content.metadata)?.buttons"
+				<div v-if="mediaCaption(meta.video?.caption)" style="overflow-wrap: break-word"
+					class="max-w-[320px] whitespace-pre-wrap" v-html="linkifyText(mediaCaption(meta.video?.caption))"></div>
+				<div v-if="meta?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
-					<div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
+					<div v-for="(item, index) in meta?.buttons" :key="index"
 						class="flex justify-center items-center space-x-2 rounded-lg bg-white h-10 my-[0.1em]">
 						<span>
 							<svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18"
@@ -752,7 +771,7 @@ async function handleMediaDownload(event, content) {
 				</div>
 			</div>
 			<!--System: واتساب تُبلغ بتغيّر رقم العميل-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'system'"
+			<div v-else-if="meta.type === 'system'"
 				class="max-w-[320px] flex items-start gap-2 text-slate-600">
 				<svg class="mt-[2px] shrink-0" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
 					viewBox="0 0 24 24">
@@ -760,14 +779,14 @@ async function handleMediaDownload(event, content) {
 						stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
 				</svg>
 				<span class="text-xs whitespace-pre-wrap" dir="auto">
-					{{ JSON.parse(content.metadata).system?.body || $t('Contact changed their number') }}
+					{{ meta.system?.body || $t('Contact changed their number') }}
 				</span>
 			</div>
 			<!--Edit: العميل عدّل رسالة أرسلها-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'edit'" style="overflow-wrap: break-word"
+			<div v-else-if="meta.type === 'edit'" style="overflow-wrap: break-word"
 				class="max-w-[320px]">
-				<p v-if="editedBody(content.metadata)" class="normal-case whitespace-pre-wrap"
-					v-html="linkifyText(editedBody(content.metadata))"></p>
+				<p v-if="editedBody()" class="normal-case whitespace-pre-wrap"
+					v-html="linkifyText(editedBody())"></p>
 				<span class="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
 					<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24">
 						<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -777,7 +796,7 @@ async function handleMediaDownload(event, content) {
 				</span>
 			</div>
 			<!--Revoke: حُذفت للجميع، فلا محتوى بعدها-->
-			<div v-else-if="JSON.parse(content.metadata).type === 'revoke'"
+			<div v-else-if="meta.type === 'revoke'"
 				class="max-w-[320px] flex items-center gap-2 italic text-slate-500">
 				<svg class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
 					<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -788,7 +807,7 @@ async function handleMediaDownload(event, content) {
 				<span class="text-xs">{{ $t('This message was deleted') }}</span>
 			</div>
 			<!--نوع لا نعرف رسمه: أفضل من فقاعة فارغة بلا تفسير-->
-			<div v-else-if="isUnrenderableType(content.metadata)"
+			<div v-else-if="isUnrenderableType()"
 				class="max-w-[320px] flex items-center gap-2 text-slate-500">
 				<svg class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
 					<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -807,23 +826,23 @@ async function handleMediaDownload(event, content) {
 					{{ content.created_at }}
 				</p>
 				<span class="relative group cursor-pointer"
-					:class="chatStatus(content.logs) === 'read' ? 'text-blue-500' : 'text-gray-500'">
+					:class="status === 'read' ? 'text-blue-500' : 'text-gray-500'">
 					<!-- Tooltip text -->
 					<div
 						class="absolute capitalize hidden group-hover:block bg-white text-gray-600 text-xs rounded-sm py-1 px-2 bottom-full mb-1 whitespace-no-wrap">
-						{{ chatStatus(content.logs) }}
+						{{ status }}
 					</div>
-					<svg v-if="chatStatus(content.logs) === 'sent'" xmlns="http://www.w3.org/2000/svg" width="16"
+					<svg v-if="status === 'sent'" xmlns="http://www.w3.org/2000/svg" width="16"
 						height="16" viewBox="0 0 16 16">
 						<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
 							stroke-width="1.5" d="m2.75 8.75l3.5 3.5l7-7.5" />
 					</svg>
-					<svg v-if="chatStatus(content.logs) === 'delivered' || chatStatus(content.logs) === 'read'"
+					<svg v-if="status === 'delivered' || status === 'read'"
 						xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 16 16">
 						<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
 							stroke-width="1.5" d="m1.75 9.75l2.5 2.5m3.5-4l2.5-2.5m-4.5 4l2.5 2.5l6-6.5" />
 					</svg>
-					<svg @click="isModalOpen = true" v-if="chatStatus(content.logs) === 'failed'" class="text-red-600"
+					<svg @click="isModalOpen = true" v-if="status === 'failed'" class="text-red-600"
 						xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
 						<g fill="currentColor">
 							<path
@@ -832,15 +851,15 @@ async function handleMediaDownload(event, content) {
 								d="M12.5 16a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7m.5-5v1.5a.5.5 0 0 1-1 0V11a.5.5 0 0 1 1 0m0 3a.5.5 0 1 1-1 0a.5.5 0 0 1 1 0" />
 						</g>
 					</svg>
-					<span v-if="chatStatus(content.logs) === 'retrying'" class="text-amber-600 text-xs" :title="$t('Retrying with compatible format')">↻</span>
+					<span v-if="status === 'retrying'" class="text-amber-600 text-xs" :title="$t('Retrying with compatible format')">↻</span>
 				</span>
 			</div>
 		</div>
 	</div>
-	<Modal :label="$t('Message status: ') + chatStatus(content.logs)" :isOpen="isModalOpen" :closeBtn="true"
+	<Modal :label="$t('Message status: ') + status" :isOpen="isModalOpen" :closeBtn="true"
 		@close="isModalOpen = false">
 		<div>
-			<div v-if="chatStatus(content.logs) === 'retrying'" class="bg-amber-50 rounded-md p-3 text-sm mt-4 text-amber-800">
+			<div v-if="status === 'retrying'" class="bg-amber-50 rounded-md p-3 text-sm mt-4 text-amber-800">
 				{{ $t('WhatsApp rejected the video format. Retrying with a compatible version...') }}
 			</div>
 			<div v-if="failureReason" class="bg-red-50 border border-red-200 rounded-md p-3 text-sm mt-4 text-red-800">

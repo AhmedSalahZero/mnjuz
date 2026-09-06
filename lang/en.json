@@ -1381,5 +1381,7 @@
     "WhatsApp could not send the message for an unspecified reason. Try again.": "WhatsApp could not send the message for an unspecified reason. Try again.",
     "WhatsApp temporarily blocked sending because of too many requests. Try again later.": "WhatsApp temporarily blocked sending because of too many requests. Try again later.",
     "WhatsApp error code": "WhatsApp error code",
-    "Technical details": "Technical details"
+    "Technical details": "Technical details",
+    "{count} photos": "{count} photos",
+    "Sent By": "Sent By"
 }

@@ -38,8 +38,13 @@ class ChatBubbleRenderChainTest extends TestCase
     }
 
     /**
-     * فروع سلسلة الرسائل فقط: الأسطر التي تفرّع على metadata.type أو على
+     * فروع سلسلة الرسائل فقط: الأسطر التي تفرّع على نوع الرسالة أو على
      * الاحتياطي. نتجاهل ما يفرّع على شيء آخر (الطابع الزمني، أزرار القالب).
+     *
+     * النمط يقبل الصياغتين — JSON.parse(content.metadata).type والحساب
+     * المشترك meta.type — لأن ما يُحرَس هو وجود فرعٍ لكل نوع، لا الطريقة
+     * التي تُقرأ بها الميتاداتا. وقد تغيّرت هذه الطريقة حين صار التحليل
+     * مرّةً واحدة للفقاعة بدل خمس وأربعين.
      *
      * @return list<array{kind: string, type: ?string, fallback: bool}>
      */
@@ -52,7 +57,7 @@ class ChatBubbleRenderChainTest extends TestCase
                 continue;
             }
 
-            $isTypeBranch = (bool) preg_match("/metadata\)\.type === '([a-z_]+)'/", $line, $type);
+            $isTypeBranch = (bool) preg_match("/(?:metadata\)|\bmeta)\.type === '([a-z_]+)'/", $line, $type);
             $isFallback = str_contains($line, 'isUnrenderableType');
 
             if (!$isTypeBranch && !$isFallback) {

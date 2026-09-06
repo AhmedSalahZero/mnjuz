@@ -1657,5 +1657,7 @@
     "WhatsApp could not send the message for an unspecified reason. Try again.": "تعذّر على واتساب إرسال الرسالة لسبب غير محدَّد. أعد المحاولة.",
     "WhatsApp temporarily blocked sending because of too many requests. Try again later.": "أوقفت واتساب الإرسال مؤقتاً لكثرة الطلبات. أعد المحاولة لاحقاً.",
     "WhatsApp error code": "رمز الخطأ من واتساب",
-    "Technical details": "تفاصيل تقنية"
+    "Technical details": "تفاصيل تقنية",
+    "{count} photos": "{count} صورة",
+    "Sent By": "أرسلها"
 }

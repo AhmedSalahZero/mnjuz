@@ -56,17 +56,27 @@ class ChatThreadHiddenTypesTest extends TestCase
     /**
      * أخطر انحدار هنا: بقاء الحلقة على messages يجعل الترشيح كوداً ميتاً
      * وتعود الفقاعات الفارغة بلا أي خطأ يشي بذلك.
+     *
+     * صارت الحلقة تقرأ renderItems بعد ضمّ الصور المرسَلة دفعةً في ألبوم
+     * واحد، فالحراسة الآن على السلسلة كاملة: العرض ← التجميع ← المرشَّح.
+     * وصلٌ ناقص في أيّ حلقة منها يُعيد العلّة نفسها.
      */
     public function test_the_list_renders_the_filtered_collection(): void
     {
         $this->assertMatchesRegularExpression(
-            '/v-for="\(chat, index\) in visibleMessages"/',
+            '/v-for="item in renderItems"/',
             $this->thread,
-            'الحلقة يجب أن تقرأ من visibleMessages لا من messages'
+            'الحلقة يجب أن تقرأ من renderItems'
+        );
+
+        $this->assertMatchesRegularExpression(
+            '/renderItems = computed\(\(\) => groupImageAlbums\(visibleMessages\.value\)\)/',
+            $this->thread,
+            'renderItems يجب أن تُشتقّ من visibleMessages لا من messages'
         );
 
         $this->assertDoesNotMatchRegularExpression(
-            '/v-for="\(chat, index\) in messages"/',
+            '/v-for="[^"]*" in messages"/',
             $this->thread
         );
     }

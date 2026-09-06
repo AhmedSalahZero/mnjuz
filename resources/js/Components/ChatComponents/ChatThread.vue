@@ -2,6 +2,8 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { default as axios } from 'axios'
 import ChatBubble from '@/Components/ChatComponents/ChatBubble.vue'
+import ChatImageAlbum from '@/Components/ChatComponents/ChatImageAlbum.vue'
+import { groupImageAlbums } from '@/Composables/imageAlbums'
 
 const props = defineProps({
 	contactId: {
@@ -54,6 +56,15 @@ const visibleMessages = computed(() =>
 		return !HIDDEN_CHAT_TYPES.includes(chatMetadataType(entry))
 	})
 )
+
+/**
+ * الصور المرسَلة دفعةً واحدة تُعرض شبكةً واحدة كما في واتساب.
+ *
+ * الضمّ عرضٌ لا تخزين: كل صورة تبقى رسالةً مستقلّة عند العميل وفي قاعدة
+ * البيانات — واجهة واتساب السحابية لا تعرف الألبوم أصلاً — لكن عشر صور في
+ * عشر فقاعات متراصّة كانت تبتلع المحادثة وتُخفي ما قبلها.
+ */
+const renderItems = computed(() => groupImageAlbums(visibleMessages.value))
 watch(
 	() => props.initialMessages,
 	(newInitialMessages) => {
@@ -113,26 +124,28 @@ const loadMoreMessages = async () => {
 						d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
 				</svg> {{ $t('Load More Messages') }} </button>
 		</div>
-		<div v-for="(chat, index) in visibleMessages" :key="index" class="flex flex-grow flex-col"
-			:class="chat[0].type === 'ticket' ? 'justify-center' : 'justify-end'">
-			<ChatBubble v-if="chat[0].type === 'chat'" :content="chat[0].value" :type="chat[0].value.type" />
-			<div v-if="chat[0].type === 'ticket'" class="py-2">
+		<div v-for="item in renderItems" :key="item.key" class="flex flex-grow flex-col"
+			:class="item.kind === 'single' && item.chat[0].type === 'ticket' ? 'justify-center' : 'justify-end'">
+			<ChatImageAlbum v-if="item.kind === 'album'" :messages="item.messages" :type="item.direction" />
+			<template v-else>
+			<ChatBubble v-if="item.chat[0].type === 'chat'" :content="item.chat[0].value" :type="item.chat[0].value.type" />
+			<div v-if="item.chat[0].type === 'ticket'" class="py-2">
 				<div class="text-center font-light text-sm border-b border-t py-2 border-dashed border-black">
-					<div>{{ chat[0].value.description }}</div>
-					<div class="text-xs">{{ chat[0].value.created_at }}</div>
+					<div>{{ item.chat[0].value.description }}</div>
+					<div class="text-xs">{{ item.chat[0].value.created_at }}</div>
 				</div>
 			</div>
-			<div v-if="chat[0].type === 'notes'" class="py-2 bg-orange-100 my-2 rounded-lg p-2 w-[fit-content] ml-auto">
+			<div v-if="item.chat[0].type === 'notes'" class="py-2 bg-orange-100 my-2 rounded-lg p-2 w-[fit-content] ml-auto">
 				<div class="text-right font-light text-sm">
-					<div>{{ chat[0].value.content }}</div>
+					<div>{{ item.chat[0].value.content }}</div>
 					<div class="flex items-center justify-between mt-2 space-x-4">
-						<!--<span v-if="props.type === 'outbound' && content.user" class="text-gray-500 text-xs text-right leading-none">Sent By: {{ content.user?.first_name + ' ' + content.user?.last_name }}</span>-->
 						<p class="text-gray-500 text-xs text-right leading-none">
-							{{ chat[0].value.created_at }}
+							{{ item.chat[0].value.created_at }}
 						</p>
 					</div>
 				</div>
 			</div>
+			</template>
 		</div>
 	</div>
 </template>
