@@ -7,6 +7,13 @@
             <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         @endif
         <meta name="csrf-token" content="{{ csrf_token() }}">
+
+        {{-- بصمة ملف الترجمة الحالي.
+             الواجهة تخزّن الترجمات في المتصفّح يوماً كاملاً بلا فحص، فالمفتاح
+             الجديد يظهر خاماً — «{count} files» بدل «3 ملفات» — إلى أن تنتهي
+             المهلة. هذه البصمة تصل مع كل تحميل للصفحة بلا طلب إضافي، فيُسقط
+             الكاش نفسه لحظة تغيّر الملف. --}}
+        <meta name="i18n-version" content="{{ \App\Helpers\LocaleVersion::current() }}">
         @php
             use App\Models\Setting;
 

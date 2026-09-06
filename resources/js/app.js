@@ -9,12 +9,28 @@ const I18N_CACHE_KEY = 'mnjuz_i18n_bootstrap';
 const I18N_TRANSLATIONS_PREFIX = 'mnjuz_i18n_translations_';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 ساعة
 
+/**
+ * بصمة ملف الترجمة كما أرسلها الخادم مع الصفحة.
+ *
+ * المهلة وحدها لا تكفي: مفتاحٌ يُضاف اليوم يبقى غائباً عن العميل حتى تنتهي،
+ * وvue-i18n حين لا يجد المفتاح يطبعه كما هو — فيرى المستخدم «{count} files»
+ * حرفياً. مقارنة البصمة تُسقط الكاش لحظة تغيّر الملف بلا طلب إضافي.
+ */
+function currentI18nVersion() {
+  try {
+    return document.querySelector('meta[name="i18n-version"]')?.content || '';
+  } catch {
+    return '';
+  }
+}
+
 function getCachedBootstrap() {
   try {
     const raw = localStorage.getItem(I18N_CACHE_KEY);
     if (!raw) return null;
-    const { locale, locales, translations, at } = JSON.parse(raw);
+    const { locale, locales, translations, at, version } = JSON.parse(raw);
     if (at && Date.now() - at > CACHE_TTL_MS) return null;
+    if ((version || '') !== currentI18nVersion()) return null;
     return { locale, locales, translations };
   } catch {
     return null;
@@ -26,6 +42,7 @@ function setCachedBootstrap(data) {
     localStorage.setItem(I18N_CACHE_KEY, JSON.stringify({
       ...data,
       at: Date.now(),
+      version: currentI18nVersion(),
     }));
   } catch (_) {}
 }
@@ -34,8 +51,9 @@ function getCachedTranslations(locale) {
   try {
     const raw = localStorage.getItem(I18N_TRANSLATIONS_PREFIX + locale);
     if (!raw) return null;
-    const { messages, at } = JSON.parse(raw);
+    const { messages, at, version } = JSON.parse(raw);
     if (at && Date.now() - at > CACHE_TTL_MS) return null;
+    if ((version || '') !== currentI18nVersion()) return null;
     return messages;
   } catch {
     return null;
@@ -47,6 +65,7 @@ function setCachedTranslations(locale, messages) {
     localStorage.setItem(I18N_TRANSLATIONS_PREFIX + locale, JSON.stringify({
       messages,
       at: Date.now(),
+      version: currentI18nVersion(),
     }));
   } catch (_) {}
 }

@@ -18,6 +18,18 @@ class WazBusinessException extends Exception
      */
     public bool $connectionFailed = false;
 
+    /**
+     * هل رفضت المنصة الدفعة لأن الفاتورة سُدّدت أصلاً؟
+     *
+     * تردّ «المبلغ لا يمكن أن يتجاوز رصيد الفاتورة» حين لا يبقى عليها شيء —
+     * وهذا ليس عطلاً يستحقّ إعادة المحاولة: الغاية محقَّقة، الفاتورة مدفوعة.
+     * إعادة المحاولة خمس مرّات على شيءٍ تمّ تملأ سجلّ الأخطاء بلا فائدة.
+     */
+    public function invoiceAlreadySettled(): bool
+    {
+        return str_contains(strtolower($this->getMessage()), 'cannot exceed the invoice remaining balance');
+    }
+
     public static function connection(string $message, ?\Throwable $previous = null): self
     {
         $e = new self($message, 0, $previous);

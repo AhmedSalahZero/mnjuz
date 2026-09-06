@@ -220,16 +220,36 @@ class WazSyncService
             return;
         }
 
+        // ما تستحقّه الفاتورة لا ما دفعه العميل.
+        //
+        // الاثنان يفترقان في الاتجاهين: يدفع 530 لفاتورة 322 فيبقى الفرق
+        // رصيداً له، أو يدفع 300 ويُكمَّل الباقي من رصيدٍ سابق. تسجيلُ مبلغ
+        // الدفعة كما هو كان يُرسل 530 على فاتورة 322، فترفضه المنصة —
+        // «المبلغ يتجاوز رصيد الفاتورة» — وتبقى الفاتورة غير مدفوعة عند
+        // المحاسب رغم أن العميل دفع. وقع هذا فعلاً على المنشأة 240.
+        $due = $this->chargedTotal($invoice);
+        $paid = min(round((float) $payment->amount, 2), $due);
+
         // الدفعة اليدوية بلا معرّف عملية، فنُولّد لها معرّفاً ثابتاً مشتقّاً من
         // الفاتورة. بدونه يسقط فحص التكرار في addPayment — وهو مشروط بوجود
         // معرّف — فتُسجَّل الدفعة مرّتين عند أي إعادة محاولة. والمعرّف نفسه
         // تستعمله تسوية الرصيد، فلا يجتمع التسجيلان على فاتورة واحدة.
-        $this->recordPayment(
-            $invoice,
-            round((float) $payment->amount, 2),
-            $payment->payment_method ?: ($payment->processor ?: 'Online'),
-            $payment->transaction_id ?: $this->balanceReference($invoice)
-        );
+        if ($paid > 0) {
+            $this->recordPayment(
+                $invoice,
+                $paid,
+                $payment->payment_method ?: ($payment->processor ?: 'Online'),
+                $payment->transaction_id ?: $this->balanceReference($invoice)
+            );
+        }
+
+        // ما نقص عن المستحقّ جاء من رصيد الحساب. بلا تسجيله تبقى الفاتورة
+        // «مدفوعة جزئياً» في المحاسبة وهي مسدَّدة عندنا بالكامل.
+        $remainder = round($due - $paid, 2);
+
+        if ($remainder > 0) {
+            $this->recordPayment($invoice, $remainder, 'Account Balance', $this->balanceReference($invoice));
+        }
 
         $payment->waz_synced_at = now();
         $payment->save();
@@ -309,12 +329,27 @@ class WazSyncService
                 $reference .= $suffix;
             }
 
-            $this->waz->addPayment([
-                'invoice_id' => (int) $wazInvoiceId,
-                'amount' => $share,
-                'payment_method' => $method,
-                'transaction_id' => $reference,
-            ]);
+            try {
+                $this->waz->addPayment([
+                    'invoice_id' => (int) $wazInvoiceId,
+                    'amount' => $share,
+                    'payment_method' => $method,
+                    'transaction_id' => $reference,
+                ]);
+            } catch (WazBusinessException $e) {
+                // فاتورة سُدّدت أصلاً — بيد المحاسب غالباً. الغاية محقَّقة،
+                // والرمي هنا يعني إعادة محاولة على شيءٍ تمّ وسجلّ أخطاء يمتلئ
+                // بلا سبب.
+                if (!$e->invoiceAlreadySettled()) {
+                    throw $e;
+                }
+
+                Log::info('Waz sync: invoice already settled, payment skipped', [
+                    'invoice_id' => $invoice->id,
+                    'waz_invoice_id' => $wazInvoiceId,
+                    'amount' => $share,
+                ]);
+            }
 
             $remaining = round($remaining - $share, 2);
         }

@@ -258,6 +258,149 @@ class WazBalanceSettlementTest extends TestCase
     }
 
 
+
+    // ------------------------------------------- المبلغ مقابل المستحقّ
+
+    /**
+     * دفعةٌ أكبر من فاتورتها — وقعت في الإنتاج على المنشأة 240: دفع 530
+     * لفاتورة 322 فبقي الفرق رصيداً له. كنّا نُرسل 530 على فاتورة 322،
+     * فترفضها المنصة «المبلغ يتجاوز رصيد الفاتورة» وتبقى الفاتورة غير
+     * مدفوعة عند المحاسب رغم أن العميل دفع.
+     */
+    public function test_an_overpayment_is_capped_at_what_the_invoice_is_due(): void
+    {
+        $invoice = $this->invoice();
+
+        $payment = BillingPayment::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'processor' => 'myfatoorah',
+            'payment_method' => 'mada',
+            'amount' => 530,
+            'invoice_id' => $invoice->id,
+            'transaction_id' => '0808904397628794742185',
+        ]);
+
+        $waz = $this->fakeWaz();
+        $waz->shouldReceive('addPayment')
+            ->once()
+            ->withArgs(fn (array $data) => (float) $data['amount'] === 322.00 && $data['invoice_id'] === 900)
+            ->andReturn(['id' => 1]);
+
+        app(WazSyncService::class)->syncPayment($payment);
+
+        $this->assertNotNull($payment->fresh()->waz_synced_at);
+    }
+
+    /**
+     * دفعةٌ أصغر من فاتورتها: الباقي جاء من رصيد سابق، فيُسجَّل هو أيضاً
+     * وإلا بقيت الفاتورة «مدفوعة جزئياً» وهي مسدَّدة عندنا بالكامل.
+     */
+    public function test_a_partial_payment_is_completed_from_the_balance(): void
+    {
+        $invoice = $this->invoice();
+
+        $payment = BillingPayment::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'processor' => 'myfatoorah',
+            'payment_method' => 'Apple Pay',
+            'amount' => 300,
+            'invoice_id' => $invoice->id,
+            'transaction_id' => 'gw-300',
+        ]);
+
+        $waz = $this->fakeWaz();
+        $recorded = [];
+        $waz->shouldReceive('addPayment')->twice()
+            ->andReturnUsing(function (array $data) use (&$recorded) {
+                $recorded[] = $data;
+
+                return ['id' => count($recorded)];
+            });
+
+        app(WazSyncService::class)->syncPayment($payment);
+
+        $this->assertSame(300.0, round((float) $recorded[0]['amount'], 2), 'الدفعة تُسجَّل بقيمتها');
+        $this->assertSame('gw-300', $recorded[0]['transaction_id']);
+        $this->assertSame(22.0, round((float) $recorded[1]['amount'], 2), 'والباقي من الرصيد');
+        $this->assertSame('Account Balance', $recorded[1]['payment_method']);
+        $this->assertSame('mnjz-balance-' . $invoice->id, $recorded[1]['transaction_id']);
+    }
+
+    public function test_an_exact_payment_records_once(): void
+    {
+        $invoice = $this->invoice();
+
+        $payment = BillingPayment::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'processor' => 'myfatoorah',
+            'amount' => 322,
+            'invoice_id' => $invoice->id,
+            'transaction_id' => 'gw-exact',
+        ]);
+
+        $waz = $this->fakeWaz();
+        $waz->shouldReceive('addPayment')->once()->andReturn(['id' => 1]);
+
+        app(WazSyncService::class)->syncPayment($payment);
+
+        $this->addToAssertionCount(1);
+    }
+
+    /**
+     * فاتورة سوّاها المحاسب بيده: المنصة ترفض أي دفعة عليها. الغاية محقَّقة،
+     * فلا يصحّ أن نُعيد المحاولة خمس مرّات ونملأ سجلّ الأخطاء.
+     */
+    public function test_an_already_settled_invoice_is_not_retried(): void
+    {
+        $invoice = $this->invoice();
+
+        $payment = BillingPayment::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'processor' => 'bank',
+            'amount' => 322,
+            'invoice_id' => $invoice->id,
+        ]);
+
+        $waz = $this->fakeWaz();
+        $waz->shouldReceive('addPayment')->once()->andThrow(
+            new \App\Exceptions\WazBusinessException('The payment amount cannot exceed the invoice remaining balance.')
+        );
+
+        app(WazSyncService::class)->syncPayment($payment);
+
+        $this->assertNotNull(
+            $payment->fresh()->waz_synced_at,
+            'الدفعة يجب أن تُعدّ مزامَنة: الفاتورة مسدَّدة فعلاً'
+        );
+    }
+
+    /** أي رفض آخر يبقى خطأً يُعاد معه المحاولة. */
+    public function test_other_rejections_still_fail_loudly(): void
+    {
+        $invoice = $this->invoice();
+
+        $payment = BillingPayment::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'processor' => 'bank',
+            'amount' => 322,
+            'invoice_id' => $invoice->id,
+        ]);
+
+        $waz = $this->fakeWaz();
+        $waz->shouldReceive('addPayment')->once()->andThrow(
+            new \App\Exceptions\WazBusinessException('Invoice not found.')
+        );
+
+        $this->expectException(\App\Exceptions\WazBusinessException::class);
+
+        app(WazSyncService::class)->syncPayment($payment);
+    }
+
     // ------------------------------------------- الدفع اليدوي
 
     /**

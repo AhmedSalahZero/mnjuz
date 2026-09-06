@@ -15,6 +15,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class SendMediaJob implements ShouldQueue
 {
@@ -89,20 +90,21 @@ class SendMediaJob implements ShouldQueue
             $mediaFilePath = Storage::disk('s3')->url($s3Path);
             $mediaUrl = $mediaFilePath;
         } else {
-            Storage::disk('local')->delete($this->tempFilePath);
-            if ($transcodedPath !== null && is_file($transcodedPath)) {
-                @unlink($transcodedPath);
-            }
+            $this->cleanupTempFiles($transcodedPath);
+
             return;
         }
 
-        Storage::disk('local')->delete($this->tempFilePath);
-        if ($transcodedPath !== null && is_file($transcodedPath)) {
-            @unlink($transcodedPath);
-        }
-
+        // الملف المؤقّت يبقى حتى ينجح الإرسال.
+        //
+        // كان يُمسح هنا — قبل الإرسال — فإذا رفضت واتساب الرسالة رمت الوظيفة
+        // وأُعيدت المحاولة، فتجد الملف غير موجود فتنصرف صامتةً عند أول سطر:
+        // تُعدّ ناجحة ولم تُرسل شيئاً. أي فشل عابر كان يبتلع الرسالة نهائياً
+        // ويُخفي أثره، والرمي المقصود ليظهر الفشل يصير بلا فائدة.
         $organization = Organization::find($this->organizationId);
         if (!$organization) {
+            $this->cleanupTempFiles($transcodedPath);
+
             return;
         }
 
@@ -112,6 +114,8 @@ class SendMediaJob implements ShouldQueue
             ->first();
 
         if (!$contact || !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            $this->cleanupTempFiles($transcodedPath);
+
             return;
         }
 
@@ -154,6 +158,8 @@ class SendMediaJob implements ShouldQueue
             $error = WhatsappService::describeSendError($response);
 
             if ($this->continueBatchOnFailure) {
+                $this->cleanupTempFiles($transcodedPath);
+
                 Log::error('WhatsApp media send failed inside a batch; continuing with the rest', [
                     'organization_id' => $this->organizationId,
                     'contact_uuid' => $this->uuid,
@@ -165,9 +171,30 @@ class SendMediaJob implements ShouldQueue
                 return;
             }
 
+            // بلا مسح: المحاولة التالية تحتاج الملف نفسه.
             throw new \RuntimeException(
                 'WhatsApp media send failed: ' . json_encode($error, JSON_UNESCAPED_UNICODE)
             );
+        }
+
+        $this->cleanupTempFiles($transcodedPath);
+    }
+
+    /**
+     * آخر محاولة فشلت: لم يعد للملف المؤقّت مستهلك، فيُمسح كي لا يتراكم على
+     * القرص. الوظيفة نفسها محفوظة في failed_jobs بسببها.
+     */
+    public function failed(Throwable $exception): void
+    {
+        $this->cleanupTempFiles(null);
+    }
+
+    private function cleanupTempFiles(?string $transcodedPath): void
+    {
+        Storage::disk('local')->delete($this->tempFilePath);
+
+        if ($transcodedPath !== null && is_file($transcodedPath)) {
+            @unlink($transcodedPath);
         }
     }
 }
