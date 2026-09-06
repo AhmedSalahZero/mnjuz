@@ -13,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class SendMediaJob implements ShouldQueue
@@ -31,6 +32,15 @@ class SendMediaJob implements ShouldQueue
         public ?string $tempMessageId,
         public ?string $messageUUID,
         public ?string $caption = null,
+        /**
+         * هل يمضي ما بعد هذا الملف إن رفضته واتساب؟
+         *
+         * الدفعة تُرسَل سلسلةً كي تصل بترتيب اختيار العميل، وسلسلة الوظائف
+         * في Laravel تتوقّف عند أول فشل. فملفٌ واحد ترفضه واتساب (صيغة غير
+         * مقبولة مثلاً) كان سيبتلع بقيّة ملفات الدفعة بلا أثر يراه أحد.
+         * فنُسجّل الرفض ونمضي: الملف الواحد يسقط، لا الدفعة كلّها.
+         */
+        public bool $continueBatchOnFailure = false,
     ) {}
 
     public function handle(): void
@@ -141,11 +151,22 @@ class SendMediaJob implements ShouldQueue
         // تُعلَن فاشلة — يرى الموظّف «فشل» بلا سبب، ولا نجد نحن أثراً.
         // الرمي هنا يُسجّل الوظيفة في failed_jobs بسببها كاملاً وبإعادة محاولة.
         if (($response->success ?? false) !== true) {
+            $error = WhatsappService::describeSendError($response);
+
+            if ($this->continueBatchOnFailure) {
+                Log::error('WhatsApp media send failed inside a batch; continuing with the rest', [
+                    'organization_id' => $this->organizationId,
+                    'contact_uuid' => $this->uuid,
+                    'file_name' => $this->fileName,
+                    'file_type' => $this->fileType,
+                    'error' => $error,
+                ]);
+
+                return;
+            }
+
             throw new \RuntimeException(
-                'WhatsApp media send failed: ' . json_encode(
-                    WhatsappService::describeSendError($response),
-                    JSON_UNESCAPED_UNICODE
-                )
+                'WhatsApp media send failed: ' . json_encode($error, JSON_UNESCAPED_UNICODE)
             );
         }
     }

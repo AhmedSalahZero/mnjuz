@@ -33,6 +33,7 @@ use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -845,7 +846,13 @@ class ChatService
             ], 422);
         }
 
-        $queued = 0;
+        // سلسلة لا وظائف متوازية: الملفات تُرسَل بترتيب اختيار العميل.
+        //
+        // كانت كل وظيفة تُلقى في الطابور وحدها، وصفّ المحادثة يُكتب لحظةَ
+        // انتهاء الإرسال لا لحظةَ الاختيار — فملفٌ بطيء (مستند كبير أو فيديو
+        // يُعاد ترميزه) يهبط بين الصور فيقطع ضمّها في الألبوم، ويظهر الترتيب
+        // مخالفاً لما رآه المرسِل.
+        $chain = [];
 
         foreach ($files as $index => $file) {
             $fileType = $types[$index] ?? 'document';
@@ -882,7 +889,7 @@ class ChatService
                 . Str::slug(pathinfo($fileName, PATHINFO_FILENAME)) . '.' . $extension;
             Storage::disk('local')->put($tempFilePath, $uploadBytes);
 
-            SendMediaJob::dispatch(
+            $chain[] = new SendMediaJob(
                 $this->organizationId,
                 $contact->uuid,
                 $fileType,
@@ -891,13 +898,20 @@ class ChatService
                 auth()->id(),
                 $tempMessageIds[$index],
                 $request->messageUUID,
-                $caption
-            )->onQueue('high');
-
-            $queued++;
+                $caption,
+                // فشل ملف لا يُسقط بقيّة الدفعة: السلسلة تتوقّف عند أول
+                // استثناء، والملف المرفوض من واتساب ليس سبباً لحجب الباقي.
+                true
+            );
         }
 
-        return response()->json(['success' => true, 'queued' => $queued]);
+        if ($chain === []) {
+            return response()->json(['success' => true, 'queued' => 0]);
+        }
+
+        Bus::chain($chain)->onQueue('high')->dispatch();
+
+        return response()->json(['success' => true, 'queued' => count($chain)]);
     }
 
     private function resolveMediaCaption(object $request, ?string $mediaType): ?string

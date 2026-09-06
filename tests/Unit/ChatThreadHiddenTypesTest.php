@@ -57,7 +57,7 @@ class ChatThreadHiddenTypesTest extends TestCase
      * أخطر انحدار هنا: بقاء الحلقة على messages يجعل الترشيح كوداً ميتاً
      * وتعود الفقاعات الفارغة بلا أي خطأ يشي بذلك.
      *
-     * صارت الحلقة تقرأ renderItems بعد ضمّ الصور المرسَلة دفعةً في ألبوم
+     * صارت الحلقة تقرأ renderItems بعد ضمّ الوسائط المرسَلة دفعةً في ألبوم
      * واحد، فالحراسة الآن على السلسلة كاملة: العرض ← التجميع ← المرشَّح.
      * وصلٌ ناقص في أيّ حلقة منها يُعيد العلّة نفسها.
      */
@@ -70,7 +70,7 @@ class ChatThreadHiddenTypesTest extends TestCase
         );
 
         $this->assertMatchesRegularExpression(
-            '/renderItems = computed\(\(\) => groupImageAlbums\(visibleMessages\.value\)\)/',
+            '/renderItems = computed\(\(\) => groupMediaAlbums\(visibleMessages\.value\)\)/',
             $this->thread,
             'renderItems يجب أن تُشتقّ من visibleMessages لا من messages'
         );

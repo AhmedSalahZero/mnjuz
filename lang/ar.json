@@ -1659,5 +1659,6 @@
     "WhatsApp error code": "رمز الخطأ من واتساب",
     "Technical details": "تفاصيل تقنية",
     "{count} photos": "{count} صورة",
-    "Sent By": "أرسلها"
+    "Sent By": "أرسلها",
+    "{count} files": "{count} ملفات"
 }

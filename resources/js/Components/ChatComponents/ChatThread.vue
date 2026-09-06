@@ -2,8 +2,8 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { default as axios } from 'axios'
 import ChatBubble from '@/Components/ChatComponents/ChatBubble.vue'
-import ChatImageAlbum from '@/Components/ChatComponents/ChatImageAlbum.vue'
-import { groupImageAlbums } from '@/Composables/imageAlbums'
+import ChatMediaAlbum from '@/Components/ChatComponents/ChatMediaAlbum.vue'
+import { groupMediaAlbums } from '@/Composables/mediaAlbums'
 
 const props = defineProps({
 	contactId: {
@@ -58,13 +58,13 @@ const visibleMessages = computed(() =>
 )
 
 /**
- * الصور المرسَلة دفعةً واحدة تُعرض شبكةً واحدة كما في واتساب.
+ * الصور والفيديوهات المرسَلة دفعةً واحدة تُعرض شبكةً واحدة كما في واتساب.
  *
  * الضمّ عرضٌ لا تخزين: كل صورة تبقى رسالةً مستقلّة عند العميل وفي قاعدة
  * البيانات — واجهة واتساب السحابية لا تعرف الألبوم أصلاً — لكن عشر صور في
  * عشر فقاعات متراصّة كانت تبتلع المحادثة وتُخفي ما قبلها.
  */
-const renderItems = computed(() => groupImageAlbums(visibleMessages.value))
+const renderItems = computed(() => groupMediaAlbums(visibleMessages.value))
 watch(
 	() => props.initialMessages,
 	(newInitialMessages) => {
@@ -126,7 +126,7 @@ const loadMoreMessages = async () => {
 		</div>
 		<div v-for="item in renderItems" :key="item.key" class="flex flex-grow flex-col"
 			:class="item.kind === 'single' && item.chat[0].type === 'ticket' ? 'justify-center' : 'justify-end'">
-			<ChatImageAlbum v-if="item.kind === 'album'" :messages="item.messages" :type="item.direction" />
+			<ChatMediaAlbum v-if="item.kind === 'album'" :messages="item.messages" :type="item.direction" />
 			<template v-else>
 			<ChatBubble v-if="item.chat[0].type === 'chat'" :content="item.chat[0].value" :type="item.chat[0].value.type" />
 			<div v-if="item.chat[0].type === 'ticket'" class="py-2">

@@ -126,7 +126,10 @@ class ChatMediaBatchTest extends TestCase
         ));
 
         $response->assertOk();
-        Bus::assertDispatchedTimes(SendMediaJob::class, 3);
+
+        // سلسلة واحدة تُلقى في الطابور، وفيها الملفات الثلاثة بترتيبها.
+        Bus::assertDispatchedTimes(SendMediaJob::class, 1);
+        $this->assertCount(3, $this->batchJobs(), 'الدفعة يجب أن تحمل كل ملفاتها');
     }
 
     /**
@@ -144,14 +147,38 @@ class ChatMediaBatchTest extends TestCase
             ['image', 'image', 'image']
         ))->assertOk();
 
-        $order = [];
-        Bus::assertDispatched(SendMediaJob::class, function ($job) use (&$order) {
-            $order[] = $this->jobProperty($job, 'fileName');
+        $order = array_map(
+            fn (SendMediaJob $job) => $this->jobProperty($job, 'fileName'),
+            $this->batchJobs()
+        );
+
+        $this->assertSame(['first.jpg', 'second.jpg', 'third.jpg'], $order);
+    }
+
+    /**
+     * وظائف الدفعة بترتيبها: رأس السلسلة ثمّ ما عُلّق به.
+     *
+     * صارت الدفعة تُرسَل Bus::chain كي تصل بترتيب اختيار العميل — والسلسلة
+     * تُلقي رأسها وحده في الطابور وتحمل الباقي مُسلسَلاً داخله، فلا يراه
+     * assertDispatchedTimes. الاختبار يفكّها ليفحص الدفعة كلّها.
+     *
+     * @return list<SendMediaJob>
+     */
+    private function batchJobs(): array
+    {
+        $jobs = [];
+
+        Bus::assertDispatched(SendMediaJob::class, function ($job) use (&$jobs) {
+            $jobs[] = $job;
+
+            foreach ($job->chained as $serialized) {
+                $jobs[] = unserialize($serialized);
+            }
 
             return true;
         });
 
-        $this->assertSame(['first.jpg', 'second.jpg', 'third.jpg'], $order);
+        return $jobs;
     }
 
     private function jobProperty(SendMediaJob $job, string $name)
@@ -171,14 +198,31 @@ class ChatMediaBatchTest extends TestCase
             'الفاتورة المرفقة'
         ))->assertOk();
 
-        $captions = [];
-        Bus::assertDispatched(SendMediaJob::class, function ($job) use (&$captions) {
-            $captions[] = $this->jobProperty($job, 'caption');
-
-            return true;
-        });
+        $captions = array_map(
+            fn (SendMediaJob $job) => $this->jobProperty($job, 'caption'),
+            $this->batchJobs()
+        );
 
         $this->assertSame(['الفاتورة المرفقة', null], $captions);
+    }
+
+    /**
+     * السلسلة تتوقّف عند أول استثناء، فلولا هذه العلامة لابتلع ملفٌ ترفضه
+     * واتساب بقيّةَ الدفعة بلا أثر يراه أحد.
+     */
+    public function test_batch_jobs_are_marked_to_survive_a_rejected_file(): void
+    {
+        $this->post('/chats', $this->batchPayload(
+            [UploadedFile::fake()->image('a.jpg'), UploadedFile::fake()->image('b.jpg')],
+            ['image', 'image']
+        ))->assertOk();
+
+        foreach ($this->batchJobs() as $job) {
+            $this->assertTrue(
+                $this->jobProperty($job, 'continueBatchOnFailure'),
+                'كل وظيفة في الدفعة يجب أن تعرف أنها ضمن دفعة'
+            );
+        }
     }
 
     public function test_a_single_file_batch_still_works(): void
