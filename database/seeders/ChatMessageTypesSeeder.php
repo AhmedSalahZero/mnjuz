@@ -71,6 +71,7 @@ class ChatMessageTypesSeeder extends Seeder
         $this->command->newLine();
         $this->command->line('  ملاحظة: reaction مُدرَجة عمداً ويجب ألا تظهر في رد الـAPI،');
         $this->command->line('  و order نوع مجهول يجب أن يقع في الـdefault بلا انهيار.');
+        $this->command->line('  وآخر المحادثة فيها 9 حالات ألبوم: 6 تُجمع و3 يجب ألا تُجمع.');
     }
 
     /* ------------------------------------------------------------------ */
@@ -567,6 +568,208 @@ class ChatMessageTypesSeeder extends Seeder
                 'status'  => 'delivered',
                 'deleted' => true,
             ],
+            // ---------- الألبوم: صور أُرسلت دفعة واحدة ----------
+            //
+            // الإرسال الدفعي يكتب رسالة مستقلة لكل ملف — واتساب السحابي لا
+            // يعرف «الألبوم» أصلًا. التجميع عرضٌ لا تخزين: صور أو فيديو
+            // متتالية، بالاتجاه نفسه، بينها أقل من 60 ثانية، وعددها اثنتان
+            // فأكثر. القواعد في القسم 9 من MOBILE_MESSAGE_TYPES.md.
+            [
+                'dir'  => 'outbound',
+                'meta' => ['type' => 'text', 'text' => ['body' => '— يبدأ من هنا اختبار الألبوم —']],
+            ],
+
+            // (1) أصغر ألبوم: صورتان. التعليق على الأولى وحدها.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'صور المنتج']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'a1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'read',
+                'logs'   => [['status' => 'sent'], ['status' => 'delivered'], ['status' => 'read']],
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'a2.jpg', 'type' => 'image/jpeg'],
+                'status' => 'read',
+                'logs'   => [['status' => 'sent'], ['status' => 'delivered'], ['status' => 'read']],
+                'gap'    => 4,
+            ],
+
+            // (2) خمس صور: أربع بلاطات و«+1» على الرابعة.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'خمس صور — تظهر أربع بلاطات و+1']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'b1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'b2.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 3,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'b3.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 3,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'b4.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 3,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'b5.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 3,
+            ],
+
+            // (3) ألبوم مختلط: صورة + فيديو + صورة. الفيديو بلاطة عليها علامة
+            //     تشغيل، ولا يُفتح في معاينة الصور.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'صور وفيديو معًا']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'c1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'video', 'video' => ['caption' => null, 'mime_type' => 'video/mp4']],
+                'media'  => ['file' => 'clip.mp4', 'name' => 'c2.mp4', 'type' => 'video/mp4'],
+                'status' => 'delivered',
+                'gap'    => 5,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'c3.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 5,
+            ],
+
+            // (4) ألبوم فيه ملف فشل: الحالة المجمّعة يجب أن تكون «فشل»، لأن
+            //     الأدنى يحكم. والملفات الأخرى تكمل — فشل ملف لا يوقف الباقي.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'ألبوم فيه ملف فاشل']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'd1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'read',
+                'logs'   => [['status' => 'sent'], ['status' => 'delivered'], ['status' => 'read']],
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'd2.jpg', 'type' => 'image/jpeg'],
+                'status' => 'failed',
+                'logs'   => [['status' => 'failed', 'errors' => [[
+                    'code'       => 131053,
+                    'title'      => 'Media upload error',
+                    'error_data' => ['details' => 'Unsupported image format'],
+                ]]]],
+                'gap'    => 4,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'd3.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 4,
+            ],
+
+            // (5) ألبوم فيه صورة بلا media: بلاطة «المحتوى غير متاح» تبقى
+            //     داخل المجموعة ولا تُخرجها منها.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'ألبوم فيه صورة بلا ملف']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'e1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'status' => 'delivered',
+                'gap'    => 4,
+            ],
+
+            // (6) ألبوم وارد: الاتجاه لا يمنع الضم، لكن لا يُضم إلى الصادر.
+            [
+                'dir'   => 'inbound',
+                'meta'  => ['type' => 'image', 'image' => ['caption' => 'صورتان من العميل']],
+                'media' => ['file' => 'photo.jpg', 'name' => 'N/A', 'type' => 'image/jpeg'],
+                'gap'   => 90,
+            ],
+            [
+                'dir'   => 'inbound',
+                'meta'  => ['type' => 'image', 'image' => ['caption' => null]],
+                'media' => ['file' => 'photo.jpg', 'name' => 'N/A', 'type' => 'image/jpeg'],
+                'gap'   => 4,
+            ],
+
+            // ---------- حالات يجب ألا تُجمع ----------
+
+            // (7) المستند يقطع المجموعة: صورة + مستند + صورة = ثلاث فقاعات.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'المستند يقطع الألبوم']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'f1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'document', 'document' => ['filename' => 'terms.pdf', 'caption' => null]],
+                'media'  => ['file' => 'offer.pdf', 'name' => 'terms.pdf', 'type' => 'application/pdf'],
+                'status' => 'delivered',
+                'gap'    => 4,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'f2.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 4,
+            ],
+
+            // (8) الفجوة الطويلة تقطع: صورتان بينهما أكثر من 60 ثانية.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => 'صورتان بفجوة طويلة — فقاعتان لا ألبوم']],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'g1.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 90,
+            ],
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'image', 'image' => ['caption' => null]],
+                'media'  => ['file' => 'photo.jpg', 'name' => 'g2.jpg', 'type' => 'image/jpeg'],
+                'status' => 'delivered',
+                'gap'    => 180,
+            ],
+
+            // (9) مستند كبير: يمثّل ملفًا رُفع عبر chunks. الشكل الواصل إلى
+            //     التطبيق واحد سواء رُفع في request واحد أو على قطع — نقطة
+            //     الرفع لا تظهر في البيانات.
+            [
+                'dir'    => 'outbound',
+                'meta'   => ['type' => 'document', 'document' => ['filename' => 'catalog-2026.pdf', 'caption' => 'الكتالوج الكامل']],
+                'media'  => ['file' => 'offer.pdf', 'name' => 'catalog-2026.pdf', 'type' => 'application/pdf'],
+                'status' => 'delivered',
+                'gap'    => 90,
+            ],
+
             [
                 // آخر رسالة غير مقروءة — لاختبار unread_messages_count
                 'dir'     => 'inbound',
@@ -578,7 +781,9 @@ class ChatMessageTypesSeeder extends Seeder
 
     private function insertMessage(Contact $contact, array $message): void
     {
-        $this->clock = $this->clock->copy()->addMinutes(2);
+        // الفجوة الافتراضية دقيقتان. رسائل الألبوم تحتاج فجوة أقصر من 60 ثانية
+        // (ALBUM_GAP_SECONDS)، وإلا لن يجمعها التطبيق ولا الداشبورد.
+        $this->clock = $this->clock->copy()->addSeconds($message['gap'] ?? 120);
         $createdAt = $this->clock->toDateTimeString();
 
         $mediaId = null;

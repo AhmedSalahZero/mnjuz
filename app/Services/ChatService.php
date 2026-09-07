@@ -839,6 +839,11 @@ class ChatService
         $types = (array) $request->input('types', []);
         $tempMessageIds = (array) $request->input('tempMessageIds', []);
 
+        // معرّف رسالة لكل ملف حين يُرسلها التطبيق: عمود uuid فريد، فمعرّف واحد
+        // لعدّة ملفات يُنجح الأول ويُفشل البقية. الويب لا يُرسل شيئاً هنا،
+        // فيعود إلى messageUUID المفرد كما كان.
+        $messageUUIDs = array_values((array) ($request->input('msg_uuid') ?? []));
+
         if (count($tempMessageIds) !== count($files)) {
             return response()->json([
                 'success' => false,
@@ -897,7 +902,7 @@ class ChatService
                 $tempFilePath,
                 auth()->id(),
                 $tempMessageIds[$index],
-                $request->messageUUID,
+                $messageUUIDs[$index] ?? $request->messageUUID,
                 $caption,
                 // فشل ملف لا يُسقط بقيّة الدفعة: السلسلة تتوقّف عند أول
                 // استثناء، والملف المرفوض من واتساب ليس سبباً لحجب الباقي.

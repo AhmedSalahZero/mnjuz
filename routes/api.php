@@ -112,7 +112,15 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 
 	
 	Route::post('/send-msg', [App\Http\Controllers\ApiController::class, 'sendMsg']);
+    // نقطة الملفات المستقلّة معطّلة عمداً: /send-msg يقبل الملف والملفات
+    // والنصّ معاً، ونقطتان لغرض واحد تتفرّقان عند أول تعديل. المعالج نفسه
+    // باقٍ ويُستدعى من sendMsg.
     // Route::post('/send-media', [App\Http\Controllers\ApiController::class, 'sendFileMessage']);
+    // الملف الكبير على قطع: الوكيل الأمامي يقطع أي طلب تجاوز ١٢٥ ثانية، فطلبٌ
+    // واحد بملفٍ كبير على شبكة جوال يموت دائماً بلا رسالة. نظيرة مسار الويب
+    // /chats/upload/chunk، والمنشأة من التوكن لا من الجلسة.
+    Route::post('/chats/upload/chunk', [App\Http\Controllers\Api\ChunkedUploadController::class, 'store']);
+    Route::delete('/chats/upload/chunk', [App\Http\Controllers\Api\ChunkedUploadController::class, 'destroy']);
     Route::get('/list-templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
     Route::post('/send-template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessageByUUID']);
 	Route::post('/send-auth-template', [App\Http\Controllers\ApiController::class, 'sendAuthTemplate']);

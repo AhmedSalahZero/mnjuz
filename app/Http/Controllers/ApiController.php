@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\ChatMediaUploadHelper;
 use App\Helpers\MessagingWindowHelper;
+use App\Helpers\WhatsappConnectionHelper;
+use Illuminate\Support\Str;
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\Api\StoreContactRequest;
 use App\Http\Resources\AutoReplyResource;
@@ -1013,12 +1015,66 @@ class ApiController extends Controller
             'data' => $data,
         ], 200);
     }
+    /**
+     * نقطة واحدة للنصّ والملفات.
+     *
+     * كانت النقاط ثلاثاً لغرض واحد فيحتار التطبيق أيّها يستعمل. الملفات تُقبل
+     * باسم `file` أو `files` مفرداً أو مصفوفة، ووجودها هو ما يحدّد الطريق —
+     * لا حقل `type` وحده: طلبٌ يحمل ملفاً ويقول `type=text` كان يُهمل الملف
+     * صامتاً ويُرسل نصاً فارغاً.
+     */
     public function sendMsg(Request $request)
     {
-        if ($request->get('type') == 'text') {
+        // قبل أي قراءة للملفات: Request::file() يخزّن ما يقرأ في ذاكرة داخلية،
+        // فالتوحيد بعدها لا يراه أحد.
+        $hasFiles = self::normalizeUploadedFiles($request);
+
+        if (!$hasFiles && $request->get('type') == 'text') {
             return $this->sendMessage($request);
         }
+
         return $this->sendFileMessage($request);
+    }
+
+    /**
+     * توحيد الملفات تحت المفتاح `file`.
+     *
+     * التطبيق يرسل `file` للمفرد و`files[]` للمتعدّد، والداشبورد يرسل `files[]`
+     * دائماً. القبولان اسمٌ واحد بعد هذه الدالة، فلا يتفرّع ما بعدها.
+     *
+     * تُستدعى قبل أي `$request->file()` أو `$request->all()`: القراءة الأولى
+     * تُثبّت الملفات المحوَّلة في ذاكرة الطلب، فما يُضاف بعدها لا يظهر.
+     *
+     * @return bool هل في الطلب ملفٌ أصلاً؟
+     */
+    private static function normalizeUploadedFiles(Request $request): bool
+    {
+        $collected = [];
+
+        foreach (['file', 'files'] as $key) {
+            $value = $request->files->get($key);
+
+            if ($value === null) {
+                continue;
+            }
+
+            foreach (is_array($value) ? $value : [$value] as $file) {
+                if ($file !== null) {
+                    $collected[] = $file;
+                }
+            }
+        }
+
+        if (!$collected) {
+            return false;
+        }
+
+        $request->files->remove('files');
+        // المفرد يبقى مفرداً: قاعدة التحقّق تختلف بين الملف والمصفوفة، ولفّ
+        // الواحد في مصفوفة كان يُغيّر رسالة الخطأ على من لم يُغيّر شيئاً.
+        $request->files->set('file', count($collected) === 1 ? $collected[0] : $collected);
+
+        return true;
     }
     public function sendTemplateMessage(Request $request)
     {
@@ -1320,6 +1376,10 @@ class ApiController extends Controller
      */
     public function sendFileMessage(Request $request)
     {
+        // `files[]` مقبول كـ `file[]`: التوحيد هنا أيضاً كي تصحّ الدالة وحدها
+        // لا عبر sendMsg فقط. وهي لا تفعل شيئاً إن سبقها التوحيد.
+        self::normalizeUploadedFiles($request);
+
         $organizationId = $request->user()->current_mobile_organization_id;
         $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
 
@@ -1384,8 +1444,15 @@ class ApiController extends Controller
         }
 
         $contact = $this->resolveContactByPhone($request, $organizationId);
-        $this->logMobileActivity(ActivityLogger::MEDIA_SENT, $contact, [], (int) $organizationId);
 
+        // نافذة المراسلة تُفحص هنا لا في الخدمة: مسار الويب يردّ بشكله،
+        // والتطبيق يقرأ statusCode.
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+            return MessagingWindowHelper::closedWindowApiJsonResponse();
+        }
+
+        // لا تسجيل هنا: المسار المشترك يسجّل MEDIA_SENT بنفسه، وتسجيله مرّتين
+        // يُظهر الإرسال الواحد سطرين في سجلّ النشاط.
         $files = $request->file('file');
         $files = is_array($files) ? array_values($files) : [$files];
 
@@ -1395,22 +1462,46 @@ class ApiController extends Controller
         $messageUUIDs = $request->get('msg_uuid');
         $messageUUIDs = is_array($messageUUIDs) ? array_values($messageUUIDs) : [$messageUUIDs];
 
-        // +"message": "(#100) Param type must be one of {AUDIO, CONTACTS, DOCUMENT, GIF, IMAGE, INTERACTIVE, LINK_PREVIEW, LOCATION, PIN, REACTION, STICKER, TEMPLATE, TEXT, VIDEO} - got "jpeg"."
-        $chatService = new ChatService($organizationId);
+        // دفعة واحدة مرتَّبة، لا وظيفة لكل ملف.
+        //
+        // الحلقة القديمة كانت تُلقي وظيفةً مستقلّة لكل ملف، فتُنفَّذ متوازيةً
+        // ويصل الملف البطيء (مستند كبير أو فيديو يُعاد ترميزه) بين الصور —
+        // فيختلف الترتيب عمّا اختاره المرسِل وينقطع ضمّها في ألبوم واحد.
+        // المسار المشترك مع الويب يُرسلها سلسلةً بالترتيب.
+        $request->merge([
+            'uuid' => $contact->uuid,
+            'types' => array_map(
+                fn ($file) => self::getFileTypeFromExtension($file->getClientOriginalExtension()),
+                $files
+            ),
+            // معرّفات مؤقّتة للبثّ اللحظي: الويب يُرسلها من المتصفّح، والتطبيق
+            // لا يعرفها — فنُولّدها هنا كي يقبلها المسار المشترك.
+            'tempMessageIds' => array_map(fn () => (string) Str::uuid(), $files),
+            'msg_uuid' => $messageUUIDs,
+            // النقطة واحدة للنصّ والملف، والتطبيق يسمّي النصّ `message`. فإن
+            // أرسل ملفاً ونصّاً معاً فالنصّ تعليقٌ عليه — كما يفعل واتساب.
+            'caption' => $request->filled('caption') ? $request->caption : $request->input('message'),
+        ]);
+        $request->files->set('files', $files);
 
-        foreach ($files as $index => $file) {
-            // التعليق يُرفق بالأول فقط؛ تكراره على كل صورة يُظهره مرات عدداً
-            // في محادثة العميل.
-            $request->merge([
-                'uuid' => $contact->uuid,
-                'file' => $file,
-                'type' => self::getFileTypeFromExtension($file->getClientOriginalExtension()),
-                'caption' => $index === 0 ? $request->caption : null,
-                'messageUUID' => $messageUUIDs[$index] ?? null,
-            ]);
-            $request->files->set('file', $file);
+        // `Request::file()` يخزّن الملفات المحوَّلة في ذاكرة داخلية أول مرّة
+        // تُقرأ فيها (التحقّق يقرأها)، فإضافة `files` بعدها لا يراها
+        // `hasFile('files')`. نُعيد بناء الطلب كي تُقرأ حقيبة الملفات من جديد.
+        $chatRequest = Request::createFrom($request);
 
-            $chatService->sendMessage($request);
+        $batch = (new ChatService($organizationId))->sendMessage($chatRequest);
+
+        // المسار المشترك يردّ بشكل الويب؛ نُخرج شكل التطبيق ونُبقي سببه إن رفض.
+        $batchData = $batch instanceof \Illuminate\Http\JsonResponse
+            ? (array) $batch->getData(true)
+            : [];
+
+        if (($batchData['success'] ?? false) !== true) {
+            return response()->json([
+                'statusCode' => 422,
+                'success' => false,
+                'message' => $batchData['message'] ?? __('Something went wrong. Refresh the page and try again'),
+            ], 422);
         }
 
         return response()->json([
@@ -1419,7 +1510,7 @@ class ApiController extends Controller
             'message' => __('Message sent successfully'),
             'data' => [
                 'queued' => true,
-                'files' => count($files),
+                'files' => (int) ($batchData['queued'] ?? count($files)),
                 'contact_id' => $contact->id,
                 'contact_uuid' => $contact->uuid,
                 'phone' => $contact->phone,
@@ -1449,24 +1540,15 @@ class ApiController extends Controller
 
     private static function getFileTypeFromExtension($extension)
     {
-        $extension = strtolower($extension);
-    
-        $fileTypes = [
-            'image' => ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'heic', 'heif'],
-            'video' => ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', '3gp', 'mpeg', 'mpg'],
-            'audio' => ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr', 'opus'],
-            'document' => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'odt', 'ods', 'odp'],
-            'gif' => ['gif']
-        ];
-    
-        foreach ($fileTypes as $type => $extensions) {
-            if (in_array($extension, $extensions)) {
-                return $type;
-            }
+        // الجدول انتقل إلى ChatMediaUploadHelper: مسار القطع يحتاجه أيضاً،
+        // ونسختان منه تفترقان عند أول امتداد يُضاف.
+        $type = ChatMediaUploadHelper::typeForExtension((string) $extension);
+
+        if ($type === null) {
+            throw new \Exception('Invalid file extension: ' . $extension);
         }
-        throw new \Exception('Invalid file extension: ' . $extension);
-        // // Default fallback
-        // return 'DOCUMENT';
+
+        return $type;
     }
     /**
      * Store a campaign.
@@ -1496,35 +1578,9 @@ class ApiController extends Controller
      */
     private function whatsappConnectionError($organizationId): ?string
     {
-        $organization = $organizationId ? Organization::find($organizationId) : null;
-
-        if (!$organization) {
-            return __('No active organization was found for your account. Please select an organization and try again.');
-        }
-
-        $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
-        $whatsapp = $metadata['whatsapp'] ?? null;
-
-        if (!is_array($whatsapp) || !$whatsapp) {
-            return __('WhatsApp is not connected for :organization. Connect your WhatsApp Business account from Settings → WhatsApp, then try again.', [
-                'organization' => $organization->name,
-            ]);
-        }
-
-        // بيانات الاعتماد الدنيا لأي نداء إلى واجهة واتساب.
-        $missing = array_values(array_filter(
-            ['access_token', 'phone_number_id', 'waba_id'],
-            fn ($key) => empty($whatsapp[$key])
-        ));
-
-        if ($missing) {
-            return __('The WhatsApp connection for :organization is incomplete (missing: :fields). Reconnect it from Settings → WhatsApp.', [
-                'organization' => $organization->name,
-                'fields' => implode(', ', $missing),
-            ]);
-        }
-
-        return null;
+        // المنطق في WhatsappConnectionHelper: مسار رفع القطع يفحصه أيضاً قبل
+        // قبول أول بايت.
+        return WhatsappConnectionHelper::errorFor($organizationId);
     }
 
     /**

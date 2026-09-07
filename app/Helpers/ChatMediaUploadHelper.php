@@ -128,4 +128,67 @@ class ChatMediaUploadHelper
 
         return $mb . ' MB';
     }
+
+    /**
+     * سقف الملف المجمَّع من قطع — حدّ النوع وحده بلا حدّ PHP.
+     *
+     * حدّ PHP يخصّ الطلب الواحد، والقطعة الواحدة لا تبلغه أصلاً (5MB). فقياس
+     * الملف المجمَّع به يُبطل الغرض من التجزئة: مستندٌ من ستين ميغابايت تُقبل
+     * قطعه كلّها ثم يُرفض بعد الدمج لأن upload_max_filesize أصغر منه — وهو
+     * حدٌّ لم يمرّ به شيء.
+     */
+    public static function maxAssembledBytesForType(string $type): int
+    {
+        $byType = config('chat.max_upload_kb_by_type', []);
+
+        $kb = match ($type) {
+            // الصور تُضغط لاحقاً لحدّ واتساب، فلا سقف نوعي هنا.
+            'image', 'gif' => null,
+            'video' => (int) ($byType['video'] ?? self::VIDEO_MAX_KB),
+            'audio' => (int) ($byType['audio'] ?? self::AUDIO_MAX_KB),
+            'document' => (int) ($byType['document'] ?? self::DOCUMENT_MAX_KB),
+            default => (int) config('chat.max_upload_kb', self::VIDEO_MAX_KB),
+        };
+
+        return $kb === null ? PHP_INT_MAX : $kb * 1024;
+    }
+
+    /**
+     * الامتدادات المقبولة لكل نوع — مصدرٌ واحد للويب والتطبيق معاً.
+     *
+     * كان الجدول محبوساً داخل متحكّم واحد، فأي مسار آخر يحتاجه يُعيد كتابته
+     * — ونسختان من قائمةٍ كهذه تفترقان عند أول إضافة.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function extensionsByType(): array
+    {
+        return [
+            'image' => ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'heic', 'heif'],
+            'video' => ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', '3gp', 'mpeg', 'mpg'],
+            'audio' => ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'wma', 'amr', 'opus'],
+            'document' => ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'odt', 'ods', 'odp'],
+            'gif' => ['gif'],
+        ];
+    }
+
+    /** نوع الوسيط من الامتداد، أو null إن لم يكن مقبولاً. */
+    public static function typeForExtension(string $extension): ?string
+    {
+        $extension = strtolower(trim($extension));
+
+        foreach (self::extensionsByType() as $type => $extensions) {
+            if (in_array($extension, $extensions, true)) {
+                return $type;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return list<string> كل الامتدادات المقبولة بلا تكرار. */
+    public static function allowedExtensions(): array
+    {
+        return array_values(array_unique(array_merge(...array_values(self::extensionsByType()))));
+    }
 }
