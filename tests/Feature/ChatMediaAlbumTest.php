@@ -85,6 +85,70 @@ class ChatMediaAlbumTest extends TestCase
         $this->assertStringContainsString('markBroken', $album, 'الصورة المكسورة يجب أن تُستبدل لا أن تبقى فارغة');
     }
 
+    /** منطق المعرض في وحدة مستقلّة تُختبر بلا متصفّح. */
+    public function test_the_gallery_rules_hold(): void
+    {
+        if (!$this->nodeAvailable()) {
+            $this->markTestSkipped('node غير متاح في هذه البيئة');
+        }
+
+        $script = base_path('tests/js/album-gallery.mjs');
+        $this->assertFileExists($script);
+
+        exec('node ' . escapeshellarg($script) . ' 2>&1', $output, $status);
+
+        $this->assertSame(0, $status, implode("\n", $output));
+        $this->assertStringContainsString('OK', implode("\n", $output));
+    }
+
+    /**
+     * الصور الزائدة عن أربع يجب أن تكون قابلة للفتح.
+     *
+     * الشبكة تعرض أربع بلاطات و«N+»، وكانت البلاطة الرابعة تفتح صورتها
+     * وحدها — فمن أرسل عشر صور رآها العميل أربعاً ولا سبيل إلى الباقي.
+     * شكا العملاء من ذلك، والمعرض يفتح المجموعة كاملة.
+     */
+    public function test_every_file_in_the_album_is_reachable(): void
+    {
+        $this->assertFileExists(base_path('resources/js/Composables/albumGallery.js'));
+
+        $album = file_get_contents(base_path('resources/js/Components/ChatComponents/ChatMediaAlbum.vue'));
+
+        $this->assertStringContainsString('galleryItems', $album, 'الألبوم لا يبني قائمة المعرض');
+        $this->assertMatchesRegularExpression(
+            '/:items="gallery"/',
+            $album,
+            'المعاينة تستقبل صورةً واحدة لا المجموعة'
+        );
+        $this->assertStringNotContainsString(
+            'openLightbox(tileSource(message))',
+            $album,
+            'ما زالت البلاطة تفتح صورتها وحدها فلا يُبلغ ما بعد الرابعة'
+        );
+
+        $lightbox = file_get_contents(base_path('resources/js/Components/ChatComponents/ImageLightbox.vue'));
+
+        $this->assertStringContainsString('stepIndex', $lightbox, 'المعاينة لا تتنقّل بين الصور');
+        $this->assertStringContainsString('hasMany', $lightbox, 'الأسهم يجب أن تظهر للمجموعة وحدها');
+        $this->assertStringContainsString('ArrowRight', $lightbox, 'لوحة المفاتيح جزء من التنقّل');
+    }
+
+    /** المعاينة المفردة (فقاعة صورة واحدة) تبقى تعمل بـ src كما كانت. */
+    public function test_the_single_image_bubble_still_works(): void
+    {
+        $lightbox = file_get_contents(base_path('resources/js/Components/ChatComponents/ImageLightbox.vue'));
+
+        $this->assertMatchesRegularExpression(
+            '/src:\s*\{ type: String/',
+            $lightbox,
+            'خاصية src يجب أن تبقى كي لا تنكسر الفقاعة المفردة'
+        );
+
+        $bubble = file_get_contents(base_path('resources/js/Components/ChatComponents/ChatBubble.vue'));
+
+        $this->assertStringContainsString(':src="lightboxSrc"', $bubble, 'الفقاعة المفردة ما زالت تمرّر src');
+    }
+
     /** واتساب يضمّ الصور والفيديو معاً؛ المستند لا يدخل ألبوماً. */
     public function test_videos_join_the_album_and_documents_do_not(): void
     {

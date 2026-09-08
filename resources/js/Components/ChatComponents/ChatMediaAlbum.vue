@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import ImageLightbox from './ImageLightbox.vue'
 import { senderName } from '@/Composables/senderName'
 import { albumCaption, albumStatus, albumTiles, tileType } from '@/Composables/mediaAlbums'
+import { galleryIndexOf, galleryItems } from '@/Composables/albumGallery'
 
 const props = defineProps({
 	/** رسائل الوسائط المضمومة (صور وفيديو)، بترتيب إرسالها. */
@@ -12,11 +13,19 @@ const props = defineProps({
 })
 
 const lightboxOpen = ref(false)
-const lightboxSrc = ref('')
+const lightboxIndex = ref(0)
 
-const openLightbox = (src) => {
-	if (!src) return
-	lightboxSrc.value = src
+/**
+ * كل ملفات المجموعة، لا الأربعة الظاهرة.
+ *
+ * كانت البلاطة الرابعة تفتح صورتها وحدها، فما بعدها لا سبيل إليه: من أرسل
+ * عشر صور رآها العميلُ أربعاً. المعرض يفتح المجموعة كاملة من الموضع المضغوط.
+ */
+const gallery = computed(() => galleryItems(props.messages))
+
+const openLightbox = (message) => {
+	if (gallery.value.length === 0) return
+	lightboxIndex.value = galleryIndexOf(gallery.value, message?.id ?? null)
 	lightboxOpen.value = true
 }
 
@@ -100,7 +109,7 @@ const columns = computed(() => (props.messages.length === 2 ? 'grid-cols-2' : 'g
 					:src="tileSource(message)"
 					alt="Image"
 					class="h-[150px] w-full cursor-pointer object-cover"
-					@click="openLightbox(tileSource(message))"
+					@click="openLightbox(message)"
 					@error="markBroken(message.id)"
 				/>
 				<div v-else class="flex h-[150px] w-full items-center justify-center px-2 text-center text-xs text-slate-500">
@@ -112,7 +121,7 @@ const columns = computed(() => (props.messages.length === 2 ? 'grid-cols-2' : 'g
 					v-if="index === grid.tiles.length - 1 && grid.hidden > 0 && playingId !== message.id"
 					type="button"
 					class="absolute inset-0 flex items-center justify-center bg-black/55 text-xl font-medium text-white"
-					@click="tileType(message) === 'video' ? play(message) : openLightbox(tileSource(message))"
+					@click="openLightbox(message)"
 				>
 					+{{ grid.hidden }}
 				</button>
@@ -154,6 +163,6 @@ const columns = computed(() => (props.messages.length === 2 ? 'grid-cols-2' : 'g
 			</div>
 		</div>
 
-		<ImageLightbox :isOpen="lightboxOpen" :src="lightboxSrc" @close="lightboxOpen = false" />
+		<ImageLightbox :isOpen="lightboxOpen" :items="gallery" :index="lightboxIndex" @close="lightboxOpen = false" />
 	</div>
 </template>
