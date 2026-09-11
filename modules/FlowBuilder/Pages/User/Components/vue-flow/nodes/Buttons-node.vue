@@ -9,6 +9,8 @@ import FormInput from '@/Components/FormInput.vue';
 import FormSelect from '@/Components/FormSelect.vue';
 import FormTextArea from '@/Components/FormTextArea.vue';
 import FlowMedia from '@modules/FlowBuilder/Pages/User/Components/vue-flow/FlowMedia.vue'
+import { duplicateNode } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowNodes.js'
+import { edgeIdsForHandle } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowEdges.js'
 import type { NodeProps } from '@vue-flow/core'
 
 const props = defineProps<NodeProps>()
@@ -83,10 +85,13 @@ const isEditTitle = ref(false)
 const node = useNode()
 const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
 
-// Helper function to remove edges for a given handle ID
+// حذف وصلات مخرج هذه العقدة وحدها.
+//
+// معرّفات المخارج ('a' و'b' و'c' و'd') مشتركة بين كل عقد الأزرار، فالفلترة
+// بـ sourceHandle وحده كانت تحذف وصلة الزر نفسه من كل العقد: توصّل عقدة ثم
+// تكتب حرفًا في عقدة أخرى فتختفي وصلتك.
 function removeEdgesForHandle(handleId) {
-  const edgesToRemove = edges.value.filter(edge => edge.sourceHandle === handleId)
-  edgesToRemove.forEach(edge => removeEdges(edge.id))
+  edgeIdsForHandle(edges.value, node.id, handleId).forEach(id => removeEdges(id))
 }
 
 function handleClickDeleteBtn() {
@@ -99,18 +104,9 @@ function handleClickDeleteBtn() {
 }
 
 function handleClickDuplicateBtn() {
-  const { type, position, label, data } = node.node
-  const newNode = {
-    id: (nodes.value.length + 1).toString(),
-    type,
-    position: {
-      x: position.x + 100,
-      y: position.y + 100
-    },
-    label,
-    data
-  }
-  addNodes(newNode)
+  // معرّف فريد وبيانات مستقلّة: «عدد العقد + 1» كان يصطدم بمعرّف موجود،
+  // وتمرير `data` نفسه كان يجعل النسخة والأصل حقلًا واحدًا.
+  addNodes(duplicateNode(node.node, nodes.value))
 }
 
 const shouldShowWarning = computed(() => {

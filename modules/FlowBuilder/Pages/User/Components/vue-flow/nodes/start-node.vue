@@ -1,6 +1,7 @@
 <script lang="ts" setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Handle, Position, useNode } from '@vue-flow/core'
+import FormInput from '@/Components/FormInput.vue';
 import FormSelect from '@/Components/FormSelect.vue';
 import FormTextArea from '@/Components/FormTextArea.vue';
 import type { NodeProps } from '@vue-flow/core'
@@ -8,26 +9,40 @@ import type { NodeProps } from '@vue-flow/core'
 const props = defineProps<NodeProps>()
 const input1 = ref(props.data.metadata?.fields["type"] || '')
 const input2 = ref(props.data.metadata?.fields["keywords"] || '')
+// المهلة بالدقائق: بعدها يُعتبر أن العميل بدأ محادثة جديدة فيُشغَّل الـ flow
+// من جديد. تخصّ المحفّزين اللذين يشتغلان مرّة واحدة؛ keywords يعيد نفسه
+// بالكلمة أصلاً.
+const input3 = ref(props.data.metadata?.fields["timeout"] ?? '')
+
+const timeoutTriggers = ['first_message', 'new_contact']
+const supportsTimeout = computed(() => timeoutTriggers.includes(input1.value))
+
+const writeFields = () => {
+  node.node.data.metadata.fields = {
+    ...node.node.data.metadata.fields,
+    type: input1.value,
+    keywords: input1.value === 'keywords' ? input2.value : null,
+    timeout: supportsTimeout.value && input3.value !== '' ? Number(input3.value) : null,
+  }
+}
+
+watch(input1, () => {
+  // تغيير المحفّز يُسقط ما لا يخصّه، وإلا بقيت مهلة محفوظة على flow صار
+  // بالكلمات المفتاحية فتعمل من حيث لا يراها أحد.
+  if (input1.value !== 'keywords') input2.value = ''
+  if (!supportsTimeout.value) input3.value = ''
+  writeFields()
+})
+
+watch(input2, writeFields)
+watch(input3, writeFields)
 const options = ref([
   { value: 'new_contact', label: 'New contact' },
+  { value: 'first_message', label: 'First-Time Message Only' },
   { value: 'keywords', label: 'Text contains specific keywords' }
 ]);
 
-watch(input1, (newValue) => {
-  node.node.data.metadata.fields = {
-    ...node.node.data.metadata.fields,
-    type: newValue,
-    keywords: null
-  }
-})
 
-watch(input2, (newValue) => {
-  node.node.data.metadata.fields = {
-    ...node.node.data.metadata.fields,
-    type: input1,
-    keywords: newValue
-  }
-})
 
 const handleConnectable: HandleConnectableFunc = (node, connectedEdges) => {
   // only allow connections if the node has 0 connections
@@ -66,6 +81,14 @@ const node = useNode()
         <div v-if="input1 === 'keywords'">
           <label class="text-sm mb-2"><span class="text-red-500">*</span> Trigger keywords</label>
           <FormTextArea v-model="input2" :name="''" :placeholder="'Enter keywords separated by a comma'" :type="'text'" :class="'col-span-4'"/>
+        </div>
+        <div v-if="supportsTimeout" class="mt-4">
+          <label class="text-sm mb-2">Timeout (minutes)</label>
+          <FormInput v-model="input3" :name="''" :type="'number'" :min="1" :placeholder="'e.g. 60'" :class="'col-span-4'"/>
+          <p class="mt-1 text-xs text-gray-500">
+            Leave empty to run only once. If set, the flow runs again when the
+            contact writes after this many minutes of silence.
+          </p>
         </div>
       </div>
     </div>

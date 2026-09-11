@@ -12,6 +12,7 @@ import MediaNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes
 import TextNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Text-node.vue'
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
 import { Test_data } from '@/lib/constant'
+import { nextNodeId } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowNodes.js'
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
@@ -221,9 +222,9 @@ function handleOnDrop(event: DragEvent) {
 	})
 
 
-	const lastNodeId = nodes.value.length
-		? Math.max(...nodes.value.map((node) => parseInt(node.id, 10))) + 1
-		: 1
+	// معرّف متّصل بلا فجوات: «الأكبر + 2» كان يترك ثقوبًا في التسلسل يمشي
+	// فيها زر Duplicate فيتصادم المعرّفان.
+	const newNodeId = nextNodeId(nodes.value)
 
 	let newNode: any
 
@@ -232,7 +233,7 @@ function handleOnDrop(event: DragEvent) {
 		const actionType = type.replace('action-', '').replace(/-/g, '_')
 
 		newNode = {
-			id: (lastNodeId + 1).toString(),
+			id: newNodeId,
 			type: 'action', // Always use 'action' type for backend compatibility
 			position,
 			label: `${actionType} action`,
@@ -246,7 +247,7 @@ function handleOnDrop(event: DragEvent) {
 		}
 	} else {
 		newNode = {
-			id: (lastNodeId + 1).toString(),
+			id: newNodeId,
 			type,
 			position,
 			label: `${type} node`,

@@ -54,18 +54,15 @@
 			</span>
 		</div>
 	</div>
-	<div class="flex-grow space-y-3 px-2 overflow-y-scroll">
+	<!-- لون واحد للنص والأيقونات معًا: الأيقونات تستعمل currentColor فترث اللون نفسه -->
+	<div class="flex-grow space-y-3 px-2 overflow-y-scroll text-slate-600">
 		<div class="flex-1">
 			<ul class="pt-2 space-y-1 text-sm mb-2">
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/dashboard') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/dashboard"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-								stroke-width="2"
-								d="M4 11.452V16.8c0 1.12 0 1.68.218 2.109c.192.376.497.682.874.873c.427.218.987.218 2.105.218h9.606c1.118 0 1.677 0 2.104-.218a2 2 0 0 0 .875-.873c.218-.428.218-.987.218-2.105v-5.352c0-.534 0-.801-.065-1.05a1.998 1.998 0 0 0-.28-.617c-.145-.213-.345-.39-.748-.741l-4.8-4.2c-.746-.653-1.12-.98-1.54-1.104c-.37-.11-.764-.11-1.135 0c-.42.124-.792.45-1.538 1.102L5.093 9.044c-.402.352-.603.528-.747.74a2 2 0 0 0-.281.618C4 10.65 4 10.918 4 11.452Z" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></g></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Dashboard') }}</span>
 					</Link>
 				</li>
@@ -75,11 +72,7 @@
 						class="flex items-center justify-between p-2 space-x-3 rounded-md no-underline text-inherit"
 						@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); goToChats(); }">
 						<div class="flex items-center space-x-3">
-							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-									stroke-width="2"
-									d="m5.6 19.92l1.524-1.219l.01-.008c.318-.255.479-.383.658-.474c.16-.082.331-.142.508-.178c.199-.041.406-.041.822-.041h8.681c1.118 0 1.678 0 2.105-.218a2 2 0 0 0 .874-.874C21 16.48 21 15.92 21 14.804V7.197c0-1.118 0-1.678-.218-2.105a2.001 2.001 0 0 0-.875-.874C19.48 4 18.92 4 17.8 4H6.2c-1.12 0-1.68 0-2.108.218a1.999 1.999 0 0 0-.874.874C3 5.52 3 6.08 3 7.2v11.471c0 1.066 0 1.599.218 1.872a1 1 0 0 0 .783.377c.35 0 .766-.334 1.599-1Z" />
-							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3C6.75 3 2.5 6.53 2.5 10.88c0 2.42 1.31 4.58 3.37 6.02c-.08 1.2-.5 2.3-1.2 3.2c-.27.35.01.85.44.78c1.98-.32 3.6-1.14 4.78-2.08c.68.12 1.38.19 2.11.19c5.25 0 9.5-3.53 9.5-7.88S17.25 3 12 3"/></svg>
 							<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Chats') }}</span>
 						</div>
 						<span v-if="parseInt(unreadMessages) > 0"
@@ -89,11 +82,7 @@
 				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/contact') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/contacts" class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-								stroke-width="2"
-								d="M8 4h-.8c-1.12 0-1.68 0-2.108.218a1.999 1.999 0 0 0-.874.874C4 5.52 4 6.08 4 7.2v9.6c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.427.218.987.218 2.105.218H8M8 4h8.8c1.12 0 1.68 0 2.107.218c.377.192.683.497.875.874c.218.427.218.987.218 2.105v9.607c0 1.118 0 1.677-.218 2.104a2.002 2.002 0 0 1-.875.874c-.427.218-.986.218-2.104.218H8M8 4v16m4-9h4m-4-3h4" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M9 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8m0 1.6c-3.6 0-6.5 1.9-6.5 4.3v.9c0 .66.54 1.2 1.2 1.2h10.6c.66 0 1.2-.54 1.2-1.2v-.9c0-2.4-2.9-4.3-6.5-4.3M17 11.5a3.25 3.25 0 1 0 0-6.5a3.25 3.25 0 0 0 0 6.5m1.1 1.7h-1.9c1.35 1.04 2.2 2.47 2.2 4.1v.9c0 .28-.05.55-.14.8h3.34c.66 0 1.2-.54 1.2-1.2v-.6c0-2.2-2.1-4-4.7-4"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Contacts') }}</span>
 					</Link>
 				</li>
@@ -101,10 +90,7 @@
 					:class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/campaigns"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
-							<path fill="currentColor"
-								d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M2.4 11.23L20.1 3.12c.72-.33 1.47.42 1.14 1.14l-8.11 17.7c-.34.74-1.42.64-1.62-.15l-1.6-6.24l-6.24-1.6c-.79-.2-.89-1.28-.15-1.62z"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Campaigns') }}</span>
 					</Link>
 				</li>
@@ -112,10 +98,7 @@
 					:class="$page.url.startsWith('/template') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/templates"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32">
-							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"
-								d="M12 15h8m-8 4h8m8 5V11c0-1.105-.892-2-1.997-2H17c-2 0-2-3-5-3H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2Z" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H7a2.5 2.5 0 0 0-2.5 2.5v15A2.5 2.5 0 0 0 7 22h10a2.5 2.5 0 0 0 2.5-2.5V7.5zm.5 1.9l3.6 3.6h-3.6zM8.5 12h7a.9.9 0 1 1 0 1.8h-7a.9.9 0 1 1 0-1.8m0 4h7a.9.9 0 1 1 0 1.8h-7a.9.9 0 1 1 0-1.8"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Message templates') }}</span>
 					</Link>
 				</li>
@@ -123,10 +106,7 @@
 					:class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/automation/basic"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32">
-							<path fill="currentColor"
-								d="M16 27c-3.6 0-7.1-1.8-9.2-5H12v-2H4v8h2v-3.7c2.5 3 6.1 4.7 10 4.7zm15-4v-2h-2.1c-.1-.6-.4-1.2-.7-1.8l1.5-1.5l-1.4-1.4l-1.5 1.5c-.5-.3-1.1-.6-1.8-.7V15h-2v2.1c-.6.1-1.2.4-1.8.7l-1.5-1.5l-1.4 1.4l1.5 1.5c-.3.5-.6 1.1-.7 1.8H17v2h2.1c.1.6.4 1.2.7 1.8l-1.5 1.5l1.4 1.4l1.5-1.5c.5.3 1.1.6 1.8.7V29h2v-2.1c.6-.1 1.2-.4 1.8-.7l1.5 1.5l1.4-1.4l-1.5-1.5c.3-.5.6-1.1.7-1.8zm-7 2c-1.7 0-3-1.3-3-3s1.3-3 3-3s3 1.3 3 3s-1.3 3-3 3m-4-15h5.2C21.9 4.9 15.1 3.5 10 6.8c-3.1 2-5 5.5-5 9.2H3C3 8.8 8.8 3 16 3c3.9 0 7.5 1.7 10 4.7V4h2v8h-8z" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M13.4 2.2L4.6 13.1c-.4.5-.05 1.25.6 1.25H10l-1.4 7.35c-.15.8.87 1.28 1.38.64l8.8-10.9c.4-.5.05-1.25-.6-1.25H14l1.4-7.35c.15-.8-.87-1.28-1.38-.64z"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Automation') }}</span>
 					</Link>
 				</li>
@@ -142,9 +122,7 @@
 						:class="isReportsActive || reportsOpen ? 'bg-slate-50 text-black' : ''"
 						:aria-expanded="reportsOpen" aria-haspopup="true">
 						<span class="flex items-center space-x-3 truncate">
-							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>
-							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="currentColor"><rect x="3" y="12" width="4.2" height="9" rx="1.4"/><rect x="9.9" y="6" width="4.2" height="15" rx="1.4"/><rect x="16.8" y="9" width="4.2" height="12" rx="1.4"/></g></svg>
 							<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Reports') }}</span>
 						</span>
 						<svg v-if="!menuIconsOnly" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
@@ -157,11 +135,7 @@
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/team" class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-								stroke-width="2"
-								d="M17 20c0-1.657-2.239-3-5-3s-5 1.343-5 3m14-3c0-1.23-1.234-2.287-3-2.75M3 17c0-1.23 1.234-2.287 3-2.75m12-4.014a3 3 0 1 0-4-4.472m-8 4.472a3 3 0 0 1 4-4.472M12 14a3 3 0 1 1 0-6a3 3 0 0 1 0 6Z" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M8 12a3.5 3.5 0 1 0 0-7a3.5 3.5 0 0 0 0 7m0 1.5c-3.2 0-5.8 1.7-5.8 3.9v1.1c0 .55.45 1 1 1h9.6c.55 0 1-.45 1-1v-1.1c0-2.2-2.6-3.9-5.8-3.9m9.5-2a3 3 0 1 0 0-6a3 3 0 0 0 0 6m.6 1.6h-1.5c1.15.95 1.85 2.2 1.85 3.6v1.1c0 .28-.05.55-.14.8H21c.55 0 1-.45 1-1v-.7c0-2-1.75-3.6-3.9-3.8"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Team') }}</span>
 					</Link>
 				</li>
@@ -169,20 +143,12 @@
 					:class="$page.url.startsWith('/settings') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/settings"
 						class="md:flex items-center p-2 space-x-3 rounded-md hidden">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
-							<path fill="currentColor" fill-rule="evenodd"
-								d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z"
-								clip-rule="evenodd" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.31-.09.63-.09.94s.02.63.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
 					</Link>
 					<Link rel="noopener noreferrer" href="/settings/m"
 						class="flex items-center p-2 space-x-3 rounded-md md:hidden">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
-							<path fill="currentColor" fill-rule="evenodd"
-								d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z"
-								clip-rule="evenodd" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.31-.09.63-.09.94s.02.63.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
 					</Link>
 				</li>
@@ -190,11 +156,7 @@
 					:class="$page.url.startsWith('/settings/devices') || $page.url.startsWith('/settings/device') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/settings/devices"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
-							<path fill="currentColor" fill-rule="evenodd"
-								d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z"
-								clip-rule="evenodd" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 2h-7A2.5 2.5 0 0 0 6 4.5v15A2.5 2.5 0 0 0 8.5 22h7a2.5 2.5 0 0 0 2.5-2.5v-15A2.5 2.5 0 0 0 15.5 2M12 20.4a1.1 1.1 0 1 1 0-2.2a1.1 1.1 0 0 1 0 2.2M16.2 5H7.8v11.2h8.4z"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Linked Devices') }}</span>
 					</Link>
 				</li>
@@ -202,20 +164,14 @@
 					:class="$page.url.startsWith('/settings/shortcuts') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/settings/shortcuts"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M4 17l6-6l-6-6"/><path d="M12 19h8"/>
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m2 3v2h2V8zm4 0v2h2V8zm4 0v2h2V8zm4 0v2h2V8zM6 12v2h2v-2zm4 0v2h8v-2zm-4 4v2h12v-2z"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Shortcuts') }}</span>
 					</Link>
 				</li>
 				<li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-							<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-								stroke-width="2"
-								d="M3 11v4.8c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.427.218.987.218 2.105.218h11.606c1.118 0 1.677 0 2.104-.218c.377-.192.683-.498.875-.874c.218-.428.218-.986.218-2.104V11M3 11V9m0 2h18M3 9v-.8c0-1.12 0-1.68.218-2.108c.192-.377.497-.682.874-.874C4.52 5 5.08 5 6.2 5h11.6c1.12 0 1.68 0 2.107.218c.377.192.683.497.875.874c.218.427.218.987.218 2.105V9M3 9h18M7 15h4m10-4V9" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20 4H4a2.5 2.5 0 0 0-2.5 2.5V8h21V6.5A2.5 2.5 0 0 0 20 4M1.5 10v7.5A2.5 2.5 0 0 0 4 20h16a2.5 2.5 0 0 0 2.5-2.5V10zM5 15.5h4a.9.9 0 1 1 0 1.8H5a.9.9 0 1 1 0-1.8"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Billing and subscription') }}</span>
 						</Link>
 					</li>
@@ -223,11 +179,7 @@
 				<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 					:class="$page.url.startsWith('/support') && !$page.url.startsWith('/support/meetings') ? 'bg-slate-50 text-black' : ''">
 					<Link rel="noopener noreferrer" href="/support" class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-							<path fill="currentColor" fill-rule="evenodd"
-								d="M12.26 21.997a10.276 10.276 0 0 1-.52 0a10.004 10.004 0 0 1-8.983-6.173a10.034 10.034 0 0 1 .017-7.69A10.015 10.015 0 0 1 4.908 4.95l.042-.042a10.015 10.015 0 0 1 3.167-2.126a10.034 10.034 0 0 1 7.753-.006a10.015 10.015 0 0 1 3.186 2.138l.03.03c.913.917 1.65 2.01 2.153 3.223a10.012 10.012 0 0 1 .76 3.985a10.004 10.004 0 0 1-6.226 9.112a10.013 10.013 0 0 1-3.512.733Zm1.772-6.55l2.874 2.873a8.004 8.004 0 0 1-9.812 0l2.874-2.874a4.007 4.007 0 0 0 4.064 0Zm-5.478-1.415L5.68 16.906a8.004 8.004 0 0 1 0-9.812l2.874 2.874a4.007 4.007 0 0 0 0 4.064Zm1.528-1.463a2.01 2.01 0 0 1-.014-1.087a1.99 1.99 0 0 1 .518-.896a1.99 1.99 0 0 1 1.932-.518c.328.088.639.26.896.518a1.99 1.99 0 0 1 .518 1.932c-.088.328-.26.639-.518.896a1.99 1.99 0 0 1-1.932.518a1.991 1.991 0 0 1-.896-.518a1.99 1.99 0 0 1-.504-.845Zm3.95-4.015a4.007 4.007 0 0 0-4.064 0L7.094 5.68a8.004 8.004 0 0 1 9.812 0l-2.874 2.874Zm4.288 8.352a8.004 8.004 0 0 0 0-9.812l-2.874 2.874a4.007 4.007 0 0 1 0 4.064l2.874 2.874Z"
-								clip-rule="evenodd" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20a10 10 0 0 0 0-20m0 3.4c1.28 0 2.47.36 3.48.98l-2.2 2.2a3.4 3.4 0 0 0-2.56 0l-2.2-2.2A6.6 6.6 0 0 1 12 5.4M5.4 12c0-1.28.36-2.47.98-3.48l2.2 2.2a3.4 3.4 0 0 0 0 2.56l-2.2 2.2A6.6 6.6 0 0 1 5.4 12m6.6 6.6a6.6 6.6 0 0 1-3.48-.98l2.2-2.2a3.4 3.4 0 0 0 2.56 0l2.2 2.2c-1.01.62-2.2.98-3.48.98m3.62-4.32a3.4 3.4 0 0 0 0-2.56l2.2-2.2a6.57 6.57 0 0 1 0 6.96zM12 14a2 2 0 1 1 0-4a2 2 0 0 1 0 4"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Support') }}</span>
 						</Link>
 					</li>
@@ -236,11 +188,7 @@
 					<li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
 						:class="$page.url.startsWith('/support/meetings') ? 'bg-slate-50 text-black' : ''">
 						<Link rel="noopener noreferrer" href="/support/meetings" class="flex items-center p-2 space-x-3 rounded-md">
-							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-									stroke-width="2"
-									d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm7 10h.01" />
-							</svg>
+							<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a2.5 2.5 0 0 1 2.5 2.5V9h-19V6.5A2.5 2.5 0 0 1 5 4h1V3a1 1 0 0 1 1-1M2.5 11v8.5A2.5 2.5 0 0 0 5 22h14a2.5 2.5 0 0 0 2.5-2.5V11zm5 3h3v3h-3z"/></svg>
 							<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Book a meeting') }}</span>
 					</Link>
 				</li>
@@ -248,12 +196,7 @@
 					class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate">
 					<Link rel="noopener noreferrer" href="/developer-tools/access-tokens"
 						class="flex items-center p-2 space-x-3 rounded-md">
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-							<path fill="currentColor"
-								d="M7.312 9H5.688L3.5 15h1.607l.446-1.226h1.894L7.893 15H9.5Zm-1.394 3.774L6.5 11.18l.582 1.595ZM14.744 9h-3.5v6h1.5v-2h2a1.473 1.473 0 0 0 1.5-1.5v-1a1.473 1.473 0 0 0-1.5-1.5m0 2.5h-2v-1h2ZM18 9h1.5v6H18z" />
-							<path fill="currentColor"
-								d="M22 6v12H2V6zm0-2H2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2" />
-						</svg>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M5 2h14a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3m1.9 5.3a1 1 0 0 0 0 1.4L9.1 11l-2.2 2.3a1 1 0 1 0 1.4 1.4l3-3a1 1 0 0 0 0-1.4l-3-3a1 1 0 0 0-1.4 0M12.5 16a1 1 0 1 0 0 2h4.6a1 1 0 1 0 0-2z"/></svg>
 						<span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Developer Tools') }}</span>
 					</Link>
 				</li>

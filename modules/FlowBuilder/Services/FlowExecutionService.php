@@ -53,6 +53,16 @@ class FlowExecutionService
             // Find the current step for the user in the flow
             $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
             $flowId = null;
+
+            // جلسة ركدت أطول من مهلة الـ flow تُهجر.
+            //
+            // العميل الذي سُئل «اختر 1 أو 2» ثم اختفى تبقى جلسته مفتوحة —
+            // فكلمته بعد ثلاثة أيام تُقرأ إجابةً على سؤال قديم. المهلة تُنهي
+            // الجلسة فيبدأ محادثةً جديدة.
+            if ($flowData && $this->sessionHasExpired($flowData, $chat)) {
+                FlowUserData::where('contact_id', $chat->contact_id)->delete();
+                $flowData = null;
+            }
 		//	logger('--inside execute flow');
             if($flowData && $flowData->exists){
                 // Check if the flow still exists in the database
@@ -108,46 +118,7 @@ class FlowExecutionService
 
             // If flowData doesn't exist or was deleted, proceed with flow determination logic
             if(!$flowData){
-				// logger('--frow new flow');
-                // Determine the flow based on trigger type
-                $flowQuery = Flow::where('organization_id', $chat->organization_id)->where('status', 'active');
-                $flow = null;
-
-                //Check if any flow trigger has been hit
-                if($isNewContact){
-					// logger('--frow is new contact');
-                    $flow = $flowQuery->where('trigger', 'new_contact')->first();
-                } else {
-                    $msg = strtolower(trim($message)); // Normalize the message
-                    $words = explode(' ', $msg); // Split message into individual words
- 					// logger('--from else new');
-                    $conditions = [];
-                    $bindings = [];
-
-                    // Condition to match the full message (as a sentence or phrase)
-                    $conditions[] = "FIND_IN_SET(?, keywords)";
-                    $bindings[] = $msg; // Add the full message (spaces stripped, like in DB)
-						
-                    // Add individual word checks
-                    foreach ($words as $word) {
-						// logger('--from word'.$word);
-                        $word = strtolower(trim($word));
-                        $conditions[] = "FIND_IN_SET(?, keywords)";
-                        $bindings[] = $word;
-                    }
-					// logger('--from final query');
-                    $flow = \DB::table('flows')->whereRaw(
-                        '( `trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
-                        array_merge(['keywords', $chat->organization_id, 'active'], $bindings)
-                    )->first();
-					// if($flow){
-					// 	logger('--from flow'.$flow->id);
-					// } else {
-					// 	logger('--from flow not found');
-					// }
-
-                    //Log::info(json_encode($flow));
-                }
+                $flow = $this->resolveTriggeredFlow($chat, $isNewContact, $message);
 
                 // Set the flow ID if a matching flow is found
                 if ($flow) {
@@ -184,6 +155,166 @@ class FlowExecutionService
 		// logger('not founnnd return false');
             return false;
         }
+    }
+
+    /**
+     * اختيار الـ flow الذي تُشغّله هذه الرسالة.
+     *
+     * الترتيب مقصود:
+     *   1. first_message — أول رسالة يكتبها العميل في عمره
+     *   2. new_contact   — صفّ جهة الاتصال أُنشئ بهذه الرسالة
+     *   3. keywords      — الرسالة تطابق كلمة مفتاحية
+     *
+     * first_message يسبق new_contact لأنه أدقّ: new_contact يسأل «هل الرقم
+     * جديد في قاعدة البيانات؟» لا «هل هذه أول مرة يكلّمنا فيها؟». والرقم
+     * يدخل النظام من الاستيراد والحملات والإضافة اليدوية قبل أن يكتب صاحبه
+     * حرفاً، فيفوت الترحيب على أكثر العملاء.
+     *
+     * @param  object  $chat
+     * @param  bool    $isNewContact
+     * @param  string  $message
+     * @return object|null
+     */
+    public function resolveTriggeredFlow($chat, $isNewContact, $message)
+    {
+        $flowQuery = Flow::where('organization_id', $chat->organization_id)
+            ->where('status', 'active');
+
+        if ($this->isFirstInboundMessage($chat)) {
+            $flow = (clone $flowQuery)->where('trigger', 'first_message')
+                ->orderBy('id')
+                ->first();
+
+            if ($flow) {
+                return $flow;
+            }
+        }
+
+        if ($isNewContact) {
+            return (clone $flowQuery)->where('trigger', 'new_contact')
+                ->orderBy('id')
+                ->first();
+        }
+
+        $flow = $this->findFlowByKeyword(
+            strtolower(trim((string) $message)),
+            (int) $chat->organization_id
+        );
+
+        if ($flow) {
+            return $flow;
+        }
+
+        // آخر ما يُجرَّب: هل بدأ العميل محادثةً جديدة بعد صمت طال؟
+        //
+        // موضعها بعد الكلمات المفتاحية مقصود: من كتب كلمةً لها flow خاص
+        // يريد ذلك الـ flow لا الترحيب. وهكذا لا يتغيّر شيء ممّا كان يعمل،
+        // وإنما يُملأ الفراغ الذي كان لا يحدث فيه شيء إطلاقاً.
+        return $this->findTimedOutFlow($chat);
+    }
+
+    /**
+     * flow انقضت مهلته: العميل عاد بعد صمت أطول من `trigger_timeout`.
+     *
+     * الفجوة تُقاس بين هذه الرسالة والواردة التي سبقتها — وهو ما يعرّف
+     * «محادثة جديدة» عملياً بلا تخزين إضافي.
+     *
+     * المهلة تخصّ المحفّزين اللذين يشتغلان مرّة واحدة (first_message
+     * وnew_contact). أمّا keywords فيعيد نفسه بالكلمة أصلاً.
+     */
+    private function findTimedOutFlow($chat)
+    {
+        $previousAt = \DB::table('chats')
+            ->where('contact_id', $chat->contact_id)
+            ->where('type', 'inbound')
+            ->where('id', '<', $chat->id)
+            ->orderByDesc('id')
+            ->value('created_at');
+
+        if ($previousAt === null) {
+            return null; // لا رسالة سابقة — يغطّيها first_message
+        }
+
+        $minutes = $this->minutesSince($previousAt, $chat);
+
+        if ($minutes === null) {
+            return null;
+        }
+
+        return Flow::where('organization_id', $chat->organization_id)
+            ->where('status', 'active')
+            ->whereIn('trigger', ['first_message', 'new_contact'])
+            ->whereNotNull('trigger_timeout')
+            ->where('trigger_timeout', '>', 0)
+            ->where('trigger_timeout', '<=', $minutes)
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * هل ركدت الجلسة أطول من مهلة الـ flow الذي تخصّه؟
+     *
+     * flow بلا مهلة لا تنتهي جلسته — السلوك القديم يبقى لمن لم يضبط شيئاً.
+     */
+    private function sessionHasExpired($flowData, $chat): bool
+    {
+        $timeout = (int) Flow::where('id', $flowData->flow_id)->value('trigger_timeout');
+
+        if ($timeout <= 0) {
+            return false;
+        }
+
+        $minutes = $this->minutesSince($flowData->updated_at, $chat);
+
+        return $minutes !== null && $minutes >= $timeout;
+    }
+
+    /**
+     * الدقائق بين وقتٍ ماضٍ ووقت هذه الرسالة.
+     *
+     * وقت الرسالة يُقرأ من القاعدة لا من الموديل: خاصية created_at تمرّ
+     * بمحوّل يُخرجها بتوقيت المنشأة نصّاً، فطرحها من طابع UTC يُنتج فرقاً
+     * بمقدار إزاحة المنطقة الزمنية.
+     */
+    private function minutesSince($since, $chat): ?int
+    {
+        if (empty($since)) {
+            return null;
+        }
+
+        $currentAt = \DB::table('chats')->where('id', $chat->id)->value('created_at');
+
+        if (empty($currentAt)) {
+            return null;
+        }
+
+        try {
+            $from = \Illuminate\Support\Carbon::parse($since, 'UTC');
+            $to = \Illuminate\Support\Carbon::parse($currentAt, 'UTC');
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return (int) $from->diffInMinutes($to, true);
+    }
+
+    /**
+     * هل هذه أوّل رسالة واردة من هذا العميل على الإطلاق؟
+     *
+     * تُقاس بالمعرّف لا بالوقت: رسالتان في الثانية نفسها تحملان الطابع
+     * الزمني نفسه، فالأقدم وحدها تُعدّ الأولى.
+     *
+     * والمحذوفة تُحسب: حذف موظّفٍ للمحادثة لا يجعل العميل جديداً، وإلا
+     * تكرّرت رسالة الترحيب مع كل حذف عابر. لذلك نستعلم بـ DB لا بالموديل —
+     * الأخير يستبعد المحذوف تلقائياً.
+     */
+    public function isFirstInboundMessage($chat): bool
+    {
+        return !\DB::table('chats')
+            ->where('contact_id', $chat->contact_id)
+            ->where('type', 'inbound')
+            ->where('id', '<', $chat->id)
+            ->exists();
     }
 
     public function hasActiveFlow($chat){
@@ -981,10 +1112,12 @@ class FlowExecutionService
             $bindings[]   = $word;
         }
 
+        // ترتيب حاسم: أكثر من flow نشط بنفس الكلمة كان يُنتج اختياراً عشوائياً
+        // يتغيّر بين استعلام وآخر. الأقدم يفوز.
         $flow = \DB::table('flows')->whereRaw(
             '(`trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
             array_merge(['keywords', $organizationId, 'active'], $bindings)
-        )->first();
+        )->orderBy('id')->first();
 
         return $flow ?: null;
     }

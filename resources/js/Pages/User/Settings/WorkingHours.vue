@@ -1,7 +1,15 @@
 <template>
 	<SettingLayout :modules="props.modules">
-		<div class="md:h-[90vh]">
-			<div class="flex justify-center items-center">
+		<!--
+			min-h لا h، وitems-start لا items-center.
+			الارتفاع الثابت مع التوسيط الرأسي كان يُفيض الصندوق من أعلى وأسفل
+			معاً متى طال بالفترات المضافة، والفائض من أعلى لا يُبلَغ بالتمرير.
+			والحدّ الأدنى وحده لا يكفي: الصندوق يبقى متوسّطاً فينزل نصفه تحت
+			حافة عمود التمرير. البداية من الأعلى تجعل ما يزيد يقع في اتجاه
+			واحد يمرّره العمود.
+		-->
+		<div class="md:min-h-[90vh]">
+			<div class="flex justify-center items-start">
 				<div class="md:w-[60em] w-full">
 					<div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4 px-4 pb-6">
 						<div class="w-full py-2 mb-2 mt-2">

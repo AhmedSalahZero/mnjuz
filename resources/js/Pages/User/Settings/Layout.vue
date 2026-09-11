@@ -1,6 +1,13 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-10 px-4 md:pt-8 md:py-8 md:pl-8 md:pr-0 rounded-[5px] text-[#000] overflow-y-hidden">
+        <!--
+            عمود بارتفاع الشاشة: صفّ التطبيق مثبّت على h-screen ولا يمرّر،
+            فما تجاوز الشاشة من محتوى الإعدادات كان يقع خارجها بلا سبيل إليه
+            — يضيف المستخدم فترات دوام فينزل زرّا «إضافة» و«حفظ» تحت الحافة.
+            بجعل هذه الحاوية عموداً بارتفاع الشاشة يصير لعمود المحتوى ارتفاع
+            محدّد، فيعمل overflow-y-auto الموجود فيه أصلاً ويمرّر ما زاد.
+        -->
+        <div class="bg-white md:bg-inherit pt-10 px-4 md:pt-8 md:py-8 md:pl-8 md:pr-0 rounded-[5px] text-[#000] overflow-y-hidden md:h-screen md:flex md:flex-col">
             <div class="flex justify-between">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('General settings') }}</h2>
@@ -11,8 +18,8 @@
                 </div>
             </div>
         
-            <div class="flex mt-4">
-                <div class="md:w-1/5 bg-white border border-slate-200 h-[fit-content] rounded-lg pb-10 md:block hidden">
+            <div class="flex mt-4 md:flex-1 md:min-h-0">
+                <div class="md:w-1/5 bg-white border border-slate-200 h-[fit-content] rounded-lg pb-10 md:block hidden md:self-start md:max-h-full md:overflow-y-auto">
                     <ul class="pt-2 space-y-1 text-sm mb-2 px-2">
                         <li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url === '/settings' ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings" class="flex items-center p-2 space-x-3 rounded-md">

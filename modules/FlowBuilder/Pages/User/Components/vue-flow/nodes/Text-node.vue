@@ -6,6 +6,7 @@ import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import { Menubar, MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } from '@modules/FlowBuilder/Pages/User/Components/ui/menubar'
 
 import FormInput from '@/Components/FormInput.vue';
+import { nextNodeId } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowNodes.js'
 import type { NodeProps } from '@vue-flow/core'
 
 const props = defineProps<NodeProps>()
@@ -41,7 +42,9 @@ function handleClickDeleteBtn() {
 function handleClickDuplicateBtn() {
   const { type, position, label, data } = node.node
   const newNode = {
-    id: (nodes.value.length + 1).toString(),
+    // معرّف فريد: «عدد العقد + 1» كان يصطدم بمعرّف عقدة موجودة، وعقدتان
+    // بمعرّف واحد تجعلان توصيل إحداهما يحذف وصلة الأخرى.
+    id: nextNodeId(nodes.value),
     type,
     position: {
       x: position.x + 100,

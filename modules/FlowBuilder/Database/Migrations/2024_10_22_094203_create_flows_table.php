@@ -14,8 +14,9 @@ class CreateFlowsTable extends Migration
             $table->unsignedBigInteger('organization_id');
             $table->string('name');
             $table->text('description')->nullable();
-            $table->enum('trigger', ['new_contact', 'keywords'])->nullable();
+            $table->enum('trigger', ['new_contact', 'keywords', 'first_message'])->nullable();
             $table->text('keywords')->nullable();
+            $table->unsignedInteger('trigger_timeout')->nullable();
             $table->text('metadata')->nullable();
             $table->enum('status', ['active', 'inactive'])->default('inactive');
             $table->timestamps();

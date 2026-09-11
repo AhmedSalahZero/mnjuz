@@ -69,6 +69,12 @@ class FlowService
             $data2['trigger'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.type', null);
             $data2['keywords'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null);
 
+            // المهلة بالدقائق: الفراغ غيابٌ لا صفر — و(int)'' يساوي صفراً
+            // فتُحفظ مهلةً معطّلة بدل ألّا تُحفظ.
+            $timeout = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.timeout', null);
+            $timeout = is_numeric($timeout) ? (int) $timeout : null;
+            $data2['trigger_timeout'] = ($timeout !== null && $timeout > 0) ? $timeout : null;
+
             $result = $validator->validateMessageNodes($metadataArray);
 
             if(is_array($result)){

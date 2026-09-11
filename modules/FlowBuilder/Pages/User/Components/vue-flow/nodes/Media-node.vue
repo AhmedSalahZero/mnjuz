@@ -9,6 +9,7 @@ import FormInput from '@/Components/FormInput.vue';
 import FormSelect from '@/Components/FormSelect.vue';
 import type { NodeProps } from '@vue-flow/core'
 import FlowMedia from '@modules/FlowBuilder/Pages/User/Components/vue-flow/FlowMedia.vue'
+import { duplicateNode } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowNodes.js'
 
 const props = defineProps<NodeProps>()
 const title = ref(props.data.title)
@@ -69,18 +70,9 @@ function handleClickDeleteBtn() {
 }
 
 function handleClickDuplicateBtn() {
-  const { type, position, label, data } = node.node
-  const newNode = {
-    id: (nodes.value.length + 1).toString(),
-    type,
-    position: {
-      x: position.x + 100,
-      y: position.y + 100
-    },
-    label,
-    data
-  }
-  addNodes(newNode)
+  // معرّف فريد وبيانات مستقلّة: «عدد العقد + 1» كان يصطدم بمعرّف موجود،
+  // وتمرير `data` نفسه كان يجعل النسخة والأصل حقلًا واحدًا.
+  addNodes(duplicateNode(node.node, nodes.value))
 }
 
 const countCharacters = (type) => {
