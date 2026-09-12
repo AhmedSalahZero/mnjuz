@@ -48,11 +48,23 @@ return new class extends Migration
         );
     }
 
+    /**
+     * هل يقبل العمود القيمة الجديدة أصلاً؟
+     *
+     * الاستعلام من information_schema لا بـ `SHOW COLUMNS ... LIKE ?`:
+     * MySQL لا يقبل معاملاً مربوطاً في جملة LIKE داخل SHOW، فيسقط النشر
+     * بخطأ صياغة (1064). وSHOW ... WHERE يقبله — والفرق غير بديهي، فالأسلم
+     * استعلامٌ قياسي يقبل الربط بلا التباس.
+     */
     private function hasFirstMessage(): bool
     {
-        $column = DB::selectOne('SHOW COLUMNS FROM `' . $this->table() . '` LIKE ?', ['trigger']);
+        $column = DB::selectOne(
+            'SELECT COLUMN_TYPE FROM information_schema.COLUMNS'
+            . ' WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            [$this->table(), 'trigger']
+        );
 
-        return $column !== null && str_contains((string) $column->Type, 'first_message');
+        return $column !== null && str_contains((string) $column->COLUMN_TYPE, 'first_message');
     }
 
     private function table(): string
