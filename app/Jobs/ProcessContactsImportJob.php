@@ -42,6 +42,19 @@ class ProcessContactsImportJob implements ShouldQueue
                 throw new \RuntimeException('Import file is missing or not readable.');
             }
 
+            // بلا معاملة واحدة تلفّ الاستيراد كلّه.
+            //
+            // Laravel Excel يفتح معاملةً واحدة من أوّل صفّ إلى آخره. وملف
+            // العميل قد يستغرق دقائق، فتُقطع الوصلة بالقاعدة في أثنائه
+            // (wait_timeout) ويُعاد الاتصال تلقائياً بلا معاملة — فيفشل
+            // الإقفال بـ «There is no active transaction» ويضيع الاستيراد
+            // كلّه بعد انتظار طويل.
+            //
+            // ولا حاجة إليها أصلاً: الاستيراد يُدخل الصفوف على دفعات مستقلّة،
+            // وصفٌّ فاسد يُتخطّى ويُحصى في التقرير. فالجزئي أنفع للعميل من
+            // اللاشيء.
+            config(['excel.transactions.handler' => null]);
+
             $import = new ContactsImport($this->organizationId, $this->userId);
             Excel::import($import, $absolutePath);
 

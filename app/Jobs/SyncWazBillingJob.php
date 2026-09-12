@@ -78,18 +78,33 @@ class SyncWazBillingJob implements ShouldQueue
 
         $sync->syncPayment($payment);
 
-        // syncPayment تنصرف بصمت إذا لم تكن الفاتورة جاهزة — والدفعة تُنشأ قبل
-        // فاتورتها في نفس المعاملة، فقد تصل هذه الوظيفة و`invoice_id` بعدُ
-        // فارغ. الانصراف بلا استثناء يعني ألّا تُعاد المحاولة أبداً فتضيع
-        // الدفعة من نظام المحاسبة. نُطلقها من جديد بعد مهلة.
-        if (!$payment->fresh()?->waz_synced_at && $sync->companyId((int) $payment->organization_id)) {
+        if ($payment->fresh()?->waz_synced_at || !$sync->companyId((int) $payment->organization_id)) {
+            return;
+        }
+
+        // الانتظار محدود بمحاولتين.
+        //
+        // الدفعة تُنشأ قبل فاتورتها في نفس المعاملة، فقد تصل هذه الوظيفة
+        // و`invoice_id` بعدُ فارغ — وهذا سباق يزول في دقائق. أمّا شحن الرصيد
+        // فدفعةٌ بلا فاتورة أبداً: لا شيء يُنتظر. وكان الإطلاق غير المحدود
+        // يُعيدها خمس مرّات ثم يرميها في failed_jobs بـ
+        // MaxAttemptsExceededException — خطأ في Sentry عن حالة سليمة تماماً.
+        if ($this->attempts() < 3) {
             Log::info('Waz billing sync: payment not ready, releasing for retry', [
                 'payment_id' => $payment->id,
                 'invoice_id' => $payment->invoice_id,
+                'attempt' => $this->attempts(),
             ]);
 
             $this->release(120);
+
+            return;
         }
+
+        Log::info('Waz billing sync: payment has no invoice to sync, giving up', [
+            'payment_id' => $payment->id,
+            'organization_id' => $payment->organization_id,
+        ]);
     }
 
     public function failed(Throwable $e): void

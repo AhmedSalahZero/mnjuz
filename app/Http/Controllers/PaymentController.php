@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller as BaseController;
 use App\Resolvers\PaymentPlatformResolver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class PaymentController extends BaseController
@@ -18,6 +19,25 @@ class PaymentController extends BaseController
 
     public function processPayment(Request $request, $processor)
     {
+        // بوّابة غير مُهيّأة تُرجع العميل إلى الفوترة برسالة مفهومة.
+        //
+        // كان المُحلِّل يرمي استثناءً فيرى العميل صفحة 500 بعد عودته من صفحة
+        // الدفع — لا يدري أدُفع ماله أم لا. والسبب غالباً بوّابة معروضة في
+        // الواجهة وإعداداتها ناقصة على الخادم.
+        if (!$this->paymentPlatformResolver->isSupported($processor)) {
+            Log::warning('Unsupported payment processor requested', [
+                'processor' => $processor,
+                'organization_id' => session()->get('current_organization'),
+            ]);
+
+            return redirect('/billing')->with(
+                'status', [
+                    'type' => 'error',
+                    'message' => __('The selected payment method is not available. Please choose another method or contact support.'),
+                ]
+            );
+        }
+
         $paymentPlatform = $this->paymentPlatformResolver->resolveService($processor);
         session()->put('paymentPlatform', $processor);
 

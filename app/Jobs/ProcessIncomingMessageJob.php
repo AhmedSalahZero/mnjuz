@@ -48,7 +48,16 @@ class ProcessIncomingMessageJob implements ShouldQueue
             // }
 
             // ✅ الحصول على/إنشاء contact
-            [$contact, $isNewContact] = $this->getOrCreateContact();
+            $resolved = $this->getOrCreateContact();
+
+            // رسالة بلا مُرسِل لا سبيل إلى معالجتها، وإعادة المحاولة لن تُغيّر
+            // شيئاً — الحمولة نفسها ناقصة. ننصرف بهدوء بدل أن نُفشل الوظيفة
+            // خمس مرّات ونملأ Sentry بما لا حيلة فيه.
+            if ($resolved === null) {
+                return;
+            }
+
+            [$contact, $isNewContact] = $resolved;
             $this->updateContactNameIfNull($contact);
 
             $chat = $this->createChat($contact);
@@ -148,23 +157,31 @@ class ProcessIncomingMessageJob implements ShouldQueue
     //     return false;
     // }
 
-    private function getOrCreateContact(): array
+    /**
+     * جهة الاتصال المُرسِلة، أو null إن كانت الحمولة بلا مُرسِل.
+     *
+     * بعض حمولات واتساب تصل بلا "from" — رسائل النظام وبعض الأنواع غير
+     * المدعومة. القراءة المباشرة كانت ترمي «Undefined array key» غامضاً،
+     * فاستُبدل باستثناء واضح. لكن الاستثناء يُفشل الوظيفة فتُعاد خمس مرّات
+     * وتنتهي في failed_jobs — وإعادة المحاولة لا تُضيف مُرسِلاً إلى حمولة
+     * ناقصة. فالانصراف الهادئ مع تحذير مُسجَّل هو الصواب: لا ضجيج، والحمولة
+     * محفوظة في السجلّ لمن أراد تشخيصها.
+     *
+     * @return array{0: Contact, 1: bool}|null
+     */
+    private function getOrCreateContact(): ?array
     {
-        // بعض حمولات واتساب تصل بلا "from" — رسائل النظام وبعض الأنواع غير
-        // المدعومة. القراءة المباشرة كانت ترمي «Undefined array key» فيفشل
-        // الجوب، وتضيع رسالة العميل كاملةً بلا أثر عند العميل ولا عندنا.
-        // نرمي استثناءً واضحاً بدل تحذير PHP غامض، ونسجّل الحمولة لتُشخَّص.
         $from = $this->message['from'] ?? null;
 
         if ($from === null || $from === '') {
-            Log::warning('Incoming message has no sender', [
+            Log::warning('Incoming message has no sender, skipping', [
                 'organization_id' => $this->organizationId,
                 'message_id'      => $this->message['id'] ?? null,
                 'message_type'    => $this->message['type'] ?? null,
                 'keys'            => array_keys($this->message),
             ]);
 
-            throw new \RuntimeException('Incoming WhatsApp message has no "from" field.');
+            return null;
         }
 
         $phone = PhoneService::getE164Format('+' . ltrim($from, '+'));

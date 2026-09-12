@@ -97,8 +97,29 @@ class MyFatoorahPaymentProcessor
                 return;
             }
 
-            // دفعةٌ بلا فاتورة: المال دخل والخدمة لم تُسلَّم. كان هذا يمرّ
-            // صامتاً فلا يُكتشف إلّا حين يشتكي العميل — وكثيرون لا يشتكون.
+            // شحن الرصيد لا يُصدر فاتورة، وهذا صحيح لا عطل.
+            //
+            // الدفعة بلا خطة تنشّط الاشتراك إن كان منتهياً — فتُصدر فاتورة —
+            // وإلّا تُضاف إلى رصيد الحساب وحده (قيدها في billing_transactions
+            // هو ما يُحتسب منه الرصيد). فمن دفع مرّتين في دقيقة: الأولى جدّدت
+            // والثانية شحنت رصيداً. تسجيلها خطأً يُطلق تنبيهاً عن حالة سليمة
+            // ويُغرق السجلّ فيضيع الخطأ الحقيقي بينه.
+            $isTopUp = $planId === null || $planId === '' || $planId === 'topup';
+
+            if ($isTopUp) {
+                Log::info('Payment credited to account balance without an invoice', [
+                    'payment_id' => $payment->id,
+                    'organization_id' => $organizationId,
+                    'amount' => $amount,
+                    'currency' => $currency,
+                ]);
+
+                return;
+            }
+
+            // أمّا شراء خطة بلا فاتورة فعطلٌ حقيقي: المال دخل والخدمة لم
+            // تُسلَّم. كان هذا يمرّ صامتاً فلا يُكتشف إلّا حين يشتكي العميل —
+            // وكثيرون لا يشتكون.
             Log::error('Payment processed without producing an invoice', [
                 'payment_id' => $payment->id,
                 'organization_id' => $organizationId,
