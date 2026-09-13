@@ -1664,12 +1664,27 @@ class ApiController extends Controller
         if ($request->is('api/v1/*')) {
             $organizationId = $request->user()->current_mobile_organization_id;
         }
+		// `role` في هذه النقطة صلاحية العضو داخل المنشأة: owner أو manager
+		// أو agent.
+		//
+		// كانت تُرجع users.role — صلاحية على مستوى المنصّة كلّها قيمتها
+		// `user` لكل من ليس أدمن، أي 404 من 406 مستخدمين. فلا تميّز مالكاً
+		// من موظّف في نقطةٍ اسمها «أعضاء الفريق».
+		//
+		// الاستبدال صريح لا بترتيب الأعمدة: `users.*` تحمل role أيضاً،
+		// والاعتماد على أن المتأخّر يغلب المتقدّم سلوكٌ ضمنيّ يسهل أن ينقلب.
 		$rows = User::join('teams', 'users.id', '=', 'teams.user_id')
 		->where('teams.organization_id', $organizationId)
 		->whereNull('teams.deleted_at')
-		->select('users.*')
+		->select('users.*', 'teams.role as organization_role')
 		->get()
-		->makeHidden(['password','tfa_secret']);
+		->makeHidden(['password','tfa_secret'])
+		->map(function ($member) {
+			$member->role = $member->organization_role;
+			unset($member->organization_role);
+
+			return $member;
+		});
 		return response()->json([
 			'statusCode' => 200,
 			'success' => true,
