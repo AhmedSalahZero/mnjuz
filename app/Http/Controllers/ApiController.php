@@ -1648,6 +1648,20 @@ class ApiController extends Controller
         ], 200);
     }
 	
+    /**
+     * ترقيم ثابت لصلاحيات المنشأة.
+     *
+     * الصلاحية تُخزَّن نصّاً في teams.role بلا جدول ولا معرّف، وهذا الترقيم
+     * اصطلاح بيننا وبين التطبيق. فمتى نُشر لا يُغيَّر: تطبيقٌ مثبَّت على
+     * جهاز عميل يقرأ 2 على أنها «مدير»، وتبديل الرقم يجعله يعرض صلاحية
+     * ليست صلاحيته.
+     */
+    private const ORGANIZATION_ROLE_IDS = [
+        'owner' => 1,
+        'manager' => 2,
+        'agent' => 3,
+    ];
+
     public function listTeamMembers(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -1673,6 +1687,10 @@ class ApiController extends Controller
 		//
 		// الاستبدال صريح لا بترتيب الأعمدة: `users.*` تحمل role أيضاً،
 		// والاعتماد على أن المتأخّر يغلب المتقدّم سلوكٌ ضمنيّ يسهل أن ينقلب.
+		//
+		// و`role_id` ترقيم ثابت للصلاحية نفسها (self::ORGANIZATION_ROLE_IDS):
+		// الصلاحية عمود نصّي بلا جدول ولا معرّف، فالرقم اصطلاحٌ بيننا وبين
+		// التطبيق لا مفتاح في قاعدة البيانات — ولا يجوز تغييره بعد نشره.
 		$rows = User::join('teams', 'users.id', '=', 'teams.user_id')
 		->where('teams.organization_id', $organizationId)
 		->whereNull('teams.deleted_at')
@@ -1680,7 +1698,10 @@ class ApiController extends Controller
 		->get()
 		->makeHidden(['password','tfa_secret'])
 		->map(function ($member) {
-			$member->role = $member->organization_role;
+			$role = $member->organization_role;
+
+			$member->role = $role;
+			$member->role_id = self::ORGANIZATION_ROLE_IDS[$role] ?? null;
 			unset($member->organization_role);
 
 			return $member;

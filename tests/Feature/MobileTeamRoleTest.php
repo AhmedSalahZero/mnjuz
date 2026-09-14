@@ -132,7 +132,7 @@ class MobileTeamRoleTest extends TestCase
         $this->assertNotSame('admin', $members[$admin->id]['role'], 'لا صلاحية المنصّة');
     }
 
-    /** ولا حقل جديد: الاسم القديم وحده. */
+    /** ولا حقل صلاحية جديد: الاسم القديم وحده. */
     public function test_no_extra_role_field_is_added(): void
     {
         $this->member('agent');
@@ -141,6 +141,62 @@ class MobileTeamRoleTest extends TestCase
             $this->assertArrayNotHasKey('team_role', $member);
             $this->assertArrayNotHasKey('organization_role', $member);
         }
+    }
+
+    // ------------------------------------------------- ترقيم الصلاحية
+
+    /**
+     * ترقيم ثابت: owner=1 · manager=2 · agent=3.
+     *
+     * الصلاحية نصّ في teams.role بلا جدول ولا معرّف، فالرقم اصطلاح بيننا
+     * وبين التطبيق. وهذا الاختبار هو عقده المكتوب: تبديل أي رقم بعد النشر
+     * يجعل تطبيقاً مثبَّتاً يعرض صلاحية ليست صلاحية صاحبها.
+     */
+    public function test_the_role_numbering_is_fixed(): void
+    {
+        $manager = $this->member('manager');
+        $agent = $this->member('agent');
+
+        $members = $this->members();
+
+        $this->assertSame(1, $members[$this->owner->id]['role_id'], 'owner = 1');
+        $this->assertSame(2, $members[$manager->id]['role_id'], 'manager = 2');
+        $this->assertSame(3, $members[$agent->id]['role_id'], 'agent = 3');
+    }
+
+    /** والرقم يوافق النصّ دائماً — لا يفترقان. */
+    public function test_the_number_always_matches_the_name(): void
+    {
+        $this->member('manager');
+        $this->member('agent');
+
+        $expected = ['owner' => 1, 'manager' => 2, 'agent' => 3];
+
+        foreach ($this->members() as $member) {
+            $this->assertSame(
+                $expected[$member['role']],
+                $member['role_id'],
+                'الرقم لا يوافق «' . $member['role'] . '»'
+            );
+        }
+    }
+
+    /** وليس معرّف المستخدم ولا معرّف صفّ العضوية. */
+    public function test_the_number_is_not_a_row_identifier(): void
+    {
+        User::factory()->count(5)->create();
+
+        $agent = $this->member('agent');
+        $member = $this->members()[$agent->id];
+
+        $membershipId = DB::table('teams')
+            ->where('user_id', $agent->id)
+            ->where('organization_id', $this->organization->id)
+            ->value('id');
+
+        $this->assertSame(3, $member['role_id']);
+        $this->assertNotEquals($member['id'], $member['role_id'], 'ليس معرّف المستخدم');
+        $this->assertNotEquals($membershipId, $member['role_id'], 'ولا معرّف صفّ العضوية');
     }
 
     /** والحقول التي يقرأها التطبيق اليوم ما زالت موجودة. */
