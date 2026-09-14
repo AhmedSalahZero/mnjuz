@@ -343,10 +343,30 @@ class CampaignRetryService
             return;
         }
 
+        // حذفٌ للمجموعات الأخرى فقط، وإدراجٌ إن لم يكن عضواً بعد.
+        //
+        // كانت المعاملة تحذف عضويات العميل كلّها ثم تُدرج صفّ مجموعة
+        // الفاشلين — ولو كان فيها أصلاً. وحملةٌ تفشل لألف رقم تُشغّل ألف
+        // معاملة متوازية، كلّها تحذف وتُدرج في نطاق المفتاح نفسه من فهرس
+        // contact_group_id (مجموعة الفاشلين واحدة للحملة). فتتقاطع أقفالها
+        // ويقع Deadlock 1213 — رُصد في الإنتاج على المجموعة 10049.
+        //
+        // بهذا الشكل: العضوية القائمة لا تُمسّ، فيصير التكرار بلا كتابة
+        // أصلاً، ويضيق نطاق القفل إلى صفوف العميل وحده.
         DB::transaction(function () use ($log, $failedGroupId) {
             DB::table('contact_contact_group')
                 ->where('contact_id', $log->contact_id)
+                ->where('contact_group_id', '!=', $failedGroupId)
                 ->delete();
+
+            $alreadyMember = DB::table('contact_contact_group')
+                ->where('contact_id', $log->contact_id)
+                ->where('contact_group_id', $failedGroupId)
+                ->exists();
+
+            if ($alreadyMember) {
+                return;
+            }
 
             DB::table('contact_contact_group')->insert([
                 'contact_id' => $log->contact_id,
@@ -354,7 +374,10 @@ class CampaignRetryService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-        });
+        // والتضييق يُقلّل التقاطع ولا يُلغيه: جدول الوصل تحته مفاتيح أجنبية
+        // تأخذ أقفالاً على صفوف contacts، وهي صفوف يُحدّثها كل رسالة واردة.
+        // فالإعادة عند التقاطع هي ما توصي به MySQL نفسها في نصّ الخطأ.
+        }, 5);
     }
 
     private function isUniqueViolation(Throwable $e): bool

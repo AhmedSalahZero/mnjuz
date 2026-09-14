@@ -141,6 +141,42 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::post('/performance/heartbeat', [App\Http\Controllers\ApiController::class, 'performanceHeartbeat']);
 	Route::get('/list-teams', [App\Http\Controllers\ApiController::class, 'listTeamMembers']);
 
+	/*
+	|--------------------------------------------------------------------------
+	| نقاط التطبيق: التقارير والتذاكر والملف الشخصي والإعدادات والأتمتة
+	|--------------------------------------------------------------------------
+	| ما كان يفعله المستخدم في الويب وحده. المنشأة تأتي من التوكن لا من
+	| الجلسة، ومسارات الـ API بلا جلسة أصلاً.
+	*/
+
+	// التقارير — للمالك والمدير
+	Route::get('/reports/agent-performance', [App\Http\Controllers\Api\MobileReportController::class, 'agentPerformance']);
+	Route::get('/reports/ratings', [App\Http\Controllers\Api\MobileReportController::class, 'ratings']);
+	Route::delete('/reports/ratings/{uuid}', [App\Http\Controllers\Api\MobileReportController::class, 'deleteRating']);
+	Route::get('/reports/activity-log', [App\Http\Controllers\Api\MobileReportController::class, 'activityLog']);
+
+	// تذاكر الدعم — التغيير والإسناد لهما نقطتاهما أدناه منذ إصدار سابق
+	Route::get('/tickets', [App\Http\Controllers\Api\MobileTicketController::class, 'index']);
+	Route::get('/tickets/summary', [App\Http\Controllers\Api\MobileTicketController::class, 'summary']);
+
+	// الملف الشخصي
+	Route::get('/profile', [App\Http\Controllers\Api\MobileProfileController::class, 'show']);
+	Route::put('/profile', [App\Http\Controllers\Api\MobileProfileController::class, 'update']);
+	Route::put('/profile/password', [App\Http\Controllers\Api\MobileProfileController::class, 'updatePassword']);
+
+	// الإعدادات العامّة وأوقات العمل
+	Route::get('/settings/general', [App\Http\Controllers\Api\MobileSettingController::class, 'general']);
+	Route::post('/settings/general', [App\Http\Controllers\Api\MobileSettingController::class, 'updateGeneral']);
+	Route::get('/settings/working-hours', [App\Http\Controllers\Api\MobileSettingController::class, 'workingHours']);
+	Route::post('/settings/working-hours', [App\Http\Controllers\Api\MobileSettingController::class, 'updateWorkingHours']);
+
+	// الأتمتة الأساسية (الردود الجاهزة)
+	Route::get('/automation/basic', [App\Http\Controllers\Api\MobileAutomationController::class, 'index']);
+	Route::post('/automation/basic', [App\Http\Controllers\Api\MobileAutomationController::class, 'store']);
+	Route::get('/automation/basic/{uuid}', [App\Http\Controllers\Api\MobileAutomationController::class, 'show']);
+	Route::put('/automation/basic/{uuid}', [App\Http\Controllers\Api\MobileAutomationController::class, 'update']);
+	Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\Api\MobileAutomationController::class, 'destroy']);
+
 	// إعداد البثّ: يسأله التطبيق عند كل فتح فيتبع تبديل المزوّد بلا إصدار جديد.
 	Route::get('/broadcast-config', [App\Http\Controllers\Api\BroadcastConfigController::class, 'show']);
 
