@@ -27,6 +27,29 @@ class MobileAutomationController extends Controller
     /** أنواع الردّ التي يقبلها التطبيق: نصّ فقط في هذه النسخة. */
     private const SUPPORTED_RESPONSE_TYPES = ['text'];
 
+    /**
+     * قيمة قاعدة البيانات ⇐ مفتاح ترجمتها.
+     *
+     * التطبيق يعرض هذين الحقلين للمستخدم مباشرةً، فكان يظهر «exact match»
+     * و«text» بالإنجليزية وسط واجهة عربية. الترجمة تتبع Accept-Language الذي
+     * يرسله التطبيق أصلاً (SetApiLanguage)، فالقيمة تصل بلغة المستخدم.
+     *
+     * والحقلان مُدخَلان كذلك في POST وPUT، فما يُرسَل إلى التطبيق يُقبل منه
+     * راجعاً: canonical() تُعيد المُترجَم إلى قيمته المخزّنة قبل التحقّق.
+     */
+    private const MATCH_CRITERIA_LABELS = [
+        'exact match' => 'Exact match',
+        'contains' => 'Contains',
+    ];
+
+    private const RESPONSE_TYPE_LABELS = [
+        'text' => 'Text',
+        'image' => 'Image',
+        'audio' => 'Audio',
+        'video' => 'Video',
+        'document' => 'Document',
+    ];
+
     public function index(Request $request): JsonResponse
     {
         $query = AutoReply::where('organization_id', $this->organizationId($request))
@@ -152,7 +175,17 @@ class MobileAutomationController extends Controller
 
     private function validator(Request $request)
     {
-        return Validator::make($request->all(), [
+        $input = $request->all();
+        $input['match_criteria'] = $this->canonical(
+            self::MATCH_CRITERIA_LABELS,
+            $request->input('match_criteria')
+        );
+        $input['response_type'] = $this->canonical(
+            self::RESPONSE_TYPE_LABELS,
+            $request->input('response_type')
+        );
+
+        return Validator::make($input, [
             'name' => 'required|string|max:255',
             'trigger' => 'required|string|max:255',
             'match_criteria' => 'required|in:exact match,contains',
@@ -182,6 +215,50 @@ class MobileAutomationController extends Controller
             ->first();
     }
 
+    /**
+     * التسمية بلغة الطلب، والقيمة كما هي إن لم تكن معروفة.
+     *
+     * @param  array<string, string>  $map
+     */
+    private function label(array $map, ?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return isset($map[$value]) ? __($map[$value]) : $value;
+    }
+
+    /**
+     * التسمية المعروضة ⇐ القيمة المخزّنة.
+     *
+     * يقبل الثلاثة: القيمة نفسها («contains»)، وتسميتها العربية («يحتوي»)،
+     * وتسميتها الإنجليزية («Contains») — فيدور الحقل بين الجلب والحفظ بلا
+     * أن يضطرّ التطبيق إلى خريطة خاصّة به.
+     *
+     * @param  array<string, string>  $map
+     */
+    private function canonical(array $map, mixed $value): mixed
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        $needle = trim($value);
+
+        if (isset($map[$needle])) {
+            return $needle;
+        }
+
+        foreach ($map as $stored => $key) {
+            if ($needle === __($key) || strcasecmp($needle, $key) === 0) {
+                return $stored;
+            }
+        }
+
+        return $value;
+    }
+
     /** @return array<string, mixed> */
     private function present(AutoReply $reply): array
     {
@@ -191,8 +268,8 @@ class MobileAutomationController extends Controller
             'uuid' => (string) $reply->uuid,
             'name' => $reply->name,
             'trigger' => $reply->trigger,
-            'match_criteria' => $reply->match_criteria,
-            'response_type' => $metadata['type'] ?? 'text',
+            'match_criteria' => $this->label(self::MATCH_CRITERIA_LABELS, $reply->match_criteria),
+            'response_type' => $this->label(self::RESPONSE_TYPE_LABELS, $metadata['type'] ?? 'text'),
             // الردود القديمة قد تحمل صورة أو صوتاً؛ يصل نصّها فارغاً ويبقى
             // النوع ظاهراً كي يعرف التطبيق أنه لا يحرّره.
             'response' => $metadata['data']['text'] ?? null,
