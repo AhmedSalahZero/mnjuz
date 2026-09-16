@@ -26,6 +26,11 @@
       "description": "sanctum token returned by login"
     },
     {
+      "key": "lang",
+      "value": "ar",
+      "description": "Accept-Language — ar or en. Controls the language of messages and of match_criteria / response_type."
+    },
+    {
       "key": "rating_uuid",
       "value": "",
       "description": "rating uuid — from get customer ratings"
@@ -49,6 +54,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -87,6 +96,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -137,6 +150,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -164,6 +181,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -233,6 +254,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -287,6 +312,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -319,6 +348,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -344,6 +377,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               },
               {
                 "key": "Content-Type",
@@ -382,6 +419,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               },
               {
                 "key": "Content-Type",
@@ -427,6 +468,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -453,6 +498,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               },
               {
                 "key": "Content-Type",
@@ -492,6 +541,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -518,6 +571,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               },
               {
                 "key": "Content-Type",
@@ -563,6 +620,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -607,6 +668,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
@@ -636,6 +701,10 @@
                 "value": "application/json"
               },
               {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -652,7 +721,7 @@
                 "basic"
               ]
             },
-            "description": "**Who**: owner, manager — an agent gets 403\n\n**Required**: all five fields\n\n`match_criteria` and `response_type` are returned in the language of the `Accept-Language` header: `ar` gives `\u064a\u062d\u062a\u0648\u064a` / `\u0646\u0635`, `en` gives `Contains` / `Text`. Display them as received.\n\nOn save, any of the three forms is accepted — `\u064a\u062d\u062a\u0648\u064a`, `Contains` or `contains` — so send back exactly what you received.\n\n`match_criteria`: exact match or contains\n\n`response_type`: **text only in this version** — image and audio need a file upload and are not exposed yet.",
+            "description": "**Who**: owner, manager — an agent gets 403\n\n**Required**: all five fields\n\n`match_criteria`: `exact match` or `contains`\n\n`response_type`: **`text` only in this version** — image and audio need a file upload and are not exposed yet.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Invoices\",\n  \"trigger\": \"invoice\",\n  \"match_criteria\": \"contains\",\n  \"response_type\": \"text\",\n  \"response\": \"You can find your invoice in your account on our website.\"\n}",
@@ -673,6 +742,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               },
               {
                 "key": "Content-Type",
@@ -713,6 +786,10 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
               }
             ],
             "url": {
