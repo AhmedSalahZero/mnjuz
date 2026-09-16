@@ -328,13 +328,6 @@ GET /api/v1/tickets/summary
 
 وللموظّف تُحسب على تذاكره وحدها.
 
-### تغيير الحالة والإسناد — موجودتان منذ إصدار سابق
-
-```
-POST /api/v1/toggle-ticket-status/{contactId}   { "status": "closed" }
-POST /api/v1/assign-ticket                      { "contact_id": 1, "user_id": 50 }
-```
-
 ---
 
 ## 3) الملف الشخصي

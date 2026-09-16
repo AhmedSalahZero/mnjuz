@@ -53,7 +53,12 @@ class ProcessMessageEchoJob implements ShouldQueue
                 return;
             }
 
-            [$contact, $isNewContact] = $this->getOrCreateContact($recipient);
+            $resolved = $this->getOrCreateContact($recipient);
+            if ($resolved === null) {
+                return;
+            }
+
+            [$contact, $isNewContact] = $resolved;
 
             $chat = $this->createChat($contact);
             if (!$chat) {
@@ -90,9 +95,18 @@ class ProcessMessageEchoJob implements ShouldQueue
         }
     }
 
-    private function getOrCreateContact(string $recipient): array
+    private function getOrCreateContact(string $recipient): ?array
     {
-        $phone = PhoneService::getE164Format('+' . ltrim($recipient, '+'));
+        $phone = PhoneService::fromWhatsappId($recipient);
+
+        if ($phone === null) {
+            Log::warning('ProcessMessageEchoJob: recipient has no digits', [
+                'organization_id' => $this->organizationId,
+                'echo_id' => $this->echo['id'] ?? null,
+            ]);
+
+            return null;
+        }
 
         try {
             $contact = Contact::firstOrCreate(

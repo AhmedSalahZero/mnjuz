@@ -73,6 +73,20 @@ class WhatsappService
 	 *
 	 * @return array{type: string, interactive: array}
 	 */
+	/**
+	 * هل لجهة الاتصال رقم يصلح للإرسال؟
+	 *
+	 * contacts.phone يقبل NULL، وجهات الاتصال القادمة من webhook كانت تُحفظ
+	 * بلا رقم كلّما رفضت libphonenumber صيغة wa_id. والإرسال إلى واحدة منها
+	 * يضع to=null في طلب Graph API، فترّد Meta برمز 100 ورسالة
+	 * «The parameter to is required» — وتُعيد الوظيفة المحاولة ثلاثاً على
+	 * شيء لن يتغيّر. نمنع الطلب من أصله ونكتب سبباً مفهوماً.
+	 */
+	public static function isSendableNumber(?Contact $contact): bool
+	{
+		return $contact !== null && trim((string) $contact->phone) !== '';
+	}
+
 	public static function buildLocationRequestPayload(string $to, string $bodyText): array
 	{
 		$body = $bodyText;
@@ -224,6 +238,16 @@ class WhatsappService
 			->first();
 		if (!$contact) {
 			return (object) ['success' => false];
+		}
+
+		if (!self::isSendableNumber($contact)) {
+			Log::error('WhatsApp send skipped: contact has no phone number', [
+				'organization_id' => $this->organizationId,
+				'contact_uuid'    => $contactUuId,
+				'message_type'    => $type,
+			]);
+
+			return (object) ['success' => false, 'message' => __('This contact has no phone number.')];
 		}
 
 		$messageContent = $this->normalizeOutboundText($messageContent);
@@ -442,6 +466,17 @@ class WhatsappService
 			$contact = Contact::where('uuid', $contactUuId)
 				->where('organization_id', $this->organizationId)
 				->first();
+
+			if (!self::isSendableNumber($contact)) {
+				Log::error('WhatsApp template send skipped: contact has no phone number', [
+					'organization_id' => $this->organizationId,
+					'contact_uuid'    => $contactUuId,
+					'campaign_id'     => $campaignId,
+				]);
+
+				return (object) ['success' => false, 'message' => __('This contact has no phone number.')];
+			}
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -855,6 +890,18 @@ class WhatsappService
         $contact = Contact::where('uuid', $contactUuId)
 			->where('organization_id', $this->organizationId)
 			->first();
+
+        if (!self::isSendableNumber($contact)) {
+            Log::error('WhatsApp media send skipped: contact has no phone number', [
+                'organization_id' => $this->organizationId,
+                'contact_uuid'    => $contactUuId,
+                'media_type'      => $mediaType,
+                'file_name'       => $mediaFileName,
+            ]);
+
+            return (object) ['success' => false, 'message' => __('This contact has no phone number.')];
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();

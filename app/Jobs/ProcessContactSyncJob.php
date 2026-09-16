@@ -62,7 +62,15 @@ class ProcessContactSyncJob implements ShouldQueue
 
     private function upsertContact(array $contactData, string $phoneRaw): void
     {
-        $phone = PhoneService::getE164Format('+' . ltrim($phoneRaw, '+'));
+        $phone = PhoneService::fromWhatsappId($phoneRaw);
+
+        if ($phone === null) {
+            Log::warning('Coexistence contact sync skipped: phone has no digits', [
+                'organization_id' => $this->organizationId,
+            ]);
+
+            return;
+        }
         $displayName = $contactData['full_name'] ?? ($contactData['first_name'] ?? null);
 
         try {

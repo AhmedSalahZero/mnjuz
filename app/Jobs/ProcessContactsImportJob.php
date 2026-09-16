@@ -53,7 +53,10 @@ class ProcessContactsImportJob implements ShouldQueue
             // ولا حاجة إليها أصلاً: الاستيراد يُدخل الصفوف على دفعات مستقلّة،
             // وصفٌّ فاسد يُتخطّى ويُحصى في التقرير. فالجزئي أنفع للعميل من
             // اللاشيء.
-            config(['excel.transactions.handler' => null]);
+            // السلسلة 'null' لا القيمة null: المدير يحلّ السائق بالاسم
+            // (createNullDriver)، وnull النَّوعية تجعله يرمي
+            // «Unable to resolve NULL driver» فيسقط الاستيراد من أوّله.
+            config(['excel.transactions.handler' => 'null']);
 
             $import = new ContactsImport($this->organizationId, $this->userId);
             Excel::import($import, $absolutePath);

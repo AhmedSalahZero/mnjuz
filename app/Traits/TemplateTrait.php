@@ -22,17 +22,22 @@ trait TemplateTrait{
         $template['language']['code'] = $templateLanguage;
         $template['components'] = [];
 
-        if ($metadata->header && $metadata->header->parameters) {
+        // حملات محفوظة قبل الإصلاح قد لا يكون فيها header إطلاقاً، والوصول
+        // إلى خاصّية غير موجودة ينتج تحذيراً ثم null صامتاً.
+        $header = $metadata->header ?? null;
+        $body = $metadata->body ?? null;
+
+        if ($header && !empty($header->parameters)) {
             $headerComponent = $this->buildHeaderComponent($metadata, $contact);
             $template['components'][] = $headerComponent;
         }
         
-        if ($metadata->body && property_exists($metadata->body, 'parameters') && !empty($metadata->body->parameters)) {
+        if ($body && property_exists($body, 'parameters') && !empty($body->parameters)) {
             $bodyComponent = $this->buildBodyComponent($metadata, $contact);
             $template['components'][] = $bodyComponent;
         }
 
-        if ($metadata->buttons) {
+        if ($metadata->buttons ?? null) {
             $buttonComponents = $this->buildButtonComponent($metadata, $contact);
             foreach ($buttonComponents as $buttonComponent) {
                 $template['components'][] = $buttonComponent;

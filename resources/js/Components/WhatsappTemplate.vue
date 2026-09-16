@@ -68,9 +68,16 @@
                 <div v-if="parameters.header.format === 'IMAGE'" class="relative w-full h-full">
                     <img :src="mediaSource" alt="Image" class="rounded-md flex justify-center items-center z-1 w-full h-full" />
                 </div>
-                <video v-if="parameters.header.format === 'VIDEO'" controls width="300" class="max-h-[350px]">
-                    <source :src="mediaSource" type="video/mp4">
-                </video>
+                <!--
+                    المصدر على <video> نفسه لا على <source> بداخله.
+                    تغيير src في <source> لا يُعيد تحميل الفيديو — المتصفّح
+                    يُبقي ما حمّله أوّل مرّة حتى يُنادى video.load(). فالعميل
+                    كان يرفع فيديو جديد ويبقى القديم معروضاً في المعاينة،
+                    بينما الصور تتغيّر فوراً لأن <img> يُعيد الرسم وحده.
+                    و:key يجعل Vue يستبدل العنصر كلّما تغيّر الرابط.
+                -->
+                <video v-if="parameters.header.format === 'VIDEO'" :key="mediaSource" :src="mediaSource"
+                    controls width="300" class="max-h-[350px]"></video>
                 <div v-if="parameters.header.format === 'DOCUMENT'">
                     <div class="relative">
                         <div class="flex space-x-2 w-full h-1/3 bg-white opacity-90 pt-2">

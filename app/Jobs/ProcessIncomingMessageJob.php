@@ -184,7 +184,16 @@ class ProcessIncomingMessageJob implements ShouldQueue
             return null;
         }
 
-        $phone = PhoneService::getE164Format('+' . ltrim($from, '+'));
+        $phone = PhoneService::fromWhatsappId($from);
+
+        if ($phone === null) {
+            Log::warning('Incoming message sender has no digits, skipping', [
+                'organization_id' => $this->organizationId,
+                'message_id'      => $this->message['id'] ?? null,
+            ]);
+
+            return null;
+        }
 
         try {
             $contact = Contact::firstOrCreate(

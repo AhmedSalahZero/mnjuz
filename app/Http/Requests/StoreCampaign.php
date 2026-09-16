@@ -41,31 +41,36 @@ class StoreCampaign extends FormRequest
         // Check for header.format and header.parameters[0].value
         $headerParams = $this->input('header.parameters');
 
-        if(!empty($headerParams)){
-            $format = $this->input('header.format');
-            $selection = $this->input('header.parameters.0.selection');
+        $format = $this->input('header.format');
+        $selection = $this->input('header.parameters.0.selection');
 
-            // Rules for image format
-            if ($format === 'TEXT') {
-                $rules['header.parameters.0.value'] = 'required|max:60'; // Max 60 characters
-            }
+        // Rules for image format
+        if ($format === 'TEXT' && !empty($headerParams)) {
+            $rules['header.parameters.0.value'] = 'required|max:60'; // Max 60 characters
+        }
 
-            if (in_array($format, ['IMAGE', 'DOCUMENT', 'VIDEO'], true)) {
-                if ($selection === 'history') {
-                    // معرّف الملف السابق (uuid). نقبل النصّ عامّةً لا uuid حصراً:
-                    // الصفحات المفتوحة قبل النشر ما زالت ترسل المسار، ورفضها
-                    // بالتحقّق يُنتج «هذا الحقل مطلوب» على اختيار صحيح. الخدمة
-                    // تقبل الشكلين وتردّ برسالة مفهومة إن لم يوجد الملف.
-                    $rules['header.parameters.0.value'] = 'required|string|max:2048';
-                } elseif ($selection === 'default') {
-                    $rules['header.parameters.0.value'] = 'required|url|max:2048';
-                } elseif ($format === 'IMAGE') {
-                    $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg,jpeg|max:5120';
-                } elseif ($format === 'VIDEO') {
-                    $rules['header.parameters.0.value'] = 'required|file|mimes:mp4|max:16384';
-                } elseif ($format === 'DOCUMENT') {
-                    $rules['header.parameters.0.value'] = 'required|file|mimes:pdf,txt,ppt,doc,xls,docx,pptx,xlsx|max:102400';
-                }
+        // ترويسة الوسائط تُلزم بملف ولو وصلت بلا معاملات إطلاقاً.
+        //
+        // الشرط كان `if (!empty($headerParams))`، وقالبٌ أنشأه العميل في Meta
+        // بلا example يصل بلا header_handle فتبقى القائمة فارغة: لا يظهر زرّ
+        // الاختيار في الواجهة، ولا قاعدة تحقّق تُطبَّق هنا، فتُحفظ الحملة بلا
+        // وسائط. وMeta ترسل القالب عندها بمثاله المرفق — الفيديو الذي رُفع
+        // يوم أُنشئ القالب، أي الأقدم دائماً.
+        if (in_array($format, ['IMAGE', 'DOCUMENT', 'VIDEO'], true)) {
+            if ($selection === 'history') {
+                // معرّف الملف السابق (uuid). نقبل النصّ عامّةً لا uuid حصراً:
+                // الصفحات المفتوحة قبل النشر ما زالت ترسل المسار، ورفضها
+                // بالتحقّق يُنتج «هذا الحقل مطلوب» على اختيار صحيح. الخدمة
+                // تقبل الشكلين وتردّ برسالة مفهومة إن لم يوجد الملف.
+                $rules['header.parameters.0.value'] = 'required|string|max:2048';
+            } elseif ($selection === 'default') {
+                $rules['header.parameters.0.value'] = 'required|url|max:2048';
+            } elseif ($format === 'IMAGE') {
+                $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg,jpeg|max:5120';
+            } elseif ($format === 'VIDEO') {
+                $rules['header.parameters.0.value'] = 'required|file|mimes:mp4|max:16384';
+            } elseif ($format === 'DOCUMENT') {
+                $rules['header.parameters.0.value'] = 'required|file|mimes:pdf,txt,ppt,doc,xls,docx,pptx,xlsx|max:102400';
             }
         }
 

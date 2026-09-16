@@ -113,7 +113,32 @@ class SendMediaJob implements ShouldQueue
             ->whereNull('deleted_at')
             ->first();
 
-        if (!$contact || !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
+        if (!$contact) {
+            $this->cleanupTempFiles($transcodedPath);
+
+            return;
+        }
+
+        // جهة اتصال بلا رقم: نقف هنا بدل أن نرمي.
+        //
+        // الرمي يُعيد المحاولة ثلاث مرّات على شيء لن يتغيّر — الرقم ناقص في
+        // قاعدة البيانات، لا في الشبكة — فيمتلئ failed_jobs بلا فائدة. وقبل
+        // هذا الفحص كان الطلب يصل Meta بـ to=null فترّد
+        // «The parameter to is required».
+        if (!WhatsappService::isSendableNumber($contact)) {
+            Log::error('WhatsApp media send skipped: contact has no phone number', [
+                'organization_id' => $this->organizationId,
+                'contact_uuid' => $this->uuid,
+                'file_name' => $this->fileName,
+                'file_type' => $this->fileType,
+            ]);
+
+            $this->cleanupTempFiles($transcodedPath);
+
+            return;
+        }
+
+        if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
             $this->cleanupTempFiles($transcodedPath);
 
             return;

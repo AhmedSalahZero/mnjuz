@@ -246,7 +246,7 @@ class ProductionErrorFixesTest extends TestCase
         $job = $this->source('app/Jobs/ProcessContactsImportJob.php');
 
         $this->assertStringContainsString(
-            "config(['excel.transactions.handler' => null])",
+            "config(['excel.transactions.handler' => 'null'])",
             $job
         );
 

@@ -188,6 +188,39 @@ class PhoneService
     }
 
     /**
+     * رقم المُرسِل كما يسلّمه واتساب (wa_id) إلى صيغة E.164.
+     *
+     * getE164Format وحدها لا تكفي هنا: هي تُرجع null كلّما رفضت libphonenumber
+     * الرقم — رقم اختبار من Meta مثل 15550001234، أو مدى أرقام أحدث من بيانات
+     * المكتبة، أو مفتاح دولة لا تعرفه. وكان هذا الـ null يُحفظ في
+     * contacts.phone كما هو، فتنشأ جهة اتصال بلا رقم: تستقبل الرسائل ولا يصلها
+     * ردّ، لأن Meta ترفض الإرسال بـ«The parameter to is required».
+     *
+     * وأسوأ منه أن الفهرس الفريد لا يعدّ NULL تكراراً، فتجتمع رسائل كل
+     * المرسِلين المرفوضين في جهة اتصال واحدة داخل الشركة.
+     *
+     * فنرجع إلى أرقام wa_id نفسه: هو المعرّف الذي يوجّه به واتساب الرسالة
+     * فعلاً، وصيغته «+» مع الأرقام هي صيغة E.164 نفسها — فالرقم الصالح لا
+     * تنشأ له نسخة ثانية بصيغة مختلفة.
+     *
+     * @param  string|null  $waId
+     * @return string|null  null فقط إن لم يكن في النص رقم واحد.
+     */
+    public static function fromWhatsappId(?string $waId): ?string
+    {
+        if ($waId === null) {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $waId) ?? '';
+        if ($digits === '') {
+            return null;
+        }
+
+        return self::getE164Format('+' . $digits) ?? '+' . $digits;
+    }
+
+    /**
      * Normalize phone number (ensure it starts with +)
      * 
      * @param string $phoneNumber

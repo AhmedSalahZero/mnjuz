@@ -1,0 +1,738 @@
+{
+  "info": {
+    "name": "mnjz-chat — mobile endpoints",
+    "description": "Endpoints added for the mobile app: reports, support tickets, profile, general settings, working hours and basic automation.\n\n## Setup\nOpen the collection **Variables** tab and set `base_url` and `token`.\n\nAuth is **Bearer Token** at collection level, so every request inherits it — no need to add the header per request.\n\n## Response envelope\nEvery endpoint returns the same shape:\n\n| key | when | notes |\n|---|---|---|\n| `statusCode` | always | equals the HTTP status |\n| `success` | always | boolean |\n| `message` | always | **may be `null` on success** — declare it nullable |\n| `data` | success only | **absent from every error response** |\n| `errors` | 400 only | keys are field names, values are `string[]` |\n\n## Pagination\nEvery list returns `data.items` and `data.pagination` (`page`, `per_page`, `total`, `last_page`). `items` is `[]` when empty — never `null`. `per_page` is capped at **100**.\n\n## Roles\n| role | what it can do |\n|---|---|\n| `owner` | everything, and only it can delete ratings |\n| `manager` | everything except deleting ratings |\n| `agent` | reads automation and settings but cannot write them, sees no reports, and sees only its own tickets |\n\nRead the caller's role once from `GET /profile` (`data.role`) and use it to show or hide screens, instead of calling an endpoint and getting a 403.\n\n**403 is not a bug**: either the role is not allowed, or the plan does not include the feature. Show `message` as-is — it is already translated.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://app.mnjz.net",
+      "description": "server url, no trailing slash"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "description": "sanctum token returned by login"
+    },
+    {
+      "key": "rating_uuid",
+      "value": "",
+      "description": "rating uuid — from get customer ratings"
+    },
+    {
+      "key": "reply_uuid",
+      "value": "",
+      "description": "canned reply uuid — from get canned replies"
+    }
+  ],
+  "item": [
+    {
+      "name": "reports",
+      "description": "Owner and manager only. An agent always gets 403.",
+      "item": [
+        {
+          "name": "get agent performance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/agent-performance?from=2026-01-01&to=2026-01-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "agent-performance"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "description": "range start, optional"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-01-31",
+                  "description": "range end, optional"
+                }
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n**Plan**: requires the `agent_performance` feature, otherwise 403\n\n**Query**: `from` and `to` as `YYYY-MM-DD`, both optional. Without them the range is the **last 30 days**.\n\n`data.metrics.agents[]` holds per agent: `online`, `last_activity_at`, `active_seconds`, `messages_sent`, `tickets_assigned`, `tickets_closed`, `avg_first_response_seconds`, `avg_resolution_seconds`.\n\n`last_activity_at`, `avg_first_response_seconds` and `avg_resolution_seconds` are **nullable** — an agent who did not work in the range returns null."
+          },
+          "response": []
+        },
+        {
+          "name": "get customer ratings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/ratings?page=1&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "ratings"
+              ],
+              "query": [
+                {
+                  "key": "rating",
+                  "value": "5",
+                  "description": "filter by stars, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "matches name, phone or comment, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25",
+                  "description": "page size, max 100"
+                }
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n**Query**: `rating` (1-5), `search`, `page`, `per_page` — all optional\n\n`data.summary` is computed over the **whole filtered set**, not the current page, so the average does not change while paging.\n\n`summary.pending` counts contacts who were asked to rate and have not answered yet — they are **not** in `items`.\n\nUse `can_delete` to show or hide the delete button instead of calling delete and getting a 403."
+          },
+          "response": []
+        },
+        {
+          "name": "delete rating",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/ratings/{{rating_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "ratings",
+                "{{rating_uuid}}"
+              ]
+            },
+            "description": "**Who**: **owner only** — a manager gets 403\n\n**Plan**: requires the `rating_delete` feature, otherwise 403\n\nReturns 404 when the rating does not exist or belongs to another organization.\n\nA manager can read ratings but not delete them — the bad rating may be about them."
+          },
+          "response": []
+        },
+        {
+          "name": "get activity log",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/activity-log?per_page=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "activity-log"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "",
+                  "description": "filter by team member, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "group",
+                  "value": "chats",
+                  "description": "event group, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "event",
+                  "value": "message_sent",
+                  "description": "single event, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-09-01",
+                  "description": "from date, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-09-14",
+                  "description": "to date, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "per_page",
+                  "value": "50",
+                  "description": "page size, max 100"
+                }
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n**Plan**: requires the `activity_log` feature, otherwise 403\n\n**Query**: `user_id`, `group`, `event`, `search`, `from`, `to`, `page`, `per_page` — all optional\n\n`data.members` and `data.groups` are returned so the filters can be built without another call.\n\nShow `data.retention_days` to the user: the log is deleted automatically after that many days, so it does not look incomplete for no reason."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "tickets",
+      "description": "A ticket here is the state of a conversation, not a separate entity: every contact has one 'latest' ticket carrying its status and assignee.",
+      "item": [
+        {
+          "name": "get tickets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tickets?status=open&page=1&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open",
+                  "description": "open or closed, optional"
+                },
+                {
+                  "key": "assigned_to",
+                  "value": "unassigned",
+                  "description": "user id or 'unassigned', optional",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "matches contact name or phone, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25",
+                  "description": "page size, max 100"
+                }
+              ]
+            },
+            "description": "**Who**: everyone — but an **agent sees only its own tickets**, enforced server side with no query needed\n\n**Query**: `status` (`open`/`closed`), `assigned_to`, `search`, `page`, `per_page` — all optional\n\n`assigned_to` takes a user id or the literal **`unassigned`**.\n\n`assigned_to_name` is ready to display without another call. `assigned_seen` tells whether the assignee has opened it yet.\n\nNullable fields: `assigned_to`, `assigned_to_name`, `contact_name`, `last_message_at`."
+          },
+          "response": []
+        },
+        {
+          "name": "get tickets summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tickets/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tickets",
+                "summary"
+              ]
+            },
+            "description": "**Who**: everyone\n\nReturns `open`, `closed` and `unassigned` counters. For an agent they are scoped to its own tickets."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "Every user reads and edits their own profile. No role or plan requirement.",
+      "item": [
+        {
+          "name": "get profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile"
+              ]
+            },
+            "description": "**Who**: everyone\n\n`data.role` is the **organization role** (`owner`/`manager`/`agent`), not the platform role.\n\nRead it once on app start and use it to show or hide screens."
+          },
+          "response": []
+        },
+        {
+          "name": "update profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile"
+              ]
+            },
+            "description": "**Who**: everyone\n\n**Required**: `first_name`, `last_name`, `email`\n\n**Optional**: `phone`, `language`\n\nReturns 400 with `errors.email` when the email is already used by another user.\n\nThe response returns the profile after the update.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Ahmed\",\n  \"last_name\": \"Salah\",\n  \"email\": \"ahmed@example.com\",\n  \"phone\": \"+966501234567\",\n  \"language\": \"ar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "update password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "password"
+              ]
+            },
+            "description": "**Who**: everyone\n\n**Required**: `old_password`, `password`, `password_confirmation`\n\n**Rules**: the new password is at least 6 characters and must match the confirmation.\n\nThe old password is verified first; a wrong one returns 400 with `errors.old_password`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"old_password\": \"current-password\",\n  \"password\": \"new-password\",\n  \"password_confirmation\": \"new-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "settings",
+      "description": "Reading is open to everyone; writing is owner and manager only.",
+      "item": [
+        {
+          "name": "get general settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/general",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "general"
+              ]
+            },
+            "description": "**Who**: everyone — an agent can read but not write\n\n`data.timezones` and `data.sounds` are the ready-made option lists, so no extra call is needed to build the pickers."
+          },
+          "response": []
+        },
+        {
+          "name": "update general settings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/general",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "general"
+              ]
+            },
+            "description": "**Who**: owner, manager — an agent gets 403\n\n**Body**: every field is optional — `timezone`, `notifications`, `campaigns`, `support`\n\n**Partial by design**: anything you do not send stays as it is, even inside one section. Sending `notifications.tone` alone changes the tone and keeps `volume`.\n\n**Not available here**: organization name and address. Changing them syncs with the billing platform, so they stay on the web for now.\n\nReturns 400 with `errors['support.ticket_form_url']` when the url is invalid.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"timezone\": \"Asia/Riyadh\",\n  \"notifications\": {\n    \"enable_sound\": true,\n    \"tone\": \"bell\",\n    \"volume\": 0.5\n  },\n  \"campaigns\": {\n    \"enable_resend\": true,\n    \"resend_intervals\": [\n      5,\n      30\n    ]\n  },\n  \"support\": {\n    \"ticket_form_url\": \"https://support.example.com/new\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "get working hours",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/working-hours",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "working-hours"
+              ]
+            },
+            "description": "**Who**: everyone\n\n**Plan**: requires the **Working Hours** addon, otherwise 403\n\n`day` runs from 0 (Sunday) to 6 (Saturday), matching PHP `date('w')`."
+          },
+          "response": []
+        },
+        {
+          "name": "update working hours",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/working-hours",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "working-hours"
+              ]
+            },
+            "description": "**Who**: owner, manager — an agent gets 403\n\n**Plan**: requires the **Working Hours** addon, otherwise 403\n\n**Required per slot**: `day` (0-6), `open` and `close` as `HH:MM`\n\n**Rules**:\n- more than one slot per day is allowed\n- `close` must be **after** `open`, otherwise 400\n- at most 64 slots\n- sending `\"slots\": []` clears the whole schedule — this is intentional\n\n`working_hours_outside_message` is optional, max 4096 characters.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slots\": [\n    {\n      \"day\": 0,\n      \"open\": \"09:00\",\n      \"close\": \"17:00\"\n    },\n    {\n      \"day\": 1,\n      \"open\": \"10:00\",\n      \"close\": \"18:00\"\n    }\n  ],\n  \"working_hours_outside_message\": \"We are outside working hours, back tomorrow.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "automation",
+      "description": "Canned replies: an automatic reply sent when a customer message matches a trigger. Reading is open to everyone; writing is owner and manager only.",
+      "item": [
+        {
+          "name": "get canned replies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/automation/basic?page=1&per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "automation",
+                "basic"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "matches name or trigger, optional",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10",
+                  "description": "page size, max 100"
+                }
+              ]
+            },
+            "description": "**Who**: everyone\n\n**Query**: `search`, `page`, `per_page` — all optional\n\nOlder replies whose type is image or audio are listed with their type and `response: null` — show them read-only, do not open them for editing."
+          },
+          "response": []
+        },
+        {
+          "name": "get canned reply",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/automation/basic/{{reply_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "automation",
+                "basic",
+                "{{reply_uuid}}"
+              ]
+            },
+            "description": "**Who**: everyone\n\nReturns 404 when it does not exist or belongs to another organization."
+          },
+          "response": []
+        },
+        {
+          "name": "store canned reply",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/automation/basic",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "automation",
+                "basic"
+              ]
+            },
+            "description": "**Who**: owner, manager — an agent gets 403\n\n**Required**: all five fields\n\n`match_criteria`: `exact match` or `contains`\n\n`response_type`: **`text` only in this version** — image and audio need a file upload and are not exposed yet.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Invoices\",\n  \"trigger\": \"invoice\",\n  \"match_criteria\": \"contains\",\n  \"response_type\": \"text\",\n  \"response\": \"You can find your invoice in your account on our website.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "update canned reply",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/automation/basic/{{reply_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "automation",
+                "basic",
+                "{{reply_uuid}}"
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n**Required**: all five fields — this update is **not partial**, unlike general settings.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Invoices\",\n  \"trigger\": \"invoice,invoices\",\n  \"match_criteria\": \"contains\",\n  \"response_type\": \"text\",\n  \"response\": \"You can find your invoice in your account on our website.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "delete canned reply",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/automation/basic/{{reply_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "automation",
+                "basic",
+                "{{reply_uuid}}"
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n**Soft delete**: it disappears from the list but the row is kept."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

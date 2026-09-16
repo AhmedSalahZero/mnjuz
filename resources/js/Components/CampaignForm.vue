@@ -4,6 +4,11 @@ import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
 import { chosenHeaderPreviewSource } from '@/Composables/templateMediaPreview'
+import {
+	buildHeaderParameters,
+	headerMediaLabel,
+	isHistoryItemSelected,
+} from '@/Composables/campaignHeaderParameters'
 import { ref, computed, onMounted, watch } from 'vue'
 import { Link, useForm } from "@inertiajs/vue3"
 import 'vue3-toastify/dist/index.css'
@@ -58,7 +63,20 @@ const props = defineProps({
 })
 const isLoading = ref(false)
 const mediaHistory = ref([])
-const selectedHistoryUuid = ref(null)
+
+/**
+ * رابط المعاينة المؤقّت لآخر ملف رفعه العميل.
+ *
+ * نُبطله قبل إنشاء غيره كي لا تتراكم الملفات في ذاكرة المتصفّح.
+ */
+let objectUrl = null
+
+const releaseObjectUrl = () => {
+	if (objectUrl) {
+		URL.revokeObjectURL(objectUrl)
+		objectUrl = null
+	}
+}
 
 /**
  * رابط الوسائط الذي ترسمه المعاينة — و'' حين لا يوجد ما يُعرض.
@@ -122,25 +140,14 @@ const loadTemplate = async () => {
 			form.header.format = extractComponent(metadata, 'HEADER', 'format')
 
 			form.header.text = extractComponent(metadata, 'HEADER', 'text')
-			const headerExamples = extractComponent(metadata, 'HEADER', 'example')
-			if (headerExamples) {
-				if (form.header.format === 'TEXT') {
-					form.header.parameters = headerExamples.header_text.map(item => ({
-						type: 'text',
-						selection: 'static',
-						value: item,
-					}))
-				} else if (form.header.format === 'IMAGE' || form.header.format === 'DOCUMENT' || form.header.format === 'VIDEO') {
-					form.header.parameters = headerExamples.header_handle.map(item => ({
-						type: form.header.format,
-						selection: 'default',
-						value: null,
-						url: item,
-					}))
-				}
-			} else {
-				form.header.parameters = []
-			}
+
+			// قالبٌ بلا example كان يُنتج قائمة فارغة، فلا يظهر زرّ اختيار
+			// الوسائط ولا يعترض التحقّق — وتخرج الحملة بفيديو القالب القديم.
+			releaseObjectUrl()
+			form.header.parameters = buildHeaderParameters(
+				form.header.format,
+				extractComponent(metadata, 'HEADER', 'example'),
+			)
 
 
 			form.body.text = extractComponent(metadata, 'BODY', 'text')
@@ -231,16 +238,20 @@ const loadMediaHistory = async () => {
  * متاحاً» على ملفٍ موجود. والـuuid معرّف ثابت وصلنا مع القائمة أصلاً.
  * url يبقى المسار لأنه ما تعرضه المعاينة.
  */
-const selectHistoryItem = (item) => {
-	if (!form.header.parameters[0]) {
+const selectHistoryItem = (item, index = 0) => {
+	const parameter = form.header.parameters[index]
+
+	if (!parameter) {
 		return
 	}
 
-	selectedHistoryUuid.value = item.uuid
-	form.header.parameters[0].selection = 'history'
-	form.header.parameters[0].value = item.uuid
-	form.header.parameters[0].url = item.path
+	releaseObjectUrl()
+	parameter.selection = 'history'
+	parameter.value = item.uuid
+	parameter.url = item.path
 }
+
+const isSelectedHistoryItem = (index, item) => isHistoryItemSelected(form.header.parameters[index], item)
 
 const deleteHistoryItem = async (item) => {
 	if (!window.confirm(trans('Remove this file from history?'))) {
@@ -249,13 +260,15 @@ const deleteHistoryItem = async (item) => {
 
 	try {
 		await axios.delete(`/campaigns/media-history/${item.uuid}`)
-		if (selectedHistoryUuid.value === item.uuid) {
-			selectedHistoryUuid.value = null
-			if (form.header.parameters[0]) {
-				form.header.parameters[0].value = null
-				form.header.parameters[0].selection = 'default'
+
+		// الملف المحذوف قد يكون هو المختار — نُخلي الاختيار عنه وحده.
+		form.header.parameters.forEach((parameter) => {
+			if (isHistoryItemSelected(parameter, item)) {
+				parameter.selection = 'default'
+				parameter.value = null
+				parameter.url = null
 			}
-		}
+		})
 		await loadMediaHistory()
 	} catch (error) {
 		// رسالة الخادم أوّلاً: «Not found» تعني قائمة قديمة أو ضغطة مكرّرة،
@@ -269,44 +282,45 @@ const deleteHistoryItem = async (item) => {
 }
 
 const selectedMediaLabel = (index) => {
-	const param = form.header.parameters[index]
-	if (!param?.value) {
-		return null
-	}
-	if (param.selection === 'history') {
-		const item = mediaHistory.value.find((entry) => entry.uuid === selectedHistoryUuid.value)
-		// القيمة صارت uuid، وعرضه على العميل بلا معنى — نعود لاسم الملف.
-		return item?.name ?? trans('Previously used file')
-	}
-	if (param.selection === 'default') {
-		return param.value
-	}
-	return param.value?.name ?? null
+	const parameter = form.header.parameters[index]
+
+	// القيمة صارت uuid، وعرضه على العميل بلا معنى — نعود لاسم الملف.
+	return headerMediaLabel(parameter, mediaHistory.value)
+		?? (parameter?.selection === 'history' ? trans('Previously used file') : null)
 }
 
-const handleFileUpload = (event) => {
-	const fileSizeLimit = getFileSizeLimit(form.header.parameters[0].type)
+const handleFileUpload = (event, index = 0) => {
+	const parameter = form.header.parameters[index]
+
+	if (!parameter) {
+		return
+	}
+
+	const fileSizeLimit = getFileSizeLimit(parameter.type)
 	const file = event.target.files[0]
 
-	if (file && file.size > fileSizeLimit) {
+	if (!file) {
+		return
+	}
+
+	if (file.size > fileSizeLimit) {
 		// Handle file size exceeding the limit
 		alert(trans('file size exceeds the limit. Max allowed size:') + ' ' + fileSizeLimit + 'b')
 		// Clear the file input
 		event.target.value = null
-	} else {
-		const reader = new FileReader()
 
-		reader.onload = (e) => {
-			form.header.parameters[0].url = e.target.result
-		}
-
-		form.header.parameters[0].selection = 'upload'
-		form.header.parameters[0].value = file
-		selectedHistoryUuid.value = null
-
-		// Start reading the file
-		reader.readAsDataURL(file)
+		return
 	}
+
+	// createObjectURL لا FileReader: قراءة فيديو بحجم 16MB إلى data URL
+	// تستغرق ثوانيَ تبقى المعاينة فيها على الملف السابق، ثم يُرسَل ذلك النصّ
+	// الضخم مع النموذج بلا فائدة. الرابط هنا يجهز في الحال.
+	releaseObjectUrl()
+	objectUrl = URL.createObjectURL(file)
+
+	parameter.selection = 'upload'
+	parameter.value = file
+	parameter.url = objectUrl
 }
 
 const getFileAcceptAttribute = (fileType) => {
@@ -535,12 +549,13 @@ watch(
 									<label
 										class="cursor-pointer flex justify-center px-2 py-2 w-[30%] bg-slate-200 shadow-sm rounded-lg border"
 										:class="form.errors['header.parameters.0.value'] ? 'border border-red-700' : ''"
-										for="file-upload">
+										:for="'file-upload-' + index">
 										{{ $t('Upload') }}
 									</label>
 									<input type="file" class="sr-only"
 										:accept="getFileAcceptAttribute(form.header.parameters[index].type)"
-										ref="fileInput" id="file-upload" @change="handleFileUpload" />
+										ref="fileInput" :id="'file-upload-' + index"
+										@change="(event) => handleFileUpload(event, index)" />
 									<div v-if="form.header.parameters[index].value" class="w-[20em] truncate">
 										{{ selectedMediaLabel(index) }}
 									</div>
@@ -562,7 +577,7 @@ watch(
 											v-for="item in mediaHistory"
 											:key="item.uuid"
 											class="flex items-center gap-2 rounded-md border bg-white p-1.5"
-											:class="selectedHistoryUuid === item.uuid ? 'border-primary ring-1 ring-primary bg-primary/5' : 'border-slate-200'"
+											:class="isSelectedHistoryItem(index, item) ? 'border-primary ring-1 ring-primary bg-primary/5' : 'border-slate-200'"
 										>
 											<!--
 												الصفّ كلّه زرّ الاختيار: الاسم وحده كان هدفاً ضيّقاً لا يبدو
@@ -573,7 +588,7 @@ watch(
 												type="button"
 												class="flex flex-1 items-center gap-2 text-left min-w-0"
 												:title="item.name"
-												@click="selectHistoryItem(item)"
+												@click="selectHistoryItem(item, index)"
 											>
 												<img
 													v-if="item.media_type === 'IMAGE'"
@@ -590,7 +605,7 @@ watch(
 												<span class="min-w-0 flex-1">
 													<span class="block text-xs truncate">{{ item.name }}</span>
 													<span
-														v-if="selectedHistoryUuid === item.uuid"
+														v-if="isSelectedHistoryItem(index, item)"
 														class="block text-[11px] font-medium text-primary"
 													>
 														✓ {{ $t('Selected') }}

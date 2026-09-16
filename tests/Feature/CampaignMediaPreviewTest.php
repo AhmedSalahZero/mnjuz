@@ -80,13 +80,15 @@ class CampaignMediaPreviewTest extends TestCase
     {
         $form = file_get_contents(base_path('resources/js/Components/CampaignForm.vue'));
 
+        // الكتابة صارت على المعامل الذي ضغطه العميل لا على [0] دائماً،
+        // والمحروس واحد: المعرّف يُرسَل والمسار يبقى للمعاينة.
         $this->assertMatchesRegularExpression(
-            '/selection = \'history\'\s*\n\s*form\.header\.parameters\[0\]\.value = item\.uuid/',
+            '/selection = \'history\'\s*\n\s*\$?\w+(?:\.header\.parameters\[\w+\])?\.value = item\.uuid/',
             $form,
             'الاختيار ما زال يرسل المسار بدل المعرّف'
         );
-        $this->assertStringContainsString(
-            'form.header.parameters[0].url = item.path',
+        $this->assertMatchesRegularExpression(
+            '/\w+(?:\.header\.parameters\[\w+\])?\.url = item\.path/',
             $form,
             'المعاينة تحتاج المسار في url'
         );

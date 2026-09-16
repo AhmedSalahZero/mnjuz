@@ -46,10 +46,14 @@ class CampaignService
                 $mediaId = null;
                 if(in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
                     $header = $request->header;
-                    
+
+                    // الصيغة تُسجَّل ولو لم تصل معاملات: الحملة بلا مفتاح
+                    // header كانت تصل إلى buildTemplate فتُرسَل بلا مكوّن
+                    // ترويسة، وMeta تملؤها من مثال القالب نفسه.
+                    $metadata['header']['format'] = $header['format'];
+                    $metadata['header']['parameters'] = [];
+
                     if ($request->header['parameters']) {
-                        $metadata['header']['format'] = $header['format'];
-                        $metadata['header']['parameters'] = [];
                 
                         foreach ($request->header['parameters'] as $key => $parameter) {
                             if ($parameter['selection'] === 'upload') {
