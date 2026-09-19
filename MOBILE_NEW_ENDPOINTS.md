@@ -442,11 +442,17 @@ GET /api/v1/settings/general
         "city": "جدة",
         "state": "Makkah",
         "zip": "23444",
-        "country": "Saudi Arabia"
+        "country": "Saudi Arabia",
+        "latitude": 21.5433,
+        "longitude": 39.1728
       }
     },
     "timezone": "Asia/Riyadh",
-    "notifications": { "enable_sound": true, "tone": "bell", "volume": 0.5 },
+    "notifications": {
+      "enable_sound": true,
+      "tone": "/sounds/message-pop-alert.mp3",
+      "volume": 0.5
+    },
     "campaigns": {
       "enable_resend": true,
       "resend_intervals": [5, 30],
@@ -454,13 +460,44 @@ GET /api/v1/settings/general
       "failed_campaign_group": "9f1c2e40-7a11-4a3e-9d2b-1b7c5e8a4d30"
     },
     "support": { "ticket_form_url": "https://support.example.com/new" },
-    "timezones": ["Asia/Riyadh", "Asia/Dubai", "Africa/Cairo"],
-    "sounds": ["bell", "chime", "ping"]
+    "auth_template": {
+      "uuid": "6a1f0e22-33bd-4a0e-9f2c-8d41b2c7e590",
+      "name": "startchat",
+      "language": "ar",
+      "status": "APPROVED",
+      "parameters": { "template": "6a1f0e22-33bd-4a0e-9f2c-8d41b2c7e590", "body": { "parameters": [] } }
+    },
+    "contact_groups": [
+      { "uuid": "9f1c2e40-7a11-4a3e-9d2b-1b7c5e8a4d30", "name": "عملاء مميزون" }
+    ],
+    "auth_templates": [
+      { "uuid": "6a1f0e22-33bd-4a0e-9f2c-8d41b2c7e590", "name": "startchat", "language": "ar" }
+    ],
+    "timezones": [
+      { "value": "Asia/Riyadh", "label": "Asia/Riyadh" },
+      { "value": "Asia/Dubai", "label": "Asia/Dubai" }
+    ],
+    "sounds": [
+      { "value": "/sounds/message-pop-alert.mp3", "label": "Message pop alert" },
+      { "value": "/sounds/long-pop.wav", "label": "Long pop alert" }
+    ]
   }
 }
 ```
 
-`timezones` و`sounds` قوائم الاختيار الجاهزة، فلا تحتاج استدعاءً آخر.
+`timezones` و`sounds` قوائم الاختيار الجاهزة، فلا تحتاج استدعاءً آخر. **كلّ عنصر فيهما كائن `{value, label}` لا نصّ**: اعرض `label` وأرسل `value`.
+
+و`notifications.tone` قيمته أحد `sounds[].value` — مسار ملف مثل `/sounds/message-pop-alert.mp3`، لا اسم مختصر.
+
+**`contact_groups`** بدائل `campaigns.failed_campaign_group` — بها ترسم قائمة اختيار «مجموعة الحملات الفاشلة».
+
+**`auth_templates`** بدائل قالب المصادقة: **القوالب المعتمدة (`APPROVED`) وحدها**، لأن غيرها تردّه Meta عند الإرسال. لا تبنِ هذه القائمة من `GET /list-templates` — تلك لا تُرشِّح بالحالة.
+
+**`auth_template`** القالب المختار حاليًا، أو `null` إن لم يُختَر أو حُذف. و`parameters` متغيّراته المحفوظة، أو `null` إن كانت لقالب آخر — فالمُرسِل يُهملها عندها.
+
+بنية القالب (المكوّنات والمتغيّرات) للمعاينة والتحرير: من `GET /api/v1/list-templates` — تُرجع `metadata` لكل قالب. لم نُكرّرها هنا كي لا يثقل ردّ الإعدادات.
+
+**`address` يُعاد كما هو محفوظ**، ويشمل `latitude` و`longitude` متى ضبطهما العميل من الويب. الحقول كلّها **للقراءة فقط** من التطبيق — العنوان والاسم والإحداثيات تُزامَن مع منصّة الفوترة فبقيت في الويب. ومنشأة بلا عنوان تُرجع `[]` لا `null`.
 
 ### التعديل
 
@@ -475,14 +512,43 @@ POST /api/v1/settings/general
 |---|---|
 | من يستطيع | `owner` · `manager` — الموظّف يتلقّى **403** |
 | شرط الباقة | لا يوجد |
-| الحقول | كلها **اختيارية**: `timezone` · `notifications` · `campaigns` · `support` |
+| الحقول | كلها **اختيارية**: `timezone` · `notifications` · `campaigns` · `support` · `auth_template` · `auth_template_parameters` |
 | الإرسال | **جزئي** — ما لا تُرسله يبقى كما هو، حتى داخل القسم الواحد |
-| غير متاح | اسم المنشأة وعنوانها — يبقيان في الويب |
+| غير متاح | اسم المنشأة وعنوانها وإحداثياتها — تبقى في الويب |
+| الأخطاء | `403` للموظّف · `400` رابط دعم غير صالح، أو قالب غير معتمد، أو متغيّرات لقالب آخر |
 
 سبب استثناء الاسم والعنوان: تغييرهما يُزامَن مع منصّة الفوترة وله أثر محاسبي.
 
 مثال على الإرسال الجزئي: إرسال `notifications.tone` وحده يغيّر النغمة ويُبقي `volume` كما هو.
-| الأخطاء | `403` للموظّف · `400` رابط دعم غير صالح |
+
+### قالب المصادقة
+
+القالب الذي يُرسَل به رمز التحقق عبر `POST /api/v1/send-auth-template`.
+
+```json
+{
+  "auth_template": "6a1f0e22-33bd-4a0e-9f2c-8d41b2c7e590",
+  "auth_template_parameters": {
+    "template": "6a1f0e22-33bd-4a0e-9f2c-8d41b2c7e590",
+    "body": { "parameters": [] },
+    "buttons": []
+  }
+}
+```
+
+**قواعده**
+
+| الحالة | ما يحدث |
+|---|---|
+| `auth_template` من `auth_templates` | يُحفظ |
+| قالب غير معتمد أو لمنشأة أخرى أو غير موجود | **400** |
+| `auth_template: null` أو `""` | يُلغى الاختيار، وتُحذف متغيّراته معه |
+| تبديل القالب بلا إرسال متغيّرات | متغيّرات القالب السابق تُحذف — لا تصلح للجديد |
+| إعادة حفظ القالب نفسه بلا متغيّرات | متغيّراته المحفوظة **تبقى** |
+| `auth_template_parameters` فيها `template` مخالف للمختار | **400** |
+| `auth_template_parameters: []` | تُحذف المتغيّرات ويبقى القالب |
+
+**`parameters.template` يجب أن يساوي `auth_template`.** المُرسِل يشترط ذلك، فمتغيّرات لا تطابقه كانت تُحفظ ثم تُهمَل بلا أثر — صارت تُردّ برسالة.
 
 
 ---
@@ -595,6 +661,49 @@ DELETE /api/v1/automation/basic/{uuid}
 
 ---
 
+## 7) متغيّرات الرسائل
+
+تقابل نافذة **«اختر متغيّر»** في الويب. يحتاجها موضعان في التطبيق: **رسالة خارج أوقات العمل** (النقطة 13)، و**نصّ الردّ الجاهز** (النقطتان 16 و17).
+
+```
+GET /api/v1/settings/placeholders
+```
+
+**شروط الاستخدام**
+
+| النقطة | من يستطيع | ملاحظات |
+|---|---|---|
+| `GET` القائمة | الجميع | بلا معاملات · بلا ترقيم صفحات · بلا شرط باقة |
+
+### الرد
+
+```json
+{
+  "statusCode": 200,
+  "success": true,
+  "data": [
+    { "value": "{first_name}", "label": "First name" },
+    { "value": "{url:first_name}", "label": "First name (URL encoded)" },
+    { "value": "{رقم_الطلب}", "label": "رقم الطلب" },
+    { "value": "{url:رقم_الطلب}", "label": "رقم الطلب (URL encoded)" }
+  ]
+}
+```
+
+### كيف يستعملها التطبيق
+
+اعرض `label` زرًّا، وعند الضغط أدرج `value` في موضع المؤشّر داخل نصّ الرسالة. **لا تستبدل شيئًا في التطبيق** — الاستبدال كلّه في الخادم وقت الإرسال، ببيانات جهة الاتصال التي ستصلها الرسالة.
+
+### لماذا endpoint ولا تُكتب في التطبيق
+
+القائمة نصفان: جزء ثابت (الاسم · البريد · الجوال · المجموعة · العنوان · اسم المنشأة…)، وجزء **يخصّ كل منشأة** — الحقول المخصّصة التي يعرّفها العميل في جهات الاتصال. الثاني يتغيّر متى أضاف العميل حقلًا، فحفظه في كود التطبيق يجعله يعرض متغيّرات لا وجود لها أو يُخفي متغيّرات موجودة.
+
+`{url:...}` هي نسخة الحقل بعد ترميز URL — تُستعمل حين يوضع المتغيّر داخل رابط.
+
+**تنبيه**: إن كان الحقل فارغًا عند جهة الاتصال، يصلها الرمز كما هو (`{email}`) — عدا `{group}` فيختفي. تجنّب المتغيّرات التي قد لا يملأها كل العملاء، أو اكتب نصًّا يحتمل فراغها.
+
+---
+
 ## ملخّص النقاط
 
 | # | النقطة | الصلاحية |
@@ -617,6 +726,7 @@ DELETE /api/v1/automation/basic/{uuid}
 | 16 | `POST /automation/basic` | owner · manager |
 | 17 | `PUT /automation/basic/{uuid}` | owner · manager |
 | 18 | `DELETE /automation/basic/{uuid}` | owner · manager |
+| 19 | `GET /settings/placeholders` | الكل |
 
 ---
 

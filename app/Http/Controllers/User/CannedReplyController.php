@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Helper;
 use App\Services\ActivityLogger;
+use App\Services\ContactPlaceholderService;
 
 class CannedReplyController extends BaseController
 {
@@ -42,32 +43,9 @@ class CannedReplyController extends BaseController
 
     public function create(){
         $data['title'] = __('Canned replies');
-        $placeholders = config('formats.placeholders');
-        $organizationId = session()->get('current_organization');
-        $additionalFields = DB::table('contact_fields')
-            ->where('organization_id', $organizationId)
-            ->where('deleted_at', null)
-            ->pluck('name');
-
-        $additionalPlaceholders = $additionalFields->map(function($name) {
-            // Convert name to lowercase and replace spaces with underscores
-            $value = '{' . strtolower(str_replace(' ', '_', $name)) . '}';
-            return [
-                'value' => $value,
-                'label' => $name,
-            ];
-        })->toArray();
-
-        // Add URL-encoded versions of custom contact fields
-        $additionalUrlPlaceholders = $additionalFields->map(function($name) {
-            $urlValue = '{url:' . strtolower(str_replace(' ', '_', $name)) . '}';
-            return [
-                'value' => $urlValue,
-                'label' => $name . ' (URL encoded)',
-            ];
-        })->toArray();
-
-        $data['placeholders'] = array_merge($placeholders, $additionalPlaceholders, $additionalUrlPlaceholders);
+        $data['placeholders'] = ContactPlaceholderService::optionsForOrganization(
+            (int) session()->get('current_organization')
+        );
 
         return Inertia::render('User/Automation/Basic/Create', $data);
     }
@@ -88,23 +66,11 @@ class CannedReplyController extends BaseController
     public function edit($uuid){
         $data['title'] = __('Canned replies');
         $data['autoreply'] = AutoReply::where('uuid', $uuid)->first();
-        $placeholders = config('formats.placeholders');
-        $organizationId = session()->get('current_organization');
-        $additionalFields = DB::table('contact_fields')
-            ->where('organization_id', $organizationId)
-            ->where('deleted_at', null)
-            ->pluck('name');
-
-        $additionalPlaceholders = $additionalFields->map(function($name) {
-            // Convert name to lowercase and replace spaces with underscores
-            $value = '{' . strtolower(str_replace(' ', '_', $name)) . '}';
-            return [
-                'value' => $value,
-                'label' => $name,
-            ];
-        })->toArray();
-
-        $data['placeholders'] = array_merge($placeholders, $additionalPlaceholders);
+        // كانت هنا نسخة ثالثة من الكود نفسه تُسقط {url:...} للحقول المخصّصة،
+        // فيرى المستخدم في التعديل متغيّرات أقلّ ممّا رآه في الإنشاء.
+        $data['placeholders'] = ContactPlaceholderService::optionsForOrganization(
+            (int) session()->get('current_organization')
+        );
 
         return Inertia::render('User/Automation/Basic/Edit', $data);
     }

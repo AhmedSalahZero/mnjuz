@@ -94,7 +94,14 @@ Route::match(['get', 'post'], '/payment/myfatoorah/success', [App\Http\Controlle
 Route::match(['get', 'post'], '/payment/myfatoorah/error', [App\Http\Controllers\PaymentController::class, 'myfatoorahError']);
 Route::match(['get', 'post'], '/payment/{processor}', [App\Http\Controllers\PaymentController::class, 'processPayment']);
 
-Route::get('/migrate-upgrade', [App\Http\Controllers\FrontendController::class, 'migrate']);
+// حُذف Route::get('/migrate-upgrade', [FrontendController::class, 'migrate']).
+//
+// جاء مع النسخة الأصلية من السكربت ولم تُكتب دالّته قطّ، فكل طلب عليه يرمي
+// BadMethodCallException — رُصد في الإنتاج. ولا شيء في النظام يشير إليه.
+//
+// وحذفه لا تنظيفٌ فحسب: المسار كان خارج أي مجموعة مصادقة — ومجموعة web ليس
+// فيها auth — أي أنه مفتوح لكل زائر. ولو كُتبت له دالّة يوماً باسمها لصار
+// تشغيل الترحيلات متاحاً لمن عرف العنوان.
 
 Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(function () {
     Route::get('/login', [App\Http\Controllers\AuthController::class, 'showLoginForm'])->name('login');

@@ -170,6 +170,18 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::get('/settings/working-hours', [App\Http\Controllers\Api\MobileSettingController::class, 'workingHours']);
 	Route::post('/settings/working-hours', [App\Http\Controllers\Api\MobileSettingController::class, 'updateWorkingHours']);
 
+	// متغيّرات الرسائل — تقابل «اختر متغيّر» في الويب
+	Route::get('/settings/placeholders', [App\Http\Controllers\Api\MobileSettingController::class, 'placeholders']);
+
+	// تذاكر الدعم — طلبٌ يفتحه صاحب الحساب لفريق الدعم عندنا.
+	// غير /tickets أعلاه: تلك حالة محادثات العملاء.
+	Route::get('/support-tickets', [App\Http\Controllers\Api\MobileSupportTicketController::class, 'index']);
+	Route::post('/support-tickets', [App\Http\Controllers\Api\MobileSupportTicketController::class, 'store']);
+	Route::get('/support-tickets/{uuid}', [App\Http\Controllers\Api\MobileSupportTicketController::class, 'show']);
+	Route::post('/support-tickets/{uuid}/comment', [App\Http\Controllers\Api\MobileSupportTicketController::class, 'comment']);
+	Route::post('/support-tickets/{uuid}/status', [App\Http\Controllers\Api\MobileSupportTicketController::class, 'changeStatus']);
+	Route::post('/support-tickets/{uuid}/priority', [App\Http\Controllers\Api\MobileSupportTicketController::class, 'changePriority']);
+
 	// الأتمتة الأساسية (الردود الجاهزة)
 	Route::get('/automation/basic', [App\Http\Controllers\Api\MobileAutomationController::class, 'index']);
 	Route::post('/automation/basic', [App\Http\Controllers\Api\MobileAutomationController::class, 'store']);

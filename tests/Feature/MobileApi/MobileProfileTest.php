@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\MobileApi;
 
+use App\Models\Addon;
+
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 
@@ -37,6 +39,92 @@ class MobileProfileTest extends MobileApiTestCase
         $this->assertSame('أحمد', $this->owner->first_name);
         $this->assertSame('new@example.com', $this->owner->email);
         $this->assertSame('ar', $this->owner->language);
+    }
+
+    // ------------------------------------------------- عمليات التحقق
+
+    /**
+     * تبويب «عمليات التحقق» في نافذة الملف الشخصي بالويب.
+     *
+     * إعدادٌ واحد: هل يُطلب من المستخدم تحقّق واحد قبل دخول لوحة التحكّم؟
+     * لم يكن في الـ API لا قراءةً ولا كتابة — ويُخلط بينه وبين
+     * `/verification/send` و`/verification/confirm`، وتلك تُنفّذ عملية
+     * التحقّق نفسها لا تُبدّل هذا الإعداد.
+     */
+    public function test_the_profile_carries_the_verification_setting(): void
+    {
+        $this->owner->forceFill(['verification_enabled' => true, 'is_verified' => true])->save();
+
+        $this->getJson('/api/v1/profile')
+            ->assertOk()
+            ->assertJsonPath('data.verification_enabled', true)
+            ->assertJsonPath('data.is_verified', true);
+    }
+
+    /** ومعه راية تقول للتطبيق متى يُظهر الخيار أصلاً. */
+    public function test_the_profile_says_whether_the_option_is_available(): void
+    {
+        $this->getJson('/api/v1/profile')
+            ->assertOk()
+            ->assertJsonPath('data.verification_available', true);
+
+        Addon::where('name', 'Google Authenticator')->update(['is_active' => 0]);
+
+        $this->getJson('/api/v1/profile')
+            ->assertOk()
+            ->assertJsonPath('data.verification_available', false);
+    }
+
+    public function test_it_turns_the_verification_on_and_off(): void
+    {
+        $this->putJson('/api/v1/profile', $this->profilePayload(['verification_enabled' => true]))
+            ->assertOk()
+            ->assertJsonPath('data.verification_enabled', true);
+
+        $this->assertTrue((bool) $this->owner->fresh()->verification_enabled);
+
+        $this->putJson('/api/v1/profile', $this->profilePayload(['verification_enabled' => false]))
+            ->assertOk()
+            ->assertJsonPath('data.verification_enabled', false);
+
+        $this->assertFalse((bool) $this->owner->fresh()->verification_enabled);
+    }
+
+    /** حفظ الاسم وحده لا يُطفئ التحقّق: الحقل يسكن تبويباً آخر في الويب. */
+    public function test_saving_the_profile_without_it_leaves_it_alone(): void
+    {
+        Addon::where('name', 'Google Authenticator')->update(['is_active' => 1]);
+        $this->owner->forceFill(['verification_enabled' => true])->save();
+
+        $this->putJson('/api/v1/profile', $this->profilePayload())->assertOk();
+
+        $this->assertTrue((bool) $this->owner->fresh()->verification_enabled);
+    }
+
+    /** والإضافة مطفأة ⇒ لا يُحفظ إعداد لا أثر له. */
+    public function test_it_is_ignored_when_the_addon_is_off(): void
+    {
+        Addon::where('name', 'Google Authenticator')->update(['is_active' => 0]);
+
+        $this->putJson('/api/v1/profile', $this->profilePayload(['verification_enabled' => true]))->assertOk();
+
+        $this->assertFalse((bool) $this->owner->fresh()->verification_enabled);
+    }
+
+    public function test_a_non_boolean_value_is_rejected(): void
+    {
+        $this->putJson('/api/v1/profile', $this->profilePayload(['verification_enabled' => 'ربما']))
+            ->assertStatus(400);
+    }
+
+    /** @param array<string, mixed> $extra */
+    private function profilePayload(array $extra = []): array
+    {
+        return array_merge([
+            'first_name' => $this->owner->first_name,
+            'last_name' => $this->owner->last_name,
+            'email' => $this->owner->email,
+        ], $extra);
     }
 
     public function test_a_missing_name_is_rejected(): void

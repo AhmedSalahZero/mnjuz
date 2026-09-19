@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\MobileApi;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
+use App\Models\Addon;
 use App\Models\User;
 use App\Rules\UniqueEmail;
 use Illuminate\Http\JsonResponse;
@@ -45,12 +46,32 @@ class MobileProfileController extends Controller
             'language' => $user->language,
             // صلاحية المنشأة لا صلاحية المنصّة — نفس ما تُرجعه list-teams.
             'role' => $this->role($request),
+            // تبويب «عمليات التحقق» في الويب: هل يُطلب من المستخدم تحقّق
+            // واحد قبل دخول لوحة التحكّم؟ ويظهر هناك متى كانت إضافة
+            // Google Authenticator مفعّلة، فنُرجع حالتها كي يعرف التطبيق
+            // متى يُظهر الخيار.
+            'verification_enabled' => (bool) $user->verification_enabled,
+            'is_verified' => (bool) $user->is_verified,
+            'verification_available' => $this->verificationAvailable(),
             'organization' => $organization ? [
                 'id' => $organization->id,
                 'uuid' => $organization->uuid,
                 'name' => $organization->name,
             ] : null,
         ];
+    }
+
+    /**
+     * هل خيار التحقّق معروض أصلاً؟
+     *
+     * الويب يُظهر التبويب متى كانت إضافة Google Authenticator مفعّلة، ويُخفيه
+     * وإلا. فلو قبلنا التعديل والإضافة مطفأة لحفظنا إعداداً لا أثر له.
+     */
+    private function verificationAvailable(): bool
+    {
+        $addon = Addon::where('name', 'Google Authenticator')->first();
+
+        return $addon !== null && (int) $addon->is_active === 1;
     }
 
     public function update(Request $request): JsonResponse
@@ -63,6 +84,7 @@ class MobileProfileController extends Controller
             'email' => ['required', 'email', new UniqueEmail($user->id)],
             'phone' => 'nullable|string|max:255',
             'language' => 'nullable|string|max:10',
+            'verification_enabled' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -71,13 +93,21 @@ class MobileProfileController extends Controller
 
         $validated = $validator->validated();
 
-        User::where('id', $user->id)->update([
+        $changes = [
             'first_name' => $validated['first_name'],
             'last_name' => $validated['last_name'],
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
             'language' => $validated['language'] ?? $user->language,
-        ]);
+        ];
+
+        // لا يُمسّ إن لم يُرسَل: بقيّة الحقول مطلوبة في هذا الطلب، وهذا وحده
+        // يسكن تبويباً آخر في الويب — فشاشة الملف الشخصي قد تحفظ بلا ذكره.
+        if ($request->has('verification_enabled') && $this->verificationAvailable()) {
+            $changes['verification_enabled'] = $request->boolean('verification_enabled');
+        }
+
+        User::where('id', $user->id)->update($changes);
 
         // التحديث تمّ باستعلام لا بالموديل، فنسخة المستخدم في الذاكرة ما
         // زالت قديمة — وهي التي يبني منها الردّ.

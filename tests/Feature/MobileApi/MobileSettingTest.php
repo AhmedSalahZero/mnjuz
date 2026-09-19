@@ -44,6 +44,78 @@ class MobileSettingTest extends MobileApiTestCase
             ->assertJsonPath('data.organization.id', $this->organization->id);
     }
 
+    /**
+     * شكل قوائم الاختيار كما تصل التطبيق فعلاً.
+     *
+     * التوثيق كان يعرضها مصفوفة نصوص — «Asia/Riyadh» و«bell» — وهي في
+     * الحقيقة كائنات {value, label}. مطوّر التطبيق يبني عليها قائمته، فخطأ
+     * التوثيق يُسقط الشاشة عنده لا عندنا. هذا الاختبار يجعل الشكل عقداً.
+     */
+    public function test_the_dropdown_lists_are_value_label_objects(): void
+    {
+        $data = $this->getJson('/api/v1/settings/general')->assertOk()->json('data');
+
+        foreach (['timezones', 'sounds'] as $list) {
+            $this->assertNotEmpty($data[$list], $list . ' فارغة');
+
+            foreach ($data[$list] as $item) {
+                $this->assertIsArray($item, $list . ': العنصر كائن لا نصّ');
+                $this->assertArrayHasKey('value', $item);
+                $this->assertArrayHasKey('label', $item);
+            }
+        }
+    }
+
+    /** ونغمة الإشعار قيمتها مسار ملف لا اسم مختصر. */
+    public function test_the_tone_value_is_one_of_the_offered_sounds(): void
+    {
+        $data = $this->getJson('/api/v1/settings/general')->assertOk()->json('data');
+        $offered = array_column($data['sounds'], 'value');
+
+        $this->assertNotEmpty($offered);
+        $this->assertStringStartsWith('/sounds/', $offered[0]);
+
+        $this->postJson('/api/v1/settings/general', [
+            'notifications' => ['tone' => $offered[0]],
+        ])->assertOk()->assertJsonPath('data.notifications.tone', $offered[0]);
+    }
+
+    /**
+     * إحداثيات المنشأة تصل ضمن العنوان.
+     *
+     * تقرير التطبيق قال إنها غائبة من كل النقاط — وهي محفوظة داخل JSON
+     * العنوان نفسه، والنقطة تُعيده كاملاً. الغائب هو الكتابة وحدها.
+     */
+    public function test_the_map_coordinates_come_back_inside_the_address(): void
+    {
+        $this->organization->address = json_encode([
+            'street' => 'الروضة',
+            'city' => 'جدة',
+            'latitude' => 21.5433,
+            'longitude' => 39.1728,
+        ]);
+        $this->organization->save();
+
+        $address = $this->getJson('/api/v1/settings/general')
+            ->assertOk()
+            ->json('data.organization.address');
+
+        $this->assertSame(21.5433, $address['latitude']);
+        $this->assertSame(39.1728, $address['longitude']);
+        $this->assertSame('جدة', $address['city']);
+    }
+
+    /** ومنشأة بلا عنوان تُرجع مصفوفة فارغة لا null. */
+    public function test_an_organization_without_an_address_returns_an_empty_array(): void
+    {
+        $this->organization->address = null;
+        $this->organization->save();
+
+        $this->getJson('/api/v1/settings/general')
+            ->assertOk()
+            ->assertJsonPath('data.organization.address', []);
+    }
+
     public function test_it_updates_the_general_settings(): void
     {
         $this->postJson('/api/v1/settings/general', [

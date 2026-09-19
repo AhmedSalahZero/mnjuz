@@ -39,6 +39,16 @@
       "key": "reply_uuid",
       "value": "",
       "description": "canned reply uuid — from get canned replies"
+    },
+    {
+      "key": "template_uuid",
+      "value": "",
+      "description": "approved template uuid — from get general settings → auth_templates"
+    },
+    {
+      "key": "support_ticket_uuid",
+      "value": "",
+      "description": "support ticket uuid — from get support tickets"
     }
   ],
   "item": [
@@ -337,6 +347,249 @@
       ]
     },
     {
+      "name": "support tickets",
+      "description": "Tickets you open with OUR support team. Not the same as /tickets, which is the state of customer conversations.",
+      "item": [
+        {
+          "name": "get support tickets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support-tickets?page=1&per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support-tickets"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "**Who**: everyone — you only ever see your own tickets.\n\nThe response carries every dropdown list the screen needs: `categories`, `statuses`, `priorities`.\n\nSupport actually works in Waz Business, so `waz_tickets` is the list as the team sees it and is the source of truth for status and replies. When `waz_available` is false that system is unreachable right now — show `items` and warn that the status may be stale."
+          }
+        },
+        {
+          "name": "get support ticket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support-tickets/{{support_ticket_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support-tickets",
+                "{{support_ticket_uuid}}"
+              ]
+            },
+            "description": "**Who**: the ticket owner — 404 for anyone else's ticket.\n\nAdds `comments`, each with `user.is_me` so you can align the bubble without comparing ids.\n\nOpening a ticket marks its comments as read; no separate call is needed."
+          }
+        },
+        {
+          "name": "create support ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support-tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support-tickets"
+              ]
+            },
+            "description": "**Who**: everyone, agents included.\n\nAll three fields are required; `category` is an id from `categories`.\n\nThe response carries `synced_with_support`. **The ticket is saved either way** — false only means syncing with the support system is delayed. Never ask the user to resend, it would create a duplicate.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category\": 1,\n  \"subject\": \"Wrong invoice\",\n  \"message\": \"The amount charged is higher than expected\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "comment on support ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support-tickets/{{support_ticket_uuid}}/comment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support-tickets",
+                "{{support_ticket_uuid}}",
+                "comment"
+              ]
+            },
+            "description": "**Who**: the ticket owner — 404 otherwise.\n\nThe response returns the ticket with the refreshed `comments`, so no follow-up GET is needed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"The problem is still there\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "change support ticket status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support-tickets/{{support_ticket_uuid}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support-tickets",
+                "{{support_ticket_uuid}}",
+                "status"
+              ]
+            },
+            "description": "**Who**: the ticket owner. Accepts only a value from `statuses` — anything else returns 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"closed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "change support ticket priority",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support-tickets/{{support_ticket_uuid}}/priority",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support-tickets",
+                "{{support_ticket_uuid}}",
+                "priority"
+              ]
+            },
+            "description": "**Who**: the ticket owner. Accepts only a value from `priorities` — anything else returns 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"high\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "profile",
       "description": "Every user reads and edits their own profile. No role or plan requirement.",
       "item": [
@@ -365,7 +618,7 @@
                 "profile"
               ]
             },
-            "description": "**Who**: everyone\n\n`data.role` is the **organization role** (`owner`/`manager`/`agent`), not the platform role.\n\nRead it once on app start and use it to show or hide screens."
+            "description": "**Who**: everyone\n\n`data.role` is the **organization role** (`owner`/`manager`/`agent`), not the platform role.\n\nRead it once on app start and use it to show or hide screens.\n\n`verification_enabled` / `is_verified` / `verification_available` mirror the \"Verifications\" tab in the web profile dialog. Hide the option entirely when `verification_available` is false — the Google Authenticator addon is off.\n\nThis is the SETTING. `/verification/send` and `/verification/confirm` perform a verification; they are unrelated."
           },
           "response": []
         },
@@ -398,10 +651,10 @@
                 "profile"
               ]
             },
-            "description": "**Who**: everyone\n\n**Required**: `first_name`, `last_name`, `email`\n\n**Optional**: `phone`, `language`\n\nReturns 400 with `errors.email` when the email is already used by another user.\n\nThe response returns the profile after the update.",
+            "description": "**Who**: everyone\n\n**Required**: `first_name`, `last_name`, `email`\n\n**Optional**: `phone`, `language`\n\nReturns 400 with `errors.email` when the email is already used by another user.\n\nThe response returns the profile after the update.\n\n`verification_enabled` is optional and boolean. Leave it out and the stored value is not touched — it lives in a different tab in the web UI. It is ignored when the Google Authenticator addon is off.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Ahmed\",\n  \"last_name\": \"Salah\",\n  \"email\": \"ahmed@example.com\",\n  \"phone\": \"+966501234567\",\n  \"language\": \"ar\"\n}",
+              "raw": "{\n  \"first_name\": \"Ahmed\",\n  \"last_name\": \"Salah\",\n  \"email\": \"ahmed@example.com\",\n  \"phone\": \"+966501234567\",\n  \"language\": \"ar\",\n  \"verification_enabled\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -486,7 +739,7 @@
                 "general"
               ]
             },
-            "description": "**Who**: everyone — an agent can read but not write\n\n`data.timezones` and `data.sounds` are the ready-made option lists, so no extra call is needed to build the pickers."
+            "description": "**Who**: everyone\n\nReturns the settings plus every dropdown list the screen needs, so no extra call is required: `timezones`, `sounds`, `contact_groups` (options for `campaigns.failed_campaign_group`) and `auth_templates` (APPROVED templates only).\n\n`timezones` and `sounds` are `{value, label}` objects, not plain strings. `notifications.tone` is one of `sounds[].value` — a file path such as `/sounds/message-pop-alert.mp3`.\n\n`auth_template` is the current selection or null; its `parameters` are null when they belong to a different template. For the template structure (preview, variables) use `GET /list-templates`."
           },
           "response": []
         },
@@ -520,10 +773,10 @@
                 "general"
               ]
             },
-            "description": "**Who**: owner, manager — an agent gets 403\n\n**Body**: every field is optional — `timezone`, `notifications`, `campaigns`, `support`\n\n**Partial by design**: anything you do not send stays as it is, even inside one section. Sending `notifications.tone` alone changes the tone and keeps `volume`.\n\n**Not available here**: organization name and address. Changing them syncs with the billing platform, so they stay on the web for now.\n\nReturns 400 with `errors['support.ticket_form_url']` when the url is invalid.",
+            "description": "**Who**: owner, manager — an agent gets 403\n\nEvery field is optional and updates are partial, inside sections too: sending only `notifications.tone` leaves `volume` untouched.\n\n`auth_template` is the uuid of the template used by `send-auth-template`. It must be one of `auth_templates` from the GET (APPROVED only) — anything else returns 400. Send `null` to clear it.\n\n`auth_template_parameters.template` must equal `auth_template`, otherwise 400: the sender ignores mismatched variables.\n\nOrganization name, address and map coordinates are web-only — they sync with the billing platform.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"timezone\": \"Asia/Riyadh\",\n  \"notifications\": {\n    \"enable_sound\": true,\n    \"tone\": \"bell\",\n    \"volume\": 0.5\n  },\n  \"campaigns\": {\n    \"enable_resend\": true,\n    \"resend_intervals\": [\n      5,\n      30\n    ]\n  },\n  \"support\": {\n    \"ticket_form_url\": \"https://support.example.com/new\"\n  }\n}",
+              "raw": "{\n  \"timezone\": \"Asia/Riyadh\",\n  \"notifications\": {\n    \"enable_sound\": true,\n    \"tone\": \"/sounds/message-pop-alert.mp3\",\n    \"volume\": 0.5\n  },\n  \"campaigns\": {\n    \"enable_resend\": true,\n    \"resend_intervals\": [\n      5,\n      30\n    ]\n  },\n  \"support\": {\n    \"ticket_form_url\": \"https://support.example.com/new\"\n  },\n  \"auth_template\": \"{{template_uuid}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -605,6 +858,35 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "get message placeholders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/settings/placeholders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "placeholders"
+              ]
+            },
+            "description": "**Who**: everyone\n\nThe variables a user can insert into a message — the \"Select variable\" dialog in the web app. Needed by two screens: the out-of-hours message and the canned reply text.\n\nShow `label` as a button, insert `value` at the cursor. Do not substitute anything in the app — the server replaces the tokens when the message is sent.\n\nHalf the list is per-organization (custom contact fields), so it cannot be hardcoded in the app."
+          }
         }
       ]
     },

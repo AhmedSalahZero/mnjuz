@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Validator;
 use App\Services\ActivityLogger;
+use App\Services\ContactPlaceholderService;
 
 class SettingController extends BaseController
 {
@@ -647,31 +648,7 @@ class SettingController extends BaseController
      */
     private function replyMessagePlaceholdersForOrganization(int $organizationId): array
     {
-        $placeholders = config('formats.placeholders') ?? [];
-        if (! is_array($placeholders)) {
-            $placeholders = [];
-        }
-
-        $additionalFields = DB::table('contact_fields')
-            ->where('organization_id', $organizationId)
-            ->where('deleted_at', null)
-            ->pluck('name');
-
-        $additionalPlaceholders = $additionalFields->map(static function ($name) {
-            return [
-                'value' => '{' . strtolower(str_replace(' ', '_', $name)) . '}',
-                'label' => $name,
-            ];
-        })->toArray();
-
-        $additionalUrlPlaceholders = $additionalFields->map(static function ($name) {
-            return [
-                'value' => '{url:' . strtolower(str_replace(' ', '_', $name)) . '}',
-                'label' => $name . ' (URL encoded)',
-            ];
-        })->toArray();
-
-        return array_merge($placeholders, $additionalPlaceholders, $additionalUrlPlaceholders);
+        return ContactPlaceholderService::optionsForOrganization($organizationId);
     }
 
     /**
