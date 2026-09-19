@@ -465,6 +465,12 @@ GET /api/v1/settings/general
       "name": "startchat",
       "language": "ar",
       "status": "APPROVED",
+      "components": [
+        { "type": "HEADER", "format": "TEXT", "text": "رسالة من متجرنا" },
+        { "type": "BODY", "text": "أهلاً {{1}}، رمز التحقق هو {{2}}" },
+        { "type": "FOOTER", "text": "شكراً لك" },
+        { "type": "BUTTONS", "buttons": [ { "type": "URL", "text": "موقعنا", "url": "https://example.com" } ] }
+      ],
       "parameters": { "template": "6a1f0e22-33bd-4a0e-9f2c-8d41b2c7e590", "body": { "parameters": [] } }
     },
     "contact_groups": [
@@ -495,7 +501,20 @@ GET /api/v1/settings/general
 
 **`auth_template`** القالب المختار حاليًا، أو `null` إن لم يُختَر أو حُذف. و`parameters` متغيّراته المحفوظة، أو `null` إن كانت لقالب آخر — فالمُرسِل يُهملها عندها.
 
-بنية القالب (المكوّنات والمتغيّرات) للمعاينة والتحرير: من `GET /api/v1/list-templates` — تُرجع `metadata` لكل قالب. لم نُكرّرها هنا كي لا يثقل ردّ الإعدادات.
+**`auth_template.components`** بنية القالب كما تحفظها Meta — بها تُرسم المعاينة:
+
+| المكوّن | ما يحمله |
+|---|---|
+| `HEADER` | `format` و`text` (أو وسائط) |
+| `BODY` | `text` المتن، وفيه `{{1}}` و`{{2}}` مواضع المتغيّرات |
+| `FOOTER` | `text` |
+| `BUTTONS` | `buttons[]` ولكل زرّ `type` و`text` و`url` |
+
+وهي **للقالب المختار وحده**. `auth_templates` تبقى خفيفة (`uuid` · `name` · `language`) لأن ردّ الإعدادات يُستدعى عند كل فتح للشاشة.
+
+`components` **مصفوفة دائمًا** — تكون `[]` إن كانت بنية القالب ناقصة، فمرّ عليها بحلقة بلا فحص `null`.
+
+ولا تحتاج `GET /list-templates` إلا في حالة واحدة: أن يُبدّل المستخدم القالب ويريد معاينة قالبٍ لم يُحفظ بعد.
 
 **`address` يُعاد كما هو محفوظ**، ويشمل `latitude` و`longitude` متى ضبطهما العميل من الويب. الحقول كلّها **للقراءة فقط** من التطبيق — العنوان والاسم والإحداثيات تُزامَن مع منصّة الفوترة فبقيت في الويب. ومنشأة بلا عنوان تُرجع `[]` لا `null`.
 

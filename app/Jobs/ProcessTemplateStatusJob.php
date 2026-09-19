@@ -30,7 +30,10 @@ class ProcessTemplateStatusJob implements ShouldQueue
     public function handle()
     {
         try {
-            $template = Template::where('meta_id', $this->templateData['message_template_id'])
+            // withTrashed: هذه مطابقةٌ بما يصل من Meta لا استعمالٌ للقالب.
+            // ولو أخفينا المحذوف لأنشأ التحديثُ صفّاً ثانياً لنفس meta_id.
+            $template = Template::withTrashed()
+                ->where('meta_id', $this->templateData['message_template_id'])
                 ->first();
 
             if($template) {

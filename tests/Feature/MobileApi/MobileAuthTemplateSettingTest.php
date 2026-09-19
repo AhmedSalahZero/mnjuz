@@ -20,6 +20,16 @@ use Illuminate\Support\Str;
  */
 class MobileAuthTemplateSettingTest extends MobileApiTestCase
 {
+    /** بنية قالب حقيقية كما تحفظها Meta. */
+    private const COMPONENTS = [
+        ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'هذه رسالة من ليدز'],
+        ['type' => 'BODY', 'text' => 'أهلاً {{1}}، رمز التحقق هو {{2}}'],
+        ['type' => 'FOOTER', 'text' => 'نورتِ'],
+        ['type' => 'BUTTONS', 'buttons' => [
+            ['type' => 'URL', 'text' => 'موقعنا', 'url' => 'https://ladyes.co/'],
+        ]],
+    ];
+
     private function template(array $attributes = []): Template
     {
         return Template::create(array_merge([
@@ -30,7 +40,7 @@ class MobileAuthTemplateSettingTest extends MobileApiTestCase
             'category' => 'AUTHENTICATION',
             'language' => 'ar',
             'status' => 'APPROVED',
-            'metadata' => json_encode(['components' => []]),
+            'metadata' => json_encode(['components' => self::COMPONENTS]),
             'created_by' => $this->owner->id,
         ], $attributes));
     }
@@ -209,6 +219,77 @@ class MobileAuthTemplateSettingTest extends MobileApiTestCase
         ]);
 
         $this->assertNull($this->general()['auth_template']['parameters']);
+    }
+
+    // ------------------------------------------------- بنية القالب
+
+    /**
+     * المعاينة تحتاج نصّ القالب لا متغيّراته.
+     *
+     * `parameters` ما حفظه المستخدم، وهو لا يكفي لرسم فقاعة الواتساب: لا
+     * عنوان ولا متن ولا تذييل ولا أزرار. فنُرجع مكوّنات القالب المختار معه.
+     */
+    public function test_the_selected_template_carries_its_components(): void
+    {
+        $template = $this->template();
+        $this->setMetadata(['auth_template' => (string) $template->uuid]);
+
+        $components = $this->general()['auth_template']['components'];
+
+        $this->assertCount(4, $components);
+        $this->assertSame(self::COMPONENTS, $components);
+    }
+
+    /** كل جزء من المعاينة موجود: العنوان والمتن والتذييل والأزرار. */
+    public function test_the_components_carry_every_part_of_the_preview(): void
+    {
+        $template = $this->template();
+        $this->setMetadata(['auth_template' => (string) $template->uuid]);
+
+        $components = collect($this->general()['auth_template']['components'])->keyBy('type');
+
+        $this->assertSame('هذه رسالة من ليدز', $components['HEADER']['text']);
+        $this->assertSame('أهلاً {{1}}، رمز التحقق هو {{2}}', $components['BODY']['text']);
+        $this->assertSame('نورتِ', $components['FOOTER']['text']);
+        $this->assertSame('موقعنا', $components['BUTTONS']['buttons'][0]['text']);
+    }
+
+    /** metadata بلا مفتاح components: مصفوفة فارغة لا null. */
+    public function test_a_template_without_components_returns_an_empty_array(): void
+    {
+        $template = $this->template(['metadata' => json_encode(['name' => 'x'])]);
+        $this->setMetadata(['auth_template' => (string) $template->uuid]);
+
+        $this->assertSame([], $this->general()['auth_template']['components']);
+    }
+
+    /** وmetadata تالفة لا تُسقط الردّ. */
+    public function test_broken_metadata_does_not_break_the_response(): void
+    {
+        $template = $this->template(['metadata' => 'ليست JSON']);
+        $this->setMetadata(['auth_template' => (string) $template->uuid]);
+
+        $this->assertSame([], $this->general()['auth_template']['components']);
+    }
+
+    /** والقائمة تبقى خفيفة: لا مكوّنات مع كل قالب. */
+    public function test_the_options_list_stays_light(): void
+    {
+        $this->template();
+
+        foreach ($this->general()['auth_templates'] as $option) {
+            $this->assertSame(['uuid', 'name', 'language'], array_keys($option));
+        }
+    }
+
+    /** وبعد الحفظ تصل المكوّنات مباشرةً بلا استدعاء آخر. */
+    public function test_components_arrive_right_after_saving_the_template(): void
+    {
+        $template = $this->template();
+
+        $this->postJson('/api/v1/settings/general', ['auth_template' => (string) $template->uuid])
+            ->assertOk()
+            ->assertJsonPath('data.auth_template.components', self::COMPONENTS);
     }
 
     // ------------------------------------------------- الكتابة

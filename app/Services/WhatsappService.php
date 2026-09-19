@@ -1679,7 +1679,10 @@ class WhatsappService
 
 
                 foreach($responseObject->data as $templateData){
-                    $template = Template::where('organization_id', session()->get('current_organization'))
+                    // withTrashed: مزامنة قوائم Meta بما عندنا، لا استعمال
+                    // للقالب. وإخفاء المحذوف يُنشئ صفّاً ثانياً لنفس meta_id.
+                    $template = Template::withTrashed()
+                        ->where('organization_id', session()->get('current_organization'))
                         ->where('meta_id', $templateData->id)->first();
 
                     if($template){

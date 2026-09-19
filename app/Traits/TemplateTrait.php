@@ -12,6 +12,16 @@ trait TemplateTrait{
         $campaign = Campaign::where('id', $campaignId)->first();
         $campaignTemplate = Template::where('id', $campaign->template_id)->first();
 
+        // حملة قالبها حُذف: نقف برسالة مفهومة بدل قراءة خاصّية من null.
+        //
+        // والحذف عندنا يحذفه عند واتساب أيضاً، فالإرسال كان سيفشل هناك برمز
+        // غامض على كل رقم في الحملة. الوقوف هنا أوضح وأسرع.
+        if (!$campaignTemplate) {
+            throw new \RuntimeException(
+                'Campaign template was deleted; campaign ' . $campaignId . ' cannot be sent.'
+            );
+        }
+
         $metadata = json_decode($campaign->metadata);
 
         return $this->buildTemplate($campaignTemplate->name, $campaignTemplate->language, $metadata, $contact);

@@ -79,6 +79,12 @@ class MobileSettingController extends Controller
                 'ticket_form_url' => $metadata['support']['ticket_form_url'] ?? null,
             ],
             'auth_template' => $this->authTemplate($organization, $metadata),
+            // اختيارٌ ضاع: القالب كان مختاراً ثم حُذف.
+            //
+            // auth_template تعود null في الحالتين — «لم يُختَر قطّ» و«اختير
+            // ثم حُذف» — والفرق مهمّ للمستخدم: الثانية تعني أن رسالة التحقّق
+            // توقّفت عنده وهو لا يدري. فالتطبيق يُنبّهه أن يختار بديلاً.
+            'auth_template_missing' => $this->authTemplateMissing($organization, $metadata),
             'timezones' => array_values(config('formats.timezones', [])),
             'sounds' => config('sounds', []),
             // قوائم الاختيار التي كانت ناقصة: النقطة تقبل تعديل
@@ -130,6 +136,22 @@ class MobileSettingController extends Controller
     }
 
     /**
+     * هل يشير الإعداد إلى قالب لم يعد موجوداً؟
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    private function authTemplateMissing(Organization $organization, array $metadata): bool
+    {
+        $uuid = $metadata['auth_template'] ?? null;
+
+        if (!is_string($uuid) || $uuid === '') {
+            return false;
+        }
+
+        return $this->authTemplate($organization, $metadata) === null;
+    }
+
+    /**
      * قالب المصادقة المختار ومتغيّراته.
      *
      * يُرسله send-auth-template لرمز التحقق. والمتغيّرات تُحفظ ومعها uuid
@@ -147,9 +169,9 @@ class MobileSettingController extends Controller
             return null;
         }
 
+        // بلا whereNull: الموديل يستثني المحذوف بنفسه منذ إضافة SoftDeletes.
         $template = Template::where('uuid', $uuid)
             ->where('organization_id', $organization->id)
-            ->whereNull('deleted_at')
             ->first();
 
         if (!$template) {
@@ -164,8 +186,33 @@ class MobileSettingController extends Controller
             'name' => $template->name,
             'language' => $template->language,
             'status' => $template->status,
+            // بنية القالب للمختار وحده — بها يرسم التطبيق المعاينة من هذا
+            // الاستدعاء بلا حاجة إلى list-templates.
+            //
+            // للمختار وحده لا لكل القوالب: metadata لكل قالب ثقيلة، وردّ
+            // الإعدادات يُستدعى عند كل فتح للشاشة.
+            'components' => $this->components($template),
             'parameters' => $belongsToTemplate ? $parameters : null,
         ];
+    }
+
+    /**
+     * مكوّنات القالب: HEADER و BODY و FOOTER و BUTTONS كما تحفظها Meta.
+     *
+     * مصفوفة دائماً ولو كانت metadata فارغة أو تالفة — فالتطبيق يمرّ عليها
+     * بحلقة، وnull تُسقطه.
+     *
+     * @return array<int, mixed>
+     */
+    private function components(Template $template): array
+    {
+        $metadata = $template->metadata ? json_decode($template->metadata, true) : null;
+
+        if (!is_array($metadata) || !isset($metadata['components']) || !is_array($metadata['components'])) {
+            return [];
+        }
+
+        return array_values($metadata['components']);
     }
 
     /**

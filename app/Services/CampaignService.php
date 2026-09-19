@@ -39,6 +39,14 @@ class CampaignService
         $template = Template::where('uuid', $request->template)->first();
         $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
 
+        // القالب المحذوف يُخفيه الموديل الآن، فكانت السطور التالية تقرأ
+        // خاصّية من null. ورسالة التحقّق أوضح من خطأ فادح.
+        if (!$template) {
+            throw ValidationException::withMessages([
+                'template' => __('The selected template is no longer available.'),
+            ]);
+        }
+
         try {
             DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
                 $historyService = app(CampaignMediaHistoryService::class);

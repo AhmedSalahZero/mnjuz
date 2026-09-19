@@ -1271,8 +1271,13 @@ class ApiController extends Controller
         }
 
         $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
+        // القالب المحذوف لا يُرسَل به — والموديل يستثنيه من كل استعلام
+        // (SoftDeletes). وكان يُرسَل به فعلاً: إعدادات المنشأة تشير إلى قالب
+        // حُذف، فتخرج الرسالة بينما تقول شاشة الإعدادات إنه غير مختار.
         $templateUUID = $metadata['auth_template'] ?? null;
-        $template = $templateUUID ? Template::where('uuid', $templateUUID)->where('organization_id', $organizationId)->first() : null;
+        $template = $templateUUID
+            ? Template::where('uuid', $templateUUID)->where('organization_id', $organizationId)->first()
+            : null;
 
         if (!$template) {
             return response()->json([

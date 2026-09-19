@@ -739,7 +739,7 @@
                 "general"
               ]
             },
-            "description": "**Who**: everyone\n\nReturns the settings plus every dropdown list the screen needs, so no extra call is required: `timezones`, `sounds`, `contact_groups` (options for `campaigns.failed_campaign_group`) and `auth_templates` (APPROVED templates only).\n\n`timezones` and `sounds` are `{value, label}` objects, not plain strings. `notifications.tone` is one of `sounds[].value` — a file path such as `/sounds/message-pop-alert.mp3`.\n\n`auth_template` is the current selection or null; its `parameters` are null when they belong to a different template. For the template structure (preview, variables) use `GET /list-templates`."
+            "description": "**Who**: everyone\n\nReturns the settings plus every dropdown list the screen needs, so no extra call is required: `timezones`, `sounds`, `contact_groups` (options for `campaigns.failed_campaign_group`) and `auth_templates` (APPROVED templates only).\n\n`timezones` and `sounds` are `{value, label}` objects, not plain strings. `notifications.tone` is one of `sounds[].value` — a file path such as `/sounds/message-pop-alert.mp3`.\n\n`auth_template` is the current selection or null. It carries `components` — the template structure as Meta stores it (HEADER / BODY / FOOTER / BUTTONS) — so you can draw the preview from this one call. It is always an array, `[]` when the structure is missing. `parameters` are the saved variables, null when they belong to a different template.\n\nOnly the SELECTED template carries `components`; `auth_templates` stays light. You need `GET /list-templates` only to preview a template the user switched to but has not saved yet."
           },
           "response": []
         },
