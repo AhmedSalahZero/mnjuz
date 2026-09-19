@@ -3,7 +3,9 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Models\ContactGroup;
 use App\Rules\CampaignLimit;
+use App\Services\CampaignAudienceService;
 
 class StoreCampaign extends FormRequest
 {
@@ -107,6 +109,59 @@ class StoreCampaign extends FormRequest
         }
 
         return $rules;
+    }
+
+    /**
+     * حملة بلا جمهور لا تُحفظ.
+     *
+     * كانت تُقبل ثم تقف صامتة إلى الأبد: لا سجلّات تُنشأ فلا تتحوّل إلى
+     * ongoing، والعميل ينتظر ولا يعرف. رُصد في الإنتاج على منشأة أنشأت سبع
+     * حملات على مجموعة فارغة.
+     *
+     * والسؤال يُطرح على الخدمة نفسها التي يسألها المُرسِل، فلا يقبل التحقّق
+     * ما سيجده المُرسِل فارغاً.
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if ($validator->errors()->has('contacts') || !$this->filled('contacts')) {
+                return;
+            }
+
+            $organizationId = (int) session()->get('current_organization');
+
+            if ($organizationId <= 0) {
+                return;
+            }
+
+            $selection = $this->input('contacts');
+
+            if ($selection === 'all') {
+                $groupId = 0;
+            } else {
+                $group = ContactGroup::where('uuid', $selection)
+                    ->where('organization_id', $organizationId)
+                    ->whereNull('deleted_at')
+                    ->first(['id']);
+
+                if (!$group) {
+                    $validator->errors()->add('contacts', __('The selected contact group is no longer available.'));
+
+                    return;
+                }
+
+                $groupId = $group->id;
+            }
+
+            if (CampaignAudienceService::isEmpty($organizationId, $groupId)) {
+                $validator->errors()->add(
+                    'contacts',
+                    $selection === 'all'
+                        ? __('There are no contacts to send this campaign to.')
+                        : __('The selected group has no contacts to send to.')
+                );
+            }
+        });
     }
 
     public function messages()

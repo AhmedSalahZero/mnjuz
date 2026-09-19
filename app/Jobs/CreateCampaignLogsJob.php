@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Helpers\DateTimeHelper;
 use App\Models\Campaign;
+use App\Services\CampaignAudienceService;
 use App\Models\CampaignLog;
 use App\Models\Contact;
 use Carbon\Carbon;
@@ -59,7 +60,19 @@ class CreateCampaignLogsJob implements ShouldQueue
     protected function processCampaign(Campaign $campaign)
     {
         $contacts = $this->getContactsForCampaign($campaign);
-        
+
+        // حملة بلا جمهور تُعلَن فاشلة بسببٍ مكتوب.
+        //
+        // كانت تبقى «مجدولة» إلى الأبد: لا سجلّات تُنشأ فلا تتحوّل إلى
+        // ongoing، ويُعاد فحصها كل دورة بلا نتيجة، والعميل ينتظر ولا يعرف.
+        // رُصد في الإنتاج: منشأة أنشأت سبع حملات على مجموعة فارغة، وبقيت
+        // كلّها صامتة حتى سأل العميل.
+        if ($contacts->isEmpty()) {
+            $this->markAsFailed($campaign, 'no_contacts');
+
+            return;
+        }
+
         if ($this->createCampaignLogs($campaign, $contacts)) {
             Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
 
@@ -70,6 +83,33 @@ class CreateCampaignLogsJob implements ShouldQueue
     }
 
     /**
+     * سبب الفشل يُكتب في metadata — لا عمود له في الجدول.
+     */
+    protected function markAsFailed(Campaign $campaign, string $reason): void
+    {
+        $metadata = $campaign->metadata ? json_decode($campaign->metadata, true) : [];
+
+        if (!is_array($metadata)) {
+            $metadata = [];
+        }
+
+        $metadata['failure_reason'] = $reason;
+        $metadata['failed_at'] = now()->toDateTimeString();
+
+        Campaign::where('uuid', $campaign->uuid)->update([
+            'status' => 'failed',
+            'metadata' => json_encode($metadata),
+        ]);
+
+        Log::warning('Campaign has no audience, marked as failed', [
+            'campaign_id' => $campaign->id,
+            'organization_id' => $campaign->organization_id,
+            'contact_group_id' => $campaign->contact_group_id,
+            'reason' => $reason,
+        ]);
+    }
+
+    /**
      * جهات الاتصال المستهدَفة بالحملة، بلا من انسحب من التسويق.
      *
      * الانسحاب يُحترم في المسارين — «الكل» ومجموعة بعينها — لا في الأول وحده:
@@ -77,19 +117,12 @@ class CreateCampaignLogsJob implements ShouldQueue
      */
     protected function getContactsForCampaign(Campaign $campaign)
     {
-        if (empty($campaign->contact_group_id) || $campaign->contact_group_id === '0') {
-            return Contact::where('organization_id', $campaign->organization_id)
-                ->whereNull('deleted_at')
-                ->whereNull('marketing_opted_out_at')
-                ->get();
-        }
-
-        return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
-            $query->where('contact_groups.id', $campaign->contact_group_id);
-        })
-            ->whereNull('deleted_at')
-            ->whereNull('marketing_opted_out_at')
-            ->get();
+        // الخدمة نفسها التي تسألها شاشة الإنشاء قبل الحفظ، فلا يختلف ما
+        // قبِلَته الشاشة عمّا يجده المُرسِل.
+        return CampaignAudienceService::query(
+            (int) $campaign->organization_id,
+            $campaign->contact_group_id
+        )->get();
     }
 
     protected function createCampaignLogs(Campaign $campaign, $contacts)
