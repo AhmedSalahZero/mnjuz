@@ -81,8 +81,15 @@ const page = readFileSync(new URL('../../resources/js/Pages/User/Chat/Index.vue'
 has(page, 'shouldHoldArrival(window.location.search)',
     'الإدراج يجب أن يُفحص قبله وجود بحث نشط')
 has(page, 'heldArrivals', 'المحجوزات تُعدّ')
-has(page, "$t('New messages arrived outside your search')",
+has(page, "$t('New conversations arrived that are not shown')",
     'شريط يُخبر بالمحادثات المحجوزة — لا نُسقطها صامتين')
+
+// النصّ يقول المؤكَّد: «غير معروضة». فالمحادثة قد تطابق البحث وتكون في صفحة
+// لم تُحمَّل بعد، والحدث لا يحمل الرقم فلا سبيل إلى تمييز الحالتين.
+checks++
+if (page.includes('outside your search')) {
+    fail.push('النصّ يدّعي أن المحادثة خارج البحث — وقد تكون داخله في صفحة غير محمَّلة')
+}
 has(page, 'showAllChats', 'وطريقة لمسح البحث وعرضها')
 has(page, "params.delete('search')", 'مسح البحث لا يُغلق المحادثة المفتوحة — يمسح البحث وحده')
 

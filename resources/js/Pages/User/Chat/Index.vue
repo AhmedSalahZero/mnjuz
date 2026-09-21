@@ -5,11 +5,15 @@
 				<!--
 					محادثات وصلت أثناء البحث. لا تُدرج في النتائج كي لا تلتبس
 					بها، ولا تُخفى كي لا تفوت.
+
+					والنصّ يقول «غير معروضة» لا «خارج بحثك»: المحادثة قد تكون
+					مطابِقة للبحث لكنها في صفحة لم تُحمَّل بعد، والحدث لا يحمل
+					الرقم فلا سبيل إلى تمييز الحالتين. فنقول المؤكَّد.
 				-->
 				<button v-if="heldArrivals.length" type="button" @click="showAllChats"
 					class="flex w-full items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-start text-xs text-amber-900 hover:bg-amber-100">
 					<span>
-						{{ $t('New messages arrived outside your search') }}
+						{{ $t('New conversations arrived that are not shown') }}
 						<span class="font-semibold">({{ heldArrivals.length }})</span>
 					</span>
 					<span class="shrink-0 font-semibold underline">{{ $t('Clear search') }}</span>
