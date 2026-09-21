@@ -55,7 +55,23 @@ class ProcessMessageStatusJob implements ShouldQueue
             $now = DateTimeHelper::convertToOrganizationTimezone(now(), null);
 
             foreach ($this->statuses as $status) {
-                $chatWamId = $status['id'];
+                // بلاغ ناقص يُتخطّى بدل أن يُسقط الطلب.
+                //
+                // applyStatus تشترط نصّاً، فبلاغ بلا status كان يرمي TypeError
+                // فيعود الـ webhook بـ500 — وMeta تُعيد إرسال الحمولة كلّها
+                // عندها، فيتكرّر الخطأ بلا نهاية وتُعاد معه البلاغات السليمة.
+                $chatWamId = $status['id'] ?? null;
+
+                if (!is_string($chatWamId) || $chatWamId === ''
+                    || !is_string(ChatStatus::forStorage($status['status'] ?? null))) {
+                    Log::warning('Skipping malformed status report', [
+                        'organization_id' => $this->organizationId,
+                        'keys' => array_keys($status),
+                    ]);
+
+                    continue;
+                }
+
                 // `played` (تشغيل رسالة صوتية) لا يعرفها تطبيق الموبايل ويرفض
                 // الردّ كلّه بسببها، فنترجمها قبل الحفظ لا عند الإخراج فقط.
                 $statusValue = ChatStatus::forStorage($status['status'] ?? null);

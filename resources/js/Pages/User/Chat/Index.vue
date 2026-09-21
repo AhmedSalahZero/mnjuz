@@ -2,6 +2,18 @@
 	<AppLayout v-slot:default="slotProps">
 		<div class="md:flex md:flex-grow md:overflow-hidden md:h-screen min-h-0">
 			<div class="md:w-[30%] md:flex flex-col h-full min-h-0 bg-white border-r border-l" :class="contact ? 'hidden' : ''">
+				<!--
+					محادثات وصلت أثناء البحث. لا تُدرج في النتائج كي لا تلتبس
+					بها، ولا تُخفى كي لا تفوت.
+				-->
+				<button v-if="heldArrivals.length" type="button" @click="showAllChats"
+					class="flex w-full items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-start text-xs text-amber-900 hover:bg-amber-100">
+					<span>
+						{{ $t('New messages arrived outside your search') }}
+						<span class="font-semibold">({{ heldArrivals.length }})</span>
+					</span>
+					<span class="shrink-0 font-semibold underline">{{ $t('Clear search') }}</span>
+				</button>
 				<ChatTable class="flex-1 min-h-0" :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
 					:ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
 					:chatSortDirection="props.chat_sort_direction"
@@ -63,12 +75,13 @@ import ChatHeader from '@/Components/ChatComponents/ChatHeader.vue'
 import ChatTable from '@/Components/ChatComponents/ChatTable.vue'
 import ChatThread from '@/Components/ChatComponents/ChatThread.vue'
 import Contact from '@/Components/ContactInfo.vue'
-import { usePage } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
 import { mergeChatIntoThread } from '@/Composables/mergeChatIntoThread'
+import { holdArrival, shouldHoldArrival } from '@/Composables/filteredChatArrivals'
 import AppLayout from './../Layout/App.vue'
 const props = defineProps({
 	rows: Array,
@@ -447,6 +460,25 @@ const removeOptimisticMessage = (tempMessageId) => {
 // 	}
 // }, 1500)
 
+/** محادثات وصلت أثناء البحث ولم تُعرض — تُعدّ بجهة الاتصال لا بالرسالة. */
+const heldArrivals = ref([])
+
+const showAllChats = () => {
+	heldArrivals.value = []
+
+	// المحادثة المفتوحة تبقى مفتوحة — يُمسح البحث وحده.
+	const params = new URLSearchParams(window.location.search)
+	params.delete('search')
+	params.delete('contact_page')
+
+	const query = params.toString()
+	router.visit(window.location.pathname + (query ? '?' + query : ''), {
+		only: ['rows', 'rowCount', 'filters', 'flash'],
+		preserveState: true,
+		preserveScroll: true,
+	})
+}
+
 const updateSidePanel = async (chat, statusChanged) => {
 	console.log('event chat', chat)
 	const isChatFormOpen = contact.value && contact.value.id == chat[0].value.contact_id
@@ -507,6 +539,17 @@ const updateSidePanel = async (chat, statusChanged) => {
 				contact.value.is_messaging_window_open = true
 			}
 		} else if (chat[0].value.contact_uuid) {
+			// بحثٌ نشط: المحادثة الواصلة لا تُدرج في نتائجه.
+			//
+			// كانت تُدرج بلا فحص، فتظهر محادثة عميل آخر داخل نتيجة بحثٍ عن
+			// رقم بعينه — فتظنّ الموظّفة أن للرقم محادثتين أو أن البحث لا
+			// يعمل. ولا نُسقطها: تُحجَز ويُعرض شريط يدلّ عليها.
+			if (shouldHoldArrival(window.location.search)) {
+				heldArrivals.value = holdArrival(heldArrivals.value, currentChat.contact_id)
+
+				return
+			}
+
 			rows.value.data.push({
 				id: currentChat.contact_id,
 				uuid: chat[0].value.contact_uuid,

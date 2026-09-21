@@ -4,6 +4,7 @@ import Pagination from '@/Components/Pagination.vue'
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
 import { Link, router, usePage } from '@inertiajs/vue3'
+import { chatUrlWithFilters } from '@/Composables/filteredChatArrivals'
 import debounce from 'lodash/debounce'
 import { ref, watch, inject, computed, onMounted, onUnmounted, nextTick } from 'vue'
 
@@ -185,7 +186,12 @@ function openChat(contact) {
 	updateTotalUnreadMessages(currentUnreadMessages)
 	contact.unread_messages = 0
 	contact.ticket_assigned_seen = true
-	router.visit('/chats/' + contact.uuid, {
+	// المرشِّحات تبقى في العنوان عند فتح المحادثة.
+	//
+	// كان الانتقال إلى '/chats/{uuid}' مجرّداً فيسقط search بينما يبقى نصّه
+	// في الصندوق — فأيّ جلبٍ لاحق للقائمة يعود بها كاملة والموظّفة تحسبها
+	// نتيجة بحثها. والاتجاه المعاكس مضبوط أصلاً: البحث يُبقي المحادثة.
+	router.visit(chatUrlWithFilters(contact.uuid, window.location.search), {
 		only: ['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash'],
 		preserveState: true,
 		preserveScroll: true,
