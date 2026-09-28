@@ -43,12 +43,41 @@ class TemplateService
         if ($uuid === null) {
             $response = $this->getTemplatesListResponse($request);
         } elseif ($uuid === 'sync') {
-            $response = $this->whatsappService->syncTemplates();
+            $response = $this->syncFromMeta();
         } else {
             $response = $this->getTemplateDetailResponse($request, $uuid);
         }
 
         return $response;
+    }
+
+    /**
+     * زرّ «مزامنة» في صفحة القوالب.
+     *
+     * يمرّ على TemplateSyncService لا على WhatsappService::syncTemplates.
+     * كانت نسختان من المزامنة، فأصلحنا واحدة وبقيت الأخرى تنهار: قالب
+     * اسمه رابط خرائط جوجل (٢٦٨ حرفاً) تجاوز عمود name، ورمى 1406 —
+     * و`catch` القديمة تلتقط أخطاء الشبكة وحدها، فوصل الخطأ صفحةً بيضاء
+     * للمستخدم في الإنتاج.
+     *
+     * والخدمة الجديدة تحصر الفشل عند القالب الواحد وتُبلّغ بما تُخطّي،
+     * ولا تعتمد على الجلسة. والواجهة تتجاهل جسم الردّ وتُعيد التحميل،
+     * فتوحيد المسارين لا يكسر شيئاً.
+     */
+    private function syncFromMeta()
+    {
+        $result = app(\App\Services\TemplateSyncService::class)
+            ->refreshOrganization((int) $this->organizationId);
+
+        // نجاح جزئي نجاح: ما زُومن يظهر بعد إعادة التحميل، والمتخطّى
+        // مذكور في العدّاد وفي السجلّ.
+        return response()->json([
+            'success' => $result['error'] === null,
+            'message' => $result['error'] ?? __('Templates synced.'),
+            'updated' => $result['updated'],
+            'created' => $result['created'],
+            'skipped' => $result['failed'],
+        ], $result['error'] === null ? 200 : 422);
     }
 
     private function getTemplatesListResponse(Request $request)

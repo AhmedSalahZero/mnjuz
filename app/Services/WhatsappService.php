@@ -1626,11 +1626,26 @@ class WhatsappService
             if ($template) {
                 $template->organization_id = session()->get('current_organization');
                 $template->category = $template->status == 'APPROVED' ? $template->category : $request->category;
-                //$template->metadata = json_encode($requestData);
                 $template->status = 'PENDING';
                 $template->created_by = auth()->user()->id;
                 $template->updated_at = now(); // No need to set `created_at` when updating
                 $template->save();
+
+                // ثمّ نسأل Meta عن القالب ونحفظ ردّها.
+                //
+                // كان هنا `//$template->metadata = json_encode($requestData);`
+                // معلَّقاً منذ أول commit في السكربت الأصلي. فتُحدَّث صورة
+                // الترويسة عند Meta وتبقى القديمة عندنا — وكل شاشة تقرأ
+                // نسختنا، فيرى العميل صورته القديمة إلى الأبد ويظنّ أن
+                // التعديل لم يُحفظ. هذه هي شكوى «الصورة القديمة».
+                //
+                // ولا نحفظ $requestData: ليس القالب — ينقصه الاسم واللغة
+                // والمعرّف، وقد تُعدّل Meta عليه. حفظه كما هو يُتلف الصفّ،
+                // وهو على الأرجح سبب تعليق السطر بدل إصلاحه.
+                //
+                // والفشل هنا غير قاتل: التعديل نجح عند Meta فعلاً، وإفشال
+                // الطلب بسبب مزامنة متعثّرة يُوهم المستخدم بالعكس.
+                app(\App\Services\TemplateSyncService::class)->refreshOne($template);
             } else {
                 // Handle case where template is not found (optional)
                 throw new \Exception('Template not found');
@@ -1679,31 +1694,45 @@ class WhatsappService
 
 
                 foreach($responseObject->data as $templateData){
-                    // withTrashed: مزامنة قوائم Meta بما عندنا، لا استعمال
-                    // للقالب. وإخفاء المحذوف يُنشئ صفّاً ثانياً لنفس meta_id.
-                    $template = Template::withTrashed()
-                        ->where('organization_id', session()->get('current_organization'))
-                        ->where('meta_id', $templateData->id)->first();
+                    // قالب واحد لا يُحفظ لا يُسقط المزامنة كلّها.
+                    //
+                    // وقع في الإنتاج: قالب اسمه رابط خرائط جوجل (٢٦٨ حرفاً)
+                    // تجاوز عمود name فرمى 1406. والـcatch أدناه تلتقط أخطاء
+                    // الشبكة وحدها، فوصل الخطأ صفحةً بيضاء للمستخدم وتوقّفت
+                    // مزامنة بقيّة قوالبه.
+                    try {
+                        // withTrashed: مزامنة قوائم Meta بما عندنا، لا استعمال
+                        // للقالب. وإخفاء المحذوف يُنشئ صفّاً ثانياً لنفس meta_id.
+                        $template = Template::withTrashed()
+                            ->where('organization_id', session()->get('current_organization'))
+                            ->where('meta_id', $templateData->id)->first();
 
-                    if($template){
-                        $template->metadata = json_encode($templateData);
-                        $template->status = $templateData->status;
-                        $template->updated_at = now();
-                        $template->deleted_at = NULL;
-                        $template->save();
-                    } else {
-                        $template = new Template();
-                        $template->organization_id = session()->get('current_organization');
-                        $template->meta_id = $templateData->id;
-                        $template->name = $templateData->name;
-                        $template->category = $templateData->category;
-                        $template->language = $templateData->language;
-                        $template->metadata = json_encode($templateData);
-                        $template->status = $templateData->status;
-                        $template->created_by = auth()->user()->id;
-                        $template->created_at = now();
-                        $template->updated_at = now();
-                        $template->save();
+                        if($template){
+                            $template->metadata = json_encode($templateData);
+                            $template->status = $templateData->status;
+                            $template->updated_at = now();
+                            $template->deleted_at = NULL;
+                            $template->save();
+                        } else {
+                            $template = new Template();
+                            $template->organization_id = session()->get('current_organization');
+                            $template->meta_id = $templateData->id;
+                            $template->name = $templateData->name;
+                            $template->category = $templateData->category;
+                            $template->language = $templateData->language;
+                            $template->metadata = json_encode($templateData);
+                            $template->status = $templateData->status;
+                            $template->created_by = auth()->user()->id;
+                            $template->created_at = now();
+                            $template->updated_at = now();
+                            $template->save();
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('syncTemplates skipped one template', [
+                            'meta_id' => $templateData->id ?? null,
+                            'name' => mb_substr((string)($templateData->name ?? ''), 0, 80),
+                            'error' => $e->getMessage(),
+                        ]);
                     }
                 };
 

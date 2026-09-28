@@ -14,6 +14,15 @@ class Chat extends Model {
     protected $guarded = [];
     public $timestamps = false;
 
+    /**
+     * كما في Contact: القيمة الافتراضية في المخطّط لا تظهر على الكائن
+     * قبل إعادة تحميله، فنُثبّتها هنا ليقرأها كل من يعاين الرسالة فور
+     * إنشائها — البثّ وبناء حمولة الجوال يفعلان ذلك.
+     */
+    protected $attributes = [
+        'channel' => \App\Services\Messaging\Channel::DEFAULT,
+    ];
+
     protected static function boot()
     {
         parent::boot();

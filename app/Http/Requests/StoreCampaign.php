@@ -24,11 +24,22 @@ class StoreCampaign extends FormRequest
      */
     public function rules(): array
     {
+        $channel = \App\Services\Messaging\Channel::normalize($this->input('channel'))
+            ?? \App\Services\Messaging\Channel::DEFAULT;
+
         $rules = [
             'name' => 'required',
-            'template' => 'required',
             'contacts' => 'required',
+            'channel' => ['nullable', \Illuminate\Validation\Rule::in(\App\Services\Messaging\Channel::all())],
         ];
+
+        // القالب لواتساب وحدها، والرسالة الحرّة لما عداها. القاعدتان
+        // متعاكستان فلا تُطلبان معاً.
+        if ($channel === \App\Services\Messaging\Channel::WHATSAPP) {
+            $rules['template'] = 'required';
+        } else {
+            $rules['message_text'] = ['required', 'string', 'max:4000'];
+        }
 
         if ($this->isMethod('post')) {
             $rules['name'] = ['required', new CampaignLimit];
@@ -38,6 +49,11 @@ class StoreCampaign extends FormRequest
     
         if (!$this->input('skip_schedule')) {
             $rules['time'] = 'required';
+        }
+
+        // ما بعده كلّه قواعد ترويسة القالب — لا معنى لها خارج واتساب.
+        if ($channel !== \App\Services\Messaging\Channel::WHATSAPP) {
+            return $rules;
         }
 
         // Check for header.format and header.parameters[0].value
@@ -153,7 +169,10 @@ class StoreCampaign extends FormRequest
                 $groupId = $group->id;
             }
 
-            if (CampaignAudienceService::isEmpty($organizationId, $groupId)) {
+            $channel = \App\Services\Messaging\Channel::normalize($this->input('channel'))
+                ?? \App\Services\Messaging\Channel::DEFAULT;
+
+            if (CampaignAudienceService::isEmpty($organizationId, $groupId, $channel)) {
                 $validator->errors()->add(
                     'contacts',
                     $selection === 'all'

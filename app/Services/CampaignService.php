@@ -36,8 +36,19 @@ class CampaignService
         $organizationMetadata = json_decode($organization->metadata ?? '{}', true);
         $timezone = $organizationMetadata['timezone'] ?? $timezone;
 
-        $template = Template::where('uuid', $request->template)->first();
+        $channel = \App\Services\Messaging\Channel::normalize($request->channel ?? null)
+            ?? \App\Services\Messaging\Channel::DEFAULT;
+
         $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
+
+        // حملة قناة أخرى: رسالة حرّة بلا قالب ولا ترويسة. مسار مستقلّ
+        // لأن ما تحته كلّه بناء قالب واتساب — معاملات الترويسة ورفع
+        // وسائطها وتسجيلها في سجلّ الوسائط.
+        if ($channel !== \App\Services\Messaging\Channel::WHATSAPP) {
+            return $this->storeChannelCampaign($request, (int) $organizationId, $channel, $contactGroup, $timezone);
+        }
+
+        $template = Template::where('uuid', $request->template)->first();
 
         // القالب المحذوف يُخفيه الموديل الآن، فكانت السطور التالية تقرأ
         // خاصّية من null. ورسالة التحقّق أوضح من خطأ فادح.
@@ -182,6 +193,132 @@ class CampaignService
 
             throw $e;
         }
+    }
+
+    /**
+     * حفظ حملة على قناة غير واتساب.
+     *
+     * الرسالة الحرّة تُخزَّن في campaigns.message_payload، و template_id
+     * يبقى NULL — ولذلك أُرخي القيد في الترحيلة 100400.
+     *
+     * الوسائط تُرفع مرّة واحدة هنا ويُخزَّن رابطها: المنصّة تُنزّله بنفسها
+     * لكل مستلم، فلا نرفعه ألف مرّة.
+     */
+    private function storeChannelCampaign(object $request, int $organizationId, string $channel, $contactGroup, $timezone)
+    {
+        $manager = app(\App\Services\Messaging\ChannelManager::class);
+        $account = $manager->activeAccount($organizationId, $channel);
+
+        if (!$account) {
+            throw ValidationException::withMessages([
+                'channel' => $manager->connectionError($organizationId, $channel),
+            ]);
+        }
+
+        $text = trim((string) ($request->message_text ?? ''));
+
+        if ($text === '') {
+            throw ValidationException::withMessages([
+                'message_text' => __('Message cannot be empty.'),
+            ]);
+        }
+
+        $media = null;
+        $file = method_exists($request, 'file') ? $request->file('message_media') : null;
+
+        if ($file) {
+            $capabilities = $manager->capabilities($channel);
+            $type = $this->mediaTypeFor($file->getMimeType());
+
+            if (!$capabilities->supportsMedia($type)) {
+                throw ValidationException::withMessages([
+                    'message_media' => __(':feature is not available on :channel.', [
+                        'feature' => __(':type attachments', ['type' => $type]),
+                        'channel' => \App\Services\Messaging\Channel::label($channel),
+                    ]),
+                ]);
+            }
+
+            $limit = $capabilities->mediaLimit($type);
+
+            if ($limit !== null && $file->getSize() > $limit) {
+                throw ValidationException::withMessages([
+                    'message_media' => __('This file is larger than :channel allows (:limit MB).', [
+                        'channel' => \App\Services\Messaging\Channel::label($channel),
+                        'limit' => round($limit / 1024 / 1024, 1),
+                    ]),
+                ]);
+            }
+
+            $media = $this->storeCampaignMedia($file, $organizationId, $type);
+        }
+
+        $scheduledAt = $request->skip_schedule
+            ? Carbon::now('UTC')
+            : Carbon::parse($request->time, $timezone)->setTimezone('UTC');
+
+        $campaign = new Campaign;
+        $campaign['organization_id'] = $organizationId;
+        $campaign['name'] = $request->name;
+        $campaign['channel'] = $channel;
+        $campaign['channel_account_id'] = $account->id;
+        $campaign['template_id'] = null;
+        $campaign['contact_group_id'] = $request->contacts === 'all' ? 0 : $contactGroup->id;
+        $campaign['metadata'] = json_encode([]);
+        $campaign['message_payload'] = \App\Support\JsonText::encode([
+            'text' => $text,
+            'media' => $media,
+        ]);
+        $campaign['created_by'] = auth()->user()->id;
+        $campaign['status'] = 'scheduled';
+        $campaign['scheduled_at'] = $scheduledAt;
+        $campaign->save();
+
+        return $campaign;
+    }
+
+    /** نوع الوسائط كما يفهمه النظام من نوع MIME. */
+    private function mediaTypeFor(?string $mimeType): string
+    {
+        $mimeType = (string) $mimeType;
+
+        return match (true) {
+            str_starts_with($mimeType, 'image/') => 'image',
+            str_starts_with($mimeType, 'video/') => 'video',
+            str_starts_with($mimeType, 'audio/') => 'audio',
+            default => 'document',
+        };
+    }
+
+    /**
+     * @return array{url: string, name: string, type: string, mime_type: string, size: int, location: string}
+     */
+    private function storeCampaignMedia($file, int $organizationId, string $type): array
+    {
+        $contents = file_get_contents($file->getRealPath());
+        $fileName = $file->getClientOriginalName();
+        $safeName = uniqid() . '_' . sanitize_filename_for_storage($fileName);
+        $storage = Setting::where('key', 'storage_system')->first()?->value;
+
+        if ($storage === 'aws') {
+            $path = 'uploads/media/campaigns/' . $organizationId . '/' . $safeName;
+            Storage::disk('s3')->put($path, $contents, ['ContentType' => $file->getMimeType()]);
+            $url = Storage::disk('s3')->url($path);
+            $location = 'amazon';
+        } else {
+            $stored = Storage::disk('local')->put('public/' . $safeName, $contents);
+            $url = rtrim(config('app.url'), '/') . '/media/' . ltrim($stored, '/');
+            $location = 'local';
+        }
+
+        return [
+            'url' => $url,
+            'name' => $fileName,
+            'type' => $type,
+            'mime_type' => $file->getMimeType(),
+            'size' => (int) $file->getSize(),
+            'location' => $location,
+        ];
     }
 
     private function getMediaInfo($path)

@@ -67,7 +67,13 @@ class FlowService
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
             $data2['trigger'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.type', null);
-            $data2['keywords'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null);
+            // التطبيع عند الحفظ: المستخدم يكتب «أ, ب, ج» بفاصلة ومسافة،
+            // والمطابقة القديمة بـ FIND_IN_SET لا تقصّ المسافات فتموت كل
+            // كلمة بعد الأولى. المطابقة صارت تُطبّع عند القراءة كذلك،
+            // لكنّ التطبيع هنا يمنع تسرّب الصيغة المعطوبة إلى العمود أصلاً.
+            $data2['keywords'] = \Modules\FlowBuilder\Support\FlowKeywords::normalizeForStorage(
+                \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null)
+            );
 
             // المهلة بالدقائق: الفراغ غيابٌ لا صفر — و(int)'' يساوي صفراً
             // فتُحفظ مهلةً معطّلة بدل ألّا تُحفظ.

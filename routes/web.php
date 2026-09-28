@@ -89,6 +89,11 @@ Route::get('/logout', [App\Http\Controllers\AuthController::class, 'logout'])->n
 //Webhook
 Route::match(['get', 'post'], '/webhook/whatsapp/{identifier?}', [App\Http\Controllers\WebhookController::class, 'handle']);
 Route::match(['get', 'post'], '/webhook/waba', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
+// قنوات التواصل الأخرى. يسبق مسار الدفع أدناه لأن ذاك يلتقط مقطعاً واحداً
+// ({processor}) ويرمي استثناءً على أي اسم لا يعرفه — ومقطعان هنا يمنعان
+// التصادم أصلاً، لكن الترتيب يبقى الأوضح لمن يقرأ.
+Route::match(['get', 'post'], '/webhook/channel/{channel}/{account?}', [App\Http\Controllers\ChannelWebhookController::class, 'handle'])
+    ->name('channels.webhook');
 Route::match(['get', 'post'], '/webhook/{processor}', [App\Http\Controllers\WebhookController::class, 'processWebhook']);
 Route::match(['get', 'post'], '/payment/myfatoorah/success', [App\Http\Controllers\PaymentController::class, 'myfatoorahSuccess']);
 Route::match(['get', 'post'], '/payment/myfatoorah/error', [App\Http\Controllers\PaymentController::class, 'myfatoorahError']);
@@ -125,6 +130,19 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
     Route::get('/verification-required', [App\Http\Controllers\VerificationController::class, 'showRequired'])->name('verification.required');
     Route::post('/verification/request', [App\Http\Controllers\VerificationController::class, 'requestCode'])->middleware('throttle:6,1');
     Route::post('/verification/confirm', [App\Http\Controllers\VerificationController::class, 'confirmCode'])->middleware('throttle:10,1');
+});
+
+/*
+ * عودة التفويض من المنصّات.
+ *
+ * خارج مجموعة الإعدادات عمداً: تلك محروسة بحالة الاشتراك وصلاحيات
+ * وتحقّق بريد، وأيّ منها يُحوّل المستخدم فيضيع الـ code ويظنّ الربط فشل.
+ * المصادقة وحدها كافية هنا — والحالة الموقَّعة تحمل المنشأة والمستخدم
+ * وتُقارَن بالجلسة داخل المتحكّم.
+ */
+Route::middleware(['auth:user'])->group(function () {
+    Route::get('/channels/oauth/{channel}/callback', [App\Http\Controllers\User\ChannelOAuthController::class, 'callback'])
+        ->name('channels.oauth.callback');
 });
 
 Route::get('/auth/reset-devices/{user}', [App\Http\Controllers\AuthController::class, 'processResetDevices'])
@@ -272,6 +290,22 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index']);
+                    // قنوات التواصل الأخرى. صفحة مستقلّة عن /settings/whatsapp
+                    // عمداً: تلك لها EmbeddedSignup ومسارات Meta الخاصّة بها،
+                    // ودمجهما يخلط مسارين مختلفين تماماً في متحكّم واحد.
+                    Route::get('/settings/channels', [App\Http\Controllers\User\ChannelAccountController::class, 'index']);
+                    Route::post('/settings/channels', [App\Http\Controllers\User\ChannelAccountController::class, 'store']);
+                    // تدفّق التفويض. البدء والاختيار داخل المجموعة المحروسة،
+                    // أمّا العودة فمسارها أدناه خارجها.
+                    //
+                    // الترتيب لازم: المسارات الثابتة قبل /{uuid}، وإلّا التقط
+                    // ذاك كلمة "select" بوصفها معرّفاً وحذفَ حساباً لا وجود له.
+                    Route::get('/settings/channels/connect/{channel}', [App\Http\Controllers\User\ChannelOAuthController::class, 'redirect'])
+                        ->name('channels.oauth.redirect');
+                    Route::post('/settings/channels/select', [App\Http\Controllers\User\ChannelOAuthController::class, 'select'])
+                        ->name('channels.oauth.select');
+                    Route::delete('/settings/channels/select', [App\Http\Controllers\User\ChannelOAuthController::class, 'cancelSelection']);
+                    Route::delete('/settings/channels/{uuid}', [App\Http\Controllers\User\ChannelAccountController::class, 'destroy']);
                     Route::match(['get', 'post'], '/settings/working-hours', [App\Http\Controllers\User\SettingController::class, 'workingHours']);
                     Route::get('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'index']);
                     Route::post('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'sync']);

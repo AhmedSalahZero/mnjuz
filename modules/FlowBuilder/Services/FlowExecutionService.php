@@ -1099,27 +1099,39 @@ class FlowExecutionService
      * Search for an active keyword-triggered flow whose keywords contain the given message.
      * Returns the flow row (stdClass) or null if none found.
      */
+    /**
+     * الـ flow الذي تُشغّله هذه الرسالة، أو null.
+     *
+     * المطابقة في PHP لا في SQL. كانت `FIND_IN_SET(?, keywords)`، وهي لا
+     * تقصّ المسافات: المستخدم يكتب «أ, ب, ج» بفاصلة ومسافة، فتصير عناصر
+     * المجموعة عند MySQL « ب» و« ج» بمسافة بادئة — ولا يطابقها بحثٌ عن
+     * «ب». فالكلمة الأولى وحدها تعمل وما بعدها ميّت.
+     *
+     * قِسناه على الإنتاج: ٢٦ من ٩١ كلمة (٢٩٪) لا تُطابَق أبداً، في ثلاث
+     * منشآت — ومنها STOP لإيقاف الرسائل التسويقية.
+     *
+     * والكلفة كما كانت: استعلام واحد. عدد flows الكلمات في المنشأة الواحدة
+     * قليل (٦٤ في النظام كلّه)، والمطابقة عليها في الذاكرة لا تُذكر.
+     */
     private function findFlowByKeyword(string $msg, int $organizationId): ?object
     {
-        $words      = explode(' ', $msg);
-        $conditions = ["FIND_IN_SET(?, keywords)"];
-        $bindings   = [$msg];
+        // الأقدم يفوز: أكثر من flow نشط بنفس الكلمة كان يُنتج اختياراً
+        // عشوائياً يتغيّر بين استعلام وآخر.
+        $flows = \DB::table('flows')
+            ->where('trigger', 'keywords')
+            ->where('organization_id', $organizationId)
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->get();
 
-        foreach ($words as $word) {
-            $word = trim($word);
-            if ($word === '') continue;
-            $conditions[] = "FIND_IN_SET(?, keywords)";
-            $bindings[]   = $word;
+        foreach ($flows as $flow) {
+            if (\Modules\FlowBuilder\Support\FlowKeywords::matches($flow->keywords, $msg)) {
+                return $flow;
+            }
         }
 
-        // ترتيب حاسم: أكثر من flow نشط بنفس الكلمة كان يُنتج اختياراً عشوائياً
-        // يتغيّر بين استعلام وآخر. الأقدم يفوز.
-        $flow = \DB::table('flows')->whereRaw(
-            '(`trigger` = ? AND organization_id = ? AND status = ? AND deleted_at IS NULL) AND (' . implode(' OR ', $conditions) . ')',
-            array_merge(['keywords', $organizationId, 'active'], $bindings)
-        )->orderBy('id')->first();
-
-        return $flow ?: null;
+        return null;
     }
 
     private function replacePlaceholders($contactUuid, $message){

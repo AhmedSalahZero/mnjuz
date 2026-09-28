@@ -2440,6 +2440,9 @@ class ApiController extends Controller
             'metadata' => $metadata,
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
+            // إضافي ويتجاهله القديم — الرسالة الواحدة قد تختلف قناتها عن
+            // قناة جهة الاتصال في المستقبل، فنُخرجها على الرسالة كذلك.
+            'channel' => $arr['channel'] ?? \App\Services\Messaging\Channel::DEFAULT,
             // نُخرج فقط الحالات التي يفهمها التطبيق؛ `played` تُترجم إلى `read`.
             'status' => ChatStatus::forApi($arr['status'] ?? null),
             'media' => $media,
@@ -2983,6 +2986,14 @@ class ApiController extends Controller
             'metadata' => $metadata,
             'type' => $arr['type'] ?? 'outbound',
             'wam_id' => $arr['wam_id'] ?? null,
+            // حقلان إضافيان: النسخة المنشورة من التطبيق تتجاهلهما، والأحدث
+            // ترسم بهما أيقونة المنصّة. كل المفاتيح أعلاه باقية كما كانت.
+            //
+            // تنبيه لمطوّر التطبيق: phone صار NULL لجهات القنوات الأخرى،
+            // و wam_id صار منمَّقاً (tg:… / fb:… / ig:… / tt:…) لها —
+            // ومعرّفات واتساب لم تتغيّر.
+            'channel' => $contact->channel ?? \App\Services\Messaging\Channel::DEFAULT,
+            'channel_identifier' => $contact->channel_identifier ?? null,
             // نُخرج فقط الحالات التي يفهمها التطبيق؛ `played` تُترجم إلى `read`.
             'status' => ChatStatus::forApi($arr['status'] ?? null),
             'media' => $media,

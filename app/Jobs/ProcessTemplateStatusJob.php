@@ -40,6 +40,18 @@ class ProcessTemplateStatusJob implements ShouldQueue
                 $template->status = $this->templateData['event'];
                 $template->save();
 
+                // ثمّ نجلب القالب كاملاً من Meta.
+                //
+                // الحالة وحدها لا تكفي: القالب الذي عُدِّل — من عندنا أو من
+                // لوحة Meta مباشرة — يعود PENDING ثمّ APPROVED، وهذا الحدث
+                // هو إشعارنا الوحيد بأن شيئاً تغيّر. وبلا جلب المحتوى تبقى
+                // نسختنا على الصورة القديمة.
+                //
+                // وفائدة ثانية: الرابط الموقَّع لصورة الترويسة ينتهي بعد نحو
+                // ثلاثين يوماً — والصورة نفسها باقية عند Meta — فالجلب
+                // يُجدّد الإذن إليها.
+                app(\App\Services\TemplateSyncService::class)->refreshOne($template);
+
                 Log::info('Template status updated', [
                     'template_id' => $template->id,
                     'status' => $this->templateData['event']

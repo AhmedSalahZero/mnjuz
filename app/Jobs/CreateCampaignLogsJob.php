@@ -119,9 +119,12 @@ class CreateCampaignLogsJob implements ShouldQueue
     {
         // الخدمة نفسها التي تسألها شاشة الإنشاء قبل الحفظ، فلا يختلف ما
         // قبِلَته الشاشة عمّا يجده المُرسِل.
+        // القناة جزء من السؤال: المجموعة الواحدة قد تجمع عملاء واتساب
+        // وتيليجرام، وحملة واتساب لا تُرسَل إلى من لا رقم له.
         return CampaignAudienceService::query(
             (int) $campaign->organization_id,
-            $campaign->contact_group_id
+            $campaign->contact_group_id,
+            $campaign->channel ?? \App\Services\Messaging\Channel::DEFAULT
         )->get();
     }
 

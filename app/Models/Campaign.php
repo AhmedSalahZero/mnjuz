@@ -14,6 +14,47 @@ class Campaign extends Model {
     protected $guarded = [];
     public $timestamps = false;
 
+    /** كما في Contact و Chat: القيمة الافتراضية تظهر على الكائن فوراً. */
+    protected $attributes = [
+        'channel' => \App\Services\Messaging\Channel::DEFAULT,
+    ];
+
+    /**
+     * حملة قالب (واتساب) أم حملة رسالة حرّة (بقيّة القنوات)؟
+     *
+     * نسأل عن القناة لا عن وجود template_id: الحملة القديمة قد تحمل قالباً
+     * محذوفاً، والسؤال عن القناة يُجيب دائماً.
+     */
+    public function isTemplateCampaign(): bool
+    {
+        return ($this->channel ?? \App\Services\Messaging\Channel::DEFAULT)
+            === \App\Services\Messaging\Channel::WHATSAPP;
+    }
+
+    /**
+     * الرسالة الحرّة: {"text": "...", "media": {"url", "type", "name"}|null}
+     *
+     * @return array{text: string, media: ?array}
+     */
+    public function messagePayload(): array
+    {
+        $decoded = $this->message_payload ? json_decode($this->message_payload, true) : null;
+
+        if (!is_array($decoded)) {
+            return ['text' => '', 'media' => null];
+        }
+
+        return [
+            'text' => (string) ($decoded['text'] ?? ''),
+            'media' => is_array($decoded['media'] ?? null) ? $decoded['media'] : null,
+        ];
+    }
+
+    public function channelAccount()
+    {
+        return $this->belongsTo(ChannelAccount::class, 'channel_account_id', 'id');
+    }
+
     public function getCreatedAtAttribute($value)
     {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
