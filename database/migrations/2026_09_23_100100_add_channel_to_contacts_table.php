@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Schema;
  *
  * الخوارزميات — مقيسة على نسخة كاملة من الإنتاج لا مقروءة من التوثيق:
  *
- *   الأعمدة الثلاثة معاً   INPLACE, LOCK=NONE   ٢٢ ثانية   (إعادة بناء على الخطّ)
+ *   الأعمدة الثلاثة معاً   INSTANT              أجزاء من الثانية
+ *     (كانت INPLACE و٢٢ ثانية حين كنّا نُقحمها AFTER phone — والموضع
+ *      التجميلي هو ما كان يمنع INSTANT ويُفشل الترحيل على MySQL 8.0)
  *   العمود المُولَّد        INSTANT              أجزاء من الثانية
  *   الفهرس الفريد         INPLACE, LOCK=NONE   ٤٫٧ ثانية
  *   فهرس البحث            INPLACE, LOCK=NONE   ٥٫٥ ثانية
@@ -21,9 +23,9 @@ use Illuminate\Support\Facades\Schema;
  *
  * القراءة والكتابة تستمرّان في كل واحدة منها.
  *
- * ولماذا الأعمدة الثلاثة في جملة واحدة؟ لأن كلّ ADD COLUMN هنا إعادةُ بناءٍ
- * كاملة لجدول حجمه ٦٣٥ ميغابايت. ثلاث جمل = ثلاث إعادات بناء، وجملة واحدة
- * = واحدة.
+ * ولماذا الأعمدة الثلاثة في جملة واحدة؟ احتياطاً: إن لم تتوفّر INSTANT على
+ * الخادم ونزلنا إلى INPLACE، فكلّ ADD COLUMN إعادةُ بناءٍ كاملة لجدول حجمه
+ * ٦٣٥ ميغابايت. ثلاث جمل = ثلاث إعادات بناء، وجملة واحدة = واحدة.
  *
  * شرط لازم: 2026_09_23_100050 حذف فهرس FULLTEXT قبل هذا الملفّ. مع وجوده
  * تهبط كل جملة أدناه إلى COPY وتحجب الكتابة دقائق. لذلك نتحقّق أولاً
@@ -51,14 +53,24 @@ return new class extends Migration
 
         DB::statement('SET SESSION lock_wait_timeout = 10');
 
-        // ─── الأعمدة الثلاثة: إعادة بناء واحدة على الخطّ ───────────────────
+        // ─── الأعمدة الثلاثة ───────────────────────────────────────────────
+        // تُضاف في آخر الجدول لا بعد phone. الموضع تجميلي محض، وكلفته كانت
+        // فشلاً صريحاً على MySQL 8.0:
+        //
+        //   ERROR 1846: INPLACE ADD or DROP of virtual columns cannot be
+        //               combined with other ALTER TABLE actions
+        //
+        // والسبب أن contacts فيه عمود مُولَّد (phone_active_key) يقع بعد
+        // phone. فإقحام أعمدة هناك يُزحزح موضعه، وMySQL 8.0 يَعُدّ ذلك
+        // إضافةً/حذفاً لعمود مُولَّد — ولا يسمح بدمجه مع إضافات أخرى.
+        //
+        // والإضافة في الآخر تتجنّب الإزحاح كلّه، وتُتيح INSTANT بدل INPLACE:
+        // لا إعادة بناء إطلاقاً بدل ٢٢ ثانية منها.
         if (!Schema::hasColumn('contacts', 'channel')) {
-            DB::statement("
-                ALTER TABLE contacts
-                ADD COLUMN channel            VARCHAR(20) NOT NULL DEFAULT 'whatsapp' AFTER phone,
-                ADD COLUMN channel_identifier VARCHAR(191) NULL                       AFTER channel,
-                ADD COLUMN channel_account_id BIGINT UNSIGNED NULL                    AFTER channel_identifier,
-                ALGORITHM=INPLACE, LOCK=NONE
+            $this->alterOnline("
+                ADD COLUMN channel            VARCHAR(20) NOT NULL DEFAULT 'whatsapp',
+                ADD COLUMN channel_identifier VARCHAR(191) NULL,
+                ADD COLUMN channel_account_id BIGINT UNSIGNED NULL
             ");
         }
 
@@ -139,14 +151,49 @@ return new class extends Migration
 
         // الأعمدة الثلاثة في جملة واحدة كذلك: إعادة بناء واحدة لا ثلاث.
         if (Schema::hasColumn('contacts', 'channel')) {
-            DB::statement('
-                ALTER TABLE contacts
+            $this->alterOnline('
                 DROP COLUMN channel_account_id,
                 DROP COLUMN channel_identifier,
-                DROP COLUMN channel,
-                ALGORITHM=INPLACE, LOCK=NONE
+                DROP COLUMN channel
             ');
         }
+    }
+
+
+    /**
+     * تنفيذ ALTER بأفضل خوارزمية متاحة، وبلا COPY أبداً.
+     *
+     * الخوارزمية المتاحة تختلف بين إصدارات MySQL: ما يمرّ على 8.4 يُرفض على
+     * 8.0 والعكس. وتثبيت واحدة في النصّ يجعل المهاجرة تنجح على خادم وتهبط
+     * على آخر — وهذا ما وقع فعلاً.
+     *
+     * فنُحاول الأفضل ثم ننزل: INSTANT (بلا إعادة بناء) ثم INPLACE مع
+     * LOCK=NONE (إعادة بناء على الخطّ، والكتابة مستمرّة).
+     *
+     * ولا نُسقط الخيار إلى جملة بلا ALGORITHM: MySQL حينها قد تختار COPY،
+     * وذاك يحجب الكتابة على جدول ٦٣٥ ميغابايت نحو إحدى عشرة دقيقة. تعثّرُ
+     * ترحيلٍ برسالة واضحة أهون من إنتاجٍ متوقّف بلا إنذار.
+     */
+    protected function alterOnline(string $body): void
+    {
+        $attempts = ['INSTANT', 'INPLACE, LOCK=NONE'];
+        $failures = [];
+
+        foreach ($attempts as $algorithm) {
+            try {
+                DB::statement("ALTER TABLE contacts {$body}, ALGORITHM={$algorithm}");
+
+                return;
+            } catch (\Throwable $e) {
+                $failures[$algorithm] = $e->getMessage();
+            }
+        }
+
+        throw new RuntimeException(
+            "تعذّر تعديل contacts بلا حجب الكتابة. المحاولات:\n"
+            . collect($failures)->map(fn ($m, $a) => "  [{$a}] {$m}")->implode("\n")
+            . "\n\nلم نُنفّذ COPY عمداً — تحجب الكتابة نحو ١١ دقيقة على هذا الجدول."
+        );
     }
 
     protected function indexExists(string $table, string $index): bool
