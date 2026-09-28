@@ -198,10 +198,21 @@ abstract class MetaDriver implements ChannelDriver, \App\Services\Messaging\Cont
         $token = $request->input('hub_verify_token') ?? $request->input('hub.verify_token');
         $challenge = $request->input('hub_challenge') ?? $request->input('hub.challenge');
 
-        $expected = $account?->credential('verify_token');
-
-        if ($expected && hash_equals((string) $expected, (string) $token)) {
-            return (string) $challenge;
+        // توكنان مقبولان، والترتيب مقصود:
+        //
+        //   ١. توكن التطبيق من .env — هو الذي تستعمله ميتا في **تحقّق لوحة
+        //      التطبيق**، وذاك يجري قبل وجود أيّ حساب مربوط. بدونه كان
+        //      التحقّق يفشل دائماً برسالة:
+        //      "The callback URL or verify token couldn't be validated."
+        //
+        //   ٢. توكن الحساب — للربط اليدوي حيث يُدخل العميل توكناً بنفسه.
+        foreach ([
+            config('services.meta.webhook_verify_token'),
+            $account?->credential('verify_token'),
+        ] as $expected) {
+            if (filled($expected) && hash_equals((string) $expected, (string) $token)) {
+                return (string) $challenge;
+            }
         }
 
         return null;

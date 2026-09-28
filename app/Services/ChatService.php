@@ -479,14 +479,19 @@ class ChatService
 		$hasMoreContacts = false;
 		$nextContactsPage = null;
 	
+		// قيمة مجهولة تُردّ إلى null لا إلى الافتراضي: الفلتر المشوّه يجب أن
+		// يُظهر الكلّ لا أن يُخفي كل شيء صامتاً.
+		//
+		// ويُسنَد هنا لا داخل الشرط أدناه: كل المخرجات تُصدّره، والطلب الجزئي
+		// الذي لا يطلب 'rows' (كالعودة من محادثة إلى القائمة) يتخطّى ذاك
+		// الشرط — فكان يبقى غير معرَّف ويرمي undefined variable.
+		$channelFilter = Channel::normalize($request->query('channel'));
+
 		if(!$skipRowsQuery){
 			$contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
 			$categoryUuid = $request->query('category');
 
 			$contactPage = $request->input('contact_page', 1);
-			// قيمة مجهولة تُردّ إلى null لا إلى الافتراضي: الفلتر المشوّه
-			// يجب أن يُظهر الكلّ لا أن يُخفي كل شيء صامتاً.
-			$channelFilter = Channel::normalize($request->query('channel'));
 			$contactsPaginated = $contactQuery->contactsWithChatsOptimized(
 				$this->organizationId,
 				$searchTerm,
