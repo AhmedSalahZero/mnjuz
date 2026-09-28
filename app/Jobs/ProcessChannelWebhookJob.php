@@ -46,16 +46,24 @@ class ProcessChannelWebhookJob implements ShouldQueue
         $account = ChannelAccount::find($this->channelAccountId);
 
         if (!$account) {
+            Log::channel('channel_webhooks')->warning('job: account not found', ['account_id' => $this->channelAccountId]);
+
             return;
         }
 
         $driver = $channels->driver($account->channel);
         $events = $driver->parseWebhook($this->rebuildRequest(), $account);
 
+        Log::channel('channel_webhooks')->info("[{$account->channel}] job: parsed", [
+            'account_id' => $account->id,
+            'events' => array_map(fn ($e) => class_basename($e), $events),
+        ]);
+
         foreach ($events as $event) {
             try {
                 if ($event instanceof InboundMessage) {
                     $messages->record($account, $event);
+                    Log::channel('channel_webhooks')->info("[{$account->channel}] job: message recorded", ['account_id' => $account->id]);
 
                     continue;
                 }
@@ -64,6 +72,11 @@ class ProcessChannelWebhookJob implements ShouldQueue
                     $statuses->record($account, $event);
                 }
             } catch (\Throwable $e) {
+                Log::channel('channel_webhooks')->error("[{$account->channel}] job: event failed", [
+                    'account_id' => $account->id,
+                    'event' => class_basename($event),
+                    'error' => $e->getMessage(),
+                ]);
                 // حدث واحد فاسد لا يُسقط بقيّة الدفعة: حمولة ميتا قد تحمل
                 // عشرات الأحداث، وإفشال الوظيفة يُعيد معالجتها كلّها
                 // فتتكرّر الرسائل الناجحة.
