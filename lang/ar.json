@@ -1825,5 +1825,7 @@
     "24-hour window closed": "انتهت نافذة الـ24 ساعة",
     "{hours} hours and {minutes} minutes left before the 24-hour reply window closes": "متبقي {hours} ساعة و{minutes} دقيقة على إغلاق نافذة الرد (24 ساعة)",
     "Distribute conversations among online team members. If no one is online, they wait in Unassigned.": "وزّع المحادثات على أعضاء الفريق المتصلين فقط. إن لم يكن أحد متصلاً تنتظر في «غير مسندة».",
-    "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.": "أسند المحادثات بالترتيب للموظفين المتصلين فقط: الموظف 1 ثم 2 ثم 3 ثم العودة للأول."
+    "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.": "أسند المحادثات بالترتيب للموظفين المتصلين فقط: الموظف 1 ثم 2 ثم 3 ثم العودة للأول.",
+    "Saved. Leave empty to keep it": "محفوظة. اتركها فارغة للإبقاء عليها",
+    "This file type is not supported by WhatsApp.": "واتساب لا يدعم هذا النوع من الملفات."
 }

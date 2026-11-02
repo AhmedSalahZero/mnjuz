@@ -7,6 +7,7 @@ use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowMedia;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Resources\FlowResource;
+use Modules\FlowBuilder\Support\FlowSecrets;
 use Modules\FlowBuilder\Validators\FlowValidator;
 
 class FlowService
@@ -48,8 +49,14 @@ class FlowService
     public function updateFlow($uuid, array $data, $publish)
     {
         $validator = new FlowValidator();
-        
-        $flow = Flow::where('uuid', $uuid)->firstOrFail();
+
+        $flow = Flow::ownedOrAbort($uuid);
+
+        // المتصفح لا يرى كلمات مرور SMTP (FlowSecrets::redact)، فيعيدها الحفظ
+        // من النسخة المخزّنة بدل أن يمسحها.
+        if (array_key_exists('metadata', $data)) {
+            $data['metadata'] = FlowSecrets::restore($data['metadata'], $flow->metadata);
+        }
 
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
@@ -62,7 +69,7 @@ class FlowService
 
         $flow->update($data);
 
-        $flow = Flow::where('uuid', $uuid)->firstOrFail();
+        $flow->refresh();
         
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
@@ -130,7 +137,7 @@ class FlowService
 
     public function duplicateFlow($uuid): void
     {
-        $flow = Flow::where('uuid', $uuid)->first();
+        $flow = Flow::ownedOrAbort($uuid);
 
         if (!$flow) {
             return; // Exit early if the flow doesn't exist
@@ -153,9 +160,46 @@ class FlowService
         $duplicate->save();
     }
 
-    public function uploadMedia($request, $uuid, $stepId)
+    /**
+     * ما يقبله واتساب لكل نوع وسائط: الامتدادات وحدّ الحجم بالكيلوبايت.
+     * https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media#supported-media-types
+     */
+    public const MEDIA_RULES = [
+        'image' => ['extensions' => ['jpg', 'jpeg', 'png'], 'max' => 5 * 1024],
+        'video' => ['extensions' => ['mp4', '3gp'], 'max' => 16 * 1024],
+        'audio' => ['extensions' => ['aac', 'amr', 'mp3', 'm4a', 'ogg'], 'max' => 16 * 1024],
+        'document' => ['extensions' => ['pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'], 'max' => 100 * 1024],
+    ];
+
+    /**
+     * أنواع المحتوى التي تُخدَم كما هي من نطاق التطبيق نفسه وتُشغّل سكربت
+     * (html/svg/xml…). امتداد الملف يكذب، فالفحص على المحتوى المكتشف.
+     */
+    private const DANGEROUS_MIME = '/html|xml|svg|javascript|ecmascript|x-php|x-httpd|x-sh|x-msdownload|x-executable/i';
+
+    public static function mediaMaxKilobytes(?string $type): int
     {
-        $flow = Flow::where('uuid', $uuid)->first();
+        return self::MEDIA_RULES[$type]['max'] ?? max(array_column(self::MEDIA_RULES, 'max'));
+    }
+
+    /** سبب رفض الملف، أو null إن كان مقبولاً لهذا النوع. */
+    public static function mediaRejection(?string $type, \Illuminate\Http\UploadedFile $file): ?string
+    {
+        $allowed = isset(self::MEDIA_RULES[$type])
+            ? self::MEDIA_RULES[$type]['extensions']
+            : array_merge(...array_column(self::MEDIA_RULES, 'extensions'));
+
+        $extension = strtolower($file->getClientOriginalExtension());
+
+        if (!in_array($extension, $allowed, true) || preg_match(self::DANGEROUS_MIME, (string) $file->getMimeType())) {
+            return __('This file type is not supported by WhatsApp.');
+        }
+
+        return null;
+    }
+
+    public function uploadMedia($request, Flow $flow, $stepId)
+    {
         $fileName = $request->file('file')->getClientOriginalName();
         $fileContent = $request->file('file');
         $storage = Setting::where('key', 'storage_system')->first()->value;
@@ -166,7 +210,9 @@ class FlowService
 
         if($storage === 'local'){
             $location = 'local';
-            $file = \Storage::disk('local')->put('public', $fileContent);
+            // الامتداد من القائمة المسموحة لا من تخمين النوع: ملف html باسم
+            // .pdf كان يُخزَّن .html ويُخدَم صفحةً من نطاق التطبيق.
+            $file = \Storage::disk('local')->putFileAs('public', $fileContent, \Illuminate\Support\Str::random(40) . '.' . $fileExtension);
             $mediaFilePath = $file;
             $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
         } else if($storage === 'aws') {
@@ -202,7 +248,7 @@ class FlowService
      */
     public function deleteFlow($uuid): void
     {
-        $flow = Flow::where('uuid', $uuid)->first();
+        $flow = Flow::ownedOrAbort($uuid);
 
         $flow->delete(); // Cascade will delete related steps
     }

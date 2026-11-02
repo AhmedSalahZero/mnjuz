@@ -792,5 +792,7 @@
     "24-hour window closed": "Dirisha la saa 24 limefungwa",
     "{hours} hours and {minutes} minutes left before the 24-hour reply window closes": "Zimebaki saa {hours} na dakika {minutes} kabla dirisha la kujibu la saa 24 kufungwa",
     "Distribute conversations among online team members. If no one is online, they wait in Unassigned.": "Gawa mazungumzo kwa wanatimu walio mtandaoni. Ikiwa hakuna aliye mtandaoni, yanasubiri katika Unassigned.",
-    "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.": "Kabidhi mazungumzo kwa mpangilio kwa mawakala walio mtandaoni pekee: wakala 1, kisha 2, kisha 3, kisha kurudi kwa 1."
+    "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.": "Kabidhi mazungumzo kwa mpangilio kwa mawakala walio mtandaoni pekee: wakala 1, kisha 2, kisha 3, kisha kurudi kwa 1.",
+    "Saved. Leave empty to keep it": "Imehifadhiwa. Iache tupu ili kuibakiza",
+    "This file type is not supported by WhatsApp.": "WhatsApp haitumii aina hii ya faili."
 }

@@ -2,7 +2,16 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:user'])->group(function () {
+// نفس حراسة /automation/basic في routes/web.php: كانت auth:user وحدها، فيفتح
+// الموظف (agent) المسارات ويعدّلها، ويصل أيّ مستخدم إلى flow منشأة أخرى بالـ uuid.
+Route::middleware([
+    'auth:user',
+    'check.email.verification',
+    'check.active.organization',
+    'check.organization',
+    'org.agent.restrict',
+    'check.subscription',
+])->group(function () {
     Route::prefix('/automation/flows')->group(function () {
         Route::get('/', [Modules\FlowBuilder\Controllers\FlowController::class, 'index']);                      // List all flows
         Route::get('/{flow}', [Modules\FlowBuilder\Controllers\FlowController::class, 'view']); 

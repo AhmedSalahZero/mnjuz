@@ -75,6 +75,9 @@ class FlowFirstMessageTriggerTest extends TestCase
         ]);
 
         $this->service = new FlowExecutionService($this->organization->id);
+
+        // حفظ المسار محصور بمنشأة الجلسة، كما في أيّ طلب حقيقي من المحرّر.
+        session(['current_organization' => $this->organization->id]);
     }
 
     private function flow(string $trigger, ?string $keywords = null, string $status = 'active'): int

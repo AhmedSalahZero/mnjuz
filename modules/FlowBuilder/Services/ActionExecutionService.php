@@ -8,8 +8,11 @@ use App\Models\Organization;
 use App\Services\WhatsappService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Modules\FlowBuilder\Jobs\ProcessDelayedFlowJob;
+use Modules\FlowBuilder\Support\OutboundUrl;
+use Symfony\Component\Mailer\Mailer as SymfonyMailer;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 
 class ActionExecutionService
 {
@@ -259,20 +262,26 @@ class ActionExecutionService
         $body = $this->replacePlaceholders($contact, $body);
 
         try {
-            // Configure mail settings
-            config([
-                'mail.mailers.smtp.host' => $smtpHost,
-                'mail.mailers.smtp.port' => $smtpPort,
-                'mail.mailers.smtp.username' => $smtpUsername,
-                'mail.mailers.smtp.password' => $smtpPassword,
-                'mail.mailers.smtp.encryption' => $smtpEncryption,
+            // ناقل خاص بهذه العقدة. تعديل config('mail.mailers.smtp.*') ثم Mail::raw
+            // كان بلا أثر بعد أوّل إرسال في العامل نفسه (MailManager يحتفظ بالـ
+            // mailer)، فيخرج بريد منشأة عبر SMTP منشأة أخرى — وبريد المنصّة أيضاً.
+            $transport = app('mail.manager')->createSymfonyTransport([
+                'transport' => 'smtp',
+                'scheme' => ($smtpEncryption === 'ssl' || (int) $smtpPort === 465) ? 'smtps' : 'smtp',
+                'host' => $smtpHost,
+                'port' => (int) $smtpPort,
+                'username' => $smtpUsername,
+                'password' => $smtpPassword,
+                'timeout' => 30,
             ]);
 
-            Mail::raw($body, function ($message) use ($contact, $subject, $fromName, $fromEmail) {
-                $message->to($contact->email)
-                        ->subject($subject)
-                        ->from($fromEmail, $fromName);
-            });
+            $email = (new Email())
+                ->from(new Address($fromEmail, (string) $fromName))
+                ->to($contact->email)
+                ->subject($subject)
+                ->text($body);
+
+            (new SymfonyMailer($transport))->send($email);
 
             // Log::info("Email sent to {$contact->email}: {$subject}");
             return true;
@@ -385,10 +394,23 @@ class ActionExecutionService
             'timestamp' => now()->toISOString(),
         ];
 
+        $target = OutboundUrl::resolvePublic($url);
+
+        if ($target === null) {
+            Log::warning("Webhook URL is not a public http(s) address: {$url}");
+            return false;
+        }
+
         try {
-            $response = Http::timeout(30)->send($method, $url, [
-                'json' => $payload,
-            ]);
+            // التحويل يُعيد فتح الباب لعنوان داخلي، والـ IP المفحوص يُثبَّت.
+            $response = Http::timeout(30)
+                ->withOptions([
+                    'allow_redirects' => false,
+                    'curl' => [CURLOPT_RESOLVE => ["{$target['host']}:{$target['port']}:{$target['ip']}"]],
+                ])
+                ->send($method, $url, [
+                    'json' => $payload,
+                ]);
 
             if ($response->successful()) {
                 // Log::info("Webhook executed successfully: {$url}");

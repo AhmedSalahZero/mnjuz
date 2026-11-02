@@ -826,5 +826,7 @@
     "24-hour window closed": "24-hour window closed",
     "{hours} hours and {minutes} minutes left before the 24-hour reply window closes": "{hours} hours and {minutes} minutes left before the 24-hour reply window closes",
     "Distribute conversations among online team members. If no one is online, they wait in Unassigned.": "Distribute conversations among online team members. If no one is online, they wait in Unassigned.",
-    "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.": "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1."
+    "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.": "Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.",
+    "Saved. Leave empty to keep it": "Saved. Leave empty to keep it",
+    "This file type is not supported by WhatsApp.": "This file type is not supported by WhatsApp."
 }

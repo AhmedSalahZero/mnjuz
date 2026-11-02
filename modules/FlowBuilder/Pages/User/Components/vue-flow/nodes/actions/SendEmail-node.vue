@@ -139,12 +139,13 @@
                       />
                     </div>
                     <div>
+                      <!-- كلمة المرور المحفوظة لا تصل إلى المتصفح: الحقل الفارغ يُبقيها -->
                       <FormInput
                         v-model="editForm.config.smtp_password"
                         :label="$t('Password')"
                         type="password"
-                        :placeholder="$t('App password or email password')"
-                        required
+                        :placeholder="editForm.config.has_smtp_password ? $t('Saved. Leave empty to keep it') : $t('App password or email password')"
+                        :required="!editForm.config.has_smtp_password"
                       />
                     </div>
                   </div>
@@ -272,6 +273,7 @@ const toggleEdit = () => {
     smtp_port: currentConfig.smtp_port || 587,
     smtp_username: currentConfig.smtp_username || '',
     smtp_password: currentConfig.smtp_password || '',
+    has_smtp_password: !!currentConfig.has_smtp_password,
     smtp_encryption: currentConfig.smtp_encryption || 'tls',
     from_name: currentConfig.from_name || '',
     from_email: currentConfig.from_email || ''
