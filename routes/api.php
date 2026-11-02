@@ -2,7 +2,6 @@
 
 use App\Http\Middleware\AuthenticateBearerToken;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -213,6 +212,6 @@ Route::middleware(['auth:sanctum', 'check.active.organization', 'check.has.selec
     Route::get('/status/{paymentId}', [App\Http\Controllers\Api\MyFatoorahPaymentController::class, 'status']);
 });
 
-Route::post('/broadcasting/auth', function (Request $request) {
-    return Broadcast::auth($request);
-})->middleware('auth:sanctum')->name('api.broadcasting.auth'); // أو auth:api
+// يوقّع بسرّ مزوّد المنشأة صاحبة القناة (Pusher أو Reverb).
+Route::post('/broadcasting/auth', App\Http\Controllers\BroadcastAuthController::class)
+    ->middleware('auth:sanctum')->name('api.broadcasting.auth');

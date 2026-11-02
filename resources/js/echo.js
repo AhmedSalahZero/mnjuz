@@ -3,6 +3,22 @@ import Pusher from 'pusher-js';
 
 let echoInstance = null;
 
+/**
+ * بصمة الإعداد الذي بُني به الاتصال. الأدمن يختار لكل منشأة Pusher أو Reverb،
+ * فالانتقال إلى منشأة على مزوّدٍ آخر (أو تبديل الأدمن) يأتي بإعدادٍ مختلف مع
+ * الصفحة التالية — والاتصال القديم يظلّ يستمع إلى مزوّدٍ لا يُبثّ إليه.
+ */
+let echoConfigKey = null;
+
+const configKeyOf = (broadcast) => JSON.stringify([
+    broadcast?.provider ?? null,
+    broadcast?.key ?? null,
+    broadcast?.host ?? null,
+    broadcast?.port ?? null,
+    broadcast?.cluster ?? null,
+    broadcast?.force_tls ?? null,
+]);
+
 /** قنوات مشتركة: اسم القناة → { channel, handlers } — اشتراك فيزيائي واحد = طلب auth واحد */
 const sharedChannelEntries = new Map();
 
@@ -16,6 +32,18 @@ const sharedChannelEntries = new Map();
  * @param {{key: string, cluster?: ?string, host?: ?string, port?: number, force_tls?: boolean}} broadcast
  */
 export function getEchoInstance(broadcast) {
+    // إعدادٌ مختلف: يُغلق الاتصال القديم وتُنسى قنواته، فيُبنى اتصالٌ بالمزوّد
+    // الجديد وتشترك الصفحة من جديد عند تركيبها.
+    if (echoInstance && broadcast && configKeyOf(broadcast) !== echoConfigKey) {
+        try {
+            echoInstance.disconnect();
+        } catch (error) {
+            console.warn('[Echo] تعذّر إغلاق الاتصال السابق', error);
+        }
+        echoInstance = null;
+        sharedChannelEntries.clear();
+    }
+
     if (!echoInstance) {
         // مفتاح غائب = اتصال يُبنى ويفشل بلا خطأ ظاهر: تُحفظ الرسائل ولا تصل
         // لحظياً فيبدو النظام بطيئاً لا معطّلاً. حدث هذا فعلاً حين مُرِّر
@@ -57,6 +85,7 @@ export function getEchoInstance(broadcast) {
         }
 
         echoInstance = new Echo(options);
+        echoConfigKey = configKeyOf(broadcast);
     }
     return echoInstance;
 }

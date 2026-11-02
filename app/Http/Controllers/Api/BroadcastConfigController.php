@@ -23,7 +23,8 @@ class BroadcastConfigController extends Controller
 {
     public function show(): JsonResponse
     {
-        $config = BroadcastProvider::clientConfig();
+        // مزوّد المنشأة المختارة في التطبيق، كما يختاره الأدمن لكل منشأة.
+        $config = BroadcastProvider::clientConfig((int) auth()->user()?->current_mobile_organization_id ?: null);
 
         return response()->json([
             'statusCode' => 200,

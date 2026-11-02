@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\BroadcastsOnOrganizationProvider;
 use App\Jobs\SendNewChatPushNotificationJob;
 use App\Services\Chat\ChatBroadcastPayloadBuilder;
 use App\Services\Chat\ChatChannelRecipients;
@@ -34,6 +35,7 @@ class NewChatEvent implements ShouldBroadcast
     use Dispatchable;
     use InteractsWithSockets;
     use SerializesModels;
+    use BroadcastsOnOrganizationProvider;
 
     public string $queue = 'high';
 

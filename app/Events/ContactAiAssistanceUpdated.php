@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\BroadcastsOnOrganizationProvider;
 use App\Services\Chat\ChatChannelRecipients;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
@@ -25,6 +26,7 @@ class ContactAiAssistanceUpdated implements ShouldBroadcast
 {
     use Dispatchable;
     use InteractsWithSockets;
+    use BroadcastsOnOrganizationProvider;
 
     public string $queue = 'high';
 

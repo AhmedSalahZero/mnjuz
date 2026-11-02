@@ -116,7 +116,8 @@ class BroadcastClientConfigTest extends TestCase
     {
         $source = file_get_contents(base_path($file));
 
-        $this->assertStringContainsString('BroadcastProvider::clientConfig()', $source, $file);
+        // بمنشأة الصفحة: الأدمن يختار لكل منشأة مزوّدها.
+        $this->assertMatchesRegularExpression('/BroadcastProvider::clientConfig\(\(int\) [^)]+\)/', $source, $file);
         $this->assertDoesNotMatchRegularExpression(
             "/Setting::whereIn\('key', \[\s*\n\s*'pusher_app_key',/",
             $source,

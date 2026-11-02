@@ -6,6 +6,7 @@ use App\Models\Setting;
 use Illuminate\Broadcasting\Broadcasters\PusherBroadcaster;
 use Illuminate\Contracts\Broadcasting\Factory as BroadcastingFactory;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 
 /**
  * مزوّد البثّ الفعّال — Pusher أو Reverb — ومصدر إعداده الوحيد.
@@ -23,6 +24,11 @@ use Illuminate\Support\Facades\Config;
  *
  * Reverb يتكلّم بروتوكول Pusher، فكلاهما يستعمل سائق pusher نفسه ولا يحتاج
  * التطبيق حزمة laravel/reverb — تلك لتشغيل الخادم، وخادمنا منفصل.
+ *
+ * ولكل منشأة مزوّدها (organizations.broadcast_provider) يختاره الأدمن، وما لم
+ * يُختَر يتبع افتراضي المنصّة. الأحداث تُبثّ عبر اتصالٍ مسمّى لكل مزوّد
+ * (provider_pusher / provider_reverb) فتصل كل منشأة إلى مزوّدها في العامل
+ * نفسه، والمصادقة على القنوات تُوقَّع بسرّ مزوّد المنشأة صاحبة القناة.
  */
 class BroadcastProvider
 {
@@ -38,8 +44,14 @@ class BroadcastProvider
      */
     private const SLOT = 'broadcasting.connections.pusher';
 
+    /** بادئة اتصالَي المزوّدين المسمَّيين: provider_pusher و provider_reverb. */
+    private const CONNECTION_PREFIX = 'provider_';
+
     /** @var array<string, string>|null إعدادات مقروءة مرّة واحدة لكل طلب. */
     private static ?array $settings = null;
+
+    /** @var array<int, ?string> اختيار كل منشأة مقروءاً مرّة لكل طلب؛ null = الافتراضي. */
+    private static array $organizations = [];
 
     /**
      * اسم المزوّد الفعّال. الافتراضي pusher: أي بيئة لم تُضبط بعد تبقى على ما
@@ -50,6 +62,96 @@ class BroadcastProvider
         $value = strtolower(trim((string) (self::settings()[self::SETTING_KEY] ?? '')));
 
         return $value === self::REVERB ? self::REVERB : self::PUSHER;
+    }
+
+    /**
+     * مزوّد المنشأة: ما اختاره لها الأدمن، وإلا افتراضي المنصّة. بلا منشأة
+     * (صفحات الأدمن، أو تعذّر معرفتها) فالافتراضي.
+     */
+    public static function forOrganization(?int $organizationId): string
+    {
+        if (!$organizationId) {
+            return self::active();
+        }
+
+        if (!array_key_exists($organizationId, self::$organizations)) {
+            try {
+                $value = DB::table('organizations')->where('id', $organizationId)->value('broadcast_provider');
+            } catch (\Throwable $e) {
+                // قبل الترحيل (لا عمود) أو حين تتعذّر القاعدة: الافتراضي.
+                $value = null;
+            }
+
+            self::$organizations[$organizationId] = self::normalize($value);
+        }
+
+        return self::$organizations[$organizationId] ?? self::active();
+    }
+
+    /** pusher أو reverb، أو null لقيمة فارغة أو غير معروفة. */
+    public static function normalize($value): ?string
+    {
+        $value = strtolower(trim((string) $value));
+
+        return in_array($value, [self::PUSHER, self::REVERB], true) ? $value : null;
+    }
+
+    /** اسم الاتصال المسمّى لمزوّد: provider_pusher أو provider_reverb. */
+    public static function connectionName(string $provider): string
+    {
+        return self::CONNECTION_PREFIX . (self::normalize($provider) ?? self::PUSHER);
+    }
+
+    /** الاتصال الذي تُبثّ عبره أحداث المنشأة. */
+    public static function connectionNameForOrganization(?int $organizationId): string
+    {
+        return self::connectionName(self::forOrganization($organizationId));
+    }
+
+    /**
+     * رقم المنشأة من اسم القناة. القنوات كلها تحمله: chats.ch{org}.{user}
+     * و payments.ch{org} و contact.chat.deleted.{org}، بالبادئة أو بلاها.
+     */
+    public static function organizationFromChannel(string $channel): ?int
+    {
+        $channel = preg_replace('/^(presence-|private-)/', '', trim($channel));
+
+        foreach (['/^chats\.ch(\d+)\./', '/^payments\.ch(\d+)$/', '/^contact\.chat\.deleted\.(\d+)$/'] as $pattern) {
+            if (preg_match($pattern, (string) $channel, $match)) {
+                return (int) $match[1];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * المفاتيح الناقصة لمزوّد: key و secret و app_id و host.
+     *
+     * @return string[]
+     */
+    public static function missingCredentials(string $provider): array
+    {
+        $connection = self::connectionFor($provider);
+        $missing = [];
+
+        foreach (['key', 'secret', 'app_id'] as $field) {
+            if (trim((string) ($connection[$field] ?? '')) === '') {
+                $missing[] = $field;
+            }
+        }
+
+        if (trim((string) ($connection['options']['host'] ?? '')) === '') {
+            $missing[] = 'host';
+        }
+
+        return $missing;
+    }
+
+    /** مزوّدٌ مكتمل البيانات يصحّ التبديل إليه. */
+    public static function isConfigured(string $provider): bool
+    {
+        return self::missingCredentials($provider) === [];
     }
 
     /**
@@ -91,17 +193,40 @@ class BroadcastProvider
      */
     public static function apply(): void
     {
-        $connection = self::connection();
+        self::write(self::SLOT, 'pusher', self::connection());
 
+        // اتصالا المزوّدين المسمَّيان معرَّفان دائماً: تختار الأحداث بينهما
+        // بحسب منشأتها (broadcastConnections).
+        foreach ([self::PUSHER, self::REVERB] as $provider) {
+            $name = self::connectionName($provider);
+            self::write('broadcasting.connections.' . $name, $name, self::connectionFor($provider));
+        }
+    }
+
+    /**
+     * المصادقة على قناة منشأة: الفتحة الافتراضية ومُذيعها يشيران إلى مزوّدها
+     * طوال هذا الطلب. تسجيلات القنوات على المُذيع الافتراضي وحده، فهو من
+     * يُوقّع — والتوقيع بسرّ مزوّدٍ آخر يرفضه خادم البثّ فيفشل الاشتراك بصمت.
+     */
+    public static function useForOrganization(?int $organizationId): void
+    {
+        self::write(self::SLOT, 'pusher', self::connectionFor(self::forOrganization($organizationId)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $connection
+     */
+    private static function write(string $configKey, string $driverName, array $connection): void
+    {
         // مقارنة قبل الكتابة: بلا تغيير لا نُسقط عميلاً يعمل — والدالّة
         // تُستدعى مع كل إنشاء لخدمة واتساب.
-        if (Config::get(self::SLOT) === $connection) {
+        if (Config::get($configKey) === $connection) {
             return;
         }
 
-        Config::set(self::SLOT, $connection);
+        Config::set($configKey, $connection);
 
-        self::refreshDriver($connection);
+        self::refreshDriver($driverName, $connection);
     }
 
     /**
@@ -117,7 +242,7 @@ class BroadcastProvider
      *
      * @param  array<string, mixed>  $connection
      */
-    private static function refreshDriver(array $connection): void
+    private static function refreshDriver(string $name, array $connection): void
     {
         try {
             $manager = app(BroadcastingFactory::class);
@@ -127,7 +252,7 @@ class BroadcastProvider
             // سيُبنى لاحقاً بالإعداد الذي كُتب للتوّ.
             $drivers = new \ReflectionProperty($manager, 'drivers');
             $drivers->setAccessible(true);
-            $driver = ($drivers->getValue($manager))['pusher'] ?? null;
+            $driver = ($drivers->getValue($manager))[$name] ?? null;
 
             if ($driver instanceof PusherBroadcaster) {
                 $driver->setPusher($manager->pusher($connection));
@@ -142,19 +267,20 @@ class BroadcastProvider
      *
      * @return array{provider: string, key: ?string, cluster: ?string, host: ?string, port: int, scheme: string, force_tls: bool}
      */
-    public static function clientConfig(): array
+    public static function clientConfig(?int $organizationId = null): array
     {
-        $connection = self::connection();
+        $provider = self::forOrganization($organizationId);
+        $connection = self::connectionFor($provider);
         $options = $connection['options'] ?? [];
         $scheme = (string) ($options['scheme'] ?? 'https');
 
         return [
-            'provider' => self::active(),
+            'provider' => $provider,
             'key' => $connection['key'] ?? null,
             'cluster' => $options['cluster'] ?? null,
             // Pusher السحابي يشتقّ عنوانه من التجميعة، فنُرجع null ليستعمل
             // العميل سلوكه الافتراضي بدل عنوان مُخترَع.
-            'host' => self::active() === self::REVERB ? ($options['host'] ?? null) : null,
+            'host' => $provider === self::REVERB ? ($options['host'] ?? null) : null,
             'port' => (int) ($options['port'] ?? 443),
             'scheme' => $scheme,
             'force_tls' => $scheme === 'https',
@@ -165,6 +291,7 @@ class BroadcastProvider
     public static function forget(): void
     {
         self::$settings = null;
+        self::$organizations = [];
     }
 
     /** @return array<string, mixed> */

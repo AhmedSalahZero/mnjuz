@@ -174,7 +174,8 @@ class HandleInertiaRequests extends Middleware
             'applicationReleaseDate' => fn () => Config::get('version.release_date'),
             'config' => $config,
             // إعداد البثّ للعميل — يتبع مفتاح التبديل بلا إعادة بناء.
-            'broadcast' => BroadcastProvider::clientConfig(),
+            // مزوّد المنشأة الحالية؛ صفحات الأدمن بلا منشأة فتأخذ الافتراضي.
+            'broadcast' => BroadcastProvider::clientConfig((int) session('current_organization') ?: null),
             // أقصى حجم يقبله الخادم فعلاً. الملف الأكبر يرفضه PHP قبل بلوغ
             // Laravel، فتصل حمولة بلا ملف ويظنّ المستخدم أن الإرسال نجح.
             // نمرّره للواجهة لتردّ الملف مبكّراً برسالة تذكر الحدّ الحقيقي.

@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Broadcasting\ResilientPusherBroadcaster;
 use Illuminate\Broadcasting\BroadcastManager;
+use App\Http\Controllers\BroadcastAuthController;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class BroadcastServiceProvider extends ServiceProvider
@@ -20,7 +22,10 @@ class BroadcastServiceProvider extends ServiceProvider
             return new ResilientPusherBroadcaster($manager->pusher($config));
         });
 
-        Broadcast::routes(['middleware' => ['web', 'auth']]);
+        // المسار نفسه الذي يسجّله Broadcast::routes، بمتحكّمٍ يوقّع بسرّ مزوّد
+        // المنشأة صاحبة القناة لا مزوّد المنصّة (BroadcastAuthController).
+        Route::match(['get', 'post'], 'broadcasting/auth', BroadcastAuthController::class)
+            ->middleware(['web', 'auth']);
 
         require base_path('routes/channels.php');
     }

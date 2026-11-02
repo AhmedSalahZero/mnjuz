@@ -238,8 +238,9 @@ class ChatService
 			$nextContactsPage = $hasMoreContacts ? (int)$contactPage + 1 : null;
         // إعداد البثّ كما يحتاجه العميل: المفتاح والعنوان لا السرّ. يأتي من
         // BroadcastProvider فيتبع مفتاح التبديل تلقائياً — تغيير المزوّد يظهر
-        // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء.
-			$pusherSettings = BroadcastProvider::clientConfig();
+        // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء. ومزوّد
+        // المنشأة نفسها: الأدمن يختار لكل منشأة Pusher أو Reverb.
+			$pusherSettings = BroadcastProvider::clientConfig((int) $this->organizationId ?: null);
 			
 		}
 
