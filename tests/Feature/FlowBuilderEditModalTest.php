@@ -27,6 +27,9 @@ class FlowBuilderEditModalTest extends TestCase
         'Delay', 'Webhook', 'Conditional', 'AIResponse',
     ];
 
+    /** بلا نافذة: لا إعداد لها، وحالة التفعيل تُبدَّل من شارة البطاقة. */
+    private const MODAL_LESS = ['RemoveFromGroup'];
+
     private function source(string $path): string
     {
         $this->assertFileExists(base_path($path));
@@ -45,6 +48,14 @@ class FlowBuilderEditModalTest extends TestCase
     public static function actions(): array
     {
         return array_combine(self::ACTIONS, array_map(fn ($a) => [$a], self::ACTIONS));
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function modalActions(): array
+    {
+        $actions = array_values(array_diff(self::ACTIONS, self::MODAL_LESS));
+
+        return array_combine($actions, array_map(fn ($a) => [$a], $actions));
     }
 
     public function test_the_templates_compile_and_the_modal_is_wired(): void
@@ -80,7 +91,7 @@ class FlowBuilderEditModalTest extends TestCase
         );
     }
 
-    /** @dataProvider actions */
+    /** @dataProvider modalActions */
     public function test_every_action_node_uses_the_shared_modal(string $action): void
     {
         $source = $this->source(self::DIR . "{$action}-node.vue");
@@ -88,6 +99,21 @@ class FlowBuilderEditModalTest extends TestCase
         $this->assertStringContainsString("import NodeEditModal from './NodeEditModal.vue'", $source);
         $this->assertStringContainsString('<NodeEditModal :open="showEditModal" @close="closeEditModal">', $source);
         $this->assertStringContainsString('</NodeEditModal>', $source);
+    }
+
+    /**
+     * نافذة بلا إعداد كانت تُربك المستخدم («ماذا أعدّل؟»)؛ الإيقاف المؤقت وحده
+     * بقي، فصار زرّاً على البطاقة نفسها.
+     */
+    public function test_remove_from_group_toggles_active_from_its_card(): void
+    {
+        $source = $this->source(self::DIR . 'RemoveFromGroup-node.vue');
+
+        $this->assertStringNotContainsString('NodeEditModal', $source);
+        $this->assertStringContainsString('role="switch"', $source);
+        $this->assertStringContainsString('@click.stop="toggleActive"', $source);
+        $this->assertStringContainsString('is_active: !isActive.value', $source);
+        $this->assertMatchesRegularExpression('/class="[^"]*\bnodrag\b/', $source);
     }
 
     /** كل العقد الثماني، لا بعضها: عقدة جديدة بنافذتها الخاصة تعيد العطل. */

@@ -12,7 +12,9 @@ import { readFileSync } from 'node:fs'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 
 const DIR = new URL('../../modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/', import.meta.url)
-const ACTIONS = ['AddToGroup', 'RemoveFromGroup', 'UpdateContact', 'SendEmail', 'Delay', 'Webhook', 'Conditional', 'AIResponse']
+const ACTIONS = ['AddToGroup', 'UpdateContact', 'SendEmail', 'Delay', 'Webhook', 'Conditional', 'AIResponse']
+// بلا نافذة: الإجراء لا إعداد له، وحالة التفعيل تُبدَّل من شارة البطاقة.
+const MODAL_LESS = ['RemoveFromGroup']
 
 let checks = 0
 const fail = []
@@ -60,6 +62,19 @@ for (const action of ACTIONS) {
     // الفورم نفسه بقي داخل النافذة: الحفظ والإلغاء
     ok(/<form\s+@submit\.prevent="saveAction"/.test(html), `${filename}: فقد نموذج الحفظ`)
     ok(/@click="closeEditModal"/.test(html), `${filename}: فقد زرّ الإلغاء`)
+}
+
+for (const action of MODAL_LESS) {
+    const { filename, descriptor, template } = load(`${action}-node`)
+    const html = descriptor.template?.content ?? ''
+
+    ok(!/class="[^"]*\bfixed\b[^"]*\binset-0\b/.test(html), `${filename}: نافذة fixed داخل قالب العقدة`)
+    ok(!template.code.includes('NodeEditModal'), `${filename}: عادت نافذة تعديل لإجراء بلا إعداد`)
+    ok(/role="switch"/.test(html) && /@click\.stop="toggleActive"/.test(html), `${filename}: شارة التفعيل لا تبدّل الحالة`)
+    ok(/class="[^"]*\bnodrag\b/.test(html), `${filename}: الضغط على الشارة يسحب العقدة`)
+
+    const script = compileScript(descriptor, { id: action })
+    ok(/is_active: !isActive\.value/.test(script.content), `${filename}: toggleActive لا يقلب is_active`)
 }
 
 // ------------------------------------------------ النافذة نفسها
