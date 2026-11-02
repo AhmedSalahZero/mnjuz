@@ -1030,12 +1030,11 @@ onBeforeUnmount(() => {
 				@cancel="(job) => uploads.cancel(job.id)"
 				@dismiss="(job) => uploads.dismiss(job.id)"
 			/>
-			<div
+			<!-- النافذة مغلقة: يُخفى الحقل كله (v-show لا v-if فيبقى textInputRef) — كان باهتاً معطّلاً
+			     يملأ المساحة تحت اللافتة، وزرّ القوالب فيه مكرّر ولا يعمل. -->
+			<div v-show="isInboundChatWithin24Hours"
 				class="flex items-center py-4 md:py-2 pl-2 pr-2"
-				:class="[
-					processingForm ? 'bg-gray-200' : 'bg-white',
-					!isInboundChatWithin24Hours ? 'pointer-events-none opacity-40' : '',
-				]">
+				:class="processingForm ? 'bg-gray-200' : 'bg-white'">
 				<div class="absolute">
 					<button type="button" @click="toggleEmojiPicker"> 😀 </button>
 					<div v-if="emojiPicker" class="absolute left-0 bottom-full" ref="emojiPickerRef">
@@ -1200,7 +1199,7 @@ onBeforeUnmount(() => {
 				@cancel="(job) => uploads.cancel(job.id)"
 				@dismiss="(job) => uploads.dismiss(job.id)"
 			/>
-			<div class="p-4" :class="!isInboundChatWithin24Hours ? 'pointer-events-none opacity-40' : ''">
+			<div v-show="isInboundChatWithin24Hours" class="p-4">
 			<div>
 				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown="onComposeKeydown" @keydown.enter.exact.prevent="handleEnterKey"
 					class="w-full outline-none resize-none text-sm rounded-md p-2"

@@ -24,6 +24,7 @@ class MessagingWindowCountdownTest extends TestCase
         '{hours}h {minutes}m left',
         '24-hour window closed',
         '{hours} hours and {minutes} minutes left before the 24-hour reply window closes',
+        'The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.',
     ];
 
     private function source(string $path): string
@@ -47,6 +48,22 @@ class MessagingWindowCountdownTest extends TestCase
         }
 
         $script = base_path('tests/js/messaging-window.mjs');
+        $this->assertFileExists($script);
+
+        exec('node ' . escapeshellarg($script) . ' 2>&1', $output, $status);
+
+        $this->assertSame(0, $status, implode("\n", $output));
+        $this->assertStringContainsString('OK', implode("\n", $output));
+    }
+
+    /** شكل الشارة واللافتة مرسومين فعلاً: tests/js/messaging-window-ui.mjs */
+    public function test_the_closed_window_reads_clearly(): void
+    {
+        if (!$this->nodeAvailable() || !is_dir(base_path('node_modules/@vue/server-renderer'))) {
+            $this->markTestSkipped('node أو @vue/server-renderer غير متاح في هذه البيئة');
+        }
+
+        $script = base_path('tests/js/messaging-window-ui.mjs');
         $this->assertFileExists($script);
 
         exec('node ' . escapeshellarg($script) . ' 2>&1', $output, $status);
@@ -102,6 +119,33 @@ class MessagingWindowCountdownTest extends TestCase
             $header,
             'space-x-4 لا يعمل في RTL: يلتصق نصّ العدّاد بالزرّ.'
         );
+    }
+
+    /** الرقم في سطر واحد وبترتيبه: في RTL كان يُقسَم على سطرين ويظهر «5766 422 54 966+». */
+    public function test_the_phone_number_stays_on_one_line_and_left_to_right(): void
+    {
+        $this->assertStringContainsString(
+            '<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contact.formatted_phone_number }}</span>',
+            $this->source(self::HEADER)
+        );
+    }
+
+    // ------------------------------------------------- حقل الكتابة
+
+    /**
+     * النافذة مغلقة: يُخفى حقل الكتابة بنسختيه ولا يبقى باهتاً معطّلاً تحت اللافتة.
+     * v-show لا v-if: الدوال التي تلمس textInputRef تبقى تجده.
+     */
+    public function test_the_compose_box_is_hidden_while_the_window_is_closed(): void
+    {
+        $form = $this->source(self::FORM);
+
+        $this->assertSame(2, substr_count($form, '<div v-show="isInboundChatWithin24Hours"'), 'إحدى نسختي حقل الكتابة لا تُخفى.');
+        $this->assertStringNotContainsString("'pointer-events-none opacity-40'", $form, 'الحقل الباهت المعطّل ما زال.');
+        $this->assertStringNotContainsString('v-if="isInboundChatWithin24Hours"', $form, 'v-if يفكّ textInputRef فترمي الدوال التي تلمسه.');
+
+        // اللافتة نفسها ما زالت تظهر في النسختين حين تُغلق النافذة.
+        $this->assertSame(2, substr_count($form, '<Chat24HourComposeBanner' . "\n" . "\t\t\t\tv-if=\"!isInboundChatWithin24Hours\""));
     }
 
     // ------------------------------------------------- مصدر واحد للحقيقة

@@ -10,28 +10,26 @@ defineEmits(['viewTemplate', 'sendAuthTemplate'])
 </script>
 
 <template>
-	<div
-		class="border-b border-gray-100 bg-[#FFF5EC] p-4 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-5">
-		<div class="flex min-w-0 flex-1 items-start gap-3">
-			<span class="mt-0.5 shrink-0 text-red-600" aria-hidden="true">
-				<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none"
-					stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-					<path
-						d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+	<!-- flex-wrap لا sm:flex: عرض اللافتة عرض لوحة المحادثة لا الشاشة، فعلى شاشة لابتوب
+	     كان النص يُعصر في عمود ضيّق بجانب الأزرار. هنا تنزل الأزرار تحته حين يضيق المكان. -->
+	<div class="flex flex-wrap items-center gap-x-6 gap-y-3 bg-red-50/70 px-4 py-4 sm:px-5">
+		<div class="flex min-w-[15rem] flex-1 items-start gap-3">
+			<span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600"
+				aria-hidden="true">
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5" fill="none"
+					stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<rect x="5" y="11" width="14" height="10" rx="2" />
+					<path d="M8 11V7a4 4 0 0 1 8 0v4" />
 				</svg>
 			</span>
 			<div class="min-w-0">
-				<div class="text-base font-semibold text-gray-900">{{ $t('24 hour limit') }}</div>
-				<p class="mt-1 text-sm leading-relaxed text-gray-600">
-					{{
-						$t(
-							'Whatsapp does not allow sending messages 24 hours after they last messaged you. However, you can send them a template message',
-						)
-					}}
+				<p class="text-sm font-semibold text-gray-900">{{ $t('24-hour window closed') }}</p>
+				<p class="mt-0.5 text-sm leading-relaxed text-gray-600">
+					{{ $t('The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.') }}
 				</p>
 			</div>
 		</div>
-		<div class="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 sm:mt-0 sm:justify-end">
+		<div class="ms-auto flex shrink-0 flex-wrap items-center gap-2">
 			<button type="button"
 				class="flex items-center justify-center gap-2 rounded-md border border-[#16332E]/35 bg-white px-4 py-2 text-sm font-medium text-[#16332E] shadow-sm transition-colors hover:bg-white/90"
 				@click="$emit('viewTemplate')">

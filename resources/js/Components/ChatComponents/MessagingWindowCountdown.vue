@@ -45,24 +45,17 @@ const fullLabel = computed(() =>
 			hours: remaining.value.hours,
 			minutes: remaining.value.minutes,
 		})
-		: trans('Whatsapp does not allow sending messages 24 hours after they last messaged you. However, you can send them a template message'),
+		: trans('The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.'),
 )
 
-const ringColor = computed(
+// الحالة المغلقة شارة حمراء بقفل لا حلقة رمادية: الرمادي بدا معطّلاً أو جارِي التحميل
+// فلا يلفت الموظف إلى أن الرد الحرّ صار ممنوعاً.
+const pillClass = computed(
 	() => ({
-		ok: 'stroke-green-500',
-		warning: 'stroke-amber-500',
-		critical: 'stroke-red-500',
-		closed: 'stroke-slate-300',
-	})[remaining.value.level],
-)
-
-const textColor = computed(
-	() => ({
-		ok: 'text-green-700',
-		warning: 'text-amber-600',
-		critical: 'text-red-600',
-		closed: 'text-slate-500',
+		ok: 'bg-green-50 text-green-700 ring-green-200',
+		warning: 'bg-amber-50 text-amber-700 ring-amber-200',
+		critical: 'bg-red-50 text-red-700 ring-red-200',
+		closed: 'bg-red-50 text-red-700 ring-red-200',
 	})[remaining.value.level],
 )
 
@@ -70,27 +63,24 @@ const dash = computed(() => `${remaining.value.fraction * CIRCUMFERENCE} ${CIRCU
 </script>
 
 <template>
-	<div class="flex items-center gap-x-2 shrink-0" role="timer" :title="fullLabel" :aria-label="fullLabel"
+	<div class="inline-flex h-8 shrink-0 items-center gap-x-1.5 rounded-full px-2 ring-1 ring-inset xl:pe-3"
+		:class="pillClass" role="timer" :title="fullLabel" :aria-label="fullLabel"
 		data-testid="messaging-window-countdown" :data-level="remaining.level">
-		<div class="relative w-9 h-9">
-			<svg class="w-9 h-9 -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
-				<circle cx="18" cy="18" :r="RADIUS" fill="none" stroke-width="3" class="stroke-slate-200" />
-				<circle cx="18" cy="18" :r="RADIUS" fill="none" stroke-width="3" stroke-linecap="round"
-					:stroke-dasharray="dash" :class="ringColor" class="transition-all duration-500" />
-			</svg>
-			<!-- أقل من xl: الوقت داخل الحلقة لأن النص الجانبي مخفيّ (الهيدر ضيّق: 70% من المساحة) -->
-			<span v-if="remaining.open" class="xl:hidden absolute inset-0 flex items-center justify-center text-[9px] font-medium leading-none"
-				:class="textColor">
-				{{ pad(remaining.hours) }}:{{ pad(remaining.minutes) }}
-			</span>
-			<svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"
-				class="absolute inset-0 m-auto w-4 h-4 text-slate-400" fill="none" stroke="currentColor"
-				stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-				<circle cx="12" cy="12" r="9" />
-				<path d="M12 7v5l3 2" />
-			</svg>
-		</div>
-		<span class="hidden xl:inline text-xs font-medium whitespace-nowrap" :class="textColor">
+		<svg v-if="remaining.open" class="hidden xl:block w-4 h-4 shrink-0 -rotate-90" viewBox="0 0 36 36" aria-hidden="true">
+			<circle cx="18" cy="18" :r="RADIUS" fill="none" stroke-width="5" class="stroke-current opacity-20" />
+			<circle cx="18" cy="18" :r="RADIUS" fill="none" stroke-width="5" stroke-linecap="round"
+				:stroke-dasharray="dash" class="stroke-current transition-all duration-500" />
+		</svg>
+		<svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" class="w-4 h-4 shrink-0"
+			fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<rect x="5" y="11" width="14" height="10" rx="2" />
+			<path d="M8 11V7a4 4 0 0 1 8 0v4" />
+		</svg>
+		<!-- أقل من xl الترويسة ضيّقة (70% من المساحة): المفتوحة وقتٌ بلون المستوى بلا حلقة، والمغلقة قفل وحده ونصّها في الـ title واللافتة تحت -->
+		<span v-if="remaining.open" class="xl:hidden text-xs font-semibold tabular-nums" dir="ltr">
+			{{ pad(remaining.hours) }}:{{ pad(remaining.minutes) }}
+		</span>
+		<span class="hidden xl:inline text-xs font-medium whitespace-nowrap">
 			{{ shortLabel }}
 		</span>
 	</div>

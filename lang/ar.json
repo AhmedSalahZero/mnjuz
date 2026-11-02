@@ -1929,5 +1929,6 @@
     "Reverb app secret": "سرّ تطبيق Reverb",
     "Reverb host": "عنوان خادم Reverb",
     "Reverb port": "منفذ Reverb",
-    "Reverb scheme": "بروتوكول Reverb"
+    "Reverb scheme": "بروتوكول Reverb",
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "مرّ أكثر من 24 ساعة على آخر رسالة من العميل، وواتساب لا يسمح إلا برسائل القوالب حتى يردّ."
 }

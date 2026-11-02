@@ -192,13 +192,13 @@ const submitForm3 = () => {
 					{{ contact.full_name?.substring(0, 1) || '?' }}
 				</div>
 			</div>
-			<div class="flex items-center w-full gap-x-8">
+			<div class="flex items-center w-full gap-x-4 xl:gap-x-8">
 				<div>
 					<div class="flex items-center" @click="toggleView">
 						<span>{{ contact.full_name }}</span>
 					</div>
 					<div class="w-full flex items-center text-xs">
-						<span @click="toggleView">{{ contact.formatted_phone_number }}</span>
+						<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contact.formatted_phone_number }}</span>
 					</div>
 				</div>
 				<FormSelectCombo v-if="ticketingIsEnabled" v-model="user"

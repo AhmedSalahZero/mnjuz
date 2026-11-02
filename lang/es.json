@@ -905,5 +905,6 @@
     "Reverb app secret": "Secreto de la app de Reverb",
     "Reverb host": "Host de Reverb",
     "Reverb port": "Puerto de Reverb",
-    "Reverb scheme": "Esquema de Reverb"
+    "Reverb scheme": "Esquema de Reverb",
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "El cliente no ha escrito en más de 24 horas. WhatsApp solo permite mensajes de plantilla hasta que responda."
 }

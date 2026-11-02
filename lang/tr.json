@@ -871,5 +871,6 @@
     "Reverb app secret": "Reverb uygulama gizli anahtarı",
     "Reverb host": "Reverb sunucusu",
     "Reverb port": "Reverb bağlantı noktası",
-    "Reverb scheme": "Reverb şeması"
+    "Reverb scheme": "Reverb şeması",
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Müşteri 24 saatten uzun süredir mesaj göndermedi. Yanıt verene kadar WhatsApp yalnızca şablon mesajlarına izin verir."
 }
