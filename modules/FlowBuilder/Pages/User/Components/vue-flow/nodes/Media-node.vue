@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, inject } from 'vue'
 import { MoreHorizontalIcon } from 'lucide-vue-next'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 
@@ -15,6 +15,9 @@ import { useTrans } from '@/Composables/useTrans'
 const trans = useTrans()
 
 const props = defineProps<NodeProps>()
+
+// مولّد القماش: معرّف عقدةٍ محذوفة لا يُعاد لنسخة جديدة (main-canvas.vue).
+const nextFlowNodeId = inject<(() => string) | null>('nextFlowNodeId', null)
 const title = ref(props.data.title)
 const uuid = ref(props.data.uuid)
 const textAreaRef = ref(null);
@@ -32,9 +35,20 @@ const options = ref([
   { value: 'document', label: trans('Document') },
 ]);
 const node = useNode()
+
+// الاسم الجديد يُحفظ في العقدة: كان متغيّرًا محليًا يضيع مع أوّل إعادة تحميل.
+function finishRename() {
+  isEditTitle.value = false
+  node.node.data = { ...node.node.data, title: title.value }
+}
 const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
 
-watch(input1, (newValue) => {
+watch(input1, (newValue, oldValue) => {
+  // الملفّ السابق لا يبقى بعد تغيير النوع: صورةٌ مرفوعة كانت تُرسَل «فيديو».
+  if (oldValue && newValue !== oldValue) {
+    media.value = []
+  }
+
   node.node.data.metadata.fields = {
     ...node.node.data.metadata.fields,
     type: 'media',
@@ -76,7 +90,7 @@ function handleClickDeleteBtn() {
 function handleClickDuplicateBtn() {
   // معرّف فريد وبيانات مستقلّة: «عدد العقد + 1» كان يصطدم بمعرّف موجود،
   // وتمرير `data` نفسه كان يجعل النسخة والأصل حقلًا واحدًا.
-  addNodes(duplicateNode(node.node, nodes.value))
+  addNodes(duplicateNode(node.node, nodes.value, 100, nextFlowNodeId?.()))
 }
 
 const countCharacters = (type) => {
@@ -94,8 +108,8 @@ const countCharacters = (type) => {
 const addVariable = (variable) => {
   const textarea = textAreaRef.value;
 
-  // Check if textarea is defined and get the cursor position
-  if (textarea && textInput.value.indexOf(variable) === -1) {
+  // المتغيّر نفسه قد يتكرّر في الرسالة ({first_name} في التحية والتوقيع).
+  if (textarea) {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
 
@@ -158,7 +172,7 @@ onMounted(() => {
         <div class="flex gap-x-2">
           <img src="~@/assets/images/icon_LLM.png" class="mt-1 h-4 w-4" alt="LLM icon" />
           <div class="flex flex-col gap-y-1">
-            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @blur="() => (isEditTitle = false)"/>
+            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @focusout="finishRename" @keyup.enter="finishRename"/>
             <h3 class="text-base capitalize" v-else>{{ title }}</h3>
           </div>
         </div>

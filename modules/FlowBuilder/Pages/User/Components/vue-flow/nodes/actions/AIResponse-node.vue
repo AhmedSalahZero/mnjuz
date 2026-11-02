@@ -44,9 +44,9 @@
         </div>
       </div>
       <div class="text-xs text-gray-600 mb-2">
-        <span class="font-medium">{{ $t('Prompt:') }}</span> {{ config.prompt ? (config.prompt.substring(0, 30) + (config.prompt.length > 30 ? '...' : '')) : 'No prompt set' }}
+        <span class="font-medium">{{ $t('Prompt:') }}</span> {{ config.prompt ? (config.prompt.substring(0, 30) + (config.prompt.length > 30 ? '...' : '')) : $t('No prompt set') }}
         <div v-if="config.proceed_condition === 'confidence_threshold'" class="text-xs text-gray-500 mt-1">
-          Confidence: {{ (config.confidence_threshold || 0.8) * 100 }}%
+          {{ $t('Confidence:') }} {{ (config.confidence_threshold || 0.8) * 100 }}%
         </div>
       </div>
       <div class="flex items-center justify-between text-xs">
@@ -56,7 +56,7 @@
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? $t('Active') : $t('Inactive') }}
           </span>
         </div>
       </div>
@@ -137,10 +137,10 @@
                   <div v-if="editForm.config.proceed_condition === 'confidence_threshold'">
                     <p class="font-medium">{{ $t('Wait for High Confidence:') }}</p>
                     <div class="text-xs space-y-2">
-                      <p>• AI generates response and calculates confidence (0-100%)</p>
-                      <p>• If confidence ≥ {{ (editForm.config.confidence_threshold || 0.8) * 100 }}%: Send response and continue</p>
-                      <p>• If confidence < {{ (editForm.config.confidence_threshold || 0.8) * 100 }}%: Send fallback message and wait for user input</p>
-                      <p>• AI keeps trying until it reaches the confidence threshold</p>
+                      <p>• {{ $t('AI generates response and calculates confidence (0-100%)') }}</p>
+                      <p>• {{ $t('If confidence ≥ {threshold}%: Send response and continue', { threshold: (editForm.config.confidence_threshold || 0.8) * 100 }) }}</p>
+                      <p>• {{ $t('If confidence < {threshold}%: Send fallback message and wait for user input', { threshold: (editForm.config.confidence_threshold || 0.8) * 100 }) }}</p>
+                      <p>• {{ $t('AI keeps trying until it reaches the confidence threshold') }}</p>
                     </div>
                   </div>
                   <div v-else>
@@ -179,6 +179,7 @@
   </div>
 </template>
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
@@ -191,6 +192,8 @@ const props = defineProps({
   data: Object,
   selected: Boolean,
 })
+
+const trans = useTrans()
 const { removeNodes } = useVueFlow()
 const node = useNode()
 const config = computed(() => props.data?.config || {})
@@ -232,7 +235,7 @@ const saveAction = () => {
   closeEditModal()
 }
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }

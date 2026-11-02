@@ -16,7 +16,7 @@ import { nextNodeId } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
-const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields'])
+const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'invalidNodeIds'])
 
 // Provide contact groups to child components
 provide('contactGroups', props.contactGroups || [])
@@ -24,6 +24,32 @@ provide('contactGroups', props.contactGroups || [])
 provide('contactFields', props.contactFields || [])
 
 const elements = ref<Elements>()
+
+// آخر معرّف عقدة صدر في هذا الـ flow، محفوظًا معه: معرّف عقدةٍ محذوفة لا
+// يُعاد لعقدة جديدة (انظر nextNodeId).
+const lastNodeId = ref(0)
+
+const issueNodeId = () => {
+	const id = nextNodeId(nodes.value, lastNodeId.value)
+	lastNodeId.value = Number(id)
+	return id
+}
+
+// زرّ «نسخ» في العقد يأخذ معرّفه من هنا.
+provide('nextFlowNodeId', issueNodeId)
+
+// عقد الرسائل والإجراءات التي في القائمة الجانبية وحدها تُنشأ بالإفلات.
+const MESSAGE_NODE_TYPES = ['text', 'media', 'buttons', 'list']
+
+/**
+ * البداية لا تُحذف: كان Backspace يحذفها ولا سبيل لإعادتها، فيحفظ المسار
+ * بلا محفّز ويسقط الحفظ. والتحديد لا يُحمَّل: عقدةٌ حُفظت محدّدة كانت تُحذف
+ * بأوّل Backspace بعد فتح المحرّر.
+ */
+const prepareNode = (node: any) => {
+	const { selected, ...rest } = node ?? {}
+	return rest.type === 'start' ? { ...rest, deletable: false } : rest
+}
 
 const nodeTypes = {
 	start: markRaw(StartNode),
@@ -49,6 +75,7 @@ const {
 	setEdges,
 	setViewport,
 	onViewportChange,
+	fitView,
 } = useVueFlow()
 
 onMounted(() => {
@@ -60,14 +87,19 @@ onMounted(() => {
 			const actionNodes = savedData.nodes.filter((node) => node.type === 'action')
 		}
 
-		setNodes(savedData.nodes || [])
+		const loadedNodes = (savedData.nodes || []).map(prepareNode)
+		lastNodeId.value = Number(nextNodeId(loadedNodes, savedData.lastNodeId ?? 0)) - 1
+
+		setNodes(loadedNodes)
 		setEdges(savedData.edges || [])
 		setViewport(savedData.viewport || [])
 	} else {
+		lastNodeId.value = 1
 		setNodes([
 			{
 				id: '1',
 				type: 'start',
+				deletable: false,
 				label: 'start',
 				position: { x: 25, y: 10 },
 				data: {
@@ -200,11 +232,29 @@ const getDefaultConfig = (actionType: string) => {
 const saveNodesAndEdges = () => {
 	emit(
 		'updatePayload',
-		JSON.stringify({ nodes: nodes.value, edges: edges.value, viewport: viewport.value }),
+		JSON.stringify({ nodes: nodes.value, edges: edges.value, viewport: viewport.value, lastNodeId: lastNodeId.value }),
 	)
 }
 
+// الخطوات التي رُفض الحفظ أو النشر بسببها تُحدَّد ويُقرَّب إليها.
+watch(
+	() => props.invalidNodeIds,
+	(ids) => {
+		const invalid = new Set((ids || []).map(String))
+		if (invalid.size === 0) return
+
+		nodes.value.forEach((node) => {
+			node.selected = invalid.has(String(node.id))
+		})
+		nextTick(() => fitView({ nodes: [...invalid], padding: 0.3, duration: 400 }))
+	},
+)
+
 function handleOnDrop(event: DragEvent) {
+	// بلا preventDefault يفتح المتصفح الملف المُفلَت (صورة من سطح المكتب) ويغادر
+	// المحرّر، وكان يُنشئ قبلها عقدةً بلا نوع لا يُنشر المسار بوجودها.
+	event.preventDefault()
+
 	const type = event.dataTransfer?.getData('application/vueflow')
 	if (type === 'workflow') {
 		const { nodes, edges, position, zoom } = Test_data
@@ -223,9 +273,13 @@ function handleOnDrop(event: DragEvent) {
 	})
 
 
+	if (!type || (!type.startsWith('action-') && !MESSAGE_NODE_TYPES.includes(type))) {
+		return
+	}
+
 	// معرّف متّصل بلا فجوات: «الأكبر + 2» كان يترك ثقوبًا في التسلسل يمشي
 	// فيها زر Duplicate فيتصادم المعرّفان.
-	const newNodeId = nextNodeId(nodes.value)
+	const newNodeId = issueNodeId()
 
 	let newNode: any
 

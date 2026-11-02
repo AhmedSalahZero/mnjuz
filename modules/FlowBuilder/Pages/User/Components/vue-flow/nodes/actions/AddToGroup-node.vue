@@ -58,7 +58,7 @@
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? $t('Active') : $t('Inactive') }}
           </span>
         </div>
       </div>
@@ -140,6 +140,7 @@
 </template>
 
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
@@ -151,6 +152,8 @@ const props = defineProps({
   data: Object,
   selected: Boolean,
 })
+
+const trans = useTrans()
 
 const { removeNodes } = useVueFlow()
 const node = useNode()
@@ -169,9 +172,9 @@ const actionName = computed(() => {
   
   if (actionConfig.group_id) {
     const group = availableGroups.value.find(g => g.value == actionConfig.group_id)
-    return group ? `Add to ${group.label}` : `Add to Group (ID: ${actionConfig.group_id})`
+    return group ? `${trans('Add to group')}: ${group.label}` : `${trans('Add to group')} (#${actionConfig.group_id})`
   }
-  return 'Add to Group'
+  return trans('Add to group')
 })
 
 const editForm = reactive({
@@ -180,9 +183,9 @@ const editForm = reactive({
 })
 
 const getGroupName = (groupId) => {
-  if (!groupId) return 'No group selected'
+  if (!groupId) return trans('No group selected')
   const group = availableGroups.value.find(g => g.value == groupId)
-  return group ? group.label : `Group ID: ${groupId}`
+  return group ? group.label : `#${groupId}`
 }
 
 const toggleEdit = () => {
@@ -211,7 +214,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }

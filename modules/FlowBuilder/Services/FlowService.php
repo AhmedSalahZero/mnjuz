@@ -43,14 +43,17 @@ class FlowService
     /**
      * Update an existing flow.
      *
+     * مسارٌ منشور لا يُستبدل بنسخةٍ معطوبة: كان «حفظ» يُلغي النشر بصمت حين
+     * تنقص خطوةٌ إعداداً، ويُظهر «تم الحفظ بنجاح»، فيتوقّف البوت عن الردّ على
+     * كل العملاء. الآن يُرفض الحفظ ويبقى المسار يعمل بآخر نسخة سليمة، مع قائمة
+     * الأخطاء لكل خطوة. والمسار غير المنشور يُحفظ كما هو مع الأخطاء تنبيهاً.
+     *
      * @param string $uuid
      * @param array $data
-     * @return Flow
+     * @return \Illuminate\Http\JsonResponse
      */
     public function updateFlow($uuid, array $data, $publish)
     {
-        $validator = new FlowValidator();
-
         $flow = Flow::ownedOrAbort($uuid);
 
         // المتصفح لا يرى كلمات مرور SMTP (FlowSecrets::redact)، فيعيدها الحفظ
@@ -59,98 +62,106 @@ class FlowService
             $data['metadata'] = FlowSecrets::restore($data['metadata'], $flow->metadata);
         }
 
-        if(isset($flow->metadata)){
-            $metadataArray = json_decode($flow->metadata, true);
-            $result = $validator->validateMessageNodes($metadataArray);
+        $metadata = $data['metadata'] ?? $flow->metadata;
+        $graph = $metadata ? (json_decode($metadata, true) ?: []) : [];
+        $result = $graph !== [] ? (new FlowValidator())->validateMessageNodes($graph) : true;
+        $errors = $result === true ? [] : $result;
 
-            if(is_array($result)){
-                $data['status'] = 'inactive';
-            }
+        $publishing = isset($publish) && (int) $publish === 1;
+        $unpublishing = isset($publish) && (int) $publish === 0;
+
+        if ($errors !== [] && $flow->status === 'active' && !$unpublishing) {
+            return response()->json([
+                'success' => false,
+                'message' => __('The flow is live, so these changes were not saved. Fix the problems below, or unpublish the flow first.'),
+                'errors' => $errors,
+                'status' => 'active',
+            ], 200);
+        }
+
+        if ($graph !== []) {
+            $data = array_merge($data, $this->triggerColumns($graph));
+        }
+
+        if ($publishing) {
+            $data['status'] = $errors === [] ? 'active' : 'inactive';
+        } elseif ($unpublishing) {
+            $data['status'] = 'inactive';
         }
 
         $flow->update($data);
 
-        $flow->refresh();
-        
-        if(isset($flow->metadata)){
-            $metadataArray = json_decode($flow->metadata, true);
-            $data2['trigger'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.type', null);
-            // «hi, hello» و«مرحبا، عرض» تُخزَّن «hi,hello» و«مرحبا,عرض»: انظر KeywordMatcher.
-            $data2['keywords'] = KeywordMatcher::normalize(\Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null));
-
-            // المهلة بالدقائق: الفراغ غيابٌ لا صفر — و(int)'' يساوي صفراً
-            // فتُحفظ مهلةً معطّلة بدل ألّا تُحفظ.
-            $timeout = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.timeout', null);
-            $timeout = is_numeric($timeout) ? (int) $timeout : null;
-            $data2['trigger_timeout'] = ($timeout !== null && $timeout > 0) ? $timeout : null;
-
-            $result = $validator->validateMessageNodes($metadataArray);
-
-            if(is_array($result)){
-                $data2['status'] = 'inactive';
-            }
-
-            $flow->update($data2);
-        }
-
-        if(isset($publish)){
-            $validator = new FlowValidator();
-            $metadataArray = json_decode($flow->metadata, true);
-            $status = $publish == 1 ? 'active' : 'inactive';
-
-            if($publish == 1){
-                $result = $validator->validateMessageNodes($metadataArray);
-
-                if (!is_array($result)) {
-                    $flow->update(['status' => $status]);
-
-                    return response()->json([
-                        'success' => true,
-                        'message' => __('Flow saved & published successfully!'),
-                        'status' => 'active'
-                    ]);
-                } else {
-                    // Return the errors in JSON format with a 422 Unprocessable Entity status code
-                    return response()->json([
-                        'success' => false,
-                        'errors' => $result,
-                        'status' => 'inactive'
-                    ], 200);
-                }
-            } else {
-                $flow->update(['status' => $status]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => __('Flow saved & unpublished successfully!'),
-                    'status' => 'inactive'
-                ], 200);
-            }
+        if ($publishing && $errors !== []) {
+            return response()->json([
+                'success' => false,
+                'message' => __('The flow was saved, but it cannot be published until these problems are fixed.'),
+                'errors' => $errors,
+                'status' => 'inactive',
+            ], 200);
         }
 
         return response()->json([
             'success' => true,
-            'message' => __('Flow saved successfully!'),
+            'message' => match (true) {
+                $publishing => __('Flow saved & published successfully!'),
+                $unpublishing => __('Flow saved & unpublished successfully!'),
+                $errors !== [] => __('Flow saved. Fix the problems below before publishing.'),
+                default => __('Flow saved successfully!'),
+            },
+            'errors' => $errors,
             'status' => $flow->status,
         ], 200);
-
-        return $flow;
     }
 
+    /**
+     * أعمدة المحفّز من عقدة البداية — بنوعها لا بموضعها. «nodes.0» كان يقرأ
+     * أوّل عقدة أيّاً كانت، فإن حُذفت البداية صار المحفّز «text» ويرفضه
+     * عمود enum فيسقط الحفظ بخطأ 500.
+     */
+    private function triggerColumns(array $graph): array
+    {
+        $fields = [];
+        foreach ($graph['nodes'] ?? [] as $node) {
+            if (($node['type'] ?? null) === 'start') {
+                $fields = $node['data']['metadata']['fields'] ?? [];
+                break;
+            }
+        }
+        $fields = is_array($fields) ? $fields : [];
+
+        $trigger = $fields['type'] ?? null;
+        $trigger = in_array($trigger, ['new_contact', 'keywords', 'first_message'], true) ? $trigger : null;
+
+        // المهلة بالدقائق: الفراغ غيابٌ لا صفر — و(int)'' يساوي صفراً
+        // فتُحفظ مهلةً معطّلة بدل ألّا تُحفظ.
+        $timeout = $fields['timeout'] ?? null;
+        $timeout = is_numeric($timeout) ? (int) $timeout : null;
+
+        return [
+            'trigger' => $trigger,
+            // «hi, hello» و«مرحبا، عرض» تُخزَّن «hi,hello» و«مرحبا,عرض»: انظر KeywordMatcher.
+            'keywords' => KeywordMatcher::normalize($fields['keywords'] ?? null),
+            'trigger_timeout' => ($timeout !== null && $timeout > 0) ? $timeout : null,
+        ];
+    }
+
+    /**
+     * النسخة غير منشورة: كانت تُنسخ «نشطة» بالمحفّز نفسه فتبدو تعمل ولا تعمل
+     * (الأقدم يفوز). والترقيم يعدّ مسارات المنشأة وحدها.
+     */
     public function duplicateFlow($uuid): void
     {
         $flow = Flow::ownedOrAbort($uuid);
 
-        if (!$flow) {
-            return; // Exit early if the flow doesn't exist
-        }
-
         // Get the base name without any existing (number) suffix
-        $baseName = preg_replace('/\(\d+\)$/', '', trim($flow->name));
+        $baseName = trim(preg_replace('/\(\d+\)$/', '', trim($flow->name)));
+        $escaped = addcslashes($baseName, '\\%_');
 
         // Find existing duplicates
-        $count = Flow::where('name', 'LIKE', "{$baseName} (%)")
-            ->orWhere('name', $baseName)
+        $count = Flow::where('organization_id', $flow->organization_id)
+            ->where(function ($query) use ($escaped, $baseName) {
+                $query->where('name', 'LIKE', "{$escaped} (%)")->orWhere('name', $baseName);
+            })
             ->count();
 
         // Set the new name with an incremented number
@@ -159,6 +170,7 @@ class FlowService
         // Duplicate the flow and assign the new name
         $duplicate = $flow->replicate(['uuid']);
         $duplicate->name = $newName;
+        $duplicate->status = 'inactive';
         $duplicate->save();
     }
 

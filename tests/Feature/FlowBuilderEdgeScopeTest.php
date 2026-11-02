@@ -66,8 +66,10 @@ class FlowBuilderEdgeScopeTest extends TestCase
                 $path . ': الفلترة بـ sourceHandle وحده تحذف وصلات العقد الأخرى'
             );
 
-            $this->assertStringContainsString(
-                'edgeIdsForHandle(edges.value, node.id, handleId)',
+            // القائمة تحذف وتُزيح معًا (remapListEdges)، والأزرار تحذف فقط؛
+            // والدالتان مقصورتان على العقدة صاحبة المخرج.
+            $this->assertMatchesRegularExpression(
+                '/edgeIdsForHandle\(edges\.value, node\.id, handleId\)|remapListEdges\(edges\.value, node\.id,/',
                 $source,
                 $path . ': الحذف يجب أن يمرّ بالدالة المقصورة على العقدة'
             );
@@ -170,8 +172,9 @@ class FlowBuilderEdgeScopeTest extends TestCase
                 base_path('modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/' . $name . '.vue')
             );
 
+            // والمعرّف من مولّد القماش، فلا يُعاد معرّف عقدةٍ محذوفة.
             $this->assertStringContainsString(
-                'duplicateNode(node.node, nodes.value)',
+                'duplicateNode(node.node, nodes.value, 100, nextFlowNodeId?.())',
                 $source,
                 $name . ': التكرار يجب أن يمرّ بالدالة المشتركة'
             );

@@ -59,7 +59,7 @@
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? $t('Active') : $t('Inactive') }}
           </span>
         </div>
       </div>
@@ -97,6 +97,7 @@
                         v-model="editForm.config.target_field"
                         :options="availableContactFields"
                         :placeholder="$t('Choose which field to update')"
+                        required
                       />
                     </div>
                   </div>
@@ -106,7 +107,7 @@
                     <div>
                       <FormTextArea
                         v-model="editForm.config.invalid_email_message"
-                        name="Invalid Email Message"
+                        :name="$t('Invalid email message')"
                         rows="3"
                         :placeholder="$t('Please provide a valid email address.')"
                       />
@@ -166,6 +167,7 @@
 </template>
 
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, inject } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
@@ -178,6 +180,8 @@ const props = defineProps({
   data: Object,
   selected: Boolean,
 })
+
+const trans = useTrans()
 
 const { removeNodes } = useVueFlow()
 const node = useNode()
@@ -196,18 +200,18 @@ const availableContactFields = computed(() => {
   
   // Standard fields
   fields.push(
-    { value: 'first_name', label: 'First Name' },
-    { value: 'last_name', label: 'Last Name' },
-    { value: 'email', label: 'Email' }
+    { value: 'first_name', label: trans('First Name') },
+    { value: 'last_name', label: trans('Last Name') },
+    { value: 'email', label: trans('Email') }
   )
   
   // Address fields
   fields.push(
-    { value: 'address.street', label: 'Street' },
-    { value: 'address.city', label: 'City' },
-    { value: 'address.state', label: 'State' },
-    { value: 'address.zip', label: 'Zip Code' },
-    { value: 'address.country', label: 'Country' }
+    { value: 'address.street', label: trans('Street') },
+    { value: 'address.city', label: trans('City') },
+    { value: 'address.state', label: trans('State') },
+    { value: 'address.zip', label: trans('Zip Code') },
+    { value: 'address.country', label: trans('Country') }
   )
   
   // Custom fields
@@ -227,9 +231,9 @@ const actionName = computed(() => {
   
   if (actionConfig.target_field) {
     const field = availableContactFields.value.find(f => f.value === plainField(actionConfig.target_field))
-    return field ? `Update Contact: ${field.label}` : `Update Contact: ${actionConfig.target_field}`
+    return `${trans('Update contact')}: ${field ? field.label : plainField(actionConfig.target_field)}`
   }
-  return 'Update Contact'
+  return trans('Update contact')
 })
 
 const editForm = reactive({
@@ -241,7 +245,7 @@ const editForm = reactive({
 const plainField = (value) => String(value || '').replace(/^metadata\./, '')
 
 const getTargetFieldName = (fieldValue) => {
-  if (!fieldValue) return 'No field selected'
+  if (!fieldValue) return trans('No field selected')
   fieldValue = plainField(fieldValue)
   const field = availableContactFields.value.find(f => f.value === fieldValue)
   return field ? field.label : fieldValue
@@ -292,7 +296,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }

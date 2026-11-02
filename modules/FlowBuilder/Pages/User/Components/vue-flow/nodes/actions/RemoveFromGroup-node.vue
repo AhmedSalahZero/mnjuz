@@ -77,6 +77,7 @@
 </template>
 
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import { computed } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 
@@ -86,13 +87,15 @@ const props = defineProps({
   selected: Boolean,
 })
 
+const trans = useTrans()
+
 const { removeNodes } = useVueFlow()
 const node = useNode()
 
 const isActive = computed(() => props.data?.is_active !== false)
 
 // الاسم ثابت: الإجراء لم يعد يخصّ مجموعة بعينها.
-const actionName = computed(() => 'Remove from all groups')
+const actionName = computed(() => trans('Remove from all groups'))
 
 // تعديل data يكفي للحفظ: main-canvas يراقب العقد ويستدعي saveNodesAndEdges.
 const toggleActive = () => {
@@ -105,7 +108,7 @@ const toggleActive = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }

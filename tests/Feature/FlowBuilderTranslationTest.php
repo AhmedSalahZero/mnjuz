@@ -43,14 +43,22 @@ class FlowBuilderTranslationTest extends TestCase
                 continue;
             }
 
-            $template = explode('<template>', $source, 2)[1];
+            // القالب وحده: ما بعد آخر </template> أنماطٌ لا نصوص ظاهرة.
+            $start = strpos($source, '<template>');
+            $template = substr($source, $start, strrpos($source, '</template>') - $start);
 
-            preg_match_all('/>\s*([A-Z][^<>{}]{8,400}?)\s*</s', $template, $matches);
+            // كل نصّ بين وسمين، بعد حذف {{ … }} ورموز المتغيّرات ({first_name}).
+            // الفحص القديم كان يبدأ بحرف كبير ولا يرى نصّاً بجوار {{ }}، ففاتته
+            // «Section {{ n }}» و«accurate information…».
+            // التعبيرات تُحذف أوّلاً: فيها < و> (length > 30) تقطع النصّ.
+            $template = preg_replace('/\{\{.*?\}\}/s', '', $template);
+            preg_match_all('/>([^<>]+)</s', $template, $matches);
 
             foreach ($matches[1] as $text) {
+                $text = preg_replace('/\{[\w.]+\}/', '', $text);
                 $text = trim(preg_replace('/\s+/', ' ', $text));
 
-                if ($text === '' || str_contains($text, '$t(')) {
+                if (!preg_match('/[A-Za-z]{3,}/', $text)) {
                     continue;
                 }
 
@@ -70,7 +78,8 @@ class FlowBuilderTranslationTest extends TestCase
         $missing = [];
 
         foreach ($this->pages() as $path) {
-            preg_match_all("/\\\$t\('((?:[^'\\\\]|\\\\.)+)'\)/", file_get_contents($path), $matches);
+            // $t في القوالب وtrans في السكربت (قوائم الخيارات، عناوين البطاقات).
+            preg_match_all("/(?:\\\$t|\\btrans)\('((?:[^'\\\\]|\\\\.)+)'[,)]/", file_get_contents($path), $matches);
 
             foreach ($matches[1] as $key) {
                 $key = str_replace("\\'", "'", $key);

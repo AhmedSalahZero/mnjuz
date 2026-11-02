@@ -2,251 +2,323 @@
 
 namespace Modules\FlowBuilder\Validators;
 
-use Illuminate\Support\Facades\Validator;
+use Modules\FlowBuilder\Support\KeywordMatcher;
 
+/**
+ * ما يمنع نشر المسار أو حفظ تعديلٍ على مسارٍ منشور.
+ *
+ * كانت الأخطاء تُجمع بمفتاحٍ لكل نوع عقدة، فيمحو خطأُ العقدة الأخيرة ما قبله،
+ * ولا يقول أيّها المقصودة، ويصل المحرّرَ نصّاً إنجليزياً خاماً. الآن قائمةٌ
+ * بكل خطأ مع معرّف عقدته ونوعها ورسالةٍ مترجمة.
+ *
+ * والحدود حدود واتساب: ما يتجاوزها كان يُنشر ثم يُقصّ أو يُرفض عند الإرسال.
+ */
 class FlowValidator
 {
+    /** @var array<int, array{node_id: ?string, node_type: string, message: string}> */
+    private array $errors = [];
+
     /**
-     * Validate WhatsApp message nodes for required fields.
-     *
-     * @param array $nodes
-     * @return array|bool
+     * @return true|array<int, array{node_id: ?string, node_type: string, message: string}>
      */
-    public function validateMessageNodes(array $nodes)
+    public function validateMessageNodes(array $graph)
     {
-        $errors = [];
+        $this->errors = [];
+        $nodes = is_array($graph['nodes'] ?? null) ? $graph['nodes'] : [];
 
-        foreach ($nodes['nodes'] as $node) {
-            $data = $node['data']['metadata']['fields'] ?? [];
+        $hasStart = false;
+        foreach ($nodes as $node) {
+            if (($node['type'] ?? null) === 'start') {
+                $hasStart = true;
+                break;
+            }
+        }
 
-            // Validate based on node type
-            switch ($node['type']) {
+        if (!$hasStart) {
+            $this->fail(null, 'start', __('The flow has no start step.'));
+        }
+
+        foreach ($nodes as $node) {
+            $id = isset($node['id']) ? (string) $node['id'] : null;
+            $type = (string) ($node['type'] ?? '');
+            $fields = $node['data']['metadata']['fields'] ?? [];
+            $fields = is_array($fields) ? $fields : [];
+
+            switch ($type) {
                 case 'start':
-                    if (isset($data['type']) && $data['type'] == 'keywords') {
-                        if (empty($data['keywords'])) {
-                            $errors['keywords'] = 'Keywords field is required and cannot be empty.';
-                        }
-                    }
+                    $this->validateStart($id, $fields);
                     break;
 
                 case 'text':
-                    $textValidation = $this->validateText($data);
-                    if ($textValidation !== true) {
-                        $errors['text'] = $textValidation;
+                    if (trim((string) ($fields['body'] ?? '')) === '') {
+                        $this->fail($id, $type, __('The message text is required.'));
                     }
                     break;
 
                 case 'media':
-                    $mediaValidation = $this->validateMedia($data);
-                    if ($mediaValidation !== true) {
-                        $errors['media'] = $mediaValidation;
-                    }
+                    $this->validateMedia($id, $fields);
                     break;
 
                 case 'buttons':
-                    $buttonsValidation = $this->validateButtons($data);
-                    if ($buttonsValidation !== true) {
-                        $errors['buttons'] = $buttonsValidation;
-                    }
+                    $this->validateButtons($id, $fields);
                     break;
 
                 case 'list':
-                    $listValidation = $this->validateList($data);
-                    if ($listValidation !== true) {
-                        $errors['list'] = $listValidation;
-                    }
+                    $this->validateList($id, $fields);
                     break;
 
                 case 'action':
-                    $actionValidation = $this->validateAction($node['data']);
-                    if ($actionValidation !== true) {
-                        $errors['action'] = $actionValidation;
-                    }
+                    $this->validateAction($id, is_array($node['data'] ?? null) ? $node['data'] : []);
                     break;
 
                 default:
-                    $errors['unknown'] = 'Unknown node type: ' . $node['type'];
+                    $this->fail($id, $type, __('Unknown step type: :type', ['type' => $type]));
                     break;
             }
         }
 
-        // Return true if no errors found, otherwise return errors
-        return empty($errors) ? true : $errors;
+        return $this->errors === [] ? true : $this->errors;
     }
 
-    /**
-     * Validate a text message node.
-     *
-     * @param array $data
-     * @return bool|string
-     */
-    private function validateText(array $data)
+    private function fail(?string $nodeId, string $nodeType, string $message): void
     {
-        $errors = [];
-
-        // Check if 'body' is present and not empty
-        if (empty($data['body'])) {
-            $errors[] = 'Text body is required.';
-        }
-
-       // Additional checks can be added for other media fields like 'caption'
-       return !empty($errors) ? $errors : true;
+        $this->errors[] = ['node_id' => $nodeId, 'node_type' => $nodeType, 'message' => $message];
     }
 
-    /**
-     * Validate a media message node.
-     *
-     * @param array $data
-     * @return bool|string
-     */
-    private function validateMedia(array $data)
+    /** مسارٌ بلا محفّز كان يُنشر ولا يعمل أبداً. */
+    private function validateStart(?string $id, array $fields): void
     {
-        $errors = [];
+        $trigger = $fields['type'] ?? null;
 
-        // Check if 'media' data is provided and contains the required fields
-        if (empty($data['media']) || empty($data['media']['path'])) {
-            $errors[] = 'Media path is required.';
+        if (empty($trigger)) {
+            $this->fail($id, 'start', __('Choose what starts the flow.'));
+            return;
         }
 
-        if (empty($data['mediaType'])) {
-            $errors[] = 'Media type (image, audio, etc.) is required.';
+        if ($trigger === 'keywords' && KeywordMatcher::split($fields['keywords'] ?? null) === []) {
+            $this->fail($id, 'start', __('Add at least one keyword.'));
         }
-
-        // Validate mediaType format based on mimeType
-        if (!empty($data['mediaType'])) {
-            // Assuming the metadata contains 'extension' as MIME type
-            if(isset($data['media']['metadata'])){
-                $mimeType = json_decode($data['media']['metadata'], true)['extension'] ?? ''; // You should update this based on your actual structure
-            } else {
-                $mimeType = '';
-            }
-            // Validate based on media type and mimeType
-            $validTypes = $this->validateMediaTypeFormat($mimeType, $data['mediaType']);
-            if ($validTypes !== true) {
-                $errors[] = $validTypes;  // Store specific error for invalid format
-            }
-        }
-
-        // Additional checks can be added for other media fields like 'caption'
-        return !empty($errors) ? $errors : true;
     }
 
-    /**
-     * Validate buttons message node.
-     *
-     * @param array $data
-     * @return bool|string
-     */
-    private function validateButtons(array $data)
+    private function validateMedia(?string $id, array $fields): void
     {
-        $errors = [];
-
-        // Validate 'headerType' and corresponding fields
-        if (isset($data['headerType'])) {
-            switch ($data['headerType']) {
-                case 'text':
-                    if (empty($data['headerText'])) {
-                        $errors[] = 'Header text is required when headerType is "text".';
-                    }
-                    break;
-                
-                case 'image':
-                case 'video':
-                case 'document':
-                    if (empty($data['headerMedia'])) {
-                        $errors[] = 'Media is required when headerType is "' . $data['headerType'] . '".';
-                    } else if (!empty($data['headerMedia'])) {
-                        // Assuming the metadata contains 'extension' as MIME type
-                        $mimeType = json_decode($data['headerMedia']['metadata'], true)['extension'] ?? ''; // You should update this based on your actual structure
-            
-                        // Validate based on media type and mimeType
-                        $validTypes = $this->validateMediaTypeFormat($mimeType, $data['headerType']);
-                        if ($validTypes !== true) {
-                            $errors[] = $validTypes;  // Store specific error for invalid format
-                        }
-                    }
-                    break;
-            }
+        if (empty($fields['media']) || empty($fields['media']['path'])) {
+            $this->fail($id, 'media', __('Upload the media file.'));
         }
 
-        // Check if 'body' has a value
-        if (empty($data['body'])) {
-            $errors[] = 'Body text is required.';
+        if (empty($fields['mediaType'])) {
+            $this->fail($id, 'media', __('Choose the media type.'));
+            return;
         }
 
-        // Check if 'buttonType' exists and is 'buttons'
-        // Validate buttons if 'buttonType' is 'buttons'
-        if (($data['buttonType'] ?? '') === 'buttons' && isset($data['buttons'])) {
-            $validButtons = array_filter([
-                'button1' => $data['buttons']['button1'] ?? '',
-                'button2' => $data['buttons']['button2'] ?? '',
-                'button3' => $data['buttons']['button3'] ?? '',
-            ]);
+        $mimeType = $this->mimeOf($fields['media'] ?? null);
+        if ($mimeType !== null && ($message = $this->mediaFormatError($mimeType, $fields['mediaType'])) !== null) {
+            $this->fail($id, 'media', $message);
+        }
 
-            if (empty($validButtons)) {
-                $errors[] = 'At least one button (button1, button2, button3) must have a value.';
+        if (mb_strlen((string) ($fields['caption'] ?? '')) > 1024) {
+            $this->fail($id, 'media', __('The caption cannot be longer than :max characters.', ['max' => 1024]));
+        }
+    }
+
+    private function validateButtons(?string $id, array $fields): void
+    {
+        $this->validateHeader($id, 'buttons', $fields);
+        $this->validateBody($id, 'buttons', $fields);
+
+        $buttonType = $fields['buttonType'] ?? '';
+
+        if ($buttonType === 'buttons') {
+            $titles = array_values(array_filter(
+                array_map(fn ($title) => trim((string) $title), [
+                    $fields['buttons']['button1'] ?? '',
+                    $fields['buttons']['button2'] ?? '',
+                    $fields['buttons']['button3'] ?? '',
+                ]),
+                fn ($title) => $title !== ''
+            ));
+
+            if ($titles === []) {
+                $this->fail($id, 'buttons', __('Add at least one button.'));
             }
-			
-            // Ensure button values are between 1 to 20 characters long
-            foreach ($validButtons as $key => $value) {
-                if (!$this->validateButtonValueLength($value)) {
-                    $errors[] = ucfirst($key) . ' must be between 1 to 20 characters.';
+
+            foreach ($titles as $title) {
+                if (mb_strlen($title) > 20) {
+                    $this->fail($id, 'buttons', __('The button ":title" is longer than :max characters.', ['title' => $title, 'max' => 20]));
                 }
             }
+
+            $this->failOnDuplicates($id, 'buttons', $titles);
         }
 
-        // Check if 'buttonType' exists and is 'cta_url'
-        if (isset($data['buttonType']) && $data['buttonType'] === 'cta_url') {
-            // Validate that 'ctaUrlButton' array exists and contains 'displayText' and 'url'
-            if (empty($data['ctaUrlButton']) || !isset($data['ctaUrlButton']['displayText']) || !isset($data['ctaUrlButton']['url'])) {
-                $errors[] = 'Both displayText and url are required for ctaUrlButton.';
+        if ($buttonType === 'cta_url') {
+            $text = trim((string) ($fields['ctaUrlButton']['displayText'] ?? ''));
+            $url = trim((string) ($fields['ctaUrlButton']['url'] ?? ''));
+
+            if ($text === '' || $url === '') {
+                $this->fail($id, 'buttons', __('The link button needs both a text and a URL.'));
+            } elseif (!preg_match('/^(https?:\/\/)([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/\S*)?$/', $url)) {
+                $this->fail($id, 'buttons', __('The link button URL is not valid.'));
             }
 
-            // Further validation if required for displayText and url (e.g., non-empty values)
-            if (empty($data['ctaUrlButton']['displayText']) || empty($data['ctaUrlButton']['url'])) {
-                $errors[] = 'Both displayText and url must not be empty.';
-            }
-
-            // URL pattern to validate the 'url'
-            $urlPattern = '/^(https?:\/\/)([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/\S*)?$/';
-
-            // Validate if the URL matches the pattern
-            if (!preg_match($urlPattern, $data['ctaUrlButton']['url'])) {
-                $errors[] = 'The URL format is invalid. Please provide a valid URL.';
+            if (mb_strlen($text) > 20) {
+                $this->fail($id, 'buttons', __('The button ":title" is longer than :max characters.', ['title' => $text, 'max' => 20]));
             }
         }
-        
-        // Additional checks can be added for other media fields like 'caption'
-        return !empty($errors) ? $errors : true;
+    }
+
+    private function validateList(?string $id, array $fields): void
+    {
+        $this->validateHeader($id, 'list', $fields);
+        $this->validateBody($id, 'list', $fields);
+
+        $label = trim((string) ($fields['buttonLabel'] ?? ''));
+        if ($label === '') {
+            $this->fail($id, 'list', __('The list button label is required.'));
+        } elseif (mb_strlen($label) > 20) {
+            $this->fail($id, 'list', __('The list button label cannot be longer than :max characters.', ['max' => 20]));
+        }
+
+        $sections = $fields['sections'] ?? null;
+        if (empty($sections) || !is_array($sections)) {
+            $this->fail($id, 'list', __('Add at least one section to the list.'));
+            return;
+        }
+
+        $titles = [];
+        $rowCount = 0;
+
+        foreach ($sections as $section) {
+            $sectionTitle = trim((string) ($section['title'] ?? ''));
+
+            if ($sectionTitle === '') {
+                $this->fail($id, 'list', __('Every list section needs a title.'));
+            } elseif (mb_strlen($sectionTitle) > 24) {
+                $this->fail($id, 'list', __('The section ":title" is longer than :max characters.', ['title' => $sectionTitle, 'max' => 24]));
+            }
+
+            $rows = is_array($section['rows'] ?? null) ? $section['rows'] : [];
+            $hasRow = false;
+
+            foreach ($rows as $row) {
+                $title = trim((string) ($row['title'] ?? ''));
+                if ($title === '') {
+                    continue;
+                }
+
+                $rowCount++;
+                $titles[] = $title;
+
+                if (!empty($row['id'])) {
+                    $hasRow = true;
+                }
+
+                if (mb_strlen($title) > 24) {
+                    $this->fail($id, 'list', __('The row ":title" is longer than :max characters.', ['title' => $title, 'max' => 24]));
+                }
+
+                if (mb_strlen(trim((string) ($row['description'] ?? ''))) > 72) {
+                    $this->fail($id, 'list', __('The description of ":title" is longer than :max characters.', ['title' => $title, 'max' => 72]));
+                }
+            }
+
+            if (!$hasRow) {
+                $this->fail($id, 'list', __('Every list section needs at least one row with a title and an ID.'));
+            }
+        }
+
+        // واتساب يقبل عشرة صفوف في القائمة كلها، والزائد كان يُحذف عند الإرسال بصمت.
+        if ($rowCount > 10) {
+            $this->fail($id, 'list', __('A list can have at most :max rows in total.', ['max' => 10]));
+        }
+
+        $this->failOnDuplicates($id, 'list', $titles);
+    }
+
+    private function validateHeader(?string $id, string $nodeType, array $fields): void
+    {
+        $headerType = $fields['headerType'] ?? 'none';
+
+        switch ($headerType) {
+            case 'text':
+                if (trim((string) ($fields['headerText'] ?? '')) === '') {
+                    $this->fail($id, $nodeType, __('The header text is required.'));
+                }
+                break;
+
+            // واتساب لا يقبل الصوت ترويسةً للرسائل التفاعلية؛ كان يُنشر ثم يُرفض.
+            case 'audio':
+                $this->fail($id, $nodeType, __('WhatsApp does not allow an audio header here. Use an image, video or document.'));
+                break;
+
+            case 'image':
+            case 'video':
+            case 'document':
+                if (empty($fields['headerMedia'])) {
+                    $this->fail($id, $nodeType, __('Upload the header file.'));
+                    break;
+                }
+
+                $mimeType = $this->mimeOf($fields['headerMedia']);
+                if ($mimeType !== null && ($message = $this->mediaFormatError($mimeType, $headerType)) !== null) {
+                    $this->fail($id, $nodeType, $message);
+                }
+                break;
+        }
+    }
+
+    private function validateBody(?string $id, string $nodeType, array $fields): void
+    {
+        $body = trim((string) ($fields['body'] ?? ''));
+
+        if ($body === '') {
+            $this->fail($id, $nodeType, __('The message text is required.'));
+        } elseif (mb_strlen($body) > 1024) {
+            $this->fail($id, $nodeType, __('The message text cannot be longer than :max characters.', ['max' => 1024]));
+        }
     }
 
     /**
-     * Validate action node.
+     * عنوانان متطابقان: الردّ يطابق الأوّل دائماً فيصير فرع الثاني غير قابل للوصول.
      *
-     * @param array $data
-     * @return bool|string
+     * @param string[] $titles
      */
-    private function validateAction(array $data)
+    private function failOnDuplicates(?string $id, string $nodeType, array $titles): void
     {
-        $errors = [];
+        $seen = [];
 
+        foreach ($titles as $title) {
+            $key = mb_strtolower($title);
+
+            if (isset($seen[$key])) {
+                $this->fail($id, $nodeType, __('Two options have the same title ":title". Each option needs its own title.', ['title' => $title]));
+                continue;
+            }
+
+            $seen[$key] = true;
+        }
+    }
+
+    private function validateAction(?string $id, array $data): void
+    {
         $actionType = $data['actionType'] ?? '';
-        $config = $data['config'] ?? [];
+        $config = is_array($data['config'] ?? null) ? $data['config'] : [];
         $isActive = $data['is_active'] ?? true;
 
         // If action is not active, skip validation
         if (!$isActive) {
-            return true;
+            return;
         }
 
         // Normalize action type: convert hyphens to underscores
         $actionType = str_replace('-', '_', $actionType);
+        $fail = fn (string $message) => $this->fail($id, 'action', $message);
 
         // Validate based on action type
         switch ($actionType) {
             case 'add_to_group':
                 if (empty($config['group_id'])) {
-                    $errors[] = 'Group ID is required for ' . $actionType . ' action.';
+                    $fail(__('Choose the group to add the contact to.'));
                 }
                 break;
 
@@ -258,222 +330,102 @@ class FlowValidator
 
             case 'update_contact':
                 if (empty($config['target_field'])) {
-                    $errors[] = 'Target field is required for update_contact action.';
+                    $fail(__('Choose the contact field to update.'));
                 }
                 break;
 
             case 'send_email':
-                if (empty($config['subject'])) {
-                    $errors[] = 'Subject is required for send_email action.';
-                }
-                if (empty($config['body'])) {
-                    $errors[] = 'Body is required for send_email action.';
-                }
-                if (empty($config['smtp_host'])) {
-                    $errors[] = 'SMTP host is required for send_email action.';
-                }
-                if (empty($config['smtp_username'])) {
-                    $errors[] = 'SMTP username is required for send_email action.';
-                }
-                if (empty($config['smtp_password'])) {
-                    $errors[] = 'SMTP password is required for send_email action.';
+                foreach ([
+                    'subject' => __('The email subject is required.'),
+                    'body' => __('The email body is required.'),
+                    'smtp_host' => __('The SMTP host is required.'),
+                    'smtp_username' => __('The SMTP username is required.'),
+                    'smtp_password' => __('The SMTP password is required.'),
+                ] as $key => $message) {
+                    if (empty($config[$key])) {
+                        $fail($message);
+                    }
                 }
                 break;
 
             case 'delay':
-                if (!isset($config['duration']) || $config['duration'] <= 0) {
-                    $errors[] = 'Duration must be greater than 0 for delay action.';
+                if (!isset($config['duration']) || (float) $config['duration'] <= 0) {
+                    $fail(__('The delay must be longer than zero minutes.'));
                 }
                 break;
 
             case 'webhook':
                 if (empty($config['url'])) {
-                    $errors[] = 'URL is required for webhook action.';
+                    $fail(__('The webhook URL is required.'));
                 }
                 break;
 
             case 'ai_response':
                 if (empty($config['prompt'])) {
-                    $errors[] = 'Prompt is required for ai_response action.';
+                    $fail(__('The AI prompt is required.'));
                 }
                 break;
 
+            // معطّل في config/actions.php، لكن المسارات القديمة تحمله: ?? يمنع
+            // خطأ المفتاح الغائب الذي كان يُسقط الحفظ كلّه بخطأ 500.
             case 'conditional':
                 if (empty($config['condition_type'])) {
-                    $errors[] = 'Condition type is required for conditional action.';
+                    $fail(__('Choose the condition type.'));
                 }
                 if (empty($config['conditions']) || !is_array($config['conditions'])) {
-                    $errors[] = 'Conditions array is required for conditional action.';
+                    $fail(__('Add at least one condition.'));
                 }
-                if ($config['condition_type'] === 'contact_field' && empty($config['field_name'])) {
-                    $errors[] = 'Field name is required for contact_field condition type.';
+                if (($config['condition_type'] ?? null) === 'contact_field' && empty($config['field_name'])) {
+                    $fail(__('Choose the contact field for the condition.'));
                 }
                 break;
 
             default:
-                if (empty($actionType)) {
-                    $errors[] = 'Action type is required.';
-                } else {
-                    $errors[] = 'Unknown action type: ' . $actionType;
-                }
+                $fail(empty($actionType)
+                    ? __('Choose the action type.')
+                    : __('Unknown action type: :type', ['type' => $actionType]));
                 break;
         }
-
-        return !empty($errors) ? $errors : true;
     }
 
-    /**
-     * Validate list message node.
-     *
-     * @param array $data
-     * @return bool|string
-     */
-    private function validateList(array $data)
+    private function mimeOf($media): ?string
     {
-        $errors = [];
-
-        // Validate 'headerType' and corresponding fields
-        if (isset($data['headerType'])) {
-            switch ($data['headerType']) {
-                case 'text':
-                    if (empty($data['headerText'])) {
-                        $errors[] = 'Header text is required when headerType is "text".';
-                    }
-                    break;
-                
-                case 'image':
-                case 'video':
-                case 'document':
-                    if (empty($data['headerMedia'])) {
-                        $errors[] = 'Media is required when headerType is "' . $data['headerType'] . '".';
-                    } else if (!empty($data['headerMedia'])) {
-                        // Assuming the metadata contains 'extension' as MIME type
-                        $mimeType = json_decode($data['headerMedia']['metadata'], true)['extension'] ?? ''; // You should update this based on your actual structure
-            
-                        // Validate based on media type and mimeType
-                        $validTypes = $this->validateMediaTypeFormat($mimeType, $data['headerType']);
-                        if ($validTypes !== true) {
-                            $errors[] = $validTypes;  // Store specific error for invalid format
-                        }
-                    }
-                    break;
-            }
+        if (!is_array($media) || !isset($media['metadata'])) {
+            return null;
         }
 
-        // Check if 'body' has a value
-        if (empty($data['body'])) {
-            $errors[] = 'Body text is required.';
-        }
+        $metadata = is_string($media['metadata']) ? json_decode($media['metadata'], true) : $media['metadata'];
 
-        // Check if button label has a value
-        if (empty($data['buttonLabel'])) {
-            $errors[] = 'Button label is required.';
-        }
-
-        // Check if list sections are provided
-        if (empty($data['sections']) || !is_array($data['sections'])) {
-            $errors[] = 'List sections are required.';
-        }
-
-        $hasEmptySections = false;
-
-        if(isset($data['sections'])){
-            // Ensure each section has a title and valid rows
-            foreach ($data['sections'] as $section) {
-                if (empty($section['title'])) {
-                    $errors[] = 'Each list section must have a title.';
-                }
-
-                if (empty($section['rows']) || !is_array($section['rows'])) {
-                    $errors[] = 'Each list section must have rows.';
-                }
-
-                // Check if all rows in a section are empty (no title or id)
-                $allRowsEmpty = true;
-                foreach ($section['rows'] as $row) {
-                    if (!empty($row['title']) && !empty($row['id'])) {
-                        $allRowsEmpty = false;
-                        break;
-                    }
-                }
-
-                if ($allRowsEmpty) {
-                    $hasEmptySections = true;
-                }
-            }
-        }
-
-        // Return error if any section has all rows empty
-        if ($hasEmptySections) {
-            $errors[] = 'Each section must contain at least one row with both a title and an id.';
-        }
-
-        // Additional checks can be added for other media fields like 'caption'
-        return !empty($errors) ? $errors : true;
+        return is_array($metadata) ? (string) ($metadata['extension'] ?? '') : null;
     }
 
     /**
      * Validate the format of the media type based on its MIME type.
-     * 
-     * @param string $mimeType
-     * @param string $mediaType
-     * @return bool|string
      */
-    private function validateMediaTypeFormat($mimeType, $mediaType)
+    private function mediaFormatError(string $mimeType, string $mediaType): ?string
     {
-        // Define valid formats for each category
         $validFormats = [
             'image' => ['image/jpeg', 'image/png'],
             'audio' => ['audio/mpeg', 'audio/mp3', 'audio/aac', 'audio/amr', 'audio/mp4', 'audio/ogg'],
             'document' => [
                 'application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-                'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
             ],
-            'video' => ['video/mp4', 'video/3gpp']
+            'video' => ['video/mp4', 'video/3gpp'],
         ];
 
-        // Check if media type matches the predefined categories and mimeType
-        if ($mediaType === 'image') {
-            // Only allow 'image/jpeg' or 'image/png' for image mediaType
-            if (!in_array($mimeType, $validFormats['image'])) {
-                return 'Invalid image format. Allowed types: JPEG, PNG.';
-            }
+        $messages = [
+            'image' => __('Invalid image format. Allowed types: JPEG, PNG.'),
+            'audio' => __('Invalid audio format. Allowed types: MP3, AAC, AMR, MP4, OGG.'),
+            'document' => __('Invalid document format. Allowed types: PDF, TXT, DOC, DOCX, XLS, XLSX, PPT, PPTX.'),
+            'video' => __('Invalid video format. Allowed types: MP4, 3GPP.'),
+        ];
+
+        if (isset($validFormats[$mediaType]) && !in_array($mimeType, $validFormats[$mediaType], true)) {
+            return $messages[$mediaType];
         }
 
-        if ($mediaType === 'audio') {
-            // Only allow valid audio formats
-            if (!in_array($mimeType, $validFormats['audio'])) {
-                return 'Invalid audio format. Allowed types: MP3, AAC, AMR, MP4, OGG.';
-            }
-        }
-
-        if ($mediaType === 'document') {
-            // Only allow valid document formats
-            if (!in_array($mimeType, $validFormats['document'])) {
-                return 'Invalid document format. Allowed types: PDF, TXT, DOC, DOCX, XLS, XLSX, PPT, PPTX.';
-            }
-        }
-
-        if ($mediaType === 'video') {
-            // Only allow valid video formats
-            if (!in_array($mimeType, $validFormats['video'])) {
-                return 'Invalid video format. Allowed types: MP4, 3GPP.';
-            }
-        }
-
-        return true; // Return true if no validation errors found
-    }
-
-    /**
-     * Validate button value length (1-20 characters).
-     *
-     * @param string $value
-     * @return bool
-     */
-    private function validateButtonValueLength(string $value): bool
-    {
-        $length = mb_strlen(trim($value));
-        return $length >= 1 && $length <= 20;
+        return null;
     }
 }

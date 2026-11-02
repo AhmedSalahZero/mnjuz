@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
 import { MoreHorizontalIcon } from 'lucide-vue-next'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 
@@ -10,7 +10,7 @@ import FormSelect from '@/Components/FormSelect.vue';
 import FormTextArea from '@/Components/FormTextArea.vue';
 import FlowMedia from '@modules/FlowBuilder/Pages/User/Components/vue-flow/FlowMedia.vue'
 import { duplicateNode } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowNodes.js'
-import { edgeIdsForHandle } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowEdges.js'
+import { edgeIdsForHandle, outgoingEdgeCount } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowEdges.js'
 import type { NodeProps } from '@vue-flow/core'
 import { useTrans } from '@/Composables/useTrans'
 
@@ -18,7 +18,10 @@ const trans = useTrans()
 
 const props = defineProps<NodeProps>()
 
-const title = ref('Interactive Buttons')
+// مولّد القماش: معرّف عقدةٍ محذوفة لا يُعاد لنسخة جديدة (main-canvas.vue).
+const nextFlowNodeId = inject<(() => string) | null>('nextFlowNodeId', null)
+
+const title = ref(props.data.title && props.data.title !== 'buttons' ? props.data.title : trans('Interactive Buttons'))
 const uuid = ref(props.data.uuid)
 const fields = ref({
   type: 'interactive buttons',
@@ -49,7 +52,7 @@ const options2 = ref([
   { value: 'text', label: trans('Text') },
   { value: 'image', label: trans('Image') },
   { value: 'video', label: trans('Video') },
-  { value: 'audio', label: trans('Audio') },
+  // لا صوت: واتساب لا يقبله ترويسةً للرسائل التفاعلية.
   { value: 'document', label: trans('Document') },
 ]);
 
@@ -78,12 +81,27 @@ watch(
   { deep: true }
 )
 
+// الوصلات الخارجة وحدها: vue-flow يمرّر كل وصلات العقدة، فقائمةٌ يصلها
+// فرعان كانت تمنع توصيل زرّها الثالث، أو إعادة توجيه زرّ موصول.
 const handleConnectable: HandleConnectableFunc = (node, connectedEdges) => {
-  // only allow connections if the node has less than 3 connections
-  return connectedEdges.length <= 3
+  return outgoingEdgeCount(connectedEdges, node.id) <= 3
 }
 
+// ملفّ الترويسة السابق لا يبقى بعد تغيير نوعها (صورة ثم فيديو).
+watch(
+  () => fields.value.headerType,
+  () => {
+    fields.value.headerMedia = []
+  }
+)
+
 const isEditTitle = ref(false)
+
+// الاسم الجديد يُحفظ في العقدة: كان متغيّرًا محليًا يضيع مع أوّل إعادة تحميل.
+function finishRename() {
+  isEditTitle.value = false
+  node.node.data = { ...node.node.data, title: title.value }
+}
 
 const node = useNode()
 const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
@@ -109,7 +127,7 @@ function handleClickDeleteBtn() {
 function handleClickDuplicateBtn() {
   // معرّف فريد وبيانات مستقلّة: «عدد العقد + 1» كان يصطدم بمعرّف موجود،
   // وتمرير `data` نفسه كان يجعل النسخة والأصل حقلًا واحدًا.
-  addNodes(duplicateNode(node.node, nodes.value))
+  addNodes(duplicateNode(node.node, nodes.value, 100, nextFlowNodeId?.()))
 }
 
 const shouldShowWarning = computed(() => {
@@ -151,7 +169,7 @@ function getCharsCount(input: string): number {
         <div class="flex gap-x-2">
           <img src="~@/assets/images/icon_LLM.png" class="mt-1 h-4 w-4" alt="LLM icon" />
           <div class="flex flex-col gap-y-1">
-            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @blur="() => (isEditTitle = false)"/>
+            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @focusout="finishRename" @keyup.enter="finishRename"/>
             <h3 class="text-base" v-else>{{ title }}</h3>
           </div>
         </div>
@@ -248,7 +266,7 @@ function getCharsCount(input: string): number {
         <label class="text-sm mb-2">{{ $t('CTA Button') }}</label>
         <div class="mb-4">
           <label class="text-sm mb-2">{{ $t('Display text') }}</label>
-          <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :class="'col-span-4'"/>
+          <FormInput v-model="fields.ctaUrlButton.displayText" :maxLength="maxButtonLength" :type="'text'" :class="'col-span-4'"/>
         </div>
 
         <div class="mb-4">

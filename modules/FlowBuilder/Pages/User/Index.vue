@@ -66,12 +66,12 @@
     });
 
     const submitForm = () => {
+        // الخادم يحوّل إلى محرّر المسار الجديد بنفسه. router لم يكن مستورداً
+        // هنا، فكان onSuccess يرمي خطأً، ووجهته (/automation/ai) خاطئة أصلاً.
         form.post('/automation/flows', {
             preserveScroll: true,
             onSuccess: () => {
-                router.visit('/automation/ai', {
-                    preserveState: false,
-                });
+                isOpenFormModal.value = false;
             }
         })
     }

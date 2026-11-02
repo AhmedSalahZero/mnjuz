@@ -95,7 +95,7 @@
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? $t('Active') : $t('Inactive') }}
           </span>
         </div>
       </div>
@@ -172,7 +172,7 @@
                       class="border border-gray-200 rounded-lg p-3 bg-gray-50"
                     >
                       <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-medium text-gray-700">Value {{ index + 1 }}</span>
+                        <span class="text-xs font-medium text-gray-700">{{ $t('Value') }} {{ index + 1 }}</span>
                         <button
                           type="button"
                           @click="removeCondition(index)"
@@ -205,10 +205,10 @@
                     {{ $t('How Conditional Flow Works:') }}
                   </p>
                   <div class="space-y-2 text-sm text-blue-700">
-                    <p class="text-xs">• Each value will be evaluated against the selected condition type</p>
-                    <p class="text-xs">• When a value matches, flow will branch to that value's connected node</p>
-                    <p class="text-xs">• If no values match, flow will continue to the default path</p>
-                    <p class="text-xs">• You can connect multiple nodes to different values</p>
+                    <p class="text-xs">• {{ $t('Each value will be evaluated against the selected condition type') }}</p>
+                    <p class="text-xs">• {{ $t('When a value matches, flow will branch to that value\'s connected node') }}</p>
+                    <p class="text-xs">• {{ $t('If no values match, flow will continue to the default path') }}</p>
+                    <p class="text-xs">• {{ $t('You can connect multiple nodes to different values') }}</p>
                   </div>
                 </div>
               </div>
@@ -246,6 +246,7 @@
 </template>
 
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
@@ -258,6 +259,8 @@ const props = defineProps({
   data: Object,
   selected: Boolean,
 })
+
+const trans = useTrans()
 
 const { removeNodes } = useVueFlow()
 const node = useNode()
@@ -342,7 +345,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }

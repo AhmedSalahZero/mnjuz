@@ -132,22 +132,25 @@ class FlowController extends BaseController
 
         $data = [
             'name' => $data['name'] ?? $flow->name,
-            'description' => $data['description'] ?? $flow->description,
+            // array_key_exists لا ??: الوصف المُفرَّغ يصل null، و?? كان يُبقي القديم.
+            'description' => $request->exists('description') ? ($data['description'] ?? null) : $flow->description,
             'metadata' => $data['metadata'] ?? $flow->metadata,
         ];
 
-        $flow = $this->flowService->updateFlow($uuid, $data, $request->publish);
+        $response = $this->flowService->updateFlow($uuid, $data, $request->publish);
 
         // Check if the request expects JSON response
         if (request()->expectsJson()) {
-            return response()->json($flow);
+            return $response;
         }
 
         // If it's an Inertia request, redirect back
+        $result = $response->getData(true);
+
         return Redirect::back()->with(
             'status', [
-                'type' => 'success', 
-                'message' => __('Flow automation updated successfully!')
+                'type' => $result['success'] ? 'success' : 'error',
+                'message' => $result['success'] ? __('Flow automation updated successfully!') : $result['message'],
             ]
         );
     }

@@ -19,10 +19,15 @@
  * المعرّفات غير الرقمية لا تُسقط الحساب (كانت `Math.max` ترجع NaN معها
  * فيصير معرّف كل عقدة جديدة "NaN")، لكنها تُحجز فلا يُعاد استعمالها.
  *
+ * و«الأعلى + 1» وحده يُعيد معرّف آخر عقدة حُذفت، فيُكمل منها عميلٌ كان واقفًا
+ * عليها (current_step) في عقدةٍ أخرى. floor آخر معرّف صدر في هذا الـ flow
+ * (يُحفظ معه lastNodeId)، فلا يُعاد.
+ *
  * @param {Array<{id: *}>} nodes عقد الـ flow الحالية
+ * @param {number|string} floor آخر معرّف صدر
  * @returns {string} معرّف فريد
  */
-export function nextNodeId(nodes) {
+export function nextNodeId(nodes, floor = 0) {
     const list = Array.isArray(nodes) ? nodes : []
     const taken = new Set(list.map((node) => String(node?.id)))
 
@@ -36,7 +41,8 @@ export function nextNodeId(nodes) {
         }
     }
 
-    let candidate = highest + 1
+    const issued = parseInt(String(floor), 10)
+    let candidate = Math.max(highest, Number.isFinite(issued) ? issued : 0) + 1
 
     // الحلقة حارس لا أكثر: الفجوات وحدها لا تكفي بعد أن صار التوليد متّصلًا،
     // لكن flow محفوظًا من نسخة قديمة قد يحمل تكرارًا سابقًا.
@@ -66,13 +72,14 @@ export function cloneNodeData(data) {
  * @param {object} node العقدة المنسوخة
  * @param {Array<{id: *}>} nodes عقد الـ flow الحالية
  * @param {number} offset الإزاحة بالبكسل
+ * @param {string|null} id المعرّف الجديد (من مولّد القماش)، وإلا التالي بعد الحالية
  */
-export function duplicateNode(node, nodes, offset = 100) {
+export function duplicateNode(node, nodes, offset = 100, id = null) {
     const source = node ?? {}
     const position = source.position ?? {}
 
     return {
-        id: nextNodeId(nodes),
+        id: id ?? nextNodeId(nodes),
         type: source.type,
         position: {
             x: (Number(position.x) || 0) + offset,

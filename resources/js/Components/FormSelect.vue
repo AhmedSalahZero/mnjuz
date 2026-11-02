@@ -23,7 +23,11 @@ const trans = useTrans();
         default: 'Select option'
       },
       multiple: Boolean,
+      // قائمة headlessui ليست حقلاً أصلياً فلا يمنعها required من الإرسال
+      // وهي فارغة؛ حقلٌ مخفيّ بالقيمة نفسها يحمل التحقّق.
       required: Boolean,
+      // عنوان الحقل؛ يُعرض بدل name إن مُرِّر (كان يُسقَط بصمت).
+      label: String,
       error: String,
       disabled: Boolean,
       dropdownUp: {
@@ -46,7 +50,7 @@ const trans = useTrans();
 </script>
 <template>
     <div :class="className">
-        <label for="name" class="block text-sm leading-6 text-gray-900">{{ name }}</label>
+        <label for="name" class="block text-sm leading-6 text-gray-900">{{ props.label || name }}</label>
         <div v-if="disabled == true">
             <input
             class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6"
@@ -64,6 +68,8 @@ const trans = useTrans();
                 @update:modelValue="value => emit('update:modelValue', value)"
                 :model-value="props.modelValue">
                 <div class="relative">
+                    <input v-if="props.required" class="pointer-events-none absolute inset-0 h-full w-full opacity-0" tabindex="-1" aria-hidden="true"
+                        :value="Array.isArray(props.modelValue) ? props.modelValue.join(',') : (props.modelValue ?? '')" required />
                     <ListboxButton
                     class="relative w-full cursor-default rounded-lg bg-white py-2 px-5 pr-10 shadow-sm text-left ring-1 ring-inset focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm"
                     :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"

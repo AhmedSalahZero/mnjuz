@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, inject } from 'vue'
 import { MoreHorizontalIcon } from 'lucide-vue-next'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 
@@ -10,7 +10,7 @@ import FormSelect from '@/Components/FormSelect.vue';
 import FormTextArea from '@/Components/FormTextArea.vue';
 import FlowMedia from '@modules/FlowBuilder/Pages/User/Components/vue-flow/FlowMedia.vue'
 import { duplicateNode } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowNodes.js'
-import { edgeIdsForHandle } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowEdges.js'
+import { remapListEdges } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowEdges.js'
 
 import type { NodeProps } from '@vue-flow/core'
 import { useTrans } from '@/Composables/useTrans'
@@ -19,9 +19,18 @@ const trans = useTrans()
 
 const props = defineProps<NodeProps>()
 
+// مولّد القماش: معرّف عقدةٍ محذوفة لا يُعاد لنسخة جديدة (main-canvas.vue).
+const nextFlowNodeId = inject<(() => string) | null>('nextFlowNodeId', null)
+
 const title = ref(props.data.title)
 const uuid = ref(props.data.uuid)
 const isEditTitle = ref(false)
+
+// الاسم الجديد يُحفظ في العقدة: كان متغيّرًا محليًا يضيع مع أوّل إعادة تحميل.
+function finishRename() {
+  isEditTitle.value = false
+  node.node.data = { ...node.node.data, title: title.value }
+}
 
 const fields = ref({
   type: 'interactive list',
@@ -39,20 +48,13 @@ const options = ref([
   { value: 'text', label: trans('Text') },
   { value: 'image', label: trans('Image') },
   { value: 'video', label: trans('Video') },
-  { value: 'audio', label: trans('Audio') },
+  // لا صوت: واتساب لا يقبله ترويسةً للرسائل التفاعلية.
   { value: 'document', label: trans('Document') },
 ]);
 
 const node = useNode()
-const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
+const { removeNodes, nodes, addNodes, removeEdges, edges, setEdges } = useVueFlow()
 
-// حذف وصلات مخرج هذه العقدة وحدها.
-//
-// معرّف الصف ('a' + رقم القسم + رقم الصف) مشترك بين كل عقد القوائم، فحذف صف
-// من عقدة كان يحذف وصلة الصف المقابل من العقد الأخرى أيضًا.
-function removeEdgesForHandle(handleId) {
-  edgeIdsForHandle(edges.value, node.id, handleId).forEach(id => removeEdges(id))
-}
 
 watch(
   fields,
@@ -62,25 +64,37 @@ watch(
   { deep: true }
 )
 
+// ملفّ الترويسة السابق لا يبقى بعد تغيير نوعها (صورة ثم فيديو).
+watch(
+  () => fields.value.headerType,
+  () => {
+    fields.value.headerMedia = []
+  }
+)
+
+// واتساب يقبل عشرة صفوف في القائمة كلها لا في كل قسم: الزائد كان يُحذف عند
+// الإرسال بصمت، ووصلاته لا يصلها أحد.
+const MAX_ROWS = 10
+const totalRows = computed(() => fields.value.sections.reduce((sum, section) => sum + (section.rows?.length ?? 0), 0))
+
 function addSection() {
-  if (fields.value.sections.length < 10) {
+  if (fields.value.sections.length < 10 && totalRows.value < MAX_ROWS) {
     fields.value.sections.push({ rows: [{}] })
   }
 }
 
 function addRow(sectionIndex) {
-  if (fields.value.sections[sectionIndex].rows.length < 10) {
+  if (totalRows.value < MAX_ROWS) {
     fields.value.sections[sectionIndex].rows.push({})
   }
 }
 
+// مخرج الصفّ موضعه ('a' + القسم + الصفّ)، فبعد الحذف تنزاح وصلات ما بعده
+// لتتبع صفوفها: كانت تبقى على مواضعها القديمة فتقود إلى فروعٍ أخرى أو لا شيء.
+// والمعرّف مشترك بين كل عقد القوائم، فالإزاحة مقصورة على وصلات هذه العقدة.
 function removeSection(sectionIndex) {
   if (fields.value.sections.length > 1) {
-    fields.value.sections[sectionIndex].rows.forEach((row, rowIndex) => {
-      const handleId = 'a' + sectionIndex + rowIndex
-      removeEdgesForHandle(handleId)
-    })
-    
+    setEdges(remapListEdges(edges.value, node.id, { section: sectionIndex }))
     fields.value.sections.splice(sectionIndex, 1)
   }
 }
@@ -88,21 +102,8 @@ function removeSection(sectionIndex) {
 function removeRow(sectionIndex, rowIndex) {
   // Check that there is more than one row to avoid deleting the last row in a section
   if (fields.value.sections[sectionIndex].rows.length > 1) {
-    // Remove the specific row by creating a fresh array without it
-    fields.value.sections[sectionIndex].rows.splice(rowIndex, 1);
-
-    // Reset the remaining rows to ensure correct ordering and clear out any leftover data
-    fields.value.sections[sectionIndex].rows = fields.value.sections[sectionIndex].rows.map((row, index) => {
-      // Re-index each row and reset its data structure if needed
-      return {
-        ...row, // Retain existing properties if you want or reset if needed
-        id: row.id, // Optional: Set an `id` or index if applicable
-        title: row.title || "", // Clear out existing data or retain if needed
-        description: row.description || "" // Adjust other fields accordingly
-      };
-    });
-
-    removeEdgesForHandle('a' + sectionIndex + rowIndex)
+    setEdges(remapListEdges(edges.value, node.id, { section: sectionIndex, row: rowIndex }))
+    fields.value.sections[sectionIndex].rows.splice(rowIndex, 1)
   }
 }
 
@@ -118,7 +119,7 @@ function handleClickDeleteBtn() {
 function handleClickDuplicateBtn() {
   // معرّف فريد وبيانات مستقلّة: «عدد العقد + 1» كان يصطدم بمعرّف موجود،
   // وتمرير `data` نفسه كان يجعل النسخة والأصل حقلًا واحدًا.
-  addNodes(duplicateNode(node.node, nodes.value))
+  addNodes(duplicateNode(node.node, nodes.value, 100, nextFlowNodeId?.()))
 }
 
 const shouldShowWarning = computed(() => {
@@ -149,7 +150,7 @@ function getCharsCount(input: string): number {
         <div class="flex gap-x-2">
           <img src="~@/assets/images/icon_LLM.png" class="mt-1 h-4 w-4" alt="LLM icon" />
           <div class="flex flex-col gap-y-1">
-            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @blur="() => (isEditTitle = false)"/>
+            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @focusout="finishRename" @keyup.enter="finishRename"/>
             <h3 class="text-base" v-else>{{ title }}</h3>
           </div>
         </div>
@@ -203,17 +204,18 @@ function getCharsCount(input: string): number {
 
       <div class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> {{ $t('Button Label') }}</label>
-        <FormInput v-model="fields.buttonLabel" :name="''" :placeholder="$t('Enter footer text')" :type="'text'" :class="'col-span-4'"/>
+        <FormInput v-model="fields.buttonLabel" maxLength="20" :name="''" :placeholder="$t('Enter button label')" :type="'text'" :class="'col-span-4'"/>
       </div>
 
       <div class="flex justify-between items-center mb-4">
           <label class="text-sm">{{ $t('Sections (Atleast one section)') }}</label>
-          <button @click="addSection" class="bg-slate-100 p-1 rounded-md text-sm px-2">{{ $t('Add Section') }}</button>
+          <button @click="addSection" :disabled="totalRows >= MAX_ROWS" class="bg-slate-100 p-1 rounded-md text-sm px-2 disabled:opacity-50">{{ $t('Add Section') }}</button>
         </div>
+      <p v-if="totalRows >= MAX_ROWS" class="text-xs text-amber-700 mb-2">{{ $t('WhatsApp allows up to 10 rows in a whole list.') }}</p>
 
       <div v-for="(section, sectionIndex) in fields.sections" :key="sectionIndex" class="border rounded p-3 mb-4">
         <div class="flex justify-between items-center mb-2">
-          <label class="text-sm">Section {{ sectionIndex + 1 }}</label>
+          <label class="text-sm">{{ $t('Section') }} {{ sectionIndex + 1 }}</label>
           <button v-if="sectionIndex > 0" @click="removeSection(sectionIndex)" class="text-red-500 text-sm">
             {{ $t('Remove Section') }}
           </button>
@@ -221,17 +223,17 @@ function getCharsCount(input: string): number {
         
         <div class="mb-4">
           <label class="text-sm mb-2"><span class="text-red-500">*</span> {{ $t('Title') }}</label>
-          <FormInput v-model="section.title" :name="''" :placeholder="$t('Enter section title')" :type="'text'" :class="'col-span-4'"/>
+          <FormInput v-model="section.title" maxLength="24" :name="''" :placeholder="$t('Enter section title')" :type="'text'" :class="'col-span-4'"/>
         </div>
 
         <div class="flex justify-between items-center mb-4">
           <label class="text-sm">{{ $t('Rows (Atleast one row)') }}</label>
-          <button @click="addRow(sectionIndex)" class="bg-slate-100 p-1 rounded-md text-sm px-2">{{ $t('Add Row') }}</button>
+          <button @click="addRow(sectionIndex)" :disabled="totalRows >= MAX_ROWS" class="bg-slate-100 p-1 rounded-md text-sm px-2 disabled:opacity-50">{{ $t('Add Row') }}</button>
         </div>
 
         <div v-for="(row, rowIndex) in section.rows" :key="rowIndex" class="relative border rounded p-3 bg-slate-50 mb-2">
           <div class="flex justify-between items-center mb-2">
-            <label class="text-sm">Row {{ rowIndex + 1 }}</label>
+            <label class="text-sm">{{ $t('Row') }} {{ rowIndex + 1 }}</label>
             <button v-if="rowIndex > 0" @click="removeRow(sectionIndex, rowIndex)" class="text-red-500 text-sm">
               {{ $t('Remove Row') }}
             </button>
@@ -239,7 +241,7 @@ function getCharsCount(input: string): number {
 
           <div class="grid grid-cols-2 gap-x-6">
             <div class="mb-4">
-              <label class="text-sm mb-2"><span class="text-red-500">*</span> ID</label>
+              <label class="text-sm mb-2"><span class="text-red-500">*</span> {{ $t('ID') }}</label>
               <FormInput v-model="row.id" maxLength="200" :name="''" :placeholder="$t('Enter ID')" :type="'text'" :class="'col-span-4'"/>
               <span class="text-sm">{{ getCharsCount(row?.id ?? '') }}/200</span>
             </div>

@@ -58,7 +58,7 @@
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? $t('Active') : $t('Inactive') }}
           </span>
         </div>
       </div>
@@ -97,7 +97,6 @@
                   <FormSelect
                     v-model="editForm.config.method"
                     :label="$t('Method')"
-                    name="Method"
                     :options="[
                       { value: 'GET', label: 'GET' },
                       { value: 'POST', label: 'POST' },
@@ -153,6 +152,7 @@
 </template>
 
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
 import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
@@ -165,6 +165,8 @@ const props = defineProps({
   data: Object,
   selected: Boolean,
 })
+
+const trans = useTrans()
 
 const { removeNodes } = useVueFlow()
 const node = useNode()
@@ -211,7 +213,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }
