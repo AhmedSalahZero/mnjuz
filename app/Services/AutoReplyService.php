@@ -248,7 +248,10 @@ class AutoReplyService
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/IntelliReply/Services/AIResponseService.php'))) {
-            $query = new \Modules\IntelliReply\Services\AIResponseService();
+            // من الحاوية لا new: الخدمة بلا مُنشئ فالسلوك واحد في الإنتاج، ويستطيع
+            // الاختبار ربط نسخة تتجاوز البحث بالـ embeddings (مكتبة openai-php
+            // لا تمرّ بـ Http::fake) فيمرّ ما سواه كاملاً بلا شبكة.
+            $query = app(\Modules\IntelliReply\Services\AIResponseService::class);
             if ($query->handleAIResponse($chat, $receivedMessage)) {
                 return true;
             }

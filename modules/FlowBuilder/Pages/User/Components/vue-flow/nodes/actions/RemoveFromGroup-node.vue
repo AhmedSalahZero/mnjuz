@@ -76,72 +76,71 @@
     />
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Remove from Group Action') }}</h3>
-        </div>
-        
-        <form @submit.prevent="saveAction" class="p-6">
-          <div class="space-y-4">
-            <!-- Configuration Fields -->
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
-              <div class="space-y-3">
-                <!--
-                  لا اختيار مجموعة: الإجراء ينزع جهة الاتصال من كل مجموعات
-                  المنشأة. اشتراط مجموعة كان يعني عقدةً لكل مجموعة — مئة
-                  مجموعة، مئة عقدة متتالية.
-                -->
-                <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
-                  <p class="text-xs text-gray-600 mb-1">
-                    <strong>{{ $t('What happens:') }}</strong> {{ $t('The contact is removed from every group in this workspace, and marked as opted out of marketing.') }}
-                  </p>
-                  <p class="text-xs text-gray-500">
-                    {{ $t('Campaigns skip this contact from then on, including campaigns sent to everyone, and even if the contact is added back to a group later.') }}
-                  </p>
-                </div>
+    <NodeEditModal :open="showEditModal" @close="closeEditModal">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Remove from Group Action') }}</h3>
+      </div>
+      
+      <form @submit.prevent="saveAction" class="p-6">
+        <div class="space-y-4">
+          <!-- Configuration Fields -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
+            <div class="space-y-3">
+              <!--
+                لا اختيار مجموعة: الإجراء ينزع جهة الاتصال من كل مجموعات
+                المنشأة. اشتراط مجموعة كان يعني عقدةً لكل مجموعة — مئة
+                مجموعة، مئة عقدة متتالية.
+              -->
+              <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
+                <p class="text-xs text-gray-600 mb-1">
+                  <strong>{{ $t('What happens:') }}</strong> {{ $t('The contact is removed from every group in this workspace, and marked as opted out of marketing.') }}
+                </p>
+                <p class="text-xs text-gray-500">
+                  {{ $t('Campaigns skip this contact from then on, including campaigns sent to everyone, and even if the contact is added back to a group later.') }}
+                </p>
+              </div>
 
-                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p class="text-xs text-amber-800">
-                    <strong>{{ $t('Note:') }}</strong> {{ $t('This cannot be undone from the flow. Re-subscribing a contact has to be done deliberately.') }}
-                  </p>
-                </div>
+              <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p class="text-xs text-amber-800">
+                  <strong>{{ $t('Note:') }}</strong> {{ $t('This cannot be undone from the flow. Re-subscribing a contact has to be done deliberately.') }}
+                </p>
               </div>
             </div>
-
-            <!-- Active Status -->
-            <div class="flex items-center">
-              <FormCheckbox
-                v-model="editForm.is_active"
-                :label="$t('Active')"
-                class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-              />
-            </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
-            <button 
-              type="button"
-              @click="closeEditModal"
-              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              {{ $t('Cancel') }}
-            </button>
-            <button 
-              type="submit"
-              class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              {{ $t('Save Changes') }}
-            </button>
+          <!-- Active Status -->
+          <div class="flex items-center">
+            <FormCheckbox
+              v-model="editForm.is_active"
+              :label="$t('Active')"
+              class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+          <button 
+            type="button"
+            @click="closeEditModal"
+            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            {{ $t('Cancel') }}
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            {{ $t('Save Changes') }}
+          </button>
+        </div>
+      </form>
+    </NodeEditModal>
   </div>
 </template>
 
 <script setup>
+import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormCheckbox from '../../../../../../../../resources/js/Components/FormCheckbox.vue'

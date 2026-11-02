@@ -71,167 +71,166 @@
     />
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Send Email Action') }}</h3>
-        </div>
-        
-        <form @submit.prevent="saveAction" class="p-6">
-          <div class="space-y-4">
-            <!-- Configuration Fields -->
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
-              <div class="space-y-3">
-                <!-- Send Email -->
-                <div class="space-y-4">
-                  <!-- Email Content -->
-                  <div class="space-y-3">
-                    <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t('Email Content') }}</h4>
+    <NodeEditModal :open="showEditModal" @close="closeEditModal">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Send Email Action') }}</h3>
+      </div>
+      
+      <form @submit.prevent="saveAction" class="p-6">
+        <div class="space-y-4">
+          <!-- Configuration Fields -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
+            <div class="space-y-3">
+              <!-- Send Email -->
+              <div class="space-y-4">
+                <!-- Email Content -->
+                <div class="space-y-3">
+                  <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t('Email Content') }}</h4>
+                  <div>
+                    <FormInput
+                      v-model="editForm.config.subject"
+                      :label="$t('Subject')"
+                      type="text"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <FormTextArea
+                      v-model="editForm.config.body"
+                      name="Body"
+                      rows="4"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <!-- SMTP Settings -->
+                <div class="space-y-3">
+                  <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t('SMTP Settings') }}</h4>
+                  <div class="grid grid-cols-2 gap-3">
                     <div>
                       <FormInput
-                        v-model="editForm.config.subject"
-                        :label="$t('Subject')"
+                        v-model="editForm.config.smtp_host"
+                        :label="$t('SMTP Host')"
                         type="text"
+                        placeholder="e.g., smtp.gmail.com"
                         required
                       />
-                    </div>
-                    <div>
-                      <FormTextArea
-                        v-model="editForm.config.body"
-                        name="Body"
-                        rows="4"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <!-- SMTP Settings -->
-                  <div class="space-y-3">
-                    <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t('SMTP Settings') }}</h4>
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <FormInput
-                          v-model="editForm.config.smtp_host"
-                          :label="$t('SMTP Host')"
-                          type="text"
-                          placeholder="e.g., smtp.gmail.com"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <FormInput
-                          v-model="editForm.config.smtp_port"
-                          :label="$t('SMTP Port')"
-                          type="number"
-                          placeholder="587"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <FormInput
-                          v-model="editForm.config.smtp_username"
-                          :label="$t('Username')"
-                          type="text"
-                          placeholder="your-email@gmail.com"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <FormInput
-                          v-model="editForm.config.smtp_password"
-                          :label="$t('Password')"
-                          type="password"
-                          :placeholder="$t('App password or email password')"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <FormSelect
-                          v-model="editForm.config.smtp_encryption"
-                          :label="$t('Encryption')"
-                          name="Encryption"
-                          :options="[
-                            { value: 'tls', label: 'TLS' },
-                            { value: 'ssl', label: 'SSL' },
-                            { value: 'none', label: 'None' }
-                          ]"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <FormInput
-                          v-model="editForm.config.from_name"
-                          :label="$t('From Name')"
-                          type="text"
-                          :placeholder="$t('Your Company Name')"
-                          required
-                        />
-                      </div>
                     </div>
                     <div>
                       <FormInput
-                        v-model="editForm.config.from_email"
-                        :label="$t('From Email')"
-                        type="email"
-                        placeholder="noreply@yourdomain.com"
+                        v-model="editForm.config.smtp_port"
+                        :label="$t('SMTP Port')"
+                        type="number"
+                        placeholder="587"
                         required
                       />
-                      <p class="text-xs text-gray-500 mt-1">
-                        {{ $t('This must be a valid email address that you\'re authorized to send from through your SMTP provider.') }}
-                      </p>
                     </div>
                   </div>
-
-                  <!-- What happens explanation -->
-                  <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
-                    <p class="text-xs text-gray-600 mb-1">
-                      <strong>{{ $t('What happens:') }}</strong> {{ $t('An email will be sent to the contact using the configured SMTP settings.') }}
-                    </p>
-                    <p class="text-xs text-gray-500">
-                      {{ $t('The email will be sent from the configured SMTP account to the contact\'s email address.') }}
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <FormInput
+                        v-model="editForm.config.smtp_username"
+                        :label="$t('Username')"
+                        type="text"
+                        placeholder="your-email@gmail.com"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <FormInput
+                        v-model="editForm.config.smtp_password"
+                        :label="$t('Password')"
+                        type="password"
+                        :placeholder="$t('App password or email password')"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <FormSelect
+                        v-model="editForm.config.smtp_encryption"
+                        :label="$t('Encryption')"
+                        name="Encryption"
+                        :options="[
+                          { value: 'tls', label: 'TLS' },
+                          { value: 'ssl', label: 'SSL' },
+                          { value: 'none', label: 'None' }
+                        ]"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <FormInput
+                        v-model="editForm.config.from_name"
+                        :label="$t('From Name')"
+                        type="text"
+                        :placeholder="$t('Your Company Name')"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <FormInput
+                      v-model="editForm.config.from_email"
+                      :label="$t('From Email')"
+                      type="email"
+                      placeholder="noreply@yourdomain.com"
+                      required
+                    />
+                    <p class="text-xs text-gray-500 mt-1">
+                      {{ $t('This must be a valid email address that you\'re authorized to send from through your SMTP provider.') }}
                     </p>
                   </div>
                 </div>
+
+                <!-- What happens explanation -->
+                <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
+                  <p class="text-xs text-gray-600 mb-1">
+                    <strong>{{ $t('What happens:') }}</strong> {{ $t('An email will be sent to the contact using the configured SMTP settings.') }}
+                  </p>
+                  <p class="text-xs text-gray-500">
+                    {{ $t('The email will be sent from the configured SMTP account to the contact\'s email address.') }}
+                  </p>
+                </div>
               </div>
             </div>
-
-            <!-- Active Status -->
-            <div class="flex items-center">
-              <FormCheckbox
-                v-model="editForm.is_active"
-                :label="$t('Active')"
-                class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-              />
-            </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
-            <button 
-              type="button"
-              @click="closeEditModal"
-              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              {{ $t('Cancel') }}
-            </button>
-            <button 
-              type="submit"
-              class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              {{ $t('Save Changes') }}
-            </button>
+          <!-- Active Status -->
+          <div class="flex items-center">
+            <FormCheckbox
+              v-model="editForm.is_active"
+              :label="$t('Active')"
+              class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+          <button 
+            type="button"
+            @click="closeEditModal"
+            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            {{ $t('Cancel') }}
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            {{ $t('Save Changes') }}
+          </button>
+        </div>
+      </form>
+    </NodeEditModal>
   </div>
 </template>
 
 <script setup>
+import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'

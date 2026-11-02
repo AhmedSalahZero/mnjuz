@@ -71,13 +71,7 @@ export function getEchoInstance(broadcast) {
 export function getOrJoinChatChannel(organizationId, userId, broadcast) {
     const name = `chats.ch${organizationId}.${userId}`;
     if (sharedChannelEntries.has(name)) {
-        const entry = sharedChannelEntries.get(name);
-        return {
-            subscribe(handler) {
-                entry.handlers.add(handler);
-                return () => entry.handlers.delete(handler);
-            },
-        };
+        return channelApi(sharedChannelEntries.get(name));
     }
 
     const echo = getEchoInstance(broadcast);
@@ -97,22 +91,42 @@ export function getOrJoinChatChannel(organizationId, userId, broadcast) {
     });
 
     const handlers = new Set();
-    channel.listen('NewChatEvent', (event) => {
-        handlers.forEach((h) => {
+    const contactHandlers = new Set();
+
+    // معالج يرمي لا يمنع بقية المعالجات ولا يقطع الاستماع.
+    const fanOut = (set, label) => (event) => {
+        set.forEach((h) => {
             try {
                 h(event);
             } catch (e) {
-                console.warn('[Echo NewChatEvent handler]', e);
+                console.warn(label, e);
             }
         });
-    });
+    };
 
-    sharedChannelEntries.set(name, { channel, handlers });
+    channel.listen('NewChatEvent', fanOut(handlers, '[Echo NewChatEvent handler]'));
+    // حالة جهة الاتصال تتغيّر من الخادم (مساعد الذكاء الاصطناعي) دون رسالة جديدة.
+    channel.listen('ContactAiAssistanceUpdated', fanOut(contactHandlers, '[Echo ContactAiAssistanceUpdated handler]'));
 
+    const entry = { channel, handlers, contactHandlers };
+    sharedChannelEntries.set(name, entry);
+
+    return channelApi(entry);
+}
+
+/**
+ * واجهة الاشتراك على قناة مشتركة: كل دالة تُرجع دالة إلغاء الاشتراك.
+ * subscribe: رسائل المحادثات. subscribeContactUpdates: تحديثات جهة الاتصال.
+ */
+function channelApi(entry) {
     return {
         subscribe(handler) {
-            handlers.add(handler);
-            return () => handlers.delete(handler);
+            entry.handlers.add(handler);
+            return () => entry.handlers.delete(handler);
+        },
+        subscribeContactUpdates(handler) {
+            entry.contactHandlers.add(handler);
+            return () => entry.contactHandlers.delete(handler);
         },
     };
 }

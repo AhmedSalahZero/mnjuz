@@ -184,6 +184,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/chats/upload/chunk', [App\Http\Controllers\User\ChunkedUploadController::class, 'destroy']);
                 Route::get('/shortcuts/available', [App\Http\Controllers\User\ShortcutController::class, 'available']);
                 Route::get('/performance', [App\Http\Controllers\User\AgentPerformanceController::class, 'index']);
+                Route::get('/performance/status', [App\Http\Controllers\User\AgentPerformanceController::class, 'status']);
                 Route::get('/activity-log', [App\Http\Controllers\User\ActivityLogController::class, 'index']);
                 Route::get('/activity-log/export', [App\Http\Controllers\User\ActivityLogController::class, 'export']);
                 Route::get('/ratings', [App\Http\Controllers\User\RatingController::class, 'index']);

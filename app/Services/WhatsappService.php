@@ -2330,7 +2330,9 @@ class WhatsappService
 
     private function sendHttpRequest($method, $url, $data = [], $headers = [])
     {
-        $client = new Client();
+        // من الحاوية لا new: السلوك واحد في الإنتاج، ويستطيع الاختبار حقن
+        // عميل وهمي فيمرّ الإرسال كاملاً بلا شبكة.
+        $client = app(Client::class);
         $responseObject = new \stdClass();
 
         try {

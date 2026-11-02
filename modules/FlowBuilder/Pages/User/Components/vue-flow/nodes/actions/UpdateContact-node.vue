@@ -73,101 +73,100 @@
     />
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Update Contact Action') }}</h3>
-        </div>
-        
-        <form @submit.prevent="saveAction" class="p-6">
-          <div class="space-y-4">
-            <!-- Configuration Fields -->
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
-              <div class="space-y-3">
-                <!-- Update Contact -->
-                <div>
-                  <div class="space-y-4">
-                    <label class="block text-sm font-medium text-gray-700">{{ $t('Save User\'s Message to Contact Field') }}</label>
-                    
-                    <!-- Field Selection -->
-                    <div class="space-y-3">
-                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Select Contact Field') }}</label>
-                        <FormSelect
-                          v-model="editForm.config.target_field"
-                          :options="availableContactFields"
-                          :placeholder="$t('Choose which field to update')"
-                        />
-                      </div>
+    <NodeEditModal :open="showEditModal" @close="closeEditModal">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Update Contact Action') }}</h3>
+      </div>
+      
+      <form @submit.prevent="saveAction" class="p-6">
+        <div class="space-y-4">
+          <!-- Configuration Fields -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
+            <div class="space-y-3">
+              <!-- Update Contact -->
+              <div>
+                <div class="space-y-4">
+                  <label class="block text-sm font-medium text-gray-700">{{ $t('Save User\'s Message to Contact Field') }}</label>
+                  
+                  <!-- Field Selection -->
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Select Contact Field') }}</label>
+                      <FormSelect
+                        v-model="editForm.config.target_field"
+                        :options="availableContactFields"
+                        :placeholder="$t('Choose which field to update')"
+                      />
                     </div>
-                    
-                    <!-- Invalid Email Message (only show when email field is selected) -->
-                    <div v-if="editForm.config.target_field === 'email'" class="space-y-3">
-                      <div>
-                        <FormTextArea
-                          v-model="editForm.config.invalid_email_message"
-                          name="Invalid Email Message"
-                          rows="3"
-                          :placeholder="$t('Please provide a valid email address.')"
-                        />
-                        <p class="text-xs text-gray-500 mt-1">
-                          {{ $t('Message to send when user provides an invalid email format. Leave empty to use default message.') }}
-                        </p>
-                      </div>
+                  </div>
+                  
+                  <!-- Invalid Email Message (only show when email field is selected) -->
+                  <div v-if="editForm.config.target_field === 'email'" class="space-y-3">
+                    <div>
+                      <FormTextArea
+                        v-model="editForm.config.invalid_email_message"
+                        name="Invalid Email Message"
+                        rows="3"
+                        :placeholder="$t('Please provide a valid email address.')"
+                      />
+                      <p class="text-xs text-gray-500 mt-1">
+                        {{ $t('Message to send when user provides an invalid email format. Leave empty to use default message.') }}
+                      </p>
                     </div>
-                    
-                    <!-- What happens explanation - below dropdown -->
-                    <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
-                      <div class="text-sm text-blue-800">
-                        <p class="text-xs text-gray-600 mb-1">
-                          <strong>{{ $t('What happens:') }}</strong> {{ $t('When a user sends a message, their message content will be automatically saved to the selected field.') }}
-                        </p>
-                        <p class="text-xs text-gray-500">
-                          {{ $t('Example: if the user types john@example.com and you select Email, their email is updated to john@example.com') }}
-                        </p>
-                        <p v-if="editForm.config.target_field === 'email'" class="text-xs text-orange-600 mt-2">
-                          <strong>{{ $t('Email validation:') }}</strong> {{ $t('If the user provides an invalid email format, they will receive the configured error message.') }}
-                        </p>
-                      </div>
+                  </div>
+                  
+                  <!-- What happens explanation - below dropdown -->
+                  <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
+                    <div class="text-sm text-blue-800">
+                      <p class="text-xs text-gray-600 mb-1">
+                        <strong>{{ $t('What happens:') }}</strong> {{ $t('When a user sends a message, their message content will be automatically saved to the selected field.') }}
+                      </p>
+                      <p class="text-xs text-gray-500">
+                        {{ $t('Example: if the user types john@example.com and you select Email, their email is updated to john@example.com') }}
+                      </p>
+                      <p v-if="editForm.config.target_field === 'email'" class="text-xs text-orange-600 mt-2">
+                        <strong>{{ $t('Email validation:') }}</strong> {{ $t('If the user provides an invalid email format, they will receive the configured error message.') }}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Active Status -->
-            <div class="flex items-center">
-              <FormCheckbox
-                v-model="editForm.is_active"
-                :label="$t('Active')"
-                class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-              />
-            </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
-            <button 
-              type="button"
-              @click="closeEditModal"
-              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              {{ $t('Cancel') }}
-            </button>
-            <button 
-              type="submit"
-              class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              {{ $t('Save Changes') }}
-            </button>
+          <!-- Active Status -->
+          <div class="flex items-center">
+            <FormCheckbox
+              v-model="editForm.is_active"
+              :label="$t('Active')"
+              class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+          <button 
+            type="button"
+            @click="closeEditModal"
+            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            {{ $t('Cancel') }}
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            {{ $t('Save Changes') }}
+          </button>
+        </div>
+      </form>
+    </NodeEditModal>
   </div>
 </template>
 
 <script setup>
+import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, inject } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'

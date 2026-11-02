@@ -38,7 +38,9 @@ class BroadcastConfigController extends Controller
                 'scheme' => $config['scheme'],
                 'force_tls' => $config['force_tls'],
                 'cluster' => $config['cluster'],
-                'auth_endpoint' => url('/api/v1/broadcasting/auth'),
+                // المسار مسجّل خارج بادئة v1 (routes/api.php). كان هنا v1 فيردّ
+                // 404 على كل اشتراك في قناة الحضور، والتطبيق يأخذ هذا العنوان كما هو.
+                'auth_endpoint' => route('api.broadcasting.auth'),
             ],
         ]);
     }

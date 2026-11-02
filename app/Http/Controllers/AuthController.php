@@ -24,6 +24,7 @@ use App\Models\TeamInvite;
 use App\Models\User;
 use App\Models\UserDevice;
 use App\Mail\ResetLinkedDevicesMail;
+use App\Services\AgentPerformanceService;
 use App\Services\UserDeviceService;
 use App\Services\AuthService;
 use App\Services\PasswordResetService;
@@ -291,6 +292,7 @@ class AuthController extends BaseController
                     $currentOrganizationId = $organizations[0]['id'];
 					$user->current_mobile_organization_id = $currentOrganizationId;
 					$user->save();
+                    AgentPerformanceService::markPresent((int) $currentOrganizationId, (int) $user->id);
                 }
             }
 
@@ -321,6 +323,13 @@ class AuthController extends BaseController
             $teams = Team::where('user_id', auth()->user()->id);
             if($teams->count() == 1){
                 session()->put('current_organization', $teams->first()->organization_id);
+            }
+
+            // حاضرٌ منذ لحظة الدخول لا بعد انتهاء لوحة التحكّم من التحميل. ومن له
+            // عدّة شركات ولم يخترها بعد يثبّته اختيارُه لها (selectOrganization).
+            $presenceOrganizationId = (int) (session('current_organization') ?: $user->current_web_organization_id);
+            if ($presenceOrganizationId) {
+                AgentPerformanceService::markPresent($presenceOrganizationId, (int) $user->id);
             }
         }
 
@@ -950,6 +959,8 @@ class AuthController extends BaseController
 				'message' => __('The selected organization is not associated with the user.')
 			], 403);
 		}
+
+		AgentPerformanceService::markPresent((int) $organization->id, (int) $request->user()->id);
 
 		return response()->json([
 			'success' => true,

@@ -146,24 +146,31 @@ onMounted(() => {
 		return
 	}
 
-	const { subscribe } = getOrJoinChatChannel(
-		organization.value.id,
-		user.value.id,
-		broadcast.value,
-	)
-	subscribe((event) => {
-		const chat = event.chat
-
-		if (shouldPlaySound(chat)) {
-			playSound()
-		}
-
-		if (shouldCountAsUnread(chat, window.location.pathname)) {
-			unreadMessages.value += 1
-		}
-	})
-
+	// النبضة أولاً ومستقلّة عن البثّ: كانت تأتي بعد الاشتراك في القناة، فإن رمى
+	// الاشتراك (مفتاح بثّ غير صالح مثلاً) لم تنطلق النبضة قطّ ولا يظهر الموظف
+	// متصلاً — وهما أمران لا علاقة لأحدهما بالآخر.
 	setupActivityHeartbeat()
+
+	try {
+		const { subscribe } = getOrJoinChatChannel(
+			organization.value.id,
+			user.value.id,
+			broadcast.value,
+		)
+		subscribe((event) => {
+			const chat = event.chat
+
+			if (shouldPlaySound(chat)) {
+				playSound()
+			}
+
+			if (shouldCountAsUnread(chat, window.location.pathname)) {
+				unreadMessages.value += 1
+			}
+		})
+	} catch (error) {
+		console.warn('Chat channel subscription failed', error)
+	}
 
 	// const SB_BASE = 'https://business.waz.com.sa/support'
 	// const loadExternalScript = (src, id) =>

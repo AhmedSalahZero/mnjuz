@@ -99,13 +99,23 @@ class MainController extends BaseController
     }
 
     public function enable_ai_assistant(Request $request, $uuid){
-        Contact::where('uuid', $uuid)->update([
-            'ai_assistance_enabled' => $request->ai_assistant
+        $request->validate([
+            'ai_assistant' => 'required|boolean',
         ]);
+
+        // مقصور على منظمة المستخدم الحالية: بالـ uuid وحده كان يمكن تعديل
+        // جهة اتصال في منظمة أخرى.
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        // عبر الدالة الموحّدة لا update مباشر: تُعلم بقيّة الموظفين الذين يفتحون
+        // المحادثة نفسها فيرون الحالة الجديدة دون إعادة تحميل.
+        $contact->setAiAssistanceEnabled($request->boolean('ai_assistant'));
 
         return back()->with(
             'status', [
-                'type' => 'successs', 
+                'type' => 'success',
                 'message' => __('AI assistant updated successfully!')
             ]
         );

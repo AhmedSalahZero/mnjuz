@@ -215,4 +215,4 @@ Route::middleware(['auth:sanctum', 'check.active.organization', 'check.has.selec
 
 Route::post('/broadcasting/auth', function (Request $request) {
     return Broadcast::auth($request);
-})->middleware('auth:sanctum'); // أو auth:api
+})->middleware('auth:sanctum')->name('api.broadcasting.auth'); // أو auth:api

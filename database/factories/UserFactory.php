@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
@@ -10,6 +11,13 @@ use Illuminate\Support\Str;
  */
 class UserFactory extends Factory
 {
+    /**
+     * كلمة المرور مشفّرة بإعدادات التشفير الحالية. كان الـ hash ثابتاً بتكلفة 10،
+     * فيرفضه cast الـ hashed حين تكون BCRYPT_ROUNDS في بيئة الاختبار أقل (4) —
+     * وتسقط كل اختبارات تُنشئ مستخدماً قبل أن تبدأ.
+     */
+    protected static ?string $password = null;
+
     /**
      * Define the model's default state.
      *
@@ -22,7 +30,7 @@ class UserFactory extends Factory
             'last_name' => fake()->lastName(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password
+            'password' => static::$password ??= Hash::make('password'),
             'role' => 'user',
             'language' => 'en',
             'status' => 1,

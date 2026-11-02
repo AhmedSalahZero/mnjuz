@@ -72,89 +72,88 @@
     />
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Webhook Action') }}</h3>
-        </div>
-        
-        <form @submit.prevent="saveAction" class="p-6">
-          <div class="space-y-4">
-            <!-- Configuration Fields -->
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
-              <div class="space-y-3">
-                <!-- Webhook -->
-                <div class="space-y-2">
-                  <div>
-                    <FormInput
-                      v-model="editForm.config.url"
-                      :label="$t('URL')"
-                      type="url"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <FormSelect
-                      v-model="editForm.config.method"
-                      :label="$t('Method')"
-                      name="Method"
-                      :options="[
-                        { value: 'GET', label: 'GET' },
-                        { value: 'POST', label: 'POST' },
-                        { value: 'PUT', label: 'PUT' },
-                        { value: 'PATCH', label: 'PATCH' },
-                        { value: 'DELETE', label: 'DELETE' }
-                      ]"
-                      required
-                    />
-                  </div>
+    <NodeEditModal :open="showEditModal" @close="closeEditModal">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Webhook Action') }}</h3>
+      </div>
+      
+      <form @submit.prevent="saveAction" class="p-6">
+        <div class="space-y-4">
+          <!-- Configuration Fields -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
+            <div class="space-y-3">
+              <!-- Webhook -->
+              <div class="space-y-2">
+                <div>
+                  <FormInput
+                    v-model="editForm.config.url"
+                    :label="$t('URL')"
+                    type="url"
+                    required
+                  />
                 </div>
-
-                <!-- What happens explanation -->
-                <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
-                  <p class="text-xs text-gray-600 mb-1">
-                    <strong>{{ $t('What happens:') }}</strong> {{ $t('A webhook request will be sent to the specified URL with the contact data.') }}
-                  </p>
-                  <p class="text-xs text-gray-500">
-                    {{ $t('The webhook will include contact information and any relevant flow data in the request payload.') }}
-                  </p>
+                <div>
+                  <FormSelect
+                    v-model="editForm.config.method"
+                    :label="$t('Method')"
+                    name="Method"
+                    :options="[
+                      { value: 'GET', label: 'GET' },
+                      { value: 'POST', label: 'POST' },
+                      { value: 'PUT', label: 'PUT' },
+                      { value: 'PATCH', label: 'PATCH' },
+                      { value: 'DELETE', label: 'DELETE' }
+                    ]"
+                    required
+                  />
                 </div>
               </div>
-            </div>
 
-            <!-- Active Status -->
-            <div class="flex items-center">
-              <FormCheckbox
-                v-model="editForm.is_active"
-                :label="$t('Active')"
-                class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-              />
+              <!-- What happens explanation -->
+              <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
+                <p class="text-xs text-gray-600 mb-1">
+                  <strong>{{ $t('What happens:') }}</strong> {{ $t('A webhook request will be sent to the specified URL with the contact data.') }}
+                </p>
+                <p class="text-xs text-gray-500">
+                  {{ $t('The webhook will include contact information and any relevant flow data in the request payload.') }}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
-            <button 
-              type="button"
-              @click="closeEditModal"
-              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              {{ $t('Cancel') }}
-            </button>
-            <button 
-              type="submit"
-              class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              {{ $t('Save Changes') }}
-            </button>
+          <!-- Active Status -->
+          <div class="flex items-center">
+            <FormCheckbox
+              v-model="editForm.is_active"
+              :label="$t('Active')"
+              class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+          <button 
+            type="button"
+            @click="closeEditModal"
+            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            {{ $t('Cancel') }}
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            {{ $t('Save Changes') }}
+          </button>
+        </div>
+      </form>
+    </NodeEditModal>
   </div>
 </template>
 
 <script setup>
+import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'

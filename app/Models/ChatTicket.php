@@ -142,6 +142,11 @@ class ChatTicket extends Model {
     use HasFactory;
 
     protected $guarded = [];
+
+    // عمود محسوب يحمل القيد الفريد (انظر ترحيل enforce_single_latest_chat_ticket):
+    // لا قيمة له للواجهة، ولا نريده في ردّ JSON ولا في حمولة Inertia.
+    protected $hidden = ['latest_contact_id'];
+
     public $timestamps = false;
 
     protected static function booted(): void
@@ -172,15 +177,21 @@ class ChatTicket extends Model {
     /**
      * One row per contact should have is_latest = true.
      * Single UPDATE + deadlock retries to avoid 1213 under concurrent inbound messages.
+     *
+     * ORDER BY is_latest DESC: القيد الفريد على is_latest يُفحص صفّاً صفّاً لا
+     * في نهاية الجملة. فإن عولج الصفّ المرشّح قبل الصفّ الذي يحمل العلم الآن
+     * وُجد صفّان بـ 1 لحظةً وسقطت الجملة بـ Duplicate entry — وهذا يقع فعلاً حين
+     * يُرقّى صفّ أقدم (حذف التذكرة الأحدث). الترتيب يجعل من يحمل 1 يُعالَج أولاً
+     * فيُنزَّل (أو يبقى إن كان هو المرشّح) قبل أن يُرفع أيّ صفّ آخر.
      */
     public static function syncLatestFlag(int $contactId, int $latestTicketId): void
     {
         DB::transaction(function () use ($contactId, $latestTicketId) {
-            DB::table('chat_tickets')
-                ->where('contact_id', $contactId)
-                ->update([
-                    'is_latest' => DB::raw('CASE WHEN id = ' . $latestTicketId . ' THEN 1 ELSE 0 END'),
-                ]);
+            DB::update(
+                'UPDATE chat_tickets SET is_latest = CASE WHEN id = ? THEN 1 ELSE 0 END '
+                . 'WHERE contact_id = ? ORDER BY is_latest DESC, id',
+                [$latestTicketId, $contactId]
+            );
         }, 3);
     }
 

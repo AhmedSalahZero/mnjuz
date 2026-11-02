@@ -15,6 +15,7 @@ import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
+import { isWindowOpen } from '@/Composables/messagingWindow'
 
 const trans = useTrans()
 
@@ -448,35 +449,10 @@ const onComposeKeydown = (event) => {
 const nowTick = ref(null)
 let messagingWindowTimer = null
 
-const parseUtcDate = (value) => {
-	if (!value) return null
-	if (value instanceof Date) return value
-	const normalized = typeof value === 'string' && !value.endsWith('Z') && !value.includes('+')
-		? value.replace(' ', 'T') + 'Z'
-		: value
-	const parsed = new Date(normalized)
-	return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
 const isInboundChatWithin24Hours = computed(() => {
 	nowTick.value
 
-	const iso = props.contact?.last_inbound_chat_created_at_iso
-		?? props.contact?.last_inbound_chat?.created_at_iso
-		?? props.contact?.last_inbound_chat?.created_at
-
-	if (iso) {
-		const lastInbound = parseUtcDate(iso)
-		if (lastInbound) {
-			return Date.now() - lastInbound.getTime() < 24 * 60 * 60 * 1000
-		}
-	}
-
-	if (typeof props.contact?.is_messaging_window_open === 'boolean') {
-		return props.contact.is_messaging_window_open
-	}
-
-	return false
+	return isWindowOpen(props.contact)
 })
 
 const handleFileUpload = (event) => {

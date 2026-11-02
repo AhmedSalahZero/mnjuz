@@ -84,6 +84,7 @@ import { default as axios } from 'axios'
 import debounce from 'lodash/debounce'
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getOrJoinChatChannel } from '../../../echo'
+import { applyAiAssistanceUpdate } from '@/Composables/contactUpdates'
 import { mergeChatIntoThread } from '@/Composables/mergeChatIntoThread'
 import { holdArrival, shouldHoldArrival } from '@/Composables/filteredChatArrivals'
 import AppLayout from './../Layout/App.vue'
@@ -117,6 +118,7 @@ const props = defineProps({
 
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */
 const unsubscribeChatChannel = ref(null)
+const unsubscribeContactUpdates = ref(null)
 // عند وصول رسالة جديدة والمحادثة مفتوحة بالفعل: علّمها كمقروءة على الخادم مباشرة
 // حتى لا تبقى غير مقروءة في قاعدة البيانات رغم أن الموظف يشاهدها الآن.
 const markCurrentConversationRead = debounce((uuid) => {
@@ -493,11 +495,12 @@ const updateSidePanel = async (chat, statusChanged) => {
 	//	const isCurrentContact = contact.value && contact.value.id === chat[0].value.contact_id
 	if (isChatFormOpen) {
 		updateChatThread(chat)
-		currentContact.last_chat = currentChat
-		if (isInboundChat) {
-
+		// المحادثة المفتوحة قد لا تكون في القائمة المحمّلة (بحث، فلتر، أو لم تُحمَّل
+		// صفحتها بعد). بلا هذا الفحص يرمي السطر خطأً يبتلعه echo.js، فلا يصل
+		// ما بعده — ومنه تصفير عدّاد نافذة الـ24 ساعة.
+		if (currentContact) {
+			currentContact.last_chat = currentChat
 		}
-
 	}
 
 	if (statusChanged) {
@@ -514,6 +517,19 @@ const updateSidePanel = async (chat, statusChanged) => {
 
 	if (isInboundChat) {
 		const inboundIso = new Date().toISOString()
+
+		// رسالة واردة تفتح النافذة من جديد. نحدّث المحادثة المفتوحة هنا، قبل أي
+		// خروج مبكّر أدناه وبمعزل عن وجودها في القائمة، ليتصفّر العدّاد دائماً.
+		if (isChatFormOpen) {
+			contact.value.last_inbound_chat = {
+				created_at: inboundIso,
+				created_at_iso: inboundIso,
+			}
+			contact.value.last_inbound_chat_created_at = inboundIso
+			contact.value.last_inbound_chat_created_at_iso = inboundIso
+			contact.value.is_messaging_window_open = true
+		}
+
 		//	console.log('isInboundChat', currentContact)
 		if (currentContact) {
 			currentContact.last_chat = currentChat
@@ -533,15 +549,6 @@ const updateSidePanel = async (chat, statusChanged) => {
 			currentContact.last_inbound_chat_created_at_iso = inboundIso
 			currentContact.is_messaging_window_open = true
 			currentContact.latest_chat_created_at = currentChat.created_at
-			if (isChatFormOpen) {
-				contact.value.last_inbound_chat = {
-					created_at: inboundIso,
-					created_at_iso: inboundIso,
-				}
-				contact.value.last_inbound_chat_created_at = inboundIso
-				contact.value.last_inbound_chat_created_at_iso = inboundIso
-				contact.value.is_messaging_window_open = true
-			}
 		} else if (chat[0].value.contact_uuid) {
 			// بحثٌ نشط: المحادثة الواصلة لا تُدرج في نتائجه.
 			//
@@ -601,7 +608,7 @@ onMounted(() => {
 	try {
 		if (!props.organizationId) return
 
-		const { subscribe } = getOrJoinChatChannel(
+		const { subscribe, subscribeContactUpdates } = getOrJoinChatChannel(
 			props.organizationId,
 			props.user.id,
 			// المشتركة لا prop الصفحة: ChatController لا يمرّر pusherSettings،
@@ -610,6 +617,11 @@ onMounted(() => {
 		)
 		unsubscribeChatChannel.value = subscribe((event) => {
 			updateSidePanel(event.chat, event.statusChanged)
+		})
+		// الخادم يغيّر مساعد الذكاء الاصطناعي بنفسه (كلمة بدء/إيقاف، تفعيل تلقائي):
+		// المفتاح في الترويسة يتبع ذلك فوراً بدل أن يبقى على ما حُمّلت به الصفحة.
+		unsubscribeContactUpdates.value = subscribeContactUpdates((event) => {
+			applyAiAssistanceUpdate(contact.value, event)
 		})
 
 		scrollToBottom()
@@ -624,6 +636,10 @@ onUnmounted(() => {
 			unsubscribeChatChannel.value()
 		}
 		unsubscribeChatChannel.value = null
+		if (typeof unsubscribeContactUpdates.value === 'function') {
+			unsubscribeContactUpdates.value()
+		}
+		unsubscribeContactUpdates.value = null
 	} catch (error) {
 		// تجاهل
 	}

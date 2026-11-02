@@ -12,6 +12,7 @@ use DB;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Services\ActivityLogger;
+use App\Services\AgentPerformanceService;
 
 class OrganizationController extends BaseController
 {
@@ -49,6 +50,10 @@ class OrganizationController extends BaseController
                 (int) $organization->id
             );
 
+            // حاضرٌ في الشركة الجديدة منذ لحظة التبديل، لا بعد أن تنتهي صفحتها
+            // من التحميل وتنطلق النبضة الأولى.
+            AgentPerformanceService::markPresent((int) $organization->id, (int) $request->user()->id);
+
             return to_route('dashboard');
         }
 
@@ -60,7 +65,9 @@ class OrganizationController extends BaseController
         $organization = $this->organizationService->store($request);
 
         if ($organization) {
-            $this->organizationContext->setCurrent($request->user(), $organization->id);
+            if ($this->organizationContext->setCurrent($request->user(), $organization->id)) {
+                AgentPerformanceService::markPresent((int) $organization->id, (int) $request->user()->id);
+            }
 
             return to_route('dashboard');
         }
