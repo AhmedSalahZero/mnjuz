@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Http\Controllers\Api\Concerns\MobileApi;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
@@ -57,6 +58,8 @@ class MobileProfileController extends Controller
                 'id' => $organization->id,
                 'uuid' => $organization->uuid,
                 'name' => $organization->name,
+                // إعداد البثّ لهذه المنشأة (Pusher أو Reverb كما يختاره الأدمن).
+                'broadcast' => BroadcastProvider::appConfig((int) $organization->id, (int) $user->id),
             ] : null,
         ];
     }

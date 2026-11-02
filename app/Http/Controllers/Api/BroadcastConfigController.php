@@ -23,26 +23,19 @@ class BroadcastConfigController extends Controller
 {
     public function show(): JsonResponse
     {
-        // مزوّد المنشأة المختارة في التطبيق، كما يختاره الأدمن لكل منشأة.
-        $config = BroadcastProvider::clientConfig((int) auth()->user()?->current_mobile_organization_id ?: null);
+        $user = auth()->user();
 
+        // مزوّد المنشأة المختارة في التطبيق، كما يختاره الأدمن لكل منشأة. الشكل
+        // نفسه يصل مع كل منشأة في الدخول والتبديل والملف الشخصي (appConfig):
+        // host فارغ لسحابة Pusher (تشتقّ عنوانها من التجميعة)، و auth_endpoint
+        // خارج بادئة v1 كما سُجّل في routes/api.php.
         return response()->json([
             'statusCode' => 200,
             'success' => true,
-            'data' => [
-                'provider' => $config['provider'],
-                'key' => $config['key'],
-                // Pusher السحابي يشتقّ عنوانه من التجميعة؛ عنوان مُخترَع يكسر
-                // الاتصال. null هنا تعني «استعمل سلوكك الافتراضي».
-                'host' => $config['host'],
-                'port' => $config['port'],
-                'scheme' => $config['scheme'],
-                'force_tls' => $config['force_tls'],
-                'cluster' => $config['cluster'],
-                // المسار مسجّل خارج بادئة v1 (routes/api.php). كان هنا v1 فيردّ
-                // 404 على كل اشتراك في قناة الحضور، والتطبيق يأخذ هذا العنوان كما هو.
-                'auth_endpoint' => route('api.broadcasting.auth'),
-            ],
+            'data' => BroadcastProvider::appConfig(
+                (int) $user?->current_mobile_organization_id ?: null,
+                $user?->id ? (int) $user->id : null
+            ),
         ]);
     }
 }

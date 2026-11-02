@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\Email;
 use App\Http\Controllers\Controller as BaseController;
@@ -278,12 +279,15 @@ class AuthController extends BaseController
             $currentOrganizationId = null;
             if($guard == 'user'){
                 $teams = Team::where('user_id', $user->id)->with('organization')->get();
-                $organizations = $teams->map(function($team) {
+                $organizations = $teams->map(function($team) use ($user) {
                     return [
                         'id' => $team->organization_id,
                         'name' => $team->organization->name ?? '',
                         'role' => $team->role,
 						'timezone' => DateTimeHelper::getCurrentTimeZone($team->organization_id),
+						// إعداد البثّ لهذه المنشأة (Pusher أو Reverb كما يختاره
+						// الأدمن): يتّصل به التطبيق عند اختيارها بلا مفاتيح مضمّنة.
+						'broadcast' => BroadcastProvider::appConfig((int) $team->organization_id, (int) $user->id),
                     ];
                 })->toArray();
                 
@@ -967,6 +971,8 @@ class AuthController extends BaseController
 			'message' => __('Organization set successfully'),
 			'data' => [
 				'current_organization_id' => $organization->id,
+				// المنشأة الجديدة قد تكون على مزوّد بثّ آخر: يُعيد التطبيق اتصاله به.
+				'broadcast' => BroadcastProvider::appConfig((int) $organization->id, (int) $request->user()->id),
 			],
 		], 200);
 	}
@@ -1014,6 +1020,7 @@ class AuthController extends BaseController
                 'message' => __('You have left the organization. Your session has been closed.'),
                 'data' => [
                     'current_organization_id' => null,
+                    'broadcast' => null,
                 ],
             ], 200);
         }
@@ -1023,6 +1030,10 @@ class AuthController extends BaseController
             'message' => __('You have left this organization.'),
             'data' => [
                 'current_organization_id' => (int) $user->current_mobile_organization_id,
+                // المنشأة التي انتقل إليها قد تكون على مزوّد بثّ آخر.
+                'broadcast' => $user->current_mobile_organization_id
+                    ? BroadcastProvider::appConfig((int) $user->current_mobile_organization_id, (int) $user->id)
+                    : null,
             ],
         ], 200);
     }

@@ -287,6 +287,30 @@ class BroadcastProvider
         ];
     }
 
+    /**
+     * إعداد البثّ كما يحتاجه تطبيق الجوال لمنشأة بعينها: إعداد الاتصال، ومسار
+     * المصادقة على القنوات، واسم قناة المستخدم إن عُرف.
+     *
+     * يُرسَل مع كل منشأة (قائمة الدخول، التبديل، الملف الشخصي) فيتّصل التطبيق
+     * بمزوّد المنشأة التي يختارها بلا مفاتيح مضمّنة فيه. السرّ لا يخرج: المصادقة
+     * على /api/broadcasting/auth توقّع بسرّ مزوّد المنشأة صاحبة القناة.
+     *
+     * @return array<string, mixed>
+     */
+    public static function appConfig(?int $organizationId, ?int $userId = null): array
+    {
+        $config = self::clientConfig($organizationId);
+
+        $config['auth_endpoint'] = route('api.broadcasting.auth');
+
+        // اسم القناة كاملاً كما يشترك فيه عميل Pusher (Echo يُضيف presence- بنفسه).
+        $config['channel'] = ($organizationId && $userId)
+            ? 'presence-chats.ch' . $organizationId . '.' . $userId
+            : null;
+
+        return $config;
+    }
+
     /** يُستدعى في الاختبارات وبعد تعديل الإعدادات من اللوحة. */
     public static function forget(): void
     {
