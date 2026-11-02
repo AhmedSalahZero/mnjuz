@@ -858,5 +858,18 @@
     "Each value will be evaluated against the selected condition type": "Her değer seçilen koşul türüne göre değerlendirilir",
     "When a value matches, flow will branch to that value's connected node": "Bir değer eşleştiğinde akış o değere bağlı düğüme gider",
     "If no values match, flow will continue to the default path": "Hiçbir değer eşleşmezse akış varsayılan yoldan devam eder",
-    "You can connect multiple nodes to different values": "Farklı değerlere birden çok düğüm bağlayabilirsiniz"
+    "You can connect multiple nodes to different values": "Farklı değerlere birden çok düğüm bağlayabilirsiniz",
+    "Complete the :provider settings under Settings › Broadcast first.": "Önce Ayarlar › Yayın altında :provider ayarlarını tamamlayın.",
+    "Realtime provider": "Gerçek zamanlı sağlayıcı",
+    "Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.": "Bu kuruluşun yeni mesajları panelde ve mobil uygulamada anında aldığı yer. Açık sayfalar bir sonraki yüklemede geçiş yapar.",
+    "not configured": "yapılandırılmadı",
+    "Platform default ({provider})": "Platform varsayılanı ({provider})",
+    "Default realtime provider": "Varsayılan gerçek zamanlı sağlayıcı",
+    "Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.": "\"Platform varsayılanı\" olarak ayarlanan kuruluşlar bu sağlayıcıyı kullanır. Her kuruluş için sayfasından sağlayıcı seçebilirsiniz.",
+    "Reverb app id": "Reverb uygulama kimliği",
+    "Reverb app key": "Reverb uygulama anahtarı",
+    "Reverb app secret": "Reverb uygulama gizli anahtarı",
+    "Reverb host": "Reverb sunucusu",
+    "Reverb port": "Reverb bağlantı noktası",
+    "Reverb scheme": "Reverb şeması"
 }

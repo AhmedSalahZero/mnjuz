@@ -883,5 +883,18 @@
     "Each value will be evaluated against the selected condition type": "Kila thamani itatathminiwa kwa aina ya sharti iliyochaguliwa",
     "When a value matches, flow will branch to that value's connected node": "Thamani inapolingana, mtiririko utaenda kwenye hatua iliyounganishwa nayo",
     "If no values match, flow will continue to the default path": "Ikiwa hakuna thamani inayolingana, mtiririko utaendelea njia ya msingi",
-    "You can connect multiple nodes to different values": "Unaweza kuunganisha hatua kadhaa kwa thamani tofauti"
+    "You can connect multiple nodes to different values": "Unaweza kuunganisha hatua kadhaa kwa thamani tofauti",
+    "Complete the :provider settings under Settings › Broadcast first.": "Kamilisha kwanza mipangilio ya :provider katika Mipangilio › Utangazaji.",
+    "Realtime provider": "Mtoa huduma wa wakati halisi",
+    "Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.": "Mahali shirika hili linapopokea ujumbe mpya papo hapo, kwenye dashibodi na programu ya simu. Kurasa zilizo wazi hubadilika zikipakiwa tena.",
+    "not configured": "haijasanidiwa",
+    "Platform default ({provider})": "Chaguo-msingi la jukwaa ({provider})",
+    "Default realtime provider": "Mtoa huduma chaguo-msingi wa wakati halisi",
+    "Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.": "Mashirika yaliyowekwa \"Chaguo-msingi la jukwaa\" hutumia mtoa huduma huyu. Unaweza kuchagua mtoa huduma kwa kila shirika kwenye ukurasa wake.",
+    "Reverb app id": "Kitambulisho cha programu ya Reverb",
+    "Reverb app key": "Ufunguo wa programu ya Reverb",
+    "Reverb app secret": "Siri ya programu ya Reverb",
+    "Reverb host": "Seva ya Reverb",
+    "Reverb port": "Mlango wa Reverb",
+    "Reverb scheme": "Itifaki ya Reverb"
 }

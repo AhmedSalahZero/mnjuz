@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Http\Resources\OrganizationsResource;
 use App\Http\Resources\BillingResource;
 use App\Http\Resources\UserResource;
@@ -113,6 +114,8 @@ class OrganizationService
                     'country' => $request->country,
                 ]),
                 'created_by' => auth()->user()->id,
+                // مزوّد البثّ: الفراغ = افتراضي المنصّة.
+                'broadcast_provider' => BroadcastProvider::normalize($request->input('broadcast_provider')),
             ]);
 
             Team::create([
@@ -167,6 +170,12 @@ class OrganizationService
         if ($request->has('waz_company_id')) {
             $wazId = $request->input('waz_company_id');
             $attributes['waz_company_id'] = ($wazId === null || $wazId === '') ? null : (int) $wazId;
+        }
+
+        // مزوّد البثّ (Pusher أو Reverb) يختاره الأدمن لكل منشأة؛ الفراغ يُعيدها
+        // إلى افتراضي المنصّة.
+        if ($request->has('broadcast_provider')) {
+            $attributes['broadcast_provider'] = BroadcastProvider::normalize($request->input('broadcast_provider'));
         }
 
         $organization->update($attributes);

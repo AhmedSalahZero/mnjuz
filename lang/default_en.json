@@ -917,5 +917,18 @@
     "Each value will be evaluated against the selected condition type": "Each value will be evaluated against the selected condition type",
     "When a value matches, flow will branch to that value's connected node": "When a value matches, flow will branch to that value's connected node",
     "If no values match, flow will continue to the default path": "If no values match, flow will continue to the default path",
-    "You can connect multiple nodes to different values": "You can connect multiple nodes to different values"
+    "You can connect multiple nodes to different values": "You can connect multiple nodes to different values",
+    "Complete the :provider settings under Settings › Broadcast first.": "Complete the :provider settings under Settings › Broadcast first.",
+    "Realtime provider": "Realtime provider",
+    "Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.": "Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.",
+    "not configured": "not configured",
+    "Platform default ({provider})": "Platform default ({provider})",
+    "Default realtime provider": "Default realtime provider",
+    "Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.": "Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.",
+    "Reverb app id": "Reverb app id",
+    "Reverb app key": "Reverb app key",
+    "Reverb app secret": "Reverb app secret",
+    "Reverb host": "Reverb host",
+    "Reverb port": "Reverb port",
+    "Reverb scheme": "Reverb scheme"
 }

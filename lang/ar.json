@@ -1916,5 +1916,18 @@
     "Each value will be evaluated against the selected condition type": "تُقارَن كل قيمة بنوع الشرط المختار",
     "When a value matches, flow will branch to that value's connected node": "حين تطابق قيمة، ينتقل المسار إلى الخطوة الموصولة بها",
     "If no values match, flow will continue to the default path": "إن لم تطابق أيّ قيمة، يُكمل المسار في الفرع الافتراضي",
-    "You can connect multiple nodes to different values": "يمكنك وصل خطوات مختلفة بقيم مختلفة"
+    "You can connect multiple nodes to different values": "يمكنك وصل خطوات مختلفة بقيم مختلفة",
+    "Complete the :provider settings under Settings › Broadcast first.": "أكمل إعدادات :provider في الإعدادات › البث أولاً.",
+    "Realtime provider": "مزوّد البث اللحظي",
+    "Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.": "الخدمة التي تصل عبرها الرسائل الجديدة لحظياً لهذه المنشأة في لوحة التحكم وتطبيق الجوال. الصفحات المفتوحة تنتقل عند تحميلها التالي.",
+    "not configured": "غير مُعدّ",
+    "Platform default ({provider})": "افتراضي المنصّة ({provider})",
+    "Default realtime provider": "مزوّد البث اللحظي الافتراضي",
+    "Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.": "المنشآت المضبوطة على «افتراضي المنصّة» تستخدم هذا المزوّد. ويمكنك اختيار مزوّد لكل منشأة من صفحتها.",
+    "Reverb app id": "معرّف تطبيق Reverb",
+    "Reverb app key": "مفتاح تطبيق Reverb",
+    "Reverb app secret": "سرّ تطبيق Reverb",
+    "Reverb host": "عنوان خادم Reverb",
+    "Reverb port": "منفذ Reverb",
+    "Reverb scheme": "بروتوكول Reverb"
 }

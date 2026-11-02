@@ -918,5 +918,18 @@
     "Each value will be evaluated against the selected condition type": "Chaque valeur est évaluée selon le type de condition choisi",
     "When a value matches, flow will branch to that value's connected node": "Quand une valeur correspond, le flux suit le nœud relié à cette valeur",
     "If no values match, flow will continue to the default path": "Si aucune valeur ne correspond, le flux suit le chemin par défaut",
-    "You can connect multiple nodes to different values": "Vous pouvez relier plusieurs nœuds à différentes valeurs"
+    "You can connect multiple nodes to different values": "Vous pouvez relier plusieurs nœuds à différentes valeurs",
+    "Complete the :provider settings under Settings › Broadcast first.": "Complétez d'abord les paramètres :provider dans Paramètres › Diffusion.",
+    "Realtime provider": "Fournisseur temps réel",
+    "Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.": "Où cette organisation reçoit instantanément les nouveaux messages, sur le tableau de bord et l'application mobile. Les pages ouvertes basculent à leur prochain chargement.",
+    "not configured": "non configuré",
+    "Platform default ({provider})": "Par défaut de la plateforme ({provider})",
+    "Default realtime provider": "Fournisseur temps réel par défaut",
+    "Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.": "Les organisations réglées sur « Par défaut de la plateforme » utilisent ce fournisseur. Vous pouvez choisir un fournisseur pour chaque organisation sur sa page.",
+    "Reverb app id": "ID de l'application Reverb",
+    "Reverb app key": "Clé de l'application Reverb",
+    "Reverb app secret": "Secret de l'application Reverb",
+    "Reverb host": "Hôte Reverb",
+    "Reverb port": "Port Reverb",
+    "Reverb scheme": "Schéma Reverb"
 }

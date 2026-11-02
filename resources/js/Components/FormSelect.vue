@@ -103,9 +103,11 @@ const trans = useTrans();
                         v-for="option in props.options"
                         :key="option.label"
                         :value="option.value"
+                        :disabled="!!option.disabled"
                         as="template"
                         >
-                        <li :class="[active ? 'bg-amber-100 text-amber-900' : 'text-gray-900','relative cursor-default select-none py-2 pl-10 pr-4']">
+                        <!-- خيارٌ معطّل يظهر ولا يُختار (مزوّد بثّ بياناته ناقصة مثلاً). -->
+                        <li :class="[active ? 'bg-amber-100 text-amber-900' : 'text-gray-900', option.disabled ? 'opacity-50 cursor-not-allowed' : '', 'relative cursor-default select-none py-2 pl-10 pr-4']">
                             <span :class="[selected ? 'font-medium' : 'font-normal', 'block truncate']">{{ option.label }}</span>
                             <span v-if="selected" class="absolute inset-y-0 left-0 flex items-center pl-3 text-amber-600">
                                 <CheckIcon class="h-5 w-5" aria-hidden="true" />
