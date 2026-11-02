@@ -2,7 +2,9 @@
 
 namespace Modules\FlowBuilder\Providers;
 
+use App\Models\Chat;
 use Illuminate\Support\ServiceProvider;
+use Modules\FlowBuilder\Support\FlowSessions;
 
 
 class FlowBuilderServiceProvider extends ServiceProvider
@@ -18,5 +20,14 @@ class FlowBuilderServiceProvider extends ServiceProvider
         
         // Merge config
         $this->mergeConfigFrom(__DIR__ . '/../config/actions.php', 'FlowBuilder.actions');
+
+        // موظّفٌ ردّ من المنصّة: المحادثة صارت بيده فلا يُكمل الـ flow فوقه.
+        // رسائل الـ flow تُرسَل بـ user_id = 0 والردود الآلية بلا مستخدم،
+        // فـ user_id > 0 هو الإنسان. (رسائل تطبيق الأعمال: ProcessMessageEchoJob.)
+        Chat::created(function (Chat $chat) {
+            if ($chat->type === 'outbound' && (int) $chat->user_id > 0) {
+                FlowSessions::endForContact((int) $chat->contact_id);
+            }
+        });
     }
 }

@@ -143,7 +143,8 @@ const getDefaultConfig = (actionType: string) => {
 		case 'update_contact':
 			return {
 				target_field: '', // The field to save the user's message to
-				invalid_email_message: 'Please provide a valid email address.', // Default message for invalid emails
+				// فارغ = الرسالة الافتراضية المترجمة على الخادم. النصّ الإنجليزي هنا كان يصل لعملاء عرب.
+				invalid_email_message: '',
 				fields: {
 					// Keep for backward compatibility
 					first_name: '',

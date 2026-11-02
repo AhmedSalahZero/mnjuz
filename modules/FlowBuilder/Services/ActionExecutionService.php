@@ -162,6 +162,12 @@ class ActionExecutionService
             return false;
         }
 
+        // المحرّر كان يحفظ الحقل المخصّص «metadata.City»، فيُخزَّن تحت هذا
+        // المفتاح حرفياً ولا يراه نموذج جهة الاتصال ولا متغيّر {city}.
+        if (str_starts_with($targetField, 'metadata.')) {
+            $targetField = substr($targetField, strlen('metadata.'));
+        }
+
         // Map field names to actual contact attributes
         $fieldMapping = [
             'first_name' => 'first_name',
@@ -183,11 +189,13 @@ class ActionExecutionService
                 if (!filter_var($userMessage, FILTER_VALIDATE_EMAIL)) {
                     Log::warning("Invalid email format provided: {$userMessage}");
                     
-                    // Send invalid email message if configured
-                    $invalidMessage = $config['invalid_email_message'] ?? 'Please provide a valid email address.';
-                    if (!empty($invalidMessage)) {
-                        $this->whatsappService->sendMessage($contact->uuid, $invalidMessage);
+                    // الحقل الفارغ يعني الرسالة الافتراضية كما يقول المحرّر. كان
+                    // '' يتجاوز ?? فلا يُرسَل شيء، ويبقى العميل على العقدة بلا سبب.
+                    $invalidMessage = trim((string) ($config['invalid_email_message'] ?? ''));
+                    if ($invalidMessage === '') {
+                        $invalidMessage = __('Please provide a valid email address.');
                     }
+                    $this->whatsappService->sendMessage($contact->uuid, $invalidMessage);
                     
                     return false;
                 }
@@ -291,57 +299,60 @@ class ActionExecutionService
         }
     }
 	
-	private function executeDelay($config, $contact, $flowData = null, $contactId = null)
-{
-    $duration = $config['duration'] ?? 5;
-    
-    if ($flowData && $contactId) {
-        // ✅ الحل: إيجاد الـ target node الصحيح من الـ edges
+    /**
+     * التأخير: مهمة مؤجّلة تُكمل المسار مما بعد عقدة التأخير.
+     *
+     * العميل يقف على عقدة التأخير نفسها (processActionNode)، فالحافّة الخارجة
+     * منها هي الطريق. والمهمة تحمل معرّف العقدة لتتحقّق قبل الإكمال أنه ما زال
+     * واقفاً عليها.
+     */
+    private function executeDelay($config, $contact, $flowData = null, $contactId = null)
+    {
+        $duration = max(1, (int) ($config['duration'] ?? 5));
+
+        // بلا جلسة لا مكان يُكمَل منه. البديل القديم كان sleep بالدقائق يُجمّد
+        // عامل الطابور كله.
+        if (!$flowData || !$contactId) {
+            Log::warning("Delay action without a flow session", ['contact_id' => $contactId]);
+            return false;
+        }
+
         $flow = \Modules\FlowBuilder\Models\Flow::find($flowData->flow_id);
-        
+
         if (!$flow || empty($flow->metadata)) {
             Log::warning("Flow not found or empty metadata for delay action");
             return false;
         }
-        
-        $edgesArray = json_decode($flow->metadata, true);
-        $edges = \Arr::get($edgesArray, "edges", []);
-        
-        // البحث عن الـ edge الذي source = current_step
-        $nextStepId = null;
+
+        $edges = \Arr::get(json_decode($flow->metadata, true) ?: [], "edges", []) ?? [];
+        $delayNodeId = (string) $flowData->current_step;
+
+        $hasNextStep = false;
         foreach ($edges as $edge) {
-            if (isset($edge['source']) && (string)$edge['source'] === (string)$flowData->current_step) {
-                // وجدنا الـ edge!
-                $nextStepId = $edge['targetNode']['id'] ?? null;
+            if (isset($edge['source']) && (string) $edge['source'] === $delayNodeId && !empty($edge['targetNode']['id'])) {
+                $hasNextStep = true;
                 break;
             }
         }
-        
-        if (!$nextStepId) {
+
+        if (!$hasNextStep) {
             Log::warning("No next step found for delay action", [
-                'current_step' => $flowData->current_step,
+                'current_step' => $delayNodeId,
                 'flow_id' => $flowData->flow_id,
             ]);
             return false;
         }
+
         ProcessDelayedFlowJob::dispatch(
-			$flowData->id,
-            $contactId, 
-            $flowData->flow_id, 
-            $nextStepId,  // ✅ الـ ID الصحيح من الـ edges
+            $flowData->id,
+            $contactId,
+            $flowData->flow_id,
+            $delayNodeId,
             $this->organizationId
         )->delay(now()->addMinutes($duration));
-        
-     
-        
+
         return 'delayed';
     }
-    
-    Log::warning("Delay fallback mode (sleep)");
-    sleep($duration * 60);
-    return true;
-}
-
 
     /**
      * Execute delay action

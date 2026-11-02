@@ -10,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Services\FlowExecutionService;
 
@@ -41,7 +42,9 @@ class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUniqueUntilProcessin
      */
     public function uniqueId()
     {
-        return "flow_{$this->flowId}_contact_{$this->contactId}";
+        // الجلسة جزءٌ من المفتاح: من أعاد المسار بكلمة مفتاحية يحصل على جلسة
+        // جديدة، وكان قفل المهمة القديمة يُسقط مهمته بصمت فلا يصله ما بعد التأخير.
+        return "flow_{$this->flowId}_contact_{$this->contactId}_session_{$this->flowDataId}";
     }
 
     /**
@@ -61,9 +64,17 @@ class ProcessDelayedFlowJob implements ShouldQueue, ShouldBeUniqueUntilProcessin
                 return;
             }
 
-            $flowData->current_step = $this->currentStep;
-            $flowData->save();
+            // مسارٌ أُوقف نشره أثناء الانتظار لا يُكمل الإرسال.
+            if (!Flow::whereKey($this->flowId)->where('status', 'active')->exists()) {
+                Log::info("Delayed flow skipped - flow is no longer active", [
+                    'flow_data_id' => $this->flowDataId,
+                    'flow_id' => $this->flowId,
+                ]);
+                return;
+            }
 
+            // لا يُعاد ضبط الخطوة هنا: continueDelayedFlow يُكمل فقط إن كان العميل
+            // ما زال واقفاً على عقدة التأخير ($currentStep).
             $flowExecutionService = new FlowExecutionService($this->organizationId);
             $flowExecutionService->continueDelayedFlow($this->contactId, $this->flowId, $this->currentStep);
         } catch (\Exception $e) {

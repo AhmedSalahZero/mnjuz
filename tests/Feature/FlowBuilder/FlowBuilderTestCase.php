@@ -53,7 +53,7 @@ abstract class FlowBuilderTestCase extends TestCase
             RefreshDatabaseState::$migrated = true;
         }
 
-        if (!Schema::hasTable('flow_user_data')) {
+        if (!Schema::hasTable('flow_user_data') || !Schema::hasColumn('flow_user_data', 'unmatched_replies')) {
             $this->artisan('migrate', ['--path' => 'modules/FlowBuilder/Database/Migrations']);
             $this->app[ConsoleKernel::class]->setArtisan(null);
         }
@@ -182,7 +182,7 @@ abstract class FlowBuilderTestCase extends TestCase
     protected function buttonsNode(string $id, string $body, array $buttons, string $footer = ''): array
     {
         $keys = ['button1', 'button2', 'button3'];
-        $fields = ['type' => 'interactive buttons', 'body' => $body, 'footer' => $footer, 'headerType' => 'none', 'buttons' => []];
+        $fields = ['type' => 'interactive buttons', 'buttonType' => 'buttons', 'body' => $body, 'footer' => $footer, 'headerType' => 'none', 'buttons' => []];
 
         foreach (array_values($buttons) as $i => $title) {
             $fields['buttons'][$keys[$i]] = $title;
@@ -266,6 +266,56 @@ abstract class FlowBuilderTestCase extends TestCase
             'keywords' => $start['keywords'] ?? null,
             'metadata' => json_encode(['nodes' => $nodes, 'edges' => $edges, 'viewport' => ['x' => 0, 'y' => 0, 'zoom' => 1]], JSON_UNESCAPED_UNICODE),
         ], $attributes));
+    }
+
+    /**
+     * رسالة واردة تمرّ بالمسار الحقيقي: AutoReplyService يقرّر من يُجيب
+     * (الردود الآلية، الـ flow، المساعد الذكي) بترتيب المنشأة.
+     */
+    protected function receive(string $body, bool $isNewContact = false): Chat
+    {
+        $chat = $this->inbound($body);
+        app(\App\Services\AutoReplyService::class)->checkAutoReply($chat, $isNewContact);
+
+        return $chat;
+    }
+
+    /** ضغطة زرّ ردّ: واتساب يرسل عنوان الزرّ في button_reply. */
+    protected function receiveButton(string $title): Chat
+    {
+        $chat = Chat::create([
+            'organization_id' => $this->contact->organization_id,
+            'contact_id' => $this->contact->id,
+            'type' => 'inbound',
+            'metadata' => json_encode(['type' => 'interactive', 'interactive' => [
+                'type' => 'button_reply',
+                'button_reply' => ['id' => 'button1', 'title' => $title],
+            ]]),
+            'status' => 'delivered',
+        ]);
+        app(\App\Services\AutoReplyService::class)->checkAutoReply($chat, false);
+
+        return $chat;
+    }
+
+    /** ردّ آلي بسيط: يُرسل $reply حين تحوي الرسالة $trigger. */
+    protected function basicReply(string $trigger, string $reply): void
+    {
+        \App\Models\AutoReply::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'name' => $trigger,
+            'trigger' => $trigger,
+            'match_criteria' => 'contains',
+            'metadata' => json_encode(['type' => 'text', 'data' => ['text' => $reply]]),
+            'created_by' => $this->owner->id,
+            'created_at' => now(),
+        ]);
+    }
+
+    protected function flowSession(): ?\Modules\FlowBuilder\Models\FlowUserData
+    {
+        return \Modules\FlowBuilder\Models\FlowUserData::where('contact_id', $this->contact->id)->first();
     }
 
     protected function inbound(string $body, ?Contact $contact = null): Chat

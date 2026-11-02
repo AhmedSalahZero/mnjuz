@@ -21,7 +21,8 @@ const textAreaRef = ref(null);
 const input1 = ref(props.data.metadata?.fields["mediaType"] || '')
 const textInput = ref(props.data.metadata?.fields["caption"] || '')
 const media = ref(props.data.metadata?.fields["media"] || [])
-const characterLimit = ref('1098');
+// حدّ واتساب لتعليق الوسائط؛ ما بعده كان يُرفض من الـ API.
+const characterLimit = ref('1024');
 const characterCount = ref('0');
 const isEditTitle = ref(false)
 const options = ref([

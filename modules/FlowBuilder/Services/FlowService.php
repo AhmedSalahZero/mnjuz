@@ -8,6 +8,7 @@ use Modules\FlowBuilder\Models\FlowMedia;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Resources\FlowResource;
 use Modules\FlowBuilder\Support\FlowSecrets;
+use Modules\FlowBuilder\Support\KeywordMatcher;
 use Modules\FlowBuilder\Validators\FlowValidator;
 
 class FlowService
@@ -74,7 +75,8 @@ class FlowService
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
             $data2['trigger'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.type', null);
-            $data2['keywords'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null);
+            // «hi, hello» و«مرحبا، عرض» تُخزَّن «hi,hello» و«مرحبا,عرض»: انظر KeywordMatcher.
+            $data2['keywords'] = KeywordMatcher::normalize(\Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null));
 
             // المهلة بالدقائق: الفراغ غيابٌ لا صفر — و(int)'' يساوي صفراً
             // فتُحفظ مهلةً معطّلة بدل ألّا تُحفظ.

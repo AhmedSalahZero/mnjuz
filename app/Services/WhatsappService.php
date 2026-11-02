@@ -2296,7 +2296,8 @@ class WhatsappService
 
 		$interactive['body']['text'] = $body;
 
-		if ($footer !== null) {
+		// التذييل الفارغ يُحذف: Meta ترفض footer.text الفارغ وتُسقط الرسالة كلها.
+		if ($footer !== null && trim((string) $footer) !== '') {
 			$interactive['footer'] = ['text' => $footer];
 		}
 

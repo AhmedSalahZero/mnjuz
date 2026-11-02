@@ -213,7 +213,8 @@ const availableContactFields = computed(() => {
   // Custom fields
   contactFields.forEach(field => {
     fields.push({
-      value: `metadata.${field.name}`,
+      // الاسم كما هو: «metadata.City» كان يُخزَّن تحت هذا المفتاح حرفياً.
+      value: field.name,
       label: field.name
     })
   })
@@ -225,7 +226,7 @@ const actionName = computed(() => {
   const actionConfig = config.value
   
   if (actionConfig.target_field) {
-    const field = availableContactFields.value.find(f => f.value === actionConfig.target_field)
+    const field = availableContactFields.value.find(f => f.value === plainField(actionConfig.target_field))
     return field ? `Update Contact: ${field.label}` : `Update Contact: ${actionConfig.target_field}`
   }
   return 'Update Contact'
@@ -236,8 +237,12 @@ const editForm = reactive({
   is_active: true
 })
 
+// مسارات قديمة حفظت الحقل المخصّص «metadata.X».
+const plainField = (value) => String(value || '').replace(/^metadata\./, '')
+
 const getTargetFieldName = (fieldValue) => {
   if (!fieldValue) return 'No field selected'
+  fieldValue = plainField(fieldValue)
   const field = availableContactFields.value.find(f => f.value === fieldValue)
   return field ? field.label : fieldValue
 }
@@ -248,8 +253,8 @@ const toggleEdit = () => {
   
   editForm.config = {
     ...currentConfig,
-    target_field: currentConfig.target_field || '',
-    invalid_email_message: currentConfig.invalid_email_message || 'Please provide a valid email address.',
+    target_field: plainField(currentConfig.target_field),
+    invalid_email_message: currentConfig.invalid_email_message || '',
     // Keep existing fields structure for backward compatibility
     fields: {
       first_name: currentConfig.fields?.first_name || '',

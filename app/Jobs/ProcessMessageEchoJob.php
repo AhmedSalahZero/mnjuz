@@ -160,6 +160,12 @@ class ProcessMessageEchoJob implements ShouldQueue
                 Cache::put("wam_processed_{$wamId}", true, 3600);
             }
 
+            // رسالة كتبها إنسانٌ من تطبيق واتساب للأعمال: تُنهي flow العميل
+            // كما يُنهيه ردّ الموظف من المنصّة.
+            if (class_exists(\Modules\FlowBuilder\Support\FlowSessions::class)) {
+                \Modules\FlowBuilder\Support\FlowSessions::endForContact((int) $contact->id);
+            }
+
             return $chat;
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->errorInfo[1] === 1062) {
