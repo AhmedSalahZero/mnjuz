@@ -78,8 +78,8 @@ const dash = computed(() => `${remaining.value.fraction * CIRCUMFERENCE} ${CIRCU
 				<circle cx="18" cy="18" :r="RADIUS" fill="none" stroke-width="3" stroke-linecap="round"
 					:stroke-dasharray="dash" :class="ringColor" class="transition-all duration-500" />
 			</svg>
-			<!-- الموبايل: الوقت داخل الحلقة لأن النص الجانبي مخفيّ -->
-			<span v-if="remaining.open" class="md:hidden absolute inset-0 flex items-center justify-center text-[9px] font-medium leading-none"
+			<!-- أقل من xl: الوقت داخل الحلقة لأن النص الجانبي مخفيّ (الهيدر ضيّق: 70% من المساحة) -->
+			<span v-if="remaining.open" class="xl:hidden absolute inset-0 flex items-center justify-center text-[9px] font-medium leading-none"
 				:class="textColor">
 				{{ pad(remaining.hours) }}:{{ pad(remaining.minutes) }}
 			</span>
@@ -90,7 +90,7 @@ const dash = computed(() => `${remaining.value.fraction * CIRCUMFERENCE} ${CIRCU
 				<path d="M12 7v5l3 2" />
 			</svg>
 		</div>
-		<span class="hidden md:inline text-xs font-medium whitespace-nowrap" :class="textColor">
+		<span class="hidden xl:inline text-xs font-medium whitespace-nowrap" :class="textColor">
 			{{ shortLabel }}
 		</span>
 	</div>

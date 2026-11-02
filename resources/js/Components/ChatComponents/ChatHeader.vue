@@ -179,7 +179,7 @@ const submitForm3 = () => {
 </script>
 <template>
 	<div class="h-20 bg-white border-b border-1 flex items-center justify-between px-4 md:px-4">
-		<div class="flex items-center gap-x-4 cursor-pointer w-3/4">
+		<div class="flex items-center gap-x-4 cursor-pointer flex-1 min-w-0">
 			<Link href="/chats" :only="['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash']" preserve-state preserve-scroll class="flex md:hidden items-center justify-center min-w-[2.5rem] min-h-[2.5rem] p-1 -m-1 text-current shrink-0 touch-manipulation">
 				<svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24" class="pointer-events-none">
 					<path fill="currentColor"
@@ -206,16 +206,17 @@ const submitForm3 = () => {
 					:placeholder="'Select Agent'" @update:modelValue="changeTicketAgent()" />
 			</div>
 		</div>
-		<div>
+		<!-- shrink-0: الجزء الأيسر هو اللي يتقلّص، مش الأزرار، فما يتكسّرش نص "وضع علامة مغلقة" -->
+		<div class="shrink-0 ms-4">
 			<!-- gap لا space-x: الأخير هامش فيزيائي على اليسار فلا فراغ بين العناصر في صفحة RTL -->
 			<div class="flex items-center gap-x-4">
 				<MessagingWindowCountdown :contact="contact" />
 				<button v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')"
-					class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+					class="text-sm whitespace-nowrap md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
 					{{ $t('Mark as closed') }}
 				</button>
 				<button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')"
-					class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+					class="text-sm whitespace-nowrap md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
 					{{ $t('Mark as open') }}
 				</button>
 				<Dropdown v-if="!displayContact">
