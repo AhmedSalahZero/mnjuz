@@ -932,5 +932,6 @@
     "Reverb host": "Hôte Reverb",
     "Reverb port": "Port Reverb",
     "Reverb scheme": "Schéma Reverb",
-    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Le client n'a pas écrit depuis plus de 24 heures. WhatsApp n'autorise que les messages modèles jusqu'à sa réponse."
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Le client n'a pas écrit depuis plus de 24 heures. WhatsApp n'autorise que les messages modèles jusqu'à sa réponse.",
+    "Example: if the user types {email} and you select Email, their email is updated to {email}": "Exemple : si l'utilisateur tape {email} et que vous choisissez E-mail, son e-mail devient {email}"
 }

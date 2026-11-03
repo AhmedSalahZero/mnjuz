@@ -897,5 +897,6 @@
     "Reverb host": "Seva ya Reverb",
     "Reverb port": "Mlango wa Reverb",
     "Reverb scheme": "Itifaki ya Reverb",
-    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Mteja hajatuma ujumbe kwa zaidi ya saa 24. WhatsApp inaruhusu ujumbe wa violezo pekee hadi atakapojibu."
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Mteja hajatuma ujumbe kwa zaidi ya saa 24. WhatsApp inaruhusu ujumbe wa violezo pekee hadi atakapojibu.",
+    "Example: if the user types {email} and you select Email, their email is updated to {email}": "Mfano: mtumiaji akiandika {email} na ukachagua Barua pepe, barua pepe yake inasasishwa kuwa {email}"
 }

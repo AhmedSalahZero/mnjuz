@@ -630,7 +630,6 @@
     "Event": "الحدث",
     "Every action taken by members of this organization.": "كل إجراء قام به أعضاء هذا النشاط التجاري.",
     "Exact match": "تطابق تام",
-    "Example: if the user types john@example.com and you select Email, their email is updated to john@example.com": "مثال: إن كتب العميل john@example.com واخترتَ حقل البريد، يُحدَّث بريده إلى john@example.com",
     "Excel (.xlsx)": "Excel (.xlsx)",
     "Excel import successful!": "تم الاستيراد من إكسل بنجاح!",
     "Exclusive": "غير شامل",
@@ -1930,5 +1929,6 @@
     "Reverb host": "عنوان خادم Reverb",
     "Reverb port": "منفذ Reverb",
     "Reverb scheme": "بروتوكول Reverb",
-    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "مرّ أكثر من 24 ساعة على آخر رسالة من العميل، وواتساب لا يسمح إلا برسائل القوالب حتى يردّ."
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "مرّ أكثر من 24 ساعة على آخر رسالة من العميل، وواتساب لا يسمح إلا برسائل القوالب حتى يردّ.",
+    "Example: if the user types {email} and you select Email, their email is updated to {email}": "مثال: إن كتب العميل {email} واخترتَ حقل البريد، يُحدَّث بريده إلى {email}"
 }

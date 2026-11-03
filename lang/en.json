@@ -1526,7 +1526,6 @@
     "No values added yet. Click \"Add Value\" to create your first condition.": "No values added yet. Click \"Add Value\" to create your first condition.",
     "The flow will pause for the specified duration before continuing to the next action.": "The flow will pause for the specified duration before continuing to the next action.",
     "Campaigns skip this contact from then on, including campaigns sent to everyone, and even if the contact is added back to a group later.": "Campaigns skip this contact from then on, including campaigns sent to everyone, and even if the contact is added back to a group later.",
-    "Example: if the user types john@example.com and you select Email, their email is updated to john@example.com": "Example: if the user types john@example.com and you select Email, their email is updated to john@example.com",
     "Are you sure you want to proceed?": "Are you sure you want to proceed?",
     "Duplicate Flow": "Duplicate Flow",
     "Create Automation": "Create Automation",
@@ -1642,5 +1641,6 @@
     "Reverb host": "Reverb host",
     "Reverb port": "Reverb port",
     "Reverb scheme": "Reverb scheme",
-    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply."
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.",
+    "Example: if the user types {email} and you select Email, their email is updated to {email}": "Example: if the user types {email} and you select Email, their email is updated to {email}"
 }

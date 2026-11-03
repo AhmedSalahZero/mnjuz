@@ -124,7 +124,7 @@
                         <strong>{{ $t('What happens:') }}</strong> {{ $t('When a user sends a message, their message content will be automatically saved to the selected field.') }}
                       </p>
                       <p class="text-xs text-gray-500">
-                        {{ $t('Example: if the user types john@example.com and you select Email, their email is updated to john@example.com') }}
+                        {{ $t('Example: if the user types {email} and you select Email, their email is updated to {email}', { email: 'john@example.com' }) }}
                       </p>
                       <p v-if="editForm.config.target_field === 'email'" class="text-xs text-orange-600 mt-2">
                         <strong>{{ $t('Email validation:') }}</strong> {{ $t('If the user provides an invalid email format, they will receive the configured error message.') }}

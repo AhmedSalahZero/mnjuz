@@ -872,5 +872,6 @@
     "Reverb host": "Reverb sunucusu",
     "Reverb port": "Reverb bağlantı noktası",
     "Reverb scheme": "Reverb şeması",
-    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Müşteri 24 saatten uzun süredir mesaj göndermedi. Yanıt verene kadar WhatsApp yalnızca şablon mesajlarına izin verir."
+    "The customer has not messaged in over 24 hours. WhatsApp only allows template messages until they reply.": "Müşteri 24 saatten uzun süredir mesaj göndermedi. Yanıt verene kadar WhatsApp yalnızca şablon mesajlarına izin verir.",
+    "Example: if the user types {email} and you select Email, their email is updated to {email}": "Örnek: kullanıcı {email} yazarsa ve E-posta alanını seçerseniz, e-postası {email} olarak güncellenir"
 }
