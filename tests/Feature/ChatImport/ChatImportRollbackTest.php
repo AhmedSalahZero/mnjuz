@@ -114,6 +114,81 @@ class ChatImportRollbackTest extends ChatImportTestCase
         $this->assertSame('2026-11-01 08:00:00', DB::table('contacts')->where('id', $contact->id)->value('latest_chat_created_at'));
     }
 
+    /** @dataProvider teamWork */
+    public function test_a_contact_the_team_worked_on_is_kept(string $work): void
+    {
+        $import = $this->runImport($this->makeImport($this->rows()));
+        $contact = $this->contactByPhone('+966501110002');
+
+        match ($work) {
+            'note' => DB::table('chat_notes')->insert([
+                'uuid' => (string) Str::uuid(), 'contact_id' => $contact->id, 'content' => 'called her',
+                'created_by' => $this->user->id, 'created_at' => now(), 'updated_at' => now(),
+            ]),
+            'ticket_log' => DB::table('chat_logs')->insert([
+                'contact_id' => $contact->id, 'entity_type' => 'ticket', 'entity_id' => 1,
+                'created_at' => now(), 'updated_at' => now(),
+            ]),
+            'group' => DB::table('contact_contact_group')->insert([
+                'contact_id' => $contact->id, 'contact_group_id' => 1, 'created_at' => now(), 'updated_at' => now(),
+            ]),
+            'category' => DB::table('contact_category_contact')->insert([
+                'contact_id' => $contact->id, 'contact_category_id' => 1, 'created_at' => now(), 'updated_at' => now(),
+            ]),
+            'campaign' => DB::table('campaign_logs')->insert([
+                'campaign_id' => 1, 'contact_id' => $contact->id, 'status' => 'failed', 'created_at' => now(), 'updated_at' => now(),
+            ]),
+        };
+
+        $import = $this->rollback($import);
+
+        $this->assertSame(ChatImport::ROLLED_BACK, $import->status);
+        $this->assertNull($contact->refresh()->deleted_at, "a contact with team work ($work) stays");
+        $this->assertNull(DB::table('contacts')->where('id', $contact->id)->value('latest_chat_created_at'), 'it has no messages left');
+        $this->assertSame(2, Contact::where('organization_id', $this->organization->id)->whereNotNull('deleted_at')
+            ->orWhere(fn ($q) => $q->where('organization_id', $this->organization->id)->onlyTrashed())->count(), 'the untouched contacts still go');
+    }
+
+    public static function teamWork(): array
+    {
+        return [['note'], ['ticket_log'], ['group'], ['category'], ['campaign']];
+    }
+
+    public function test_rolling_back_one_import_leaves_the_other(): void
+    {
+        $first = $this->runImport($this->makeImport($this->rows()));
+
+        $second = $this->runImport($this->makeImport($this->csv([
+            ['966501110002', 'New one', '2026-05-23 11:00:00', 'in', 'hello'],
+            ['966501110004', 'Fourth', '2026-05-23 13:00:00', 'in', 'only in the second file'],
+        ])));
+        $this->assertSame(1, $second->imported_messages);
+        $this->assertSame(1, $second->duplicate_rows);
+
+        $second = $this->rollback($second);
+
+        $this->assertSame(1, $second->rolled_back_messages);
+        $this->assertSame(3, $this->importedChats($first)->whereNull('deleted_at')->count());
+        $this->assertNull($this->contactByPhone('+966501110002')->deleted_at);
+        $this->assertNull($this->contactByPhone('+966501110004'), 'the contact only the second file created goes');
+    }
+
+    public function test_skipped_rows_do_not_change_what_is_removed(): void
+    {
+        $import = $this->runImport($this->makeImport($this->csv([
+            ['966501110001', 'A', '2026-05-23 10:00:00', 'in', 'one'],
+            ['96600647244', 'B', '2026-05-23 10:01:00', 'in', 'skipped'],
+            ['966501110002', 'C', '2026-05-23 10:02:00', 'in', 'two'],
+        ]), ['default_country' => 'SA']));
+        $this->assertSame(2, $import->imported_messages);
+
+        $import = $this->rollback($import);
+
+        $this->assertSame(ChatImport::ROLLED_BACK, $import->status);
+        $this->assertSame(2, $import->rolled_back_messages);
+        $this->assertSame(0, $this->importedChats($import)->whereNull('deleted_at')->count());
+    }
+
     public function test_the_same_file_can_be_imported_again_after_rollback(): void
     {
         $first = $this->rollback($this->runImport($this->makeImport($this->rows())));
