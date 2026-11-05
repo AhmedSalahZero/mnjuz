@@ -130,10 +130,18 @@ class ChatImportRollbackTest extends ChatImportTestCase
                 'created_at' => now(), 'updated_at' => now(),
             ]),
             'group' => DB::table('contact_contact_group')->insert([
-                'contact_id' => $contact->id, 'contact_group_id' => 1, 'created_at' => now(), 'updated_at' => now(),
+                'contact_id' => $contact->id, 'created_at' => now(), 'updated_at' => now(),
+                'contact_group_id' => DB::table('contact_groups')->insertGetId([
+                    'uuid' => (string) Str::uuid(), 'organization_id' => $this->organization->id, 'name' => 'VIP',
+                    'created_by' => $this->user->id, 'created_at' => now(), 'updated_at' => now(),
+                ]),
             ]),
             'category' => DB::table('contact_category_contact')->insert([
-                'contact_id' => $contact->id, 'contact_category_id' => 1, 'created_at' => now(), 'updated_at' => now(),
+                'contact_id' => $contact->id, 'created_at' => now(), 'updated_at' => now(),
+                'contact_category_id' => DB::table('contact_categories')->insertGetId([
+                    'uuid' => (string) Str::uuid(), 'organization_id' => $this->organization->id, 'name' => 'VIP',
+                    'created_at' => now(), 'updated_at' => now(),
+                ]),
             ]),
             'campaign' => DB::table('campaign_logs')->insert([
                 'campaign_id' => 1, 'contact_id' => $contact->id, 'status' => 'failed', 'created_at' => now(), 'updated_at' => now(),
@@ -145,8 +153,8 @@ class ChatImportRollbackTest extends ChatImportTestCase
         $this->assertSame(ChatImport::ROLLED_BACK, $import->status);
         $this->assertNull($contact->refresh()->deleted_at, "a contact with team work ($work) stays");
         $this->assertNull(DB::table('contacts')->where('id', $contact->id)->value('latest_chat_created_at'), 'it has no messages left');
-        $this->assertSame(2, Contact::where('organization_id', $this->organization->id)->whereNotNull('deleted_at')
-            ->orWhere(fn ($q) => $q->where('organization_id', $this->organization->id)->onlyTrashed())->count(), 'the untouched contacts still go');
+        $this->assertSame(1, DB::table('chat_tickets')->where('contact_id', $contact->id)->count());
+        $this->assertSame(2, Contact::onlyTrashed()->where('organization_id', $this->organization->id)->count(), 'the untouched contacts still go');
     }
 
     public static function teamWork(): array

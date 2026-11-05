@@ -10,7 +10,7 @@
               <div>
                 <h4 class="text-[16px]">{{ $t('Import conversations') }}</h4>
                 <p class="text-slate-500 mt-1 max-w-2xl">
-                  {{ $t('Move your chat history from another platform. The whole file is checked first: if any row has a problem nothing is imported, and you get a report of every error to fix.') }}
+                  {{ $t('Bring your chat history over from another platform. We check the whole file before starting: messages with invalid numbers are skipped and explained in a report, and the rest are imported. Any other problem, like a wrong date, stops the import until you fix it.') }}
                 </p>
               </div>
               <a href="/settings/chat-imports/template"
@@ -276,7 +276,7 @@ const trans = useTrans()
 const UPLOAD_URL = '/settings/chat-imports/upload/chunk'
 
 const columns = [
-  { name: 'phone', required: true, description: 'Customer number with country code, e.g. 966501234567.' },
+  { name: 'phone', required: true, description: 'Customer number, with or without the country code, e.g. 966501234567 or 0501234567.' },
   { name: 'name', required: false, description: 'Customer name. Used only for new contacts.' },
   { name: 'sent_at', required: true, description: 'Date and time, e.g. 2026-05-23 19:29:38 or 2026-05-23T19:29:38+03:00. Without a time zone your organization time zone is used.' },
   { name: 'direction', required: true, description: '"in" for messages from the customer, "out" for messages you sent.' },

@@ -22,13 +22,19 @@ use Throwable;
  * المحذوف، وبقاء البصمة كان سيمنع رفع الملف نفسه بعد تصحيحه.
  *
  * وجهة الاتصال والتذكرة اللتان أنشأهما الاستيراد تُحذفان فقط إن لم يبقَ
- * لهما أثر: عميلٌ راسل المنشأة بعد الاستيراد صار عميلاً حقيقياً.
+ * لهما أثر: عميلٌ راسل المنشأة بعد الاستيراد، أو عمل عليه الفريق بملاحظة أو
+ * مجموعة أو حملة، صار عميلاً حقيقياً.
  */
 class RollbackChatImportJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
 
     private const CHUNK = 1000;
+
+    /** ما يدلّ على أن جهة الاتصال مستعملة بعد حذف رسائل الاستيراد. */
+    private const TRACES_WITH_SOFT_DELETE = ['chats', 'chat_logs', 'chat_notes'];
+
+    private const TRACES = ['contact_contact_group', 'contact_category_contact', 'campaign_logs'];
 
     public int $timeout = 600;
 
@@ -145,30 +151,45 @@ class RollbackChatImportJob implements ShouldQueue
                     . ' WHERE c.id IN (' . implode(',', $contactIds) . ')'
                 );
 
-                $ticketContacts = $rows->where('ticket_created', 1)->pluck('contact_id')->map(fn ($id) => (int) $id)->all();
+                $inUse = $this->contactsInUse($contactIds);
+
+                $ticketContacts = array_diff($rows->where('ticket_created', 1)->pluck('contact_id')->map(fn ($id) => (int) $id)->all(), $inUse);
                 if ($ticketContacts !== []) {
                     // تذكرة أعادت فتحها رسالة حقيقية بعد الاستيراد ليست تذكرة الاستيراد بعد الآن.
                     DB::table('chat_tickets')
                         ->whereIn('contact_id', $ticketContacts)
                         ->where('status', 'closed')
                         ->whereNull('assigned_to')
-                        ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('chats')
-                            ->whereColumn('chats.contact_id', 'chat_tickets.contact_id')
-                            ->whereNull('chats.deleted_at'))
                         ->delete();
                 }
 
-                $createdContacts = $rows->where('contact_created', 1)->pluck('contact_id')->map(fn ($id) => (int) $id)->all();
+                $createdContacts = array_diff($rows->where('contact_created', 1)->pluck('contact_id')->map(fn ($id) => (int) $id)->all(), $inUse);
                 if ($createdContacts !== []) {
                     DB::table('contacts')
                         ->whereIn('id', $createdContacts)
                         ->whereNull('deleted_at')
-                        ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('chats')
-                            ->whereColumn('chats.contact_id', 'contacts.id')
-                            ->whereNull('chats.deleted_at'))
                         ->update(['deleted_at' => now()->utc()->toDateTimeString(), 'latest_chat_created_at' => null]);
                 }
             });
+    }
+
+    /**
+     * @param array<int, int> $contactIds
+     * @return array<int, int> الجهات التي بقي لها أثر بعد حذف رسائل الاستيراد
+     */
+    private function contactsInUse(array $contactIds): array
+    {
+        $inUse = [];
+
+        foreach (self::TRACES_WITH_SOFT_DELETE as $table) {
+            $inUse[] = DB::table($table)->whereIn('contact_id', $contactIds)->whereNull('deleted_at')->distinct()->pluck('contact_id')->all();
+        }
+
+        foreach (self::TRACES as $table) {
+            $inUse[] = DB::table($table)->whereIn('contact_id', $contactIds)->distinct()->pluck('contact_id')->all();
+        }
+
+        return array_values(array_unique(array_map('intval', array_merge(...$inUse))));
     }
 
     public function failed(Throwable $e): void

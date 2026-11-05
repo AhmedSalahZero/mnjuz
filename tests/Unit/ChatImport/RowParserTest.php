@@ -123,7 +123,7 @@ class RowParserTest extends TestCase
 
         $long = $this->phoneError('9665314916119');
         $this->assertSame('The number is too long: Saudi Arabia numbers have 9 digits after the country code.', $long['message']);
-        $this->assertStringContainsString('خانات زيادة', $long['message_ar']);
+        $this->assertStringContainsString('أطول من المطلوب', $long['message_ar']);
 
         $mismatch = $this->phoneError('966858647403');
         $this->assertSame('The number does not match the numbers of Saudi Arabia.', $mismatch['message']);

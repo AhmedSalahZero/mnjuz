@@ -161,7 +161,7 @@ export function transitionToast(previous, next) {
             return { type: 'error', message: 'The file was rejected. Fix the errors below and upload it again.' }
         case 'queued':
             return previous === 'validating' || previous === 'pending_validation'
-                ? { type: 'success', message: 'The file passed all checks. Importing now.' }
+                ? { type: 'success', message: 'The file has been checked. Importing now.' }
                 : null
         case 'completed':
             return { type: 'success', message: 'Import completed successfully.' }
