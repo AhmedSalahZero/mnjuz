@@ -136,6 +136,47 @@ abstract class FlowBuilderTestCase extends TestCase
         $this->app->bind(Client::class, fn () => new Client(['handler' => $stack]));
     }
 
+    /**
+     * عميل Graph يردّ على طلبات إرسال الرسائل بالترتيب المعطى.
+     *
+     * كل عنصر: 'ok' للنجاح، أو كود خطأ Meta (int) فيُردّ 400 بجسم الخطأ كما
+     * تُرسله Meta، أو 'connect' لانقطاع الشبكة. ما بعد القائمة نجاح، والطلبات
+     * التي ليست رسائل (بلا type) تنجح ولا تستهلك من القائمة.
+     *
+     * @param array<int, string|int> $outcomes
+     */
+    protected function fakeGraphSequence(array $outcomes): void
+    {
+        $this->graphRequests = [];
+        $index = 0;
+
+        $stack = HandlerStack::create(function (\Psr\Http\Message\RequestInterface $request) use (&$index, $outcomes) {
+            $body = json_decode((string) $request->getBody(), true);
+            $outcome = is_array($body) && isset($body['type']) ? ($outcomes[$index++] ?? 'ok') : 'ok';
+
+            if ($outcome === 'connect') {
+                return Create::rejectionFor(new \GuzzleHttp\Exception\ConnectException('cURL error 28: timed out', $request));
+            }
+
+            if (is_int($outcome)) {
+                return Create::promiseFor(new Response(400, [], json_encode(['error' => [
+                    'message' => "(#{$outcome}) Something went wrong",
+                    'type' => 'OAuthException',
+                    'code' => $outcome,
+                    'fbtrace_id' => 'TRACE-' . $index,
+                ]])));
+            }
+
+            // فريد بين النداءات: wam_id فريد في الجدول، والاختبار قد يستدعي هذا مرّات.
+            return Create::promiseFor(new Response(200, [], json_encode([
+                'messages' => [['id' => 'wamid.SEQ-' . Str::random(10) . '-' . $index]],
+            ])));
+        });
+        $stack->push(Middleware::history($this->graphRequests));
+
+        $this->app->bind(Client::class, fn () => new Client(['handler' => $stack]));
+    }
+
     /** @return array<int, array> أجسام الرسائل المرسلة إلى واتساب، بالترتيب. */
     protected function sentMessages(): array
     {

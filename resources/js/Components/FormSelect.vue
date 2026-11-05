@@ -98,6 +98,9 @@ const trans = useTrans();
                             optionClassName
                         ]"
                     >
+                        <!-- خيارٌ معطّل يظهر ولا يُختار (مزوّد بثّ بياناته ناقصة مثلاً).
+                             لا تعليق داخل ListboxOption: as="template" يشترط عنصراً واحداً، والتعليق
+                             يبقى في وضع التطوير فيُسقط العرض كله. -->
                         <ListboxOption
                         v-slot="{ active, selected }"
                         v-for="option in props.options"
@@ -106,7 +109,6 @@ const trans = useTrans();
                         :disabled="!!option.disabled"
                         as="template"
                         >
-                        <!-- خيارٌ معطّل يظهر ولا يُختار (مزوّد بثّ بياناته ناقصة مثلاً). -->
                         <li :class="[active ? 'bg-amber-100 text-amber-900' : 'text-gray-900', option.disabled ? 'opacity-50 cursor-not-allowed' : '', 'relative cursor-default select-none py-2 pl-10 pr-4']">
                             <span :class="[selected ? 'font-medium' : 'font-normal', 'block truncate']">{{ option.label }}</span>
                             <span v-if="selected" class="absolute inset-y-0 left-0 flex items-center pl-3 text-amber-600">

@@ -59,8 +59,22 @@ return new class extends Migration
         DB::statement($sql);
     }
 
+    /**
+     * من information_schema مباشرةً لا Schema::hasIndex: تلك أُضيفت في إصدار
+     * متأخّر من Laravel 10، وخادمٌ بـ vendor أقدم يسقط عندها الترحيل في
+     * منتصفه — بعد إضافة العمود وقبل الفهرس.
+     */
     private function hasIndex(string $table, string $index): bool
     {
-        return Schema::hasIndex($table, $index);
+        if (DB::getDriverName() === 'mysql') {
+            return DB::table('information_schema.statistics')
+                ->where('table_schema', DB::getDatabaseName())
+                ->where('table_name', $table)
+                ->where('index_name', $index)
+                ->exists();
+        }
+
+        return method_exists(Schema::getFacadeRoot(), 'getIndexes')
+            && collect(Schema::getIndexes($table))->contains(fn ($i) => ($i['name'] ?? null) === $index);
     }
 };

@@ -203,11 +203,11 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             'created_at' => now()
         ]);
 
-        Log::info('Ticket reopened successfully', [
-            'ticket_id' => $ticket->id,
-            'contact_id' => $this->contactId,
-            'assigned_to' => $ticket->assigned_to
-        ]);
+        // Log::info('Ticket reopened successfully', [
+        //     'ticket_id' => $ticket->id,
+        //     'contact_id' => $this->contactId,
+        //     'assigned_to' => $ticket->assigned_to
+        // ]);
 
         return $ticket;
     }

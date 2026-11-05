@@ -612,56 +612,69 @@ class FlowExecutionService
             return false;
         }
 
-        $response = null;
+        // قبل الإرسال لا داخله: نصٌّ فارغ لا تُصلحه إعادة المحاولة.
+        if ($type === 'text' && trim($message) === '') {
+            Log::error('Flow text node is missing body text', [
+                'flow_id' => $flowData->flow_id,
+                'contact_id' => $contactId,
+                'node_id' => $metadataArray['id'] ?? null,
+            ]);
 
-        switch ($type) {
-            case 'text':
-                if (trim($message) === '') {
-                    Log::error('Flow text node is missing body text', [
-                        'flow_id' => $flowData->flow_id,
-                        'contact_id' => $contactId,
-                        'node_id' => $metadataArray['id'] ?? null,
-                    ]);
-
-                    return false;
-                }
-
-                $response = $this->whatsappService->sendMessage($contact->uuid, $message, 0, $buttonType);
-                break;
-    
-            case 'media':
-                $mediaInfo = json_decode(($fieldsArray['media']['metadata'] ?? '{}'), true);
-                $mediaLocation = $fieldsArray['media']['location'] ?? '';
-                $mediaLocation = ($mediaLocation === 'aws') ? 'amazon' : $mediaLocation;
-
-                $response = $this->whatsappService->sendMedia(
-                    $contact->uuid,
-                    $fieldsArray['mediaType'] ?? '',
-                    $mediaInfo['name'] ?? '',
-                    $fieldsArray['media']['path'] ?? '',
-                    $fieldsArray['media']['path'] ?? '',
-                    $mediaLocation,
-                    // المحرّر يعرض «إضافة متغيّر» للتعليق، فكانت الرموز تصل حرفياً.
-                    mb_substr($this->replacePlaceholders($contact->uuid, $fieldsArray['caption'] ?? ''), 0, 1024)
-                );
-                break;
-    
-            case 'interactive buttons':
-            case 'interactive list':
-                $response = $this->whatsappService->sendMessage(
-                    $contact->uuid,
-                    $message,
-                    0,
-                    $buttonType,
-                    $buttonArray,
-                    $header,
-                    $footer,
-                    $buttonLabel
-                );
-                break;
+            return false;
         }
 
         $processedNodeId = $metadataArray['id'] ?? null;
+
+        // الإرسال مُغلَّف بإعادة المحاولة: 131000 «Something went wrong» وأخواتها
+        // أعطال مؤقتة عند Meta توصي هي نفسها بإعادتها. كانت المحاولة الأولى
+        // الأخيرة، فعميلٌ جديد لا يصله الترحيب أبداً ولا يعلم أحد.
+        [$response, $attempts] = $this->sendWithRetry(function () use ($type, $contact, $message, $buttonType, $buttonArray, $header, $footer, $buttonLabel, $fieldsArray) {
+            $response = null;
+
+            switch ($type) {
+                case 'text':
+                    $response = $this->whatsappService->sendMessage($contact->uuid, $message, 0, $buttonType);
+                    break;
+    
+                case 'media':
+                    $mediaInfo = json_decode(($fieldsArray['media']['metadata'] ?? '{}'), true);
+                    $mediaLocation = $fieldsArray['media']['location'] ?? '';
+                    $mediaLocation = ($mediaLocation === 'aws') ? 'amazon' : $mediaLocation;
+
+                    $response = $this->whatsappService->sendMedia(
+                        $contact->uuid,
+                        $fieldsArray['mediaType'] ?? '',
+                        $mediaInfo['name'] ?? '',
+                        $fieldsArray['media']['path'] ?? '',
+                        $fieldsArray['media']['path'] ?? '',
+                        $mediaLocation,
+                        // المحرّر يعرض «إضافة متغيّر» للتعليق، فكانت الرموز تصل حرفياً.
+                        mb_substr($this->replacePlaceholders($contact->uuid, $fieldsArray['caption'] ?? ''), 0, 1024)
+                    );
+                    break;
+    
+                case 'interactive buttons':
+                case 'interactive list':
+                    $response = $this->whatsappService->sendMessage(
+                        $contact->uuid,
+                        $message,
+                        0,
+                        $buttonType,
+                        $buttonArray,
+                        $header,
+                        $footer,
+                        $buttonLabel
+                    );
+                    break;
+            }
+
+            return $response;
+        }, [
+            'flow_id' => $flowData->flow_id,
+            'contact_id' => $contactId,
+            'node_id' => $processedNodeId,
+            'node_type' => $type,
+        ]);
 
         $sendSuccess = $response && isset($response->success) && $response->success === true;
 
@@ -678,6 +691,7 @@ class FlowExecutionService
                 'error_code' => $response->data->error->code ?? null,
                 'error_subcode' => $response->data->error->error_subcode ?? null,
                 'fbtrace_id' => $response->data->error->fbtrace_id ?? null,
+                'attempts' => $attempts,
             ]);
             return false;
         }
@@ -692,6 +706,58 @@ class FlowExecutionService
         }
 
         return true;
+    }
+
+    /**
+     * أكواد Meta المؤقتة التي تُعاد معها المحاولة.
+     *
+     * 131000 «Something went wrong»، و1 و2 عطل في الواجهة نفسها، و131016
+     * خدمة مُثقلة، و130429 تجاوز معدّل الإرسال. ما سواها خطأ في الطلب أو في
+     * المستلم (131026 رقم ليس على واتساب، 100 معامل خاطئ) لا تُصلحه الإعادة.
+     */
+    private const TRANSIENT_SEND_ERRORS = [131000, 1, 2, 131016, 130429];
+
+    /**
+     * يرسل ويعيد المحاولة على الأعطال المؤقتة وحدها.
+     *
+     * الإعادة آمنة: حين ترفض Meta الطلب لا يُنشأ صفّ محادثة ولا تصل رسالة،
+     * فلا تكرار. ولا إعادة مع خطأ الشبكة (بلا كود): قد تكون الرسالة وصلت
+     * وضاع الردّ وحده، فإعادتها تُكرّرها عند العميل.
+     *
+     * @param  callable(): mixed  $send
+     * @return array{0: mixed, 1: int} الردّ الأخير وعدد المحاولات
+     */
+    private function sendWithRetry(callable $send, array $logContext): array
+    {
+        $delays = (array) config('flow_builder.send_retry_delays', [2, 5]);
+        $attempt = 0;
+
+        while (true) {
+            $attempt++;
+            $response = $send();
+
+            if ($response && isset($response->success) && $response->success === true) {
+                return [$response, $attempt];
+            }
+
+            $code = isset($response->data->error->code) ? (int) $response->data->error->code : null;
+
+            if ($code === null || !in_array($code, self::TRANSIENT_SEND_ERRORS, true) || $attempt > count($delays)) {
+                return [$response, $attempt];
+            }
+
+            $delay = max(0, (int) $delays[$attempt - 1]);
+
+            Log::warning('Flow message send retry', $logContext + [
+                'attempt' => $attempt,
+                'error_code' => $code,
+                'retry_in_seconds' => $delay,
+            ]);
+
+            if ($delay > 0) {
+                sleep($delay);
+            }
+        }
     }
 
     /**

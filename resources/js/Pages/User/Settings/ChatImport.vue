@@ -53,7 +53,7 @@
             <label class="block mb-1 text-slate-600" for="default-country">{{ $t('Default country for numbers without a country code (optional)') }}</label>
             <select id="default-country" v-model="defaultCountry" :disabled="busy"
                     class="w-full md:w-96 rounded-md border border-slate-300 px-2 py-2 text-sm bg-white">
-              <option value="">{{ $t('None — every number must include its country code') }}</option>
+              <option value="">{{ $t('Detect automatically from the file') }}</option>
               <option v-for="country in props.countries" :key="country.code" :value="country.code">{{ country.name }}</option>
             </select>
 
@@ -142,11 +142,16 @@
               {{ $t('Ignored columns:') }} <span dir="auto">{{ current.ignored_columns.join('، ') }}</span>
             </p>
 
+            <p v-if="usedCountry" class="mt-3 text-xs text-slate-500">
+              {{ $t('Numbers without a country code were read as:') }} <span dir="auto">{{ usedCountry }}</span>
+            </p>
+
             <!-- الأخطاء -->
             <div v-if="current?.errors?.length" class="mt-4">
               <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h5 class="font-medium text-red-700">
-                  {{ $t('{count} errors found', { count: formatNumber(current.error_count) }) }}
+                <h5 class="font-medium" :class="hasSkippedRows ? 'text-amber-800' : 'text-red-700'">
+                  <template v-if="hasSkippedRows">{{ $t('{count} rows skipped because of invalid numbers', { count: formatNumber(current.skipped_rows) }) }}</template>
+                  <template v-else>{{ $t('{count} errors found', { count: formatNumber(current.error_count) }) }}</template>
                   <span v-if="current.error_count > current.errors.length" class="font-normal text-slate-500">
                     — {{ $t('showing the first {count}', { count: current.errors.length }) }}
                   </span>
@@ -156,6 +161,9 @@
                   {{ $t('Download full error report') }}
                 </a>
               </div>
+              <p v-if="hasSkippedRows" class="mb-2 text-xs text-slate-600">
+                {{ $t('These rows were not imported. Fix the numbers and upload the file again to add them; messages already imported will not be duplicated.') }}
+              </p>
               <div class="max-h-80 overflow-auto rounded-md border border-red-100">
                 <table class="w-full text-[12px]">
                   <thead class="sticky top-0 bg-red-50 text-red-800">
@@ -171,7 +179,10 @@
                       <td class="p-2" dir="ltr">{{ error.row }}</td>
                       <td class="p-2 font-mono" dir="ltr">{{ error.column }}</td>
                       <td class="p-2 break-all" dir="auto">{{ error.value }}</td>
-                      <td class="p-2">{{ error.message }}</td>
+                      <td class="p-2">
+                        {{ error.message }}
+                        <div v-if="error.message_ar && error.message_ar !== error.message" class="mt-1" dir="rtl">{{ error.message_ar }}</div>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -292,6 +303,11 @@ let pollTimer = null
 
 const hasActiveImport = computed(() => current.value && isActive(current.value.status))
 const busy = computed(() => uploading.value || hasActiveImport.value)
+const hasSkippedRows = computed(() => (current.value?.skipped_rows ?? 0) > 0)
+const usedCountry = computed(() => {
+  const code = current.value?.default_country
+  return code ? (props.countries.find((country) => country.code === code)?.name ?? code) : null
+})
 
 const view = computed(() => progressView({
   upload: uploading.value ? upload.value : null,
@@ -330,11 +346,14 @@ const stats = computed(() => {
     ]
   }
 
+  const skipped = state.skipped_rows > 0 ? [{ label: 'Rows skipped', value: state.skipped_rows }] : []
+
   return [
     { label: 'Rows in file', value: state.total_rows },
     { label: 'Messages imported', value: state.imported_messages - state.rolled_back_messages },
     { label: 'Duplicates skipped', value: state.duplicate_rows },
     { label: 'New contacts', value: state.started_at ? state.contacts_created : state.new_contacts_estimate },
+    ...skipped,
   ]
 })
 
@@ -392,8 +411,18 @@ function onDrop(event) {
   if (!busy.value) choose(event.dataTransfer.files?.[0])
 }
 
+/**
+ * أوضح ما في الردّ: رسالتنا، ثم أوّل خطأ حقل، ثم نصّ الاستثناء.
+ *
+ * «An error occurred» وحدها لا تقول شيئاً — كان الرفض الحقيقي («القطعة
+ * أكبر من حدّ الخادم») مدفوناً في error ولا يظهر.
+ */
 function errorMessage(error, fallback) {
-  return error?.response?.data?.message || fallback
+  const data = error?.response?.data ?? {}
+  const firstFieldError = data.errors ? Object.values(data.errors).flat()[0] : null
+  const generic = data.message === 'An error occurred' || data.message === trans('An error occurred')
+
+  return (!generic && data.message) || firstFieldError || data.error || data.message || fallback
 }
 
 async function startUpload() {
@@ -411,6 +440,8 @@ async function startUpload() {
       post: axios.post,
       url: UPLOAD_URL,
       file: selectedFile.value,
+      // حجم القطعة الذي يقبله هذا الخادم (upload_max_filesize قد يكون 2MB).
+      chunkBytes: Number(props.limits.chunk_bytes) || undefined,
       signal: abortController.signal,
       onProgress: (loaded, total) => { upload.value = { loaded, total } },
       fields: {

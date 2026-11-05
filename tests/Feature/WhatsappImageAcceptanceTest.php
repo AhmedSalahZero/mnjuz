@@ -308,6 +308,57 @@ class WhatsappImageAcceptanceTest extends TestCase
         $this->assertFalse($this->prepare($path));
     }
 
+    // ------------------------------------------------- سبب الرفض
+
+    /**
+     * صورة iPhone بصيغة HEIC لا تفكّها libheif على الخادم.
+     *
+     * رُصد في الإنتاج: «Metadata not correctly assigned to image». كانت تُرفض
+     * بـ«الصورة كبيرة جداً» وهي أصغر من الحدّ، فيصغّرها المستخدم بلا فائدة.
+     */
+    public function test_an_unreadable_heic_photo_is_rejected_with_the_real_reason(): void
+    {
+        // حاوية HEIC بتوقيع ftyp صحيح وبيانات تالفة — ما يراه الخادم من صورة لا يفكّها.
+        $path = $this->path('heic');
+        file_put_contents($path, "\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" . str_repeat("\x00", 64));
+
+        $this->assertFalse($this->prepare($path, 'image/heic'));
+
+        $message = ImageCompressionService::rejectionMessage($path, 'image/heic');
+        $this->assertStringContainsString('HEIC', $message);
+        $this->assertStringNotContainsString('too large', $message);
+
+        // التوقيع وحده يكفي حين يصل النوع عامّاً من المتصفّح.
+        $this->assertTrue(ImageCompressionService::isHeif($path, 'application/octet-stream'));
+    }
+
+    public function test_an_unreadable_image_is_not_called_too_large(): void
+    {
+        $path = $this->path('jpg');
+        file_put_contents($path, 'ليست صورة');
+
+        $message = ImageCompressionService::rejectionMessage($path, 'image/jpeg');
+
+        $this->assertSame(__('This image could not be read. Save it as JPG or PNG and try again.'), $message);
+        $this->assertFalse(ImageCompressionService::isHeif($path, 'image/jpeg'));
+    }
+
+    public function test_a_readable_image_that_cannot_shrink_keeps_the_size_message(): void
+    {
+        $path = $this->image('png', fn () => null);
+
+        $this->assertTrue(ImageCompressionService::isReadable($path));
+        $this->assertSame(__('Image is too large to send. Please use a smaller image.'), ImageCompressionService::rejectionMessage($path, 'image/png'));
+    }
+
+    public function test_both_send_paths_explain_the_rejection(): void
+    {
+        $source = file_get_contents(base_path('app/Services/ChatService.php'));
+
+        $this->assertSame(2, substr_count($source, 'ImageCompressionService::rejectionMessage('));
+        $this->assertStringNotContainsString("'message' => __('Image is too large to send. Please use a smaller image.')", $source);
+    }
+
     // ------------------------------------------------- الأسلاك
 
     /** كلا مساري الإرسال يهيّئ كل صورة لا الكبيرة وحدها. */

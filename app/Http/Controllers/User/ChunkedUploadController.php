@@ -104,9 +104,11 @@ class ChunkedUploadController extends Controller
             return response()->json(['success' => false, 'message' => __('Upload could not be completed.')], 500);
         }
 
-        // الحدّ يُفحص بعد الدمج: القطع تمرّ فرادى، والملف المجمَّع هو ما يُرسَل.
+        // الحدّ يُفحص بعد الدمج، وبحدّ النوع وحده — كمسار التطبيق. حدّ PHP
+        // يخصّ الطلب الواحد والقطعة لا تبلغه؛ قياس المجمَّع به كان يرفض كل
+        // صورة أكبر من upload_max_filesize بعد رفعها كاملة.
         $size = filesize(\Illuminate\Support\Facades\Storage::disk('local')->path($path));
-        $limit = ChatMediaUploadHelper::maxUploadBytesForType($validated['file_type']);
+        $limit = ChatMediaUploadHelper::maxAssembledBytesForType($validated['file_type']);
 
         if ($size > $limit) {
             \Illuminate\Support\Facades\Storage::disk('local')->delete($path);
@@ -119,11 +121,25 @@ class ChunkedUploadController extends Controller
             ], 422);
         }
 
+        $fileName = $validated['file_name'];
+
+        // الصورة تُهيّأ لواتساب كما في الرفع العادي (ChatService): كانت تُرسل
+        // كما وصلت، فتردّها Meta إن كانت HEIC أو CMYK أو بعمق 16 بت.
+        if ($validated['file_type'] === 'image') {
+            $prepared = ChatMediaUploadHelper::prepareAssembledImage($path, $fileName);
+
+            if (!$prepared['ok']) {
+                return response()->json(['success' => false, 'message' => $prepared['message']], 422);
+            }
+
+            [$path, $fileName] = [$prepared['path'], $prepared['file_name']];
+        }
+
         SendMediaJob::dispatch(
             $organizationId,
             $validated['contact_uuid'],
             $validated['file_type'],
-            $validated['file_name'],
+            $fileName,
             $path,
             $userId,
             $validated['temp_message_id'] ?? null,

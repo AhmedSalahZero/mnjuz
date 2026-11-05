@@ -1981,7 +1981,15 @@
     "Imported conversations are added as closed tickets, so they do not fill your team inbox.": "تُضاف المحادثات المستوردة كتذاكر مغلقة، فلا تملأ صندوق فريقك.",
     "Upload a file": "رفع ملف",
     "Default country for numbers without a country code (optional)": "الدولة الافتراضية للأرقام التي بلا مفتاح دولة (اختياري)",
-    "None — every number must include its country code": "بدون — كل رقم يجب أن يحمل مفتاح دولته",
+    "Detect automatically from the file": "تحديد تلقائي من الملف",
+    "Numbers without a country code were read as:": "الأرقام التي بلا مفتاح دولة قُرئت على أنها من:",
+    "The number is too short: :country numbers have :digits digits after the country code.": "الرقم ناقص: أرقام :country تتكوّن من :digits خانات بعد مفتاح الدولة.",
+    "The number is too long: :country numbers have :digits digits after the country code.": "الرقم فيه خانات زيادة: أرقام :country تتكوّن من :digits خانات بعد مفتاح الدولة.",
+    "The number does not match the numbers of :country.": "الرقم لا يطابق أرقام :country.",
+    "No row in the file has a valid phone number.": "لا يوجد في الملف أي صف برقم صحيح.",
+    "Rows skipped": "صفوف متخطّاة",
+    "{count} rows skipped because of invalid numbers": "تم تخطّي {count} صف بسبب أرقام غير صحيحة",
+    "These rows were not imported. Fix the numbers and upload the file again to add them; messages already imported will not be duplicated.": "هذه الصفوف لم تُستورد. صحّح الأرقام وارفع الملف مرة أخرى لإضافتها، ولن تتكرر الرسائل المستوردة من قبل.",
     "Upload and check": "رفع وفحص",
     "Cancel upload": "إلغاء الرفع",
     "Ignored columns:": "أعمدة تم تجاهلها:",
@@ -2045,5 +2053,9 @@
     "Manage all your WhatsApp customer conversations in one place with :app. Sign up with my link: :link": "أدِر كل محادثات عملائك على واتساب في مكان واحد مع :app. سجّل من رابطي: :link",
     "Unknown error": "خطأ غير معروف",
     "The selected template is no longer available.": "القالب المختار لم يعد متاحاً.",
-    "You have reached your limit of campaigns. Please upgrade your account to add more!": "وصلت إلى الحد الأقصى للحملات في باقتك. رقِّ باقتك لإضافة المزيد!"
+    "You have reached your limit of campaigns. Please upgrade your account to add more!": "وصلت إلى الحد الأقصى للحملات في باقتك. رقِّ باقتك لإضافة المزيد!",
+    "This iPhone photo (HEIC) could not be read. Send it as JPG or PNG — on iPhone: Settings › Camera › Formats › Most Compatible.": "تعذّرت قراءة صورة iPhone بصيغة HEIC. أرسلها بصيغة JPG أو PNG — من iPhone: الإعدادات › الكاميرا › التنسيقات › الأكثر توافقاً.",
+    "This image could not be read. Save it as JPG or PNG and try again.": "تعذّرت قراءة هذه الصورة. احفظها بصيغة JPG أو PNG وحاول مرة أخرى.",
+    "Part of the file is larger than this server accepts in one request (:size). Reload the page and try again; if it keeps failing, raise upload_max_filesize and post_max_size on the server.": "جزء من الملف أكبر مما يقبله الخادم في طلب واحد (:size). حدّث الصفحة وحاول مرة أخرى، وإن تكرّر الخطأ فارفع upload_max_filesize وpost_max_size على الخادم.",
+    "The background queue is not available, so the import could not start. Try again in a few minutes.": "خدمة المعالجة في الخلفية غير متاحة الآن، فلم يبدأ الاستيراد. حاول مرة أخرى بعد دقائق."
 }

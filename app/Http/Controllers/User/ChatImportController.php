@@ -9,6 +9,7 @@ use App\Jobs\ValidateChatImportJob;
 use App\Models\Addon;
 use App\Models\ChatImport;
 use App\Models\Team;
+use App\Helpers\ChatMediaUploadHelper;
 use App\Services\ActivityLogger;
 use App\Services\Chat\ChunkedUploadService;
 use App\Services\ChatImport\ChatImportException;
@@ -17,6 +18,7 @@ use App\Support\OrganizationRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Inertia\Response;
 use libphonenumber\PhoneNumberUtil;
@@ -31,9 +33,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class ChatImportController extends Controller
 {
-    /** أكبر قطعة يقبلها الخادم بالكيلوبايت — العميل يرسل خمسة ميغابايت. */
-    private const CHUNK_MAX_KB = 6 * 1024;
-
     public function index(): Response
     {
         $organizationId = $this->authorizeImport();
@@ -53,6 +52,8 @@ class ChatImportController extends Controller
             'limits' => [
                 'max_file_mb' => (int) config('chat_import.max_file_mb', 200),
                 'max_rows' => (int) config('chat_import.max_rows', 1_000_000),
+                // حجم القطعة الذي يقبله هذا الخادم — المتصفّح يقطع الملف به.
+                'chunk_bytes' => ChatMediaUploadHelper::chunkBytes(),
             ],
         ]);
     }
@@ -85,15 +86,37 @@ class ChatImportController extends Controller
         $organizationId = $this->authorizeImport();
         $maxBytes = (int) config('chat_import.max_file_mb', 200) * 1024 * 1024;
 
-        $validated = $request->validate([
+        // القطعة التي رفضها PHP نفسه (أكبر من upload_max_filesize) تصل بلا
+        // بايتات، فتُفشل قاعدة file بـ«failed to upload» — لا تقول ما الحدّ
+        // ولا ما العمل. نقولها نحن صراحةً قبل التحقّق.
+        $chunk = $request->file('chunk');
+        if ($chunk instanceof \Illuminate\Http\UploadedFile && !$chunk->isValid()
+            && in_array($chunk->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+            return $this->error(__('Part of the file is larger than this server accepts in one request (:size). Reload the page and try again; if it keeps failing, raise upload_max_filesize and post_max_size on the server.', [
+                'size' => ChatMediaUploadHelper::humanPhpUploadLimit(),
+            ]), 422);
+        }
+
+        $validator = Validator::make($request->all(), [
             'upload_id' => ['required', 'string', 'max:64'],
             'index' => ['required', 'integer', 'min:0', 'max:' . (ChunkedUploadService::MAX_CHUNKS - 1)],
             'total' => ['required', 'integer', 'min:1', 'max:' . ChunkedUploadService::MAX_CHUNKS],
-            'chunk' => ['required', 'file', 'max:' . self::CHUNK_MAX_KB],
+            // بالكيلوبايت، بهامش فوق حجم القطعة الذي تُرسله الصفحة.
+            'chunk' => ['required', 'file', 'max:' . (int) ceil(ChatMediaUploadHelper::MAX_CHUNK_BYTES / 1024 + 64)],
             'file_name' => ['required', 'string', 'max:255'],
             'file_size' => ['required', 'integer', 'min:1'],
             'default_country' => ['nullable', 'string', 'size:2'],
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()->toArray(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
 
         if (!preg_match('/\.(csv|txt)$/i', $validated['file_name'])) {
             return $this->error(__('Only CSV files are accepted.'), 422);
@@ -171,7 +194,18 @@ class ChatImportController extends Controller
 
         ChatImportService::log($import->load('user'), ActivityLogger::CHAT_IMPORT_STARTED);
 
-        ValidateChatImportJob::dispatch($import->id);
+        if (!$this->queue(new ValidateChatImportJob($import->id))) {
+            // الاستيراد لم يبلغ الطابور: يبقى «بانتظار الفحص» إلى الأبد ويمنع
+            // كل رفع بعده (استيرادٌ نشط واحد للمنشأة). نُنهيه فاشلاً ونحذف ملفه.
+            $import->forceFill([
+                'status' => ChatImport::FAILED,
+                'error_message' => __('The background queue is not available, so the import could not start. Try again in a few minutes.'),
+                'finished_at' => now(),
+            ])->save();
+            ChatImportService::deleteUploadedFile($import);
+
+            return $this->error($import->error_message, 503);
+        }
 
         return response()->json([
             'success' => true,
@@ -256,9 +290,14 @@ class ChatImportController extends Controller
             return $this->error(__('Another import is in progress. Wait for it to finish first.'), 409);
         }
 
+        $previous = $import->only(['status', 'error_message', 'finished_at']);
         $import->forceFill(['status' => ChatImport::QUEUED, 'error_message' => null, 'finished_at' => null])->save();
 
-        ImportChatHistoryJob::dispatch($import->id);
+        if (!$this->queue(new ImportChatHistoryJob($import->id))) {
+            $import->forceFill($previous)->save();
+
+            return $this->error(__('The background queue is not available, so the import could not start. Try again in a few minutes.'), 503);
+        }
 
         return response()->json($import->refresh()->toStatusPayload());
     }
@@ -275,9 +314,14 @@ class ChatImportController extends Controller
             return $this->error(__('Another import is in progress. Wait for it to finish first.'), 409);
         }
 
+        $previous = $import->only(['status', 'error_message', 'finished_at']);
         $import->forceFill(['status' => ChatImport::ROLLING_BACK, 'error_message' => null, 'finished_at' => null])->save();
 
-        RollbackChatImportJob::dispatch($import->id);
+        if (!$this->queue(new RollbackChatImportJob($import->id))) {
+            $import->forceFill($previous)->save();
+
+            return $this->error(__('The background queue is not available, so the import could not start. Try again in a few minutes.'), 503);
+        }
 
         return response()->json($import->refresh()->toStatusPayload());
     }
@@ -318,6 +362,30 @@ class ChatImportController extends Controller
     private function hasActiveImport(int $organizationId): bool
     {
         return ChatImport::forOrganization($organizationId)->active()->exists();
+    }
+
+    /**
+     * إرسال وظيفة إلى الطابور بلا أن يسقط الطلب إن تعذّر.
+     *
+     * Redis المتوقّف يرمي من داخل dispatch، فكان الطلب الأخير في الرفع يُرجع
+     * 500 «Connection refused» بعد أن أُنشئ الاستيراد — فيعلق نشطاً ويمنع
+     * كل رفع بعده. رُصد محلياً وRedis مطفأ.
+     */
+    private function queue(object $job): bool
+    {
+        try {
+            app(\Illuminate\Contracts\Bus\Dispatcher::class)->dispatch($job);
+
+            return true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Chat import job could not be queued', [
+                'job' => get_class($job),
+                'chat_import_id' => $job->chatImportId ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     private function error(string $message, int $status): JsonResponse

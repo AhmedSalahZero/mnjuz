@@ -191,4 +191,79 @@ class ChatMediaUploadHelper
     {
         return array_values(array_unique(array_merge(...array_values(self::extensionsByType()))));
     }
+
+    /** أكبر قطعة يرسلها المتصفّح في الرفع المجزّأ — والحدّ بين الطلب الواحد والتجزئة. */
+    public const MAX_CHUNK_BYTES = 5 * 1024 * 1024;
+
+    /** هامش الحقول وترويسات multipart فوق بايتات القطعة نفسها. */
+    private const CHUNK_OVERHEAD_BYTES = 64 * 1024;
+
+    private const MIN_CHUNK_BYTES = 256 * 1024;
+
+    /**
+     * حجم القطعة الذي يقبله هذا الخادم فعلاً.
+     *
+     * كانت القطعة 5MB ثابتة. وخادمٌ upload_max_filesize فيه 2MB (الافتراضي
+     * في php.ini) يرفض كل قطعة منها قبل أن تبلغ Laravel، فيفشل كل ملف أكبر
+     * من ميغابايتين برسالة «The chunk failed to upload» — رُصد محلياً عند
+     * رفع ملف استيراد المحادثات. القطعة الآن أصغر الحدود: 5MB، وحدّ الملف،
+     * وحدّ الطلب، ناقصاً هامش الحقول.
+     */
+    public static function chunkBytes(): int
+    {
+        $limit = min(self::MAX_CHUNK_BYTES, self::phpMaxUploadBytes(), self::maxRequestBytes());
+
+        return max(self::MIN_CHUNK_BYTES, $limit - self::CHUNK_OVERHEAD_BYTES);
+    }
+
+    /** حدّ رفع الملف الواحد مقروءاً: «2 MB» أو «1.5 MB». */
+    public static function humanPhpUploadLimit(): string
+    {
+        $mb = round(self::phpMaxUploadBytes() / (1024 * 1024), 1);
+
+        return rtrim(rtrim(number_format($mb, 1, '.', ''), '0'), '.') . ' MB';
+    }
+
+    /**
+     * يُهيّئ صورةً اكتمل تجميعها من قطع، كما يُهيّئ ChatService الرفع العادي.
+     *
+     * المسار المجزّأ كان يُرسل الصورة إلى SendMediaJob كما وصلت: HEIC وCMYK
+     * وPNG بعمق 16 بت تصل Meta فترفضها (131053)، والكبيرة لا تُضغط.
+     *
+     * @return array{ok: bool, path: string, file_name: string, message: ?string}
+     */
+    public static function prepareAssembledImage(string $relativePath, string $fileName): array
+    {
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        $absolute = $disk->path($relativePath);
+        $mime = @mime_content_type($absolute) ?: null;
+
+        $prepared = \App\Services\ImageCompressionService::prepareForWhatsapp($absolute, $mime, (int) filesize($absolute));
+
+        if ($prepared === false) {
+            $message = \App\Services\ImageCompressionService::rejectionMessage($absolute, $mime);
+            $disk->delete($relativePath);
+
+            return ['ok' => false, 'path' => $relativePath, 'file_name' => $fileName, 'message' => $message];
+        }
+
+        if ($prepared === null) {
+            return ['ok' => true, 'path' => $relativePath, 'file_name' => $fileName, 'message' => null];
+        }
+
+        $directory = trim(dirname($relativePath), '.');
+        $target = ($directory !== '' ? $directory . '/' : '') . pathinfo($relativePath, PATHINFO_FILENAME) . '.' . $prepared['extension'];
+
+        $disk->put($target, $prepared['contents']);
+        if ($target !== $relativePath) {
+            $disk->delete($relativePath);
+        }
+
+        return [
+            'ok' => true,
+            'path' => $target,
+            'file_name' => pathinfo($fileName, PATHINFO_FILENAME) . '.' . $prepared['extension'],
+            'message' => null,
+        ];
+    }
 }

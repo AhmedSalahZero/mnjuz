@@ -302,4 +302,91 @@ class ChatImportHttpTest extends ChatImportTestCase
         $this->deleteJson('/settings/chat-imports/upload/chunk', ['upload_id' => 'gone'])->assertOk();
         $this->assertFalse(Storage::disk('local')->exists($directory));
     }
+
+    // ------------------------------------------------- حدّ الرفع على الخادم
+
+    /**
+     * القطعة أكبر من upload_max_filesize: PHP يرفضها قبل Laravel.
+     *
+     * كان الردّ 500 «An error occurred / The chunk failed to upload.» — لا
+     * يقول ما الحدّ ولا ما العمل. رُصد محلياً: الحدّ 2MB والقطعة 5MB.
+     */
+    public function test_a_chunk_refused_by_the_php_upload_limit_explains_the_limit(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'chunk');
+        file_put_contents($tmp, 'x');
+
+        $response = $this->post('/settings/chat-imports/upload/chunk', [
+            'upload_id' => 'too-big',
+            'index' => 0,
+            'total' => 10,
+            'chunk' => new UploadedFile($tmp, 'chunk', null, UPLOAD_ERR_INI_SIZE, true),
+            'file_name' => 'history.csv',
+            'file_size' => 47564319,
+        ], ['Accept' => 'application/json']);
+
+        $response->assertStatus(422)->assertJsonPath('success', false);
+
+        $limit = round(\App\Helpers\ChatMediaUploadHelper::phpMaxUploadBytes() / (1024 * 1024), 1);
+        $this->assertStringContainsString(rtrim(rtrim((string) $limit, '0'), '.') . ' MB', $response->json('message'));
+        $this->assertStringNotContainsString('An error occurred', $response->json('message'));
+        $this->assertSame(0, ChatImport::count());
+    }
+
+    /** الصفحة تقول للمتصفّح أكبر قطعة يقبلها هذا الخادم، فلا تُرفض قطعة أصلاً. */
+    public function test_the_page_tells_the_browser_how_big_a_chunk_can_be(): void
+    {
+        $expected = max(256 * 1024, min(
+            5 * 1024 * 1024,
+            \App\Helpers\ChatMediaUploadHelper::phpMaxUploadBytes(),
+            \App\Helpers\ChatMediaUploadHelper::maxRequestBytes()
+        ) - 64 * 1024);
+
+        $this->get('/settings/chat-imports')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('limits.chunk_bytes', $expected));
+    }
+
+    // ------------------------------------------------- الطابور متوقّف
+
+    /** طابورٌ يرمي كما يرمي Redis المطفأ: «Connection refused». */
+    private function breakTheQueue(): void
+    {
+        $dispatcher = \Mockery::mock(\Illuminate\Contracts\Bus\Dispatcher::class);
+        $dispatcher->shouldReceive('dispatch')->andThrow(new \RedisException('Connection refused'));
+        $this->app->instance(\Illuminate\Contracts\Bus\Dispatcher::class, $dispatcher);
+    }
+
+    /**
+     * Redis مطفأ: القطعة الأخيرة كانت تُرجع 500 بعد إنشاء الاستيراد، فيعلق
+     * «بانتظار الفحص» ويمنع كل رفع بعده بـ 409. رُصد محلياً.
+     */
+    public function test_a_queue_outage_fails_the_import_clearly_instead_of_leaving_it_stuck(): void
+    {
+        $this->breakTheQueue();
+
+        $responses = $this->uploadInChunks($this->validCsv(), 'no-redis', 1000);
+
+        end($responses)->assertStatus(503)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', __('The background queue is not available, so the import could not start. Try again in a few minutes.'));
+
+        $import = ChatImport::firstOrFail();
+        $this->assertSame(ChatImport::FAILED, $import->status);
+        $this->assertNull($import->file_path, 'the uploaded file is not left behind');
+        $this->assertFalse($import->isActive(), 'it no longer blocks the next upload');
+    }
+
+    public function test_resume_and_rollback_keep_their_status_when_the_queue_is_down(): void
+    {
+        $failed = $this->makeImport($this->validCsv(), ['status' => ChatImport::FAILED, 'total_rows' => 2, 'processed_rows' => 1, 'started_at' => now()]);
+        $completed = $this->makeImport($this->validCsv(), ['status' => ChatImport::COMPLETED, 'imported_messages' => 2]);
+        $this->breakTheQueue();
+
+        $this->postJson("/settings/chat-imports/{$failed->uuid}/resume")->assertStatus(503);
+        $this->assertSame(ChatImport::FAILED, $failed->refresh()->status);
+
+        $this->postJson("/settings/chat-imports/{$completed->uuid}/rollback")->assertStatus(503);
+        $this->assertSame(ChatImport::COMPLETED, $completed->refresh()->status);
+    }
 }

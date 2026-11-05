@@ -751,7 +751,7 @@ class ChatService
 				if ($prepared === false) {
 					return response()->json([
 						'success' => false,
-						'message' => __('Image is too large to send. Please use a smaller image.'),
+						'message' => ImageCompressionService::rejectionMessage($file->getRealPath(), $file->getMimeType()),
 					], 422);
 				}
 
@@ -888,7 +888,7 @@ class ChatService
                 if ($prepared === false) {
                     return response()->json([
                         'success' => false,
-                        'message' => __('Image is too large to send. Please use a smaller image.'),
+                        'message' => ImageCompressionService::rejectionMessage($file->getRealPath(), $file->getMimeType()),
                     ], 422);
                 }
 

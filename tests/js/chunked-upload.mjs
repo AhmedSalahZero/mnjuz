@@ -180,7 +180,9 @@ ok(/uploadId: randomId\(\)/.test(queue), 'لا معرّف رفع ثابت — ا
 ok(!/request\.files\.length === 1/.test(queue),
    'التجزئة ما زالت مشروطة بعدد الملفات — دفعةٌ من ملفين ستعود للمسار القديم');
 
-ok(/total <= CHUNK_BYTES/.test(queue), 'لا فحص لحجم الحمولة كلّها');
+// الحدّ حجم القطعة الذي يقبله الخادم (chunkBytes)، و5MB حين لا يُمرَّر.
+ok(/total <= chunkSize/.test(queue), 'لا فحص لحجم الحمولة كلّها');
+ok(/chunkBytes = CHUNK_BYTES/.test(queue), 'حجم القطعة بلا قيمة افتراضية حين لا يمرّره الخادم');
 
 ok(/upload_id: job\.uploadId \+ '-' \+ index/.test(queue),
    'معرّف الرفع مشترك بين الملفات — ستختلط قطعها في مجلّد واحد');

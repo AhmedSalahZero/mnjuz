@@ -5,6 +5,7 @@ namespace App\Services\ChatImport;
 use App\Services\PhoneService;
 use DateTimeImmutable;
 use DateTimeZone;
+use libphonenumber\PhoneNumberUtil;
 use Propaganistas\LaravelPhone\PhoneNumber;
 
 /**
@@ -13,9 +14,10 @@ use Propaganistas\LaravelPhone\PhoneNumber;
  * يُجمع كل خطأ في الصفّ لا أوّله فقط: من يُصلح ملفاً من مئتي ألف صفّ لا
  * يريد أن يرفعه مرّة لكل عمود.
  *
- * والرقم لا يُخمَّن مفتاح دولته أبداً إلا إن اختار المستخدم دولة صراحةً
- * (كما في PhoneService::toE164): افتراض السعودية لرقم بلا مفتاح قد يضع
- * محادثة عميلٍ في جهة اتصال شخص آخر.
+ * والرقم لا يُخمَّن مفتاح دولته إلا بدليل: دولة اختارها المستخدم، أو دولة تغلب
+ * على أرقام الملف نفسه (CountryDetector). بلا دليل يبقى الرقم المحلي خطأً، لأن
+ * افتراض السعودية لرقم بلا مفتاح قد يضع محادثة عميلٍ في جهة اتصال شخص آخر.
+ * وللسبب نفسه لا تُكمَّل أرقام ناقصة أبداً.
  */
 final class RowParser
 {
@@ -68,18 +70,24 @@ final class RowParser
 
     /**
      * @param array{phone: ?string, name: ?string, sent_at: ?string, direction: ?string, text: ?string} $values
-     * @return ParsedRow|array<int, array{row: int, column: string, value: string, message: string}>
+     * @return ParsedRow|array<int, array{row: int, column: string, value: string, message: string, message_ar?: string}>
      */
     public function parse(array $values, int $row): ParsedRow|array
     {
         $errors = [];
-        $error = function (string $column, ?string $value, string $message) use (&$errors, $row) {
-            $errors[] = [
+        $error = function (string $column, ?string $value, string $message, ?string $messageAr = null) use (&$errors, $row) {
+            $entry = [
                 'row' => $row,
                 'column' => $column,
                 'value' => mb_substr((string) $value, 0, 100),
                 'message' => $message,
             ];
+
+            if ($messageAr !== null) {
+                $entry['message_ar'] = $messageAr;
+            }
+
+            $errors[] = $entry;
         };
 
         foreach ($values as $column => $value) {
@@ -92,7 +100,7 @@ final class RowParser
 
         [$phone, $phoneError] = $this->parsePhone((string) ($values['phone'] ?? ''));
         if ($phoneError !== null) {
-            $error('phone', $values['phone'], $phoneError);
+            $error('phone', $values['phone'], $phoneError['message'], $phoneError['message_ar']);
         }
 
         [$sentAt, $dateError] = $this->parseDate((string) ($values['sent_at'] ?? ''));
@@ -130,28 +138,54 @@ final class RowParser
         );
     }
 
-    /** @return array{0: ?string, 1: ?string} [E.164, رسالة الخطأ] */
+    /**
+     * خطأ الرقم الذي يُتخطّى الصفّ بسببه، أو null إن كان خطؤه يرفض الملف.
+     *
+     * رسالة بلا رقم صحيح لا عميل لها، فتُترك وحدها ويُستورد الباقي. أما التاريخ
+     * الخاطئ أو النصّ الفارغ فخلل في الملف نفسه.
+     *
+     * @param array<int, array{row: int, column: string, value: string, message: string, message_ar?: string}> $errors
+     * @return array{row: int, column: string, value: string, message: string, message_ar?: string}|null
+     */
+    public static function skipReason(array $errors): ?array
+    {
+        foreach ($errors as $error) {
+            if ($error['column'] === 'phone') {
+                return $error;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array{0: ?string, 1: ?array{message: string, message_ar: string}} [E.164, خطأ الرقم] */
     private function parsePhone(string $raw): array
     {
-        $raw = trim(str_replace(self::DIGITS_FROM, self::DIGITS_TO, $raw));
+        $raw = self::normalizeDigits($raw);
 
         return $this->phoneCache[$raw] ??= $this->resolvePhone($raw);
     }
 
-    /** @return array{0: ?string, 1: ?string} */
+    /** الأرقام العربية إلى لاتينية، بلا مسافات حول القيمة. */
+    public static function normalizeDigits(string $raw): string
+    {
+        return trim(str_replace(self::DIGITS_FROM, self::DIGITS_TO, $raw));
+    }
+
+    /** @return array{0: ?string, 1: ?array{message: string, message_ar: string}} */
     private function resolvePhone(string $raw): array
     {
         if ($raw === '') {
-            return [null, __('Phone number is required.')];
+            return [null, self::phoneError('Phone number is required.')];
         }
 
         // Excel يحوّل الأرقام الطويلة إلى 9.66E+11 ويضيع ما بعد الخانة الثالثة.
         if (preg_match('/^\+?\d+([.,]\d+)?e\+?\d+$/i', $raw)) {
-            return [null, __('Excel changed the phone number to scientific notation (like 9.66E+11). Format the column as text and export again.')];
+            return [null, self::phoneError('Excel changed the phone number to scientific notation (like 9.66E+11). Format the column as text and export again.')];
         }
 
         if (preg_match('/[^\d\s\-\+\(\)\.]/u', $raw)) {
-            return [null, __('The phone number contains invalid characters.')];
+            return [null, self::phoneError('The phone number contains invalid characters.')];
         }
 
         // بالصيغة التي يحفظ بها الـ webhook رقم المرسل نفسه (fromWhatsappId):
@@ -159,28 +193,71 @@ final class RowParser
         // بلا محاولته الأولى للرقم كما هو — وهي تفشل حتماً لرقم بلا «+»، أي
         // لكل رقم في تصدير منصّات واتساب، وتكلّف ثلث زمن الفحص.
         $digits = (string) preg_replace('/\D/', '', $raw);
+        $hasPrefix = str_starts_with($raw, '+') || str_starts_with($digits, '00');
         if (str_starts_with($digits, '00')) {
             $digits = substr($digits, 2);
         }
 
-        $e164 = $digits === '' ? null : PhoneService::getE164Format('+' . $digits);
+        // المحلي قبل الدولي: 537675751 جوال سعودي، لكنه بقراءته دولياً رقم صالح
+        // في كوبا، فيُحفظ على دولة أخرى بلا أي خطأ. من كتب «+» أو «00» أو بدأ
+        // بمفتاح الدولة الافتراضية فقد ذكر دولته، فيبقى على القراءة الدولية.
+        $preferLocal = !$hasPrefix && !$this->startsWithDefaultCode($digits);
 
-        if ($e164 === null && $this->defaultCountry) {
-            try {
-                $local = new PhoneNumber(preg_replace('/\D/', '', $raw), $this->defaultCountry);
-                if ($local->isValid()) {
-                    $e164 = $local->formatE164();
-                }
-            } catch (\Throwable) {
-                $e164 = null;
-            }
+        $e164 = $preferLocal ? $this->asLocal($digits) : null;
+
+        if ($e164 === null && $digits !== '') {
+            $e164 = PhoneService::getE164Format('+' . $digits);
+        }
+
+        if ($e164 === null && !$preferLocal) {
+            $e164 = $this->asLocal($digits);
         }
 
         if ($e164 === null) {
-            return [null, __('Invalid phone number. Include the country code, e.g. 966501234567.')];
+            $problem = PhoneProblem::of($digits, !$preferLocal, $this->defaultCountry);
+
+            return [null, ['message' => $problem->message(), 'message_ar' => $problem->message('ar')]];
         }
 
         return [$e164, null];
+    }
+
+    /**
+     * النصّ بلغة المستخدم وبالعربية دائماً: تقرير الأرقام يقرؤه من لغة حسابه
+     * إنجليزية أيضاً.
+     *
+     * @return array{message: string, message_ar: string}
+     */
+    private static function phoneError(string $key): array
+    {
+        return ['message' => __($key), 'message_ar' => __($key, [], 'ar')];
+    }
+
+    private function startsWithDefaultCode(string $digits): bool
+    {
+        if (!$this->defaultCountry) {
+            return false;
+        }
+
+        $code = PhoneNumberUtil::getInstance()->getCountryCodeForRegion($this->defaultCountry);
+
+        return $code !== 0 && str_starts_with($digits, (string) $code);
+    }
+
+    /** الرقم بصيغة E.164 إن كان صالحاً في الدولة الافتراضية. */
+    private function asLocal(string $digits): ?string
+    {
+        if (!$this->defaultCountry || $digits === '') {
+            return null;
+        }
+
+        try {
+            $local = new PhoneNumber($digits, $this->defaultCountry);
+
+            return $local->isValid() ? $local->formatE164() : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** @return array{0: ?string, 1: ?string} [UTC Y-m-d H:i:s، رسالة الخطأ] */

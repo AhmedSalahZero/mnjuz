@@ -38,7 +38,7 @@ class RollbackChatImportJob implements ShouldQueue
 
     public function __construct(public int $chatImportId)
     {
-        $this->onQueue(config('chat_import.queue', 'imports'));
+        $this->onQueue(config('chat_import.queue', 'high'));
     }
 
     public function handle(): void
@@ -58,7 +58,7 @@ class RollbackChatImportJob implements ShouldQueue
         }
 
         if ($continue) {
-            self::dispatch($this->chatImportId);
+            self::dispatch($this->chatImportId)->delay((int) config('chat_import.slice_gap_seconds', 5));
         }
     }
 
@@ -72,7 +72,7 @@ class RollbackChatImportJob implements ShouldQueue
 
         App::setLocale($import->locale ?: config('app.locale'));
 
-        $deadline = microtime(true) + (int) config('chat_import.slice_seconds', 240);
+        $deadline = microtime(true) + (int) config('chat_import.slice_seconds', 60);
         $userId = (int) $import->user_id;
 
         while (true) {

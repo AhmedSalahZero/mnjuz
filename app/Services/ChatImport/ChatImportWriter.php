@@ -34,7 +34,7 @@ final class ChatImportWriter
      * @param array<int, array{row: ParsedRow, fingerprint: string}> $rows
      * @return array{imported: int, duplicates: int}
      */
-    public function write(array $rows, int $endOffset): array
+    public function write(array $rows, int $endOffset, int $skipped = 0): array
     {
         $phones = [];
         foreach ($rows as $item) {
@@ -50,13 +50,13 @@ final class ChatImportWriter
 
         [$unique, $duplicates] = $this->withoutDuplicates($rows, $contacts);
 
-        DB::transaction(function () use ($rows, $unique, $duplicates, $contacts, $endOffset) {
+        DB::transaction(function () use ($rows, $unique, $duplicates, $contacts, $endOffset, $skipped) {
             $latest = $this->insertMessages($unique, $contacts);
             $ticketsFor = $this->bumpContacts($latest);
             $this->recordContacts($contacts, $ticketsFor);
 
             DB::table('chat_imports')->where('id', $this->import->id)->update([
-                'processed_rows' => DB::raw('processed_rows + ' . count($rows)),
+                'processed_rows' => DB::raw('processed_rows + ' . (count($rows) + $skipped)),
                 'imported_messages' => DB::raw('imported_messages + ' . count($unique)),
                 'duplicate_rows' => DB::raw('duplicate_rows + ' . $duplicates),
                 'cursor_offset' => $endOffset,

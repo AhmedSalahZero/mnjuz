@@ -127,7 +127,17 @@ class ImageCompressionService
 
             return null;
         } catch (\Throwable $e) {
-            Log::error('ImageCompressionService normalize error: ' . $e->getMessage(), ['file' => $sourcePath]);
+            $context = ['file' => $sourcePath, 'mime' => $mime];
+
+            // HEIC لا تفكّه libheif على الخادم: عطلٌ في نسخة المكتبة (الأقدم
+            // ترفض بيانات وصفية تشير لصورة غير موجودة، والأحدث تتجاهلها) لا
+            // في الكود — فالسجلّ يقول ذلك صراحةً ومعه نسخة ImageMagick.
+            if (static::isHeif($sourcePath, $mime)) {
+                $context['hint'] = 'HEIC decode failed — upgrade libheif/ImageMagick on this server';
+                $context['imagemagick'] = extension_loaded('imagick') ? (\Imagick::getVersion()['versionString'] ?? null) : null;
+            }
+
+            Log::error('ImageCompressionService normalize error: ' . $e->getMessage(), $context);
 
             return null;
         }
@@ -182,6 +192,60 @@ class ImageCompressionService
             // $img يُعاد إسناده أثناء التسطيح؛ الإتلاف هنا يطال الأخير أيّاً كان.
             $img->destroy();
         }
+    }
+
+    /**
+     * رسالة الرفض حين تُرجع prepareForWhatsapp القيمة false — بسببها الحقيقي.
+     *
+     * كانت الرسالة واحدة دائماً: «الصورة كبيرة جداً». فصورة iPhone بصيغة HEIC
+     * لا تفكّها مكتبة libheif على الخادم تُرفض بحجّة الحجم وهي أصغر من الحدّ،
+     * فيصغّرها المستخدم ويعيد المحاولة فتُرفض من جديد، ولا يعرف السبب.
+     */
+    public static function rejectionMessage(string $sourcePath, ?string $mime): string
+    {
+        if (static::isReadable($sourcePath)) {
+            return __('Image is too large to send. Please use a smaller image.');
+        }
+
+        if (static::isHeif($sourcePath, $mime)) {
+            return __('This iPhone photo (HEIC) could not be read. Send it as JPG or PNG — on iPhone: Settings › Camera › Formats › Most Compatible.');
+        }
+
+        return __('This image could not be read. Save it as JPG or PNG and try again.');
+    }
+
+    /** هل تُفتح الصورة أصلاً؟ ping يقرأ الترويسة بلا فكّ البكسلات. */
+    public static function isReadable(string $sourcePath): bool
+    {
+        if (extension_loaded('imagick')) {
+            try {
+                $img = new \Imagick();
+                $img->pingImage($sourcePath);
+                $ok = $img->getImageWidth() > 0;
+                $img->destroy();
+
+                return $ok;
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        return is_array(@getimagesize($sourcePath));
+    }
+
+    /** HEIC/HEIF من النوع المعلن أو من توقيع الحاوية (ftyp) نفسه. */
+    public static function isHeif(string $sourcePath, ?string $mime): bool
+    {
+        if (in_array(strtolower((string) $mime), ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'], true)) {
+            return true;
+        }
+
+        $head = @file_get_contents($sourcePath, false, null, 0, 12);
+
+        return is_string($head)
+            && strlen($head) === 12
+            && substr($head, 4, 4) === 'ftyp'
+            && in_array(substr($head, 8, 4), ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'mif1', 'msf1'], true);
     }
 
     /** نوع الصورة من توقيعها لا من امتدادها. */

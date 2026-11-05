@@ -85,6 +85,82 @@ class RowParserTest extends TestCase
         $this->assertSame('+201001234567', $this->parsed(['phone' => '201001234567'], 'SA')->phone);
     }
 
+    public function test_a_local_number_is_not_mistaken_for_another_country(): void
+    {
+        // بقراءتها دولياً هذه أرقام صالحة في كوبا وسورينام وباراغواي.
+        $this->assertSame('+966537675751', $this->parsed(['phone' => '537675751'], 'SA')->phone);
+        $this->assertSame('+966597588205', $this->parsed(['phone' => '597588205'], 'SA')->phone);
+        $this->assertSame('+966595908589', $this->parsed(['phone' => '595908589'], 'SA')->phone);
+        $this->assertSame('+966537675751', $this->parsed(['phone' => '0537675751'], 'SA')->phone);
+    }
+
+    public function test_an_explicit_country_code_is_kept(): void
+    {
+        $this->assertSame('+597588205', $this->parsed(['phone' => '+597588205'], 'SA')->phone);
+        $this->assertSame('+597588205', $this->parsed(['phone' => '00597588205'], 'SA')->phone);
+        $this->assertSame('+966501234567', $this->parsed(['phone' => '966501234567'], 'SA')->phone);
+        $this->assertSame('+966501234567', $this->parsed(['phone' => '9660501234567'], 'SA')->phone);
+    }
+
+    public function test_a_missing_digit_is_never_filled_in(): void
+    {
+        $this->assertSame(['phone'], $this->errorColumns(['phone' => '96600647244'], 'SA'));
+        $this->assertSame(['phone'], $this->errorColumns(['phone' => '9665314916119'], 'SA'));
+    }
+
+    /** @return array{row: int, column: string, value: string, message: string, message_ar?: string} */
+    private function phoneError(string $phone, ?string $country = 'SA'): array
+    {
+        return $this->parser($country)->parse($this->row(['phone' => $phone]), 7)[0];
+    }
+
+    public function test_a_bad_number_says_why_in_both_languages(): void
+    {
+        $short = $this->phoneError('96600647244');
+        $this->assertSame('The number is too short: Saudi Arabia numbers have 9 digits after the country code.', $short['message']);
+        $this->assertStringContainsString('الرقم ناقص', $short['message_ar']);
+        $this->assertStringContainsString('السعودية', $short['message_ar']);
+
+        $long = $this->phoneError('9665314916119');
+        $this->assertSame('The number is too long: Saudi Arabia numbers have 9 digits after the country code.', $long['message']);
+        $this->assertStringContainsString('خانات زيادة', $long['message_ar']);
+
+        $mismatch = $this->phoneError('966858647403');
+        $this->assertSame('The number does not match the numbers of Saudi Arabia.', $mismatch['message']);
+        $this->assertStringContainsString('لا يطابق', $mismatch['message_ar']);
+    }
+
+    public function test_the_reason_follows_the_country_the_number_belongs_to(): void
+    {
+        // كود صريح: تُقاس على مصر لا على الدولة الافتراضية.
+        $this->assertStringContainsString('Egypt', $this->phoneError('+20100')['message']);
+        // بلا كود: تُقاس على الدولة الافتراضية.
+        $this->assertStringContainsString('too long', $this->phoneError('097433977744')['message']);
+        // كود صريح بلا دولة افتراضية.
+        $this->assertStringContainsString('too short', $this->phoneError('+96653330991', null)['message']);
+    }
+
+    public function test_a_number_with_no_known_country_asks_for_the_code(): void
+    {
+        $key = 'Invalid phone number. Include the country code, e.g. 966501234567.';
+
+        $error = $this->phoneError('555770473', null);
+
+        $this->assertSame(__($key), $error['message']);
+        $this->assertSame(trans($key, [], 'ar'), $error['message_ar']);
+    }
+
+    public function test_only_a_bad_number_makes_a_row_skippable(): void
+    {
+        $badBoth = $this->parser('SA')->parse($this->row(['phone' => '96600647244', 'sent_at' => 'yesterday']), 7);
+        $reason = RowParser::skipReason($badBoth);
+        $this->assertSame('phone', $reason['column']);
+        $this->assertSame('96600647244', $reason['value']);
+
+        $badDate = $this->parser('SA')->parse($this->row(['sent_at' => 'yesterday']), 7);
+        $this->assertNull(RowParser::skipReason($badDate));
+    }
+
     public function test_bad_phones_are_explained(): void
     {
         $messages = fn (string $phone) => array_column($this->parser()->parse($this->row(['phone' => $phone]), 3), 'message');

@@ -509,6 +509,38 @@ is(jobPercent(null), 0, 'مهمّة معدومة');
     is(q.percent.value, 50, 'المخفق ما زال محسوباً في المقام');
 }
 
+// ------------------------------------------- حجم القطعة من الخادم
+
+/**
+ * حجم القطعة يأتي من الخادم لا من ثابت 5MB.
+ *
+ * خادمٌ upload_max_filesize فيه 2MB يرفض كل قطعة من 5MB قبل أن تبلغ
+ * Laravel، فيفشل كل مرفق أكبر من ميغابايتين. والحدّ نفسه يفصل بين الطلب
+ * الواحد والتجزئة: ملف 3MB في طلب واحد يُرفض عند 2MB كذلك.
+ */
+{
+    const t = autoTransport();
+    const q = createUploadQueue({ post: t.post, chunkBytes: 1000 });
+    const small = { file: { name: 'a.pdf', size: 1500, type: 'application/pdf', slice: (a, b) => new Blob([new Uint8Array(b - a)]) }, type: 'document' };
+
+    q.enqueue({ contactUuid: 'uuid-A', contactName: 'أحمد', files: [small], tempIds: ['a'] });
+    await settle(q);
+
+    is(t.calls.length, 2, 'ملف 1500 بايت بقطع 1000 = طلبان');
+    is(t.calls.every((call) => call.url === '/chats/upload/chunk'), true, 'تجاوز حجم القطعة ⇒ تجزئة لا طلب واحد');
+    is(t.calls[0].formData.get('total'), '2', 'عدد القطع يتبع حجم الخادم');
+}
+
+{
+    const t = autoTransport();
+    const q = createUploadQueue({ post: t.post, chunkBytes: 1000 });
+    q.enqueue({ contactUuid: 'uuid-A', contactName: 'أحمد', files: [file('tiny.pdf', 900)], tempIds: ['a'] });
+    await settle(q);
+
+    is(t.calls.length, 1, 'تحت حجم القطعة ⇒ طلب واحد');
+    is(t.calls[0].url, '/chats', 'الصغير يبقى على المسار العادي');
+}
+
 // -------------------------------------------------------- النتيجة
 
 if (fail.length) {

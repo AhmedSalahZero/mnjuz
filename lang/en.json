@@ -1693,7 +1693,15 @@
     "Imported conversations are added as closed tickets, so they do not fill your team inbox.": "Imported conversations are added as closed tickets, so they do not fill your team inbox.",
     "Upload a file": "Upload a file",
     "Default country for numbers without a country code (optional)": "Default country for numbers without a country code (optional)",
-    "None — every number must include its country code": "None — every number must include its country code",
+    "Detect automatically from the file": "Detect automatically from the file",
+    "Numbers without a country code were read as:": "Numbers without a country code were read as:",
+    "The number is too short: :country numbers have :digits digits after the country code.": "The number is too short: :country numbers have :digits digits after the country code.",
+    "The number is too long: :country numbers have :digits digits after the country code.": "The number is too long: :country numbers have :digits digits after the country code.",
+    "The number does not match the numbers of :country.": "The number does not match the numbers of :country.",
+    "No row in the file has a valid phone number.": "No row in the file has a valid phone number.",
+    "Rows skipped": "Rows skipped",
+    "{count} rows skipped because of invalid numbers": "{count} rows skipped because of invalid numbers",
+    "These rows were not imported. Fix the numbers and upload the file again to add them; messages already imported will not be duplicated.": "These rows were not imported. Fix the numbers and upload the file again to add them; messages already imported will not be duplicated.",
     "Upload and check": "Upload and check",
     "Cancel upload": "Cancel upload",
     "Ignored columns:": "Ignored columns:",
@@ -1765,5 +1773,9 @@
     "The selected group has no contacts to send to.": "The selected group has no contacts to send to.",
     "Member not found.": "Member not found.",
     "This member is already active.": "This member is already active.",
-    "Member restored successfully!": "Member restored successfully!"
+    "Member restored successfully!": "Member restored successfully!",
+    "This iPhone photo (HEIC) could not be read. Send it as JPG or PNG — on iPhone: Settings › Camera › Formats › Most Compatible.": "This iPhone photo (HEIC) could not be read. Send it as JPG or PNG — on iPhone: Settings › Camera › Formats › Most Compatible.",
+    "This image could not be read. Save it as JPG or PNG and try again.": "This image could not be read. Save it as JPG or PNG and try again.",
+    "Part of the file is larger than this server accepts in one request (:size). Reload the page and try again; if it keeps failing, raise upload_max_filesize and post_max_size on the server.": "Part of the file is larger than this server accepts in one request (:size). Reload the page and try again; if it keeps failing, raise upload_max_filesize and post_max_size on the server.",
+    "The background queue is not available, so the import could not start. Try again in a few minutes.": "The background queue is not available, so the import could not start. Try again in a few minutes."
 }

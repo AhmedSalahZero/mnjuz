@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Storage;
 /**
  * فحص الملف كلّه قبل أن يُكتب منه شيء.
  *
- * الاستيراد صارم: صفّ واحد خاطئ يرفض الملف، فلا يجد المستخدم نصف محادثاته
- * مستورداً ونصفها مفقوداً. لذلك يمرّ الفحص على كل صفّ ويجمع كل خطأ في تقرير
- * واحد يُصلَح الملف منه دفعةً واحدة.
+ * صفّ رقمه خاطئ يُتخطّى ويُستورد الباقي، ويُكتب الرقم وسببه في تقرير. وأي خطأ
+ * آخر يرفض الملف كله، فلا يجد المستخدم نصف محادثاته مستورداً ونصفها مفقوداً.
+ * لذلك يمرّ الفحص على كل صفّ ويجمع كل خطأ في تقرير واحد.
  *
  * ويحسب ما سيُضاف فعلاً — رسائل جديدة بعد استبعاد المكرّر، وجهات اتصال
  * جديدة — ليُقاس بحدود الباقة قبل البدء لا في منتصفه.
@@ -76,6 +76,17 @@ final class ChatImportValidator
             return;
         }
 
+        // بلا دولة مختارة يدلّ عليها الملف نفسه. تُحفظ على الاستيراد لأن
+        // ImportChatHistoryJob يقرأ الأرقام بها أيضاً، فلا يختلف عن الفحص.
+        if (!$this->import->default_country) {
+            $country = CountryDetector::detect($reader, $map);
+            $reader->seek($reader->dataOffset());
+
+            if ($country !== null) {
+                $this->import->forceFill(['default_country' => $country])->save();
+            }
+        }
+
         $parser = new RowParser(
             (string) $this->import->timezone,
             $this->import->default_country,
@@ -109,6 +120,7 @@ final class ChatImportValidator
             }
 
             if (count($record) < $width) {
+                $report->rejectedRows++;
                 $this->rowError(['row' => $rowNumber, 'column' => '-', 'value' => '', 'message' => __('The row has fewer columns than the header.')]);
                 continue;
             }
@@ -116,15 +128,25 @@ final class ChatImportValidator
             $parsed = $parser->parse($map->extract($record), $rowNumber);
 
             if (is_array($parsed)) {
+                $skipReason = RowParser::skipReason($parsed);
+
+                if ($skipReason !== null) {
+                    // خطأ واحد لكل صفّ متخطّى: error_count هو عدد المتخطّى.
+                    $report->skippedRows++;
+                    $this->rowError($skipReason);
+                    continue;
+                }
+
+                $report->rejectedRows++;
                 foreach ($parsed as $error) {
                     $this->rowError($error);
                 }
                 continue;
             }
 
-            // الملف مرفوض بعد أوّل خطأ: نكمل المرور لجمع الأخطاء، ونكفّ عن
-            // حساب المكرّر وجهات الاتصال — لن يُستعمل.
-            if ($report->errorCount > 0) {
+            // الملف مرفوض بعد أوّل خطأ يرفضه: نكمل المرور لجمع الأخطاء، ونكفّ
+            // عن حساب المكرّر وجهات الاتصال — لن يُستعمل.
+            if ($report->rejectedRows > 0) {
                 continue;
             }
 
@@ -152,6 +174,10 @@ final class ChatImportValidator
             $this->fileError(__('The file has no messages.'));
 
             return;
+        }
+
+        if ($report->totalRows > 0 && $report->skippedRows === $report->totalRows) {
+            $this->fileError(__('No row in the file has a valid phone number.'));
         }
 
         if (!$report->isValid()) {
@@ -193,7 +219,7 @@ final class ChatImportValidator
         $this->rowError(['row' => '-', 'column' => '-', 'value' => '', 'message' => $message]);
     }
 
-    /** @param array{row: int|string, column: string, value: string, message: string} $error */
+    /** @param array{row: int|string, column: string, value: string, message: string, message_ar?: string} $error */
     private function rowError(array $error): void
     {
         $report = $this->report;
@@ -209,7 +235,13 @@ final class ChatImportValidator
 
         $handle = $this->errorsHandle();
         if ($handle !== null) {
-            fputcsv($handle, [$error['row'], $error['column'], self::safeCell($error['value']), $error['message']], ',', '"', '');
+            $cells = [$error['row'], $error['column'], self::safeCell($error['value']), $error['message']];
+
+            if ($this->needsArabicColumn()) {
+                $cells[] = $error['message_ar'] ?? '';
+            }
+
+            fputcsv($handle, $cells, ',', '"', '');
         }
     }
 
@@ -220,6 +252,12 @@ final class ChatImportValidator
     public static function safeCell(string $value): string
     {
         return preg_match('/^(?:[=@\t\r]|[+\-](?![\d\s]))/', $value) ? "'" . $value : $value;
+    }
+
+    /** السبب يُكتب بالعربية دائماً: عمود إضافي إلا إن كان التقرير بالعربية أصلاً. */
+    private function needsArabicColumn(): bool
+    {
+        return app()->getLocale() !== 'ar';
     }
 
     /** @return resource|null */
@@ -239,7 +277,13 @@ final class ChatImportValidator
         }
 
         fwrite($handle, "\xEF\xBB\xBF");
-        fputcsv($handle, [__('Row'), __('Column'), __('Value'), __('Error')], ',', '"', '');
+        $header = [__('Row'), __('Column'), __('Value'), __('Error')];
+
+        if ($this->needsArabicColumn()) {
+            $header[] = __('Error', [], 'ar');
+        }
+
+        fputcsv($handle, $header, ',', '"', '');
 
         $this->errorsHandle = $handle;
         $this->report->errorsFilePath = $relative;

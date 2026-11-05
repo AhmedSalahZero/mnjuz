@@ -132,6 +132,12 @@ class ChatImport extends Model
         return $minutes !== null && $this->updated_at->lt(now()->subMinutes($minutes));
     }
 
+    /** في الاستيراد المقبول كل خطأ مسجَّل صفّ تُخطّي لرقم خاطئ؛ والمرفوض لم يُتخطَّ منه شيء. */
+    public function skippedRows(): int
+    {
+        return $this->status === self::INVALID ? 0 : (int) $this->error_count;
+    }
+
     /** المرحلة التي يعرضها شريط التقدّم. */
     public function phase(): string
     {
@@ -179,6 +185,7 @@ class ChatImport extends Model
             'contacts_matched' => $this->contacts_matched,
             'rolled_back_messages' => $this->rolled_back_messages,
             'error_count' => $this->error_count,
+            'skipped_rows' => $this->skippedRows(),
             'errors' => $withErrors ? ($this->errors ?? []) : [],
             'has_errors_file' => $this->errors_file_path !== null,
             'error_message' => $this->error_message,

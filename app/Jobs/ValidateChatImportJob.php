@@ -32,7 +32,7 @@ class ValidateChatImportJob implements ShouldQueue
 
     public function __construct(public int $chatImportId)
     {
-        $this->onQueue(config('chat_import.queue', 'imports'));
+        $this->onQueue(config('chat_import.queue', 'high'));
     }
 
     public function handle(): void

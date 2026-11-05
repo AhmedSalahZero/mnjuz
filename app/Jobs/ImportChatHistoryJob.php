@@ -46,7 +46,7 @@ class ImportChatHistoryJob implements ShouldQueue
 
     public function __construct(public int $chatImportId)
     {
-        $this->onQueue(config('chat_import.queue', 'imports'));
+        $this->onQueue(config('chat_import.queue', 'high'));
     }
 
     public function backoff(): array
@@ -76,7 +76,7 @@ class ImportChatHistoryJob implements ShouldQueue
 
         // بعد فكّ القفل، وآخر سطر: على طابور sync تعمل الشريحة التالية هنا.
         if ($continue) {
-            self::dispatch($this->chatImportId);
+            self::dispatch($this->chatImportId)->delay((int) config('chat_import.slice_gap_seconds', 5));
         }
     }
 
@@ -130,7 +130,7 @@ class ImportChatHistoryJob implements ShouldQueue
         );
         $writer = new ChatImportWriter($import, new ContactResolver((int) $import->organization_id));
 
-        $deadline = microtime(true) + (int) config('chat_import.slice_seconds', 240);
+        $deadline = microtime(true) + (int) config('chat_import.slice_seconds', 60);
         $sliceRows = config('chat_import.slice_rows');
         $written = 0;
 
@@ -142,7 +142,7 @@ class ImportChatHistoryJob implements ShouldQueue
                     return false;
                 }
 
-                $writer->write($batch['rows'], $batch['end_offset']);
+                $writer->write($batch['rows'], $batch['end_offset'], $batch['skipped']);
                 $written += count($batch['rows']);
 
                 $outOfTime = microtime(true) >= $deadline;

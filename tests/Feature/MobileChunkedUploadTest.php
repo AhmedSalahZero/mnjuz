@@ -37,6 +37,19 @@ class MobileChunkedUploadTest extends TestCase
 
     private const ENDPOINT = '/api/v1/chats/upload/chunk';
 
+    /**
+     * صورة JPEG حقيقية (2×2، sRGB، 8 بت) تقبلها واتساب كما هي.
+     *
+     * الصورة المجزّأة تُهيّأ الآن قبل الإرسال، فبايتات نصّية باسم ‎.jpg‎ تُرفض
+     * — وهي ليست صورة أصلاً. الاختبارات التي يهمّها المسار لا الصورة تستعمل هذه.
+     */
+    private const TINY_JPEG = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAACAAIDAREAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAVAQEBAAAAAAAAAAAAAAAAAAAHCf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/ADoDFU3/2Q==';
+
+    private function tinyJpeg(): string
+    {
+        return base64_decode(self::TINY_JPEG);
+    }
+
     private Organization $organization;
     private Contact $contact;
     private User $user;
@@ -200,13 +213,13 @@ class MobileChunkedUploadTest extends TestCase
             'upload_id' => Str::random(20),
             'index' => 0,
             'total' => 1,
-            'chunk' => UploadedFile::fake()->createWithContent('chunk', 'TINY'),
+            'chunk' => UploadedFile::fake()->createWithContent('chunk', $this->tinyJpeg()),
             'file_name' => 'photo.jpg',
         ])->assertOk()
             ->assertJsonPath('data.completed', true)
             ->assertJsonPath('data.queued', true);
 
-        $this->assertSame('TINY', Storage::disk('local')->get($this->dispatchedJob()->tempFilePath));
+        $this->assertSame($this->tinyJpeg(), Storage::disk('local')->get($this->dispatchedJob()->tempFilePath));
     }
 
     /**
@@ -264,7 +277,7 @@ class MobileChunkedUploadTest extends TestCase
 
     public function test_the_type_is_derived_from_the_file_name(): void
     {
-        $this->uploadWhole('DATA', 'photo.jpg');
+        $this->uploadWhole($this->tinyJpeg(), 'photo.jpg', [], 128);
 
         $this->assertSame('image', $this->dispatchedJob()->fileType);
     }
@@ -273,10 +286,10 @@ class MobileChunkedUploadTest extends TestCase
     {
         $uuid = (string) Str::uuid();
 
-        $this->uploadWhole('DATA', 'photo.jpg', [
+        $this->uploadWhole($this->tinyJpeg(), 'photo.jpg', [
             'caption' => 'الفاتورة المرفقة',
             'msg_uuid' => $uuid,
-        ]);
+        ], 128);
 
         $job = $this->dispatchedJob();
 
@@ -309,7 +322,7 @@ class MobileChunkedUploadTest extends TestCase
     /** والرقم الموجود تُحلّ جهته فيصل uuid الصحيح إلى الوظيفة. */
     public function test_the_known_phone_resolves_to_its_contact(): void
     {
-        $this->uploadWhole('DATA', 'photo.jpg');
+        $this->uploadWhole($this->tinyJpeg(), 'photo.jpg', [], 128);
 
         $this->assertSame((string) $this->contact->uuid, $this->dispatchedJob()->uuid);
     }
@@ -451,5 +464,73 @@ class MobileChunkedUploadTest extends TestCase
             ->assertJsonPath('success', true);
 
         $this->assertFalse(Storage::disk('local')->exists($directory . '/000000.part'));
+    }
+
+    // ------------------------------------------------- تجهيز الصور
+
+    /** صورة CMYK بصيغة JPEG — تُفتح عندنا وترفضها Meta بالخطأ 131053. */
+    private function cmykJpeg(): string
+    {
+        $img = new \Imagick();
+        $img->newPseudoImage(120, 80, 'gradient:red-blue');
+        $img->transformImageColorspace(\Imagick::COLORSPACE_CMYK);
+        $img->setImageFormat('jpeg');
+        $bytes = $img->getImageBlob();
+        $img->destroy();
+
+        return $bytes;
+    }
+
+    /**
+     * الصورة المرفوعة على قطع تمرّ بالتجهيز نفسه الذي يمرّ به الرفع العادي.
+     *
+     * كان المسار المجزّأ يُرسل الملف كما هو: ChatService يُهيّئ الصورة قبل
+     * SendMediaJob، والمسار المجزّأ يذهب إلى SendMediaJob مباشرةً.
+     */
+    public function test_a_chunked_cmyk_image_is_normalised_before_sending(): void
+    {
+        if (!extension_loaded('imagick')) {
+            $this->markTestSkipped('needs Imagick');
+        }
+
+        $this->uploadWhole($this->cmykJpeg(), 'photo.jpg', ['file_type' => 'image'], 4096)
+            ->assertOk()
+            ->assertJsonPath('data.completed', true);
+
+        $job = $this->dispatchedJob();
+        $sent = new \Imagick();
+        $sent->readImageBlob(Storage::disk('local')->get($job->tempFilePath));
+
+        $this->assertSame('JPEG', $sent->getImageFormat());
+        $this->assertSame(\Imagick::COLORSPACE_SRGB, $sent->getImageColorspace(), 'CMYK must be converted before WhatsApp sees it');
+        $this->assertStringEndsWith('.jpg', $job->fileName);
+    }
+
+    public function test_an_unreadable_chunked_heic_photo_is_refused_with_the_reason(): void
+    {
+        $heic = "\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" . str_repeat("\x00", 64);
+
+        $response = $this->uploadWhole($heic, 'IMG_0001.heic', ['file_type' => 'image'], 4096);
+
+        $response->assertStatus(400)->assertJsonPath('success', false);
+        $this->assertStringContainsString('HEIC', $response->json('message'));
+        Bus::assertNotDispatched(SendMediaJob::class);
+    }
+
+    public function test_a_valid_chunked_jpeg_is_sent_untouched(): void
+    {
+        if (!extension_loaded('imagick')) {
+            $this->markTestSkipped('needs Imagick');
+        }
+
+        $img = new \Imagick();
+        $img->newPseudoImage(120, 80, 'gradient:red-blue');
+        $img->setImageFormat('jpeg');
+        $bytes = $img->getImageBlob();
+        $img->destroy();
+
+        $this->uploadWhole($bytes, 'ok.jpg', ['file_type' => 'image'], 4096)->assertOk();
+
+        $this->assertSame($bytes, Storage::disk('local')->get($this->dispatchedJob()->tempFilePath));
     }
 }

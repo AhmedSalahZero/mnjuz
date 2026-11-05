@@ -21,7 +21,13 @@ const trans = useTrans()
 
 // الطابور مشترك على مستوى الوحدة: يبقى حيّاً بعد أن يترك الموظّف هذه المحادثة،
 // فيكمل الرفع بدل أن يموت مع المكوّن.
-const uploads = initUploadQueue({ post: (url, data, config) => axios.post(url, data, config) })
+// حجم القطعة من الخادم: 5MB ثابتة كانت تُرفض كلّها حيث upload_max_filesize
+// أصغر منها، فيفشل كل مرفق فوق ميغابايتين.
+const serverChunkBytes = Number(usePage().props.upload_chunk_bytes) || CHUNK_BYTES
+const uploads = initUploadQueue({
+	post: (url, data, config) => axios.post(url, data, config),
+	chunkBytes: serverChunkBytes,
+})
 const uploadsExpanded = ref(false)
 
 // المؤشّر خاصّ بالمحادثة المعروضة: يختفي عند الانتقال ويعود عند الرجوع إليها.
@@ -542,7 +548,7 @@ const buildAttachment = (file) => {
 	// الملف الكبير يُرفَع على قطع، فما يبلغ الخادم قطعةٌ لا الملف كلّه — ولا
 	// شأن لحجمه بحدّ upload_max_filesize. أمّا الصغير فيذهب في طلب واحد،
 	// فيُقاس به. وفحص الملف كلّه كان يردّ ملفات صار الرفع المجزّأ يقبلها.
-	if (file.size <= CHUNK_BYTES && file.size > serverMaxUploadBytes.value) {
+	if (file.size <= serverChunkBytes && file.size > serverMaxUploadBytes.value) {
 		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(serverMaxUploadBytes.value)))
 		return null
 	}

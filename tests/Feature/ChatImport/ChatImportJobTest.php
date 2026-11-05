@@ -288,6 +288,86 @@ class ChatImportJobTest extends ChatImportTestCase
         );
     }
 
+    public function test_the_next_slice_waits_so_the_worker_can_reach_lower_queues(): void
+    {
+        config(['chat_import.batch_rows' => 2, 'chat_import.slice_rows' => 2, 'chat_import.slice_gap_seconds' => 5]);
+
+        $rows = [];
+        for ($i = 0; $i < 4; $i++) {
+            $rows[] = ['966501110001', '', '2026-05-23 10:0' . $i . ':00', 'in', 'msg ' . $i];
+        }
+        $import = $this->makeImport($this->csv($rows), ['status' => ChatImport::QUEUED, 'total_rows' => 4]);
+
+        \Illuminate\Support\Facades\Queue::fake();
+        (new ImportChatHistoryJob($import->id))->handle();
+
+        \Illuminate\Support\Facades\Queue::assertPushedOn('high', ImportChatHistoryJob::class, fn ($job) => $job->delay === 5);
+    }
+
+    public function test_rows_with_bad_numbers_are_skipped_across_slices(): void
+    {
+        config(['chat_import.batch_rows' => 2, 'chat_import.slice_rows' => 2]);
+
+        $rows = [];
+        for ($i = 0; $i < 6; $i++) {
+            $rows[] = ['96650111000' . $i, '', '2026-05-23 10:0' . $i . ':00', 'in', 'msg ' . $i];
+        }
+        array_splice($rows, 1, 0, [['96600647244', '', '2026-05-23 11:00:00', 'in', 'short']]);
+        array_splice($rows, 4, 0, [['9665314916119', '', '2026-05-23 11:01:00', 'in', 'long']]);
+        $rows[] = ['96653330991', '', '2026-05-23 11:02:00', 'in', 'last row'];
+
+        $import = $this->runImport($this->makeImport($this->csv($rows), ['default_country' => 'SA']));
+
+        $this->assertSame(ChatImport::COMPLETED, $import->status);
+        $this->assertSame(9, $import->total_rows);
+        $this->assertSame(9, $import->processed_rows);
+        $this->assertSame(6, $import->imported_messages);
+        $this->assertSame(3, $import->error_count);
+        $this->assertSame(3, $import->toStatusPayload()['skipped_rows']);
+        $this->assertSame(6, Contact::count());
+        $this->assertSame(
+            ['msg 0', 'msg 1', 'msg 2', 'msg 3', 'msg 4', 'msg 5'],
+            $this->importedChats($import)->map(fn ($c) => json_decode($c->metadata, true)['text']['body'])->all()
+        );
+        $this->assertNotNull($import->errors_file_path, 'the report outlives the import');
+    }
+
+    public function test_progress_counts_skipped_rows(): void
+    {
+        config(['chat_import.batch_rows' => 2, 'chat_import.slice_rows' => 2]);
+
+        $import = $this->makeImport($this->csv([
+            ['966501110001', '', '2026-05-23 10:00:00', 'in', 'one'],
+            ['96600647244', '', '2026-05-23 10:01:00', 'in', 'skipped'],
+            ['966501110002', '', '2026-05-23 10:02:00', 'in', 'two'],
+            ['966501110003', '', '2026-05-23 10:03:00', 'in', 'three'],
+        ]), ['status' => ChatImport::QUEUED, 'total_rows' => 4, 'default_country' => 'SA']);
+
+        \Illuminate\Support\Facades\Queue::fake();
+        (new ImportChatHistoryJob($import->id))->handle();
+
+        $this->assertSame(3, $import->refresh()->processed_rows);
+    }
+
+    public function test_a_fixed_number_is_added_later_without_duplicates(): void
+    {
+        $rows = [
+            ['966501110001', '', '2026-05-23 10:00:00', 'in', 'one'],
+            ['96600647244', '', '2026-05-23 10:01:00', 'in', 'two'],
+            ['966501110002', '', '2026-05-23 10:02:00', 'in', 'three'],
+        ];
+
+        $first = $this->runImport($this->makeImport($this->csv($rows), ['default_country' => 'SA']));
+        $this->assertSame(2, $first->imported_messages);
+
+        $rows[1][0] = '966500647244';
+        $second = $this->runImport($this->makeImport($this->csv($rows), ['default_country' => 'SA']));
+
+        $this->assertSame(ChatImport::COMPLETED, $second->status);
+        $this->assertSame(1, $second->imported_messages);
+        $this->assertSame(2, $second->duplicate_rows);
+    }
+
     public function test_replaying_a_slice_after_a_crash_is_harmless(): void
     {
         $import = $this->makeImport($this->sampleCsv(), ['status' => ChatImport::QUEUED, 'total_rows' => 3]);

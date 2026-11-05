@@ -28,13 +28,14 @@ final class BatchReader
     }
 
     /**
-     * @return array{rows: array<int, array{row: ParsedRow, fingerprint: string}>, end_offset: int}|null
+     * @return array{rows: array<int, array{row: ParsedRow, fingerprint: string}>, end_offset: int, skipped: int}|null
      *
      * @throws ChatImportException صفّ لم يُقرأ — الفحص كان يجب أن يرفضه.
      */
     public function next(int $maxRows, int $maxBytes): ?array
     {
         $rows = [];
+        $skipped = 0;
         $bytes = 0;
         $lastRunKey = null;
         $endOffset = $this->reader->offset();
@@ -53,6 +54,12 @@ final class BatchReader
                 }
 
                 $parsed = $this->parse($record);
+
+                if ($parsed === null) {
+                    $this->nextRowNumber++;
+                    $skipped++;
+                    continue;
+                }
             }
 
             $full = count($rows) >= $maxRows || $bytes >= $maxBytes;
@@ -72,11 +79,14 @@ final class BatchReader
             $lastRunKey = $parsed->runKey();
         }
 
-        return $rows === [] ? null : ['rows' => $rows, 'end_offset' => $endOffset];
+        return $rows === [] ? null : ['rows' => $rows, 'end_offset' => $endOffset, 'skipped' => $skipped];
     }
 
-    /** @param array<int, string|null> $record */
-    private function parse(array $record): ParsedRow
+    /**
+     * @param array<int, string|null> $record
+     * @return ParsedRow|null null لصفّ رقمه خاطئ: تخطّاه الفحص وكتبه في التقرير.
+     */
+    private function parse(array $record): ?ParsedRow
     {
         // السجلّ يُقرأ قبل أن يُضاف، فرقمه هو رقم الصفّ التالي.
         $row = $this->nextRowNumber;
@@ -91,6 +101,10 @@ final class BatchReader
         $parsed = $this->parser->parse($this->map->extract($record), $row);
 
         if (is_array($parsed)) {
+            if (RowParser::skipReason($parsed) !== null) {
+                return null;
+            }
+
             throw new ChatImportException(__('Row :row could not be read: :error', [
                 'row' => $row,
                 'error' => $parsed[0]['message'] ?? '',
