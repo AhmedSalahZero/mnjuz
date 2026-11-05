@@ -2,6 +2,7 @@
 
 namespace App\Services\Broadcasting;
 
+use App\Events\AgentPresenceChanged;
 use App\Models\Setting;
 use Illuminate\Broadcasting\Broadcasters\PusherBroadcaster;
 use Illuminate\Contracts\Broadcasting\Factory as BroadcastingFactory;
@@ -110,13 +111,15 @@ class BroadcastProvider
 
     /**
      * رقم المنشأة من اسم القناة. القنوات كلها تحمله: chats.ch{org}.{user}
-     * و payments.ch{org} و contact.chat.deleted.{org}، بالبادئة أو بلاها.
+     * و payments.ch{org} و contact.chat.deleted.{org} و agents.presence.ch{org}،
+     * بالبادئة أو بلاها. قناةٌ لا يعرفها هذا التحليل تُوقَّع بسرّ المنصّة، فيفشل
+     * اشتراك منشأة على Reverb بصمت.
      */
     public static function organizationFromChannel(string $channel): ?int
     {
         $channel = preg_replace('/^(presence-|private-)/', '', trim($channel));
 
-        foreach (['/^chats\.ch(\d+)\./', '/^payments\.ch(\d+)$/', '/^contact\.chat\.deleted\.(\d+)$/'] as $pattern) {
+        foreach (['/^chats\.ch(\d+)\./', '/^payments\.ch(\d+)$/', '/^contact\.chat\.deleted\.(\d+)$/', '/^agents\.presence\.ch(\d+)$/'] as $pattern) {
             if (preg_match($pattern, (string) $channel, $match)) {
                 return (int) $match[1];
             }
@@ -308,7 +311,27 @@ class BroadcastProvider
             ? 'presence-chats.ch' . $organizationId . '.' . $userId
             : null;
 
+        // حالة اتصال الموظفين لحظياً — للمالك والمدير وحدهما (شاشة الأداء).
+        // غيره يُرفض اشتراكه، فلا نعطيه اسماً يفشل به.
+        $config['presence_channel'] = ($organizationId && $userId && self::isManagerOf($organizationId, $userId))
+            ? 'private-' . AgentPresenceChanged::channelName($organizationId)
+            : null;
+
         return $config;
+    }
+
+    private static function isManagerOf(int $organizationId, int $userId): bool
+    {
+        try {
+            $role = \App\Models\Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            return \App\Support\OrganizationRole::isPrivileged($role);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /** يُستدعى في الاختبارات وبعد تعديل الإعدادات من اللوحة. */

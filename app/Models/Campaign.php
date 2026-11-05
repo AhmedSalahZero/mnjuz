@@ -6,6 +6,8 @@ use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Campaign extends Model {
     use HasFactory;
@@ -33,19 +35,19 @@ class Campaign extends Model {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 
-    public function organization(){
+    public function organization(): BelongsTo {
         return $this->belongsTo(Organization::class, 'organization_id', 'id');
     }
 
-    public function template(){
+    public function template(): BelongsTo {
         return $this->belongsTo(Template::class, 'template_id', 'id');
     }
 
-    public function contactGroup(){
+    public function contactGroup(): BelongsTo {
         return $this->belongsTo(ContactGroup::class, 'contact_group_id', 'id');
     }
 
-    public function campaignLogs(){
+    public function campaignLogs(): HasMany {
         return $this->hasMany(CampaignLog::class, 'campaign_id', 'id');
     }
 

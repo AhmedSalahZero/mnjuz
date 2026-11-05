@@ -4,3 +4,5 @@ vendor
 storage/installed
 public/hot
 public/storage
+# Postman collection with a local Sanctum token — never commit
+mnjz-mobile-local-ready.postman_collection.json

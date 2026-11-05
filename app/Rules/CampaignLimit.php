@@ -10,14 +10,18 @@ class CampaignLimit implements Rule
 {
     protected $ignoreId;
 
-    public function __construct($ignoreId = null)
+    /** المنشأة صراحةً: طلبات تطبيق الجوال بلا جلسة، والجلسة كانت تُرجع null فيُرفض كل طلب. */
+    protected $organizationId;
+
+    public function __construct($ignoreId = null, $organizationId = null)
     {
         $this->ignoreId = $ignoreId;
+        $this->organizationId = $organizationId;
     }
     
     public function passes($attribute, $value)
     {
-        $organizationId = session()->get('current_organization');
+        $organizationId = $this->organizationId ?? session()->get('current_organization');
 
         return !SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'campaign_limit');
     }

@@ -108,6 +108,45 @@ const agent = (over = {}) => ({
     is(row.online, true, 'معرّف نصّي يطابق رقمياً')
 }
 
+// ------------------------------------------------ الترتيب: حدث لحظي واستعلام
+
+{
+    // ردّ استعلامٍ قُرئ قبل الحدث ووصل بعده لا يُرجع الموظف إلى حالته السابقة
+    let rows = applyPresence([agent({ at: 1000 })], [{ user_id: 1, online: true, last_activity_at: null, at: 2000 }])
+    is(rows[0].online, true, 'الحدث يُطبَّق')
+    rows = applyPresence(rows, [{ user_id: 1, online: false, last_activity_at: null, at: 1500 }])
+    is(rows[0].online, true, 'الردّ الأقدم من الحدث لا يقلب الحالة')
+    is(rows[0].at, 2000, 'ولا يُرجع لحظة آخر تطبيق')
+}
+
+{
+    const [row] = applyPresence([agent({ online: true, at: 2000 })], [{ user_id: 1, online: false, last_activity_at: null, at: 3000 }])
+    is(row.online, false, 'الأحدث يُطبَّق')
+    is(row.at, 3000, 'وتتقدّم لحظته')
+}
+
+{
+    // ردّ قديم بلا at (قبل النشر): يُطبَّق كما كان
+    const [row] = applyPresence([agent({ online: true, at: 2000 })], [{ user_id: 1, online: false, last_activity_at: null }])
+    is(row.online, false, 'ردّ بلا at يُطبَّق')
+    is(row.at, 2000, 'ويبقي آخر لحظة معروفة')
+}
+
+{
+    // الحدث الأقدم لا يُرجع الحالة، لكن آخر نشاطٍ أحدث يبقى صحيحاً فيُكتب
+    const [row] = applyPresence(
+        [agent({ online: false, at: 5000, last_activity_at: '2026-06-01 11:00:00' })],
+        [{ user_id: 1, online: true, last_activity_at: '2026-06-01 12:00:00', at: 4000 }],
+    )
+    is(row.online, false, 'الحالة الأقدم تُتجاهل')
+    is(row.last_activity_at, '2026-06-01 12:00:00', 'وآخر النشاط الأحدث يُكتب')
+}
+
+{
+    const [row] = applyPresence([agent({ at: '2000' })], [{ user_id: 1, online: true, last_activity_at: null, at: '1000' }])
+    is(row.online, false, 'at نصّاً يقارَن رقمياً')
+}
+
 // ------------------------------------------------ لا تعديل للمدخلات
 
 {

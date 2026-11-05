@@ -175,6 +175,12 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
                 $ticket->assigned_to = null;
                 $ticket->assigned_seen = true;
             }
+        } elseif ($autoAssignment && empty($ticket->assigned_to)) {
+            // تذكرة مغلقة بلا موظّف — أنشأها استيراد سجلّ المحادثات مثلاً —
+            // تعود بلا أحد يراها إن لم تُسند. والعميل الجديد يُسند عند أوّل
+            // رسالة، فلا معنى لأن يُترك من له تاريخ معنا.
+            $ticket->assigned_to = $this->resolveAssignedAgent($settings);
+            $ticket->assigned_seen = $ticket->assigned_to === null;
         }
 
         // ✅ تحديث الحالة

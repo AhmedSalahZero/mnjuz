@@ -72,8 +72,9 @@
 import AppLayout from './Layout/App.vue'
 import axios from 'axios'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import { applyPresence } from '@/Composables/agentPresence'
+import { subscribeAgentPresence } from '../../echo'
 
 const props = defineProps({
   metrics: { type: Object, default: () => ({ agents: [] }) },
@@ -87,12 +88,14 @@ watch(() => props.metrics?.agents, (value) => {
   agents.value = value ?? []
 })
 
-// الحالة كانت تُحسب مرة عند التحميل ثم تتجمّد، فمن يدخل أو يبدّل شركته لا يظهر
-// للمدير «متصلاً» إلا بإعادة تحميل الصفحة يدوياً. نسأل نقطة الحالة الخفيفة
-// (لا المقاييس كلّها) دورياً، وفور عودة التبويب إلى الظهور.
-const STATUS_POLL_MS = 20000
+// الحالة تصل لحظياً: حدث AgentPresenceChanged عند كل تغيّر (دخول، إغلاق تبويب،
+// خروج، انقطاع). كانت الصفحة تسأل كل عشرين ثانية وحدها، فيتأخّر ظهور من دخل
+// ومغادرة من خرج. الاستعلام الخفيف يبقى مصالحةً: كل دقيقة، وفور عودة التبويب
+// إلى الظهور، وكلّما اكتمل الاشتراك أو عاد اتصال البثّ — ما يفوت أثناء الانقطاع.
+const STATUS_POLL_MS = 60000
 let statusTimer = null
 let statusInFlight = false
+let unsubscribePresence = null
 
 const refreshStatus = async () => {
   if (statusInFlight || document.visibilityState !== 'visible') return
@@ -112,14 +115,30 @@ const onVisibilityChange = () => {
   if (document.visibilityState === 'visible') refreshStatus()
 }
 
+const onPresenceChanged = (event) => {
+  agents.value = applyPresence(agents.value, [event])
+}
+
 onMounted(() => {
   statusTimer = setInterval(refreshStatus, STATUS_POLL_MS)
   document.addEventListener('visibilitychange', onVisibilityChange)
+
+  // البثّ مساعد: تعذّره يُبقي الصفحة على الاستعلام الدوري.
+  try {
+    const page = usePage()
+    const organizationId = page.props.organization?.id
+    if (organizationId && page.props.broadcast?.key) {
+      unsubscribePresence = subscribeAgentPresence(organizationId, page.props.broadcast, onPresenceChanged, refreshStatus)
+    }
+  } catch (error) {
+    console.warn('Agent presence subscription failed', error)
+  }
 })
 
 onBeforeUnmount(() => {
   if (statusTimer) clearInterval(statusTimer)
   document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (unsubscribePresence) unsubscribePresence()
 })
 
 const range = ref({

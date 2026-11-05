@@ -33,6 +33,7 @@ use App\Services\MediaService;
 use App\Services\PhoneService;
 use App\Services\ActivityLogger;
 use App\Services\AgentPerformanceService;
+use App\Services\AgentPresence;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Support\ChatStatus;
@@ -985,7 +986,10 @@ class ApiController extends Controller
             $header['text'] = clean($request->header);
         }
         
-        $message = $this->whatsappService->sendMessage($contact->uuid, $request->message, 0, $type, $request->buttons, $header, $request->footer);
+        // الرسالة باسم الموظف حين تأتي من التطبيق، و0 من مفتاح الـ API (لا موظف
+        // وراءها). كانت 0 دائماً، فغاب ما يرسله الموظف من التطبيق عن «الرسائل
+        // المرسلة» و«أول زمن استجابة» في صفحة الأداء.
+        $message = $this->whatsappService->sendMessage($contact->uuid, $request->message, (int) ($request->user()?->id ?? 0), $type, $request->buttons, $header, $request->footer);
 
         // مسار التطبيق لا يمرّ بـ ChatService، فلولا هذا السطر لغاب كل ما يرسله
         // الموظفون من الموبايل عن سجلّ النشاط — وهو المسار الأكثر استعمالاً.
@@ -1025,6 +1029,8 @@ class ApiController extends Controller
      */
     public function sendMsg(Request $request)
     {
+        $this->markMobilePresence($request);
+
         // قبل أي قراءة للملفات: Request::file() يخزّن ما يقرأ في ذاكرة داخلية،
         // فالتوحيد بعدها لا يراه أحد.
         $hasFiles = self::normalizeUploadedFiles($request);
@@ -1158,6 +1164,8 @@ class ApiController extends Controller
 
     public function sendTemplateMessageByUUID(Request $request)
     {
+        $this->markMobilePresence($request);
+
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -1224,7 +1232,7 @@ class ApiController extends Controller
 
         // Extract the UUID of the contact
         $this->initializeWhatsappService($organizationId);
-        $responseObject = $this->whatsappService->sendTemplateMessage($contact->uuid, $request->template, 0, null, null, $sendByQueue);
+        $responseObject = $this->whatsappService->sendTemplateMessage($contact->uuid, $request->template, (int) $request->user()->id, null, null, $sendByQueue);
         $this->logMobileActivity(ActivityLogger::TEMPLATE_SENT, $contact, ['template' => $request->template], (int) $organizationId);
 
         return response()->json([
@@ -2609,8 +2617,8 @@ class ApiController extends Controller
     }
 
     /**
-     * نبضة نشاط من التطبيق. لم يكن للموبايل نبضة إطلاقاً — النبضة الوحيدة في
-     * routes/web.php — فكل من يعمل من التطبيق يظهر «غير متصل» دائماً مهما أرسل.
+     * نبضة التطبيق وهو في المقدّمة (كل {@see AgentPresence::HEARTBEAT_SECONDS} ثانية).
+     * تُثبت حضور جلسة التطبيق هذه (توكنها) وتقيس الوقت النشط.
      */
     public function performanceHeartbeat(Request $request)
     {
@@ -2622,9 +2630,45 @@ class ApiController extends Controller
                 (int) $request->user()->id,
                 $request->boolean('visible', true)
             );
+
+            [$clientId, $sessionKey] = AgentPresence::mobileClient($request);
+            AgentPresence::touch($organizationId, (int) $request->user()->id, $clientId, AgentPresence::MOBILE, $sessionKey);
+        }
+
+        return response()->json(['success' => true, 'interval' => AgentPresence::HEARTBEAT_SECONDS]);
+    }
+
+    /**
+     * التطبيق انتقل إلى الخلفية أو أُغلق: النظام يوقفه هناك فلا ينبض، فيُعلن
+     * مغادرته بدل أن يبقى «متصلاً» حتى تنقضي النافذة.
+     */
+    public function performanceOffline(Request $request)
+    {
+        $organizationId = (int) $request->user()->current_mobile_organization_id;
+
+        if ($organizationId) {
+            [$clientId] = AgentPresence::mobileClient($request);
+            AgentPresence::leave($organizationId, (int) $request->user()->id, $clientId);
         }
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * من يرسل من التطبيق حاضرٌ ولو لم ينبض تطبيقه بعد (نسخة قديمة). لا ترمي:
+     * markPresent تحمي نفسها، والإرسال لا يتوقّف عليها.
+     */
+    private function markMobilePresence(Request $request): void
+    {
+        $user = $request->user();
+        $organizationId = (int) ($user?->current_mobile_organization_id ?? 0);
+
+        if (!$user || !$organizationId) {
+            return;
+        }
+
+        [$clientId, $sessionKey] = AgentPresence::mobileClient($request);
+        AgentPerformanceService::markPresent($organizationId, (int) $user->id, AgentPresence::MOBILE, $clientId, $sessionKey);
     }
 
     /**
@@ -2996,6 +3040,8 @@ class ApiController extends Controller
         $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
+            // فاصل عند تساوي الثانية — السجلّ المستورد مليء بها.
+            ->orderBy('id', 'desc')
             ->when($createdAt, function ($q) use ($createdAt) {
                 $q->where('created_at', '>=', $createdAt);
             })

@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\AgentPerformanceService;
+use App\Services\AgentPresence;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Cycle\CycleTestCase;
@@ -20,8 +21,8 @@ use Tests\Feature\Cycle\CycleTestCase;
  * العطل: الإسناد كان يوزّع المحادثات على كل أعضاء الفريق النشطين، فتصل
  * المحادثة لموظف غير متصل وتبقى بلا ردّ.
  *
- * الإصلاح: يُرشَّح المرشّحون بتعريف «متصل» نفسه الذي تعرضه صفحة الأداء (نبضة أو
- * رسالة صادرة خلال آخر 5 دقائق). إن لم يكن أحد متصلاً تبقى المحادثة بلا موظف في
+ * الإصلاح: يُرشَّح المرشّحون بتعريف «متصل» نفسه الذي تعرضه صفحة الأداء (تبويب أو
+ * تطبيق نبض خلال النافذة — AgentPresence). إن لم يكن أحد متصلاً تبقى المحادثة بلا موظف في
  * Unassigned. وإن لم يكن الحضور مُتتبَّعاً أصلاً (ميزة الأداء مقفولة) يبقى
  * السلوك القديم، وإلا لما وصلت محادثة لأحد.
  */
@@ -79,10 +80,20 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
         return $user;
     }
 
-    /** نبضة قبل $minutesAgo دقيقة. داخل النافذة (< 5) ⇒ متصل. */
-    private function pinged(User $user, float $minutesAgo = 1, ?Organization $organization = null): void
+    /** تبويبه نبض قبل $secondsAgo ثانية. داخل النافذة ⇒ متصل. */
+    private function pinged(User $user, int $secondsAgo = 10, ?Organization $organization = null): void
     {
-        $at = now()->subSeconds((int) round($minutesAgo * 60));
+        $at = now()->subSeconds($secondsAgo);
+
+        DB::table('agent_presence_clients')->insert([
+            'organization_id' => ($organization ?? $this->organization)->id,
+            'user_id' => $user->id,
+            'client_id' => 'tab-' . $user->id,
+            'platform' => AgentPresence::WEB,
+            'last_seen_at' => $at,
+            'created_at' => $at,
+            'updated_at' => $at,
+        ]);
 
         DB::table('agent_activity')->insert([
             'organization_id' => ($organization ?? $this->organization)->id,
@@ -190,7 +201,7 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
     public function test_auto_leaves_the_conversation_unassigned_when_nobody_is_online(): void
     {
         $agent = $this->agent();
-        $this->pinged($agent, 6);
+        $this->pinged($agent, AgentPresence::ONLINE_WINDOW_SECONDS + 30);
 
         $ticket = $this->assignNewConversation();
 
@@ -204,28 +215,32 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
     {
         $stale = $this->agent();
         $fresh = $this->agent();
-        $this->pinged($stale, 6);
-        $this->pinged($fresh, 4);
+        $this->pinged($stale, AgentPresence::ONLINE_WINDOW_SECONDS + 30);
+        $this->pinged($fresh, AgentPresence::ONLINE_WINDOW_SECONDS - 30);
         $this->busyWith($fresh, 5);
 
         $this->assertSame($fresh->id, (int) $this->assignNewConversation()->assigned_to);
     }
 
-    /** من يردّ من التطبيق بلا نبضة متصلٌ برسائله، كما في صفحة الأداء. */
-    public function test_a_recent_outbound_message_counts_as_online(): void
+    /**
+     * رسالة باسمه ليست حضوراً: رسائل الحملة تُسجَّل باسم منشئها، فكانت
+     * المحادثات تُسنَد إليه وهو غائب طوال إرسال حملته.
+     */
+    public function test_a_message_sent_in_someones_name_does_not_make_him_assignable(): void
     {
         $agent = $this->agent();
-        $this->chat($this->newContact(), ['user_id' => $agent->id, 'created_at' => now()->subMinute()]);
-
-        $this->assertSame($agent->id, (int) $this->assignNewConversation()->assigned_to);
-    }
-
-    public function test_an_old_outbound_message_does_not(): void
-    {
-        $agent = $this->agent();
-        $this->chat($this->newContact(), ['user_id' => $agent->id, 'created_at' => now()->subMinutes(10)]);
+        $this->chat($this->newContact(), ['user_id' => $agent->id, 'created_at' => now()->subSeconds(10)]);
 
         $this->assertNull($this->assignNewConversation()->assigned_to);
+    }
+
+    /** من يرسل من التطبيق حاضرٌ بجلسة تطبيقه ولو لم ينبض بعد (نسخة قديمة). */
+    public function test_sending_from_the_app_makes_the_agent_assignable(): void
+    {
+        $agent = $this->agent();
+        AgentPerformanceService::markPresent($this->organization->id, $agent->id, AgentPresence::MOBILE, 'mobile:1', '1');
+
+        $this->assertSame($agent->id, (int) $this->assignNewConversation()->assigned_to);
     }
 
     public function test_a_suspended_or_removed_member_is_never_picked_even_when_online(): void
@@ -249,7 +264,7 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
         $agent = $this->agent();
         $other = Organization::factory()->create(['created_by' => $this->owner->id]);
         Team::factory()->create(['user_id' => $agent->id, 'organization_id' => $other->id, 'role' => 'agent', 'created_by' => $this->owner->id]);
-        $this->pinged($agent, 1, $other);
+        $this->pinged($agent, 10, $other);
 
         $this->assertNull($this->assignNewConversation()->assigned_to);
     }
@@ -390,6 +405,37 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
         $this->assertSame($offline->id, (int) ChatTicket::where('contact_id', $contact->id)->value('assigned_to'));
     }
 
+    /**
+     * تذكرة مغلقة بلا موظّف — ما يُنشئه استيراد سجلّ المحادثات — تُسند عند
+     * إعادة فتحها ولو كانت «إعادة الإسناد» مطفأة: لا موظّف سابق يُحافَظ عليه.
+     */
+    public function test_reopening_an_unassigned_ticket_assigns_it_even_without_reassignment(): void
+    {
+        $this->mode('auto', false);
+        $online = $this->agent();
+        $this->pinged($online);
+        $contact = $this->closedConversation(null);
+
+        ProcessTicketAssignmentJob::dispatchSync($contact->id, $this->organization->id, false);
+
+        $ticket = ChatTicket::where('contact_id', $contact->id)->firstOrFail();
+        $this->assertSame('open', $ticket->status);
+        $this->assertSame($online->id, (int) $ticket->assigned_to);
+        $this->assertFalse((bool) $ticket->assigned_seen);
+    }
+
+    public function test_reopening_an_unassigned_ticket_without_auto_assignment_leaves_it_unassigned(): void
+    {
+        $this->mode(null, false, false);
+        $online = $this->agent();
+        $this->pinged($online);
+        $contact = $this->closedConversation(null);
+
+        ProcessTicketAssignmentJob::dispatchSync($contact->id, $this->organization->id, false);
+
+        $this->assertNull(ChatTicket::where('contact_id', $contact->id)->value('assigned_to'));
+    }
+
     // ------------------------------------------------- بلا تتبّع حضور
 
     /** الميزة مقفولة ⇒ لا نبضات تُسجَّل أصلاً، فالترشيح يُفرغ الإسناد. */
@@ -450,7 +496,7 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
         $messaged = $this->agent();
         $this->agent();
         $this->pinged($pinged);
-        $this->pinged($stale, 7);
+        $this->pinged($stale, AgentPresence::ONLINE_WINDOW_SECONDS + 30);
         $this->chat($this->newContact(), ['user_id' => $messaged->id, 'created_at' => now()->subSeconds(30)]);
 
         $service = new AgentPerformanceService($this->organization->id);
@@ -459,16 +505,23 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
         sort($online);
 
         $this->assertSame($fromPage, $online);
-        $expected = [$pinged->id, $messaged->id];
-        sort($expected);
-        $this->assertSame($expected, $online);
+        $this->assertSame([$pinged->id], $online);
     }
 
-    public function test_online_ids_take_the_newest_of_ping_and_message(): void
+    /** تبويبان: واحدٌ منقطع والآخر حيّ ⇒ متصل. */
+    public function test_one_live_client_is_enough(): void
     {
         $agent = $this->agent();
-        $this->pinged($agent, 30);
-        $this->chat($this->newContact(), ['user_id' => $agent->id, 'created_at' => now()->subMinute()]);
+        DB::table('agent_presence_clients')->insert([
+            'organization_id' => $this->organization->id,
+            'user_id' => $agent->id,
+            'client_id' => 'old-tab',
+            'platform' => AgentPresence::WEB,
+            'last_seen_at' => now()->subMinutes(30),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->pinged($agent, 5);
 
         $this->assertSame([$agent->id], (new AgentPerformanceService($this->organization->id))->onlineUserIds());
     }

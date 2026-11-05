@@ -601,6 +601,48 @@ class SubscriptionService
         return false;
     }
 
+    /**
+     * قيمة حدٍّ عدديّ في باقة المنشأة.
+     *
+     * isSubscriptionFeatureLimitReached تجيب «هل بلغنا الحدّ الآن؟»، وهذا لا
+     * يكفي من يريد أن يضيف دفعة واحدة كبيرة — استيراد خمسين ألف جهة اتصال
+     * يحتاج أن يعرف كم بقي. والقواعد هنا هي نفسها هناك.
+     *
+     * @return int|null null = بلا حدّ؛ 0 حين لا اشتراك أو انتهى (لا يُسمح بشيء).
+     */
+    public static function featureLimit($organizationId, string $feature): ?int
+    {
+        $trialKeys = [
+            'contacts_limit' => 'contacts',
+            'message_limit' => 'messages',
+            'campaign_limit' => 'campaigns',
+            'canned_replies_limit' => 'automated_replies',
+            'team_limit' => 'users',
+        ];
+
+        $subscription = Subscription::where('organization_id', $organizationId)->first();
+
+        if (!$subscription || $subscription->valid_until < now()) {
+            return 0;
+        }
+
+        if ($subscription->status === 'trial' && isset($trialKeys[$feature])) {
+            $limits = json_decode((string) optional(Setting::where('key', 'trial_limits')->first())->value, true) ?: [];
+            $limit = $limits[$trialKeys[$feature]] ?? -1;
+
+            return (int) $limit === -1 ? null : max(0, (int) $limit);
+        }
+
+        $plan = SubscriptionPlan::find($subscription->plan_id);
+        $metadata = $plan ? (json_decode((string) $plan->metadata, true) ?: []) : [];
+
+        if (!array_key_exists($feature, $metadata) || $metadata[$feature] === null || $metadata[$feature] === '') {
+            return null;
+        }
+
+        return (int) $metadata[$feature] === -1 ? null : max(0, (int) $metadata[$feature]);
+    }
+
     public static function isSubscriptionLimitReachedForInboundMessages($organizationId)
     {
         $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();

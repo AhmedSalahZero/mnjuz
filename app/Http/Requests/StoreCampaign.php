@@ -31,7 +31,7 @@ class StoreCampaign extends FormRequest
         ];
 
         if ($this->isMethod('post')) {
-            $rules['name'] = ['required', new CampaignLimit];
+            $rules['name'] = ['required', new CampaignLimit(null, $this->organizationId() ?: null)];
         } else {
             $rules['name'] = ['required'];
         }
@@ -128,7 +128,7 @@ class StoreCampaign extends FormRequest
                 return;
             }
 
-            $organizationId = (int) session()->get('current_organization');
+            $organizationId = $this->organizationId();
 
             if ($organizationId <= 0) {
                 return;
@@ -162,6 +162,15 @@ class StoreCampaign extends FormRequest
                 );
             }
         });
+    }
+
+    /**
+     * منشأة الحملة. الويب يقرؤها من الجلسة، وتطبيق الجوال يتجاوزها
+     * (MobileStoreCampaign) لأن مسارات الـ API بلا جلسة.
+     */
+    protected function organizationId(): int
+    {
+        return (int) session()->get('current_organization');
     }
 
     public function messages()

@@ -22,6 +22,9 @@ const configKeyOf = (broadcast) => JSON.stringify([
 /** قنوات مشتركة: اسم القناة → { channel, handlers } — اشتراك فيزيائي واحد = طلب auth واحد */
 const sharedChannelEntries = new Map();
 
+/** قنوات حالة الموظفين: اسم القناة → { channel, handlers } */
+const presenceChannelEntries = new Map();
+
 /**
  * اتصال البثّ. يقبل إعداد المزوّد كما يبنيه الخادم بدل مفتاح وتجميعة.
  *
@@ -42,6 +45,7 @@ export function getEchoInstance(broadcast) {
         }
         echoInstance = null;
         sharedChannelEntries.clear();
+        presenceChannelEntries.clear();
     }
 
     if (!echoInstance) {
@@ -157,5 +161,70 @@ function channelApi(entry) {
             entry.contactHandlers.add(handler);
             return () => entry.contactHandlers.delete(handler);
         },
+    };
+}
+
+/**
+ * حالة اتصال موظفي المنظمة لحظياً — لصفحة الأداء (المالك والمدير).
+ *
+ * الحدث AgentPresenceChanged يُطلَق عند تغيّر الحالة وحده. ما يفوت الصفحة وهي
+ * غير مشتركة (قبل اكتمال الاشتراك، أو أثناء انقطاع الاتصال) تستدركه بـ onSync:
+ * يُستدعى عند نجاح الاشتراك وكلّما عاد الاتصال، فتسأل الصفحة نقطة الحالة.
+ *
+ * @param {number} organizationId
+ * @param {{key: string, cluster?: ?string, host?: ?string, port?: number, force_tls?: boolean}} broadcast
+ * @param {(event: {user_id: number, online: boolean, last_activity_at: ?string, at: number}) => void} handler
+ * @param {() => void} [onSync]
+ * @returns {() => void} إلغاء الاشتراك
+ */
+export function subscribeAgentPresence(organizationId, broadcast, handler, onSync) {
+    const name = `agents.presence.ch${organizationId}`;
+    const echo = getEchoInstance(broadcast);
+
+    let entry = presenceChannelEntries.get(name);
+    if (!entry) {
+        const handlers = new Set();
+        const syncs = new Set();
+        const channel = echo
+            .private(name)
+            .subscribed(() => syncs.forEach((sync) => sync()))
+            .error((error) => {
+                console.error('[Echo] فشل الاشتراك في ' + name, error);
+            });
+
+        channel.listen('.AgentPresenceChanged', (event) => {
+            handlers.forEach((h) => {
+                try {
+                    h(event);
+                } catch (e) {
+                    console.warn('[Echo AgentPresenceChanged handler]', e);
+                }
+            });
+        });
+
+        entry = { channel, handlers, syncs };
+        presenceChannelEntries.set(name, entry);
+    }
+
+    entry.handlers.add(handler);
+    if (onSync) entry.syncs.add(onSync);
+
+    const connection = echo.connector?.pusher?.connection;
+    const onConnected = () => onSync?.();
+    connection?.bind('connected', onConnected);
+
+    return () => {
+        entry.handlers.delete(handler);
+        if (onSync) entry.syncs.delete(onSync);
+        connection?.unbind('connected', onConnected);
+
+        if (entry.handlers.size === 0 && presenceChannelEntries.get(name) === entry) {
+            presenceChannelEntries.delete(name);
+            try {
+                echo.leave(name);
+            } catch (e) {
+                // اتصال أُغلق أصلاً.
+            }
+        }
     };
 }

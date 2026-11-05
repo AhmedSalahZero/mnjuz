@@ -112,6 +112,10 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
     Route::get('/google/callback', [App\Http\Controllers\AuthController::class, 'googleCallback'])->name('google.callback');
     Route::get('/facebook/callback', [App\Http\Controllers\AuthController::class, 'handleFacebookCallback']);
     Route::get('/signup', [App\Http\Controllers\AuthController::class, 'showRegistrationForm']);
+    // رابط «ادعُ صديقاً»: يحفظ رمز الإحالة ويوجّه إلى التسجيل.
+    Route::get('/r/{code}', [App\Http\Controllers\ReferralController::class, 'visit'])
+        ->where('code', '[A-Za-z0-9]{4,16}')
+        ->middleware('throttle:30,1');
     Route::post('/signup', [App\Http\Controllers\AuthController::class, 'handleRegistration']);
     Route::get('/forgot-password', [App\Http\Controllers\AuthController::class, 'showForgotForm']);
     Route::post('/forgot-password', [App\Http\Controllers\AuthController::class, 'createPasswordResetToken']);
@@ -190,6 +194,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/ratings', [App\Http\Controllers\User\RatingController::class, 'index']);
                 Route::delete('/ratings/{uuid}', [App\Http\Controllers\User\RatingController::class, 'destroy']);
                 Route::post('/performance/heartbeat', [App\Http\Controllers\User\AgentPerformanceController::class, 'heartbeat']);
+                Route::post('/performance/offline', [App\Http\Controllers\User\AgentPerformanceController::class, 'offline']);
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
@@ -292,6 +297,19 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/devices', [App\Http\Controllers\User\SettingController::class, 'devices']);
                     Route::get('/settings/device', [App\Http\Controllers\UserDeviceController::class, 'show']);
                     Route::delete('/settings/device', [App\Http\Controllers\UserDeviceController::class, 'destroy']);
+
+                    // استيراد سجلّ المحادثات من منصّة أخرى. خارج بادئات الموظّف في
+                    // RestrictOrganizationAgent، فلا يبلغه إلا المالك والمدير.
+                    Route::get('/settings/chat-imports', [App\Http\Controllers\User\ChatImportController::class, 'index']);
+                    Route::get('/settings/chat-imports/template', [App\Http\Controllers\User\ChatImportController::class, 'template']);
+                    Route::post('/settings/chat-imports/upload/chunk', [App\Http\Controllers\User\ChatImportController::class, 'uploadChunk']);
+                    Route::delete('/settings/chat-imports/upload/chunk', [App\Http\Controllers\User\ChatImportController::class, 'discardUpload']);
+                    Route::get('/settings/chat-imports/{uuid}/status', [App\Http\Controllers\User\ChatImportController::class, 'status']);
+                    Route::get('/settings/chat-imports/{uuid}/errors', [App\Http\Controllers\User\ChatImportController::class, 'errors']);
+                    Route::post('/settings/chat-imports/{uuid}/cancel', [App\Http\Controllers\User\ChatImportController::class, 'cancel']);
+                    Route::post('/settings/chat-imports/{uuid}/resume', [App\Http\Controllers\User\ChatImportController::class, 'resume']);
+                    Route::post('/settings/chat-imports/{uuid}/rollback', [App\Http\Controllers\User\ChatImportController::class, 'rollback']);
+
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
                     Route::post('/contact-fields/update-positions', [App\Http\Controllers\User\ContactFieldController::class, 'updatePositions']);
 

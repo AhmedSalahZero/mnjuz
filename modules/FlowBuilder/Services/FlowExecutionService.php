@@ -182,13 +182,32 @@ class FlowExecutionService
      *
      * المهلة تخصّ المحفّزين اللذين يشتغلان مرّة واحدة (first_message
      * وnew_contact). أمّا keywords فيعيد نفسه بالكلمة أصلاً.
+     *
+     * «سبقتها» بالوقت لا بالمعرّف: سجلّ المحادثات المستورد من منصّة أخرى
+     * يُكتب بعد الرسائل الحيّة فيحمل معرّفات أكبر وتواريخ أقدم. بالمعرّف
+     * كانت أوّل رسالة حقيقية بعد الاستيراد تُقاس من رسالة مستوردة عمرها
+     * أشهر، فيبدأ الترحيب لعميلٍ يتحدّث الآن.
      */
     private function findTimedOutFlow($chat)
     {
+        $currentAt = \DB::table('chats')->where('id', $chat->id)->value('created_at');
+
+        if (empty($currentAt)) {
+            return null;
+        }
+
         $previousAt = \DB::table('chats')
             ->where('contact_id', $chat->contact_id)
             ->where('type', 'inbound')
-            ->where('id', '<', $chat->id)
+            // رسالتان في الثانية نفسها: الأسبق معرّفاً هي السابقة، وإلا رأت كلٌّ
+            // منهما الأخرى قبلها بصفر دقائق فلا يبدأ الترحيب لأيّ منهما.
+            ->where(function ($q) use ($currentAt, $chat) {
+                $q->where('created_at', '<', $currentAt)
+                    ->orWhere(function ($same) use ($currentAt, $chat) {
+                        $same->where('created_at', $currentAt)->where('id', '<', $chat->id);
+                    });
+            })
+            ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->value('created_at');
 

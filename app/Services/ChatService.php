@@ -1143,6 +1143,9 @@ class ChatService
         $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
+            // رسائل الثانية الواحدة بترتيب كتابتها: السجلّ المستورد يحمل مئات
+            // الدفعات في الثانية نفسها، وبلا هذا يتبدّل ترتيبها بين صفحة وأخرى.
+            ->orderBy('id', 'desc')
           
 			->when($createdAt, function ($q) use ($createdAt) {
 				$q->where('created_at', '>=', $createdAt);

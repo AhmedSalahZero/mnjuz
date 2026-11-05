@@ -25,6 +25,7 @@ const configKey = src.slice(keyStart, keyEnd)
 const mod = `
 let echoInstance = null
 const sharedChannelEntries = new Map()
+const presenceChannelEntries = new Map()
 globalThis.__built = 0
 globalThis.__disconnected = 0
 class Echo { constructor(o) { captured = o; globalThis.__built++ } disconnect() { globalThis.__disconnected++ } }

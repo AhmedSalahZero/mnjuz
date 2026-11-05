@@ -24,8 +24,21 @@ class Kernel extends ConsoleKernel
             ->name('prune-chunked-uploads')
             ->withoutOverlapping();
 
+        // ملفات استيراد المحادثات المنتهية وتقارير أخطائها.
+        $schedule->command('chat-imports:prune')
+            ->dailyAt('03:35')
+            ->withoutOverlapping();
+
         $schedule->job(new CreateCampaignLogsJob(), 'campaign-logs')
             ->everyMinute()
+            ->withoutOverlapping();
+
+        // الموظف الذي انهار تبويبه أو انقطعت شبكته لا يرسل «غادرتُ»: المنظّف
+        // يحذف العملاء المنقطعين ويُبثّ للمدير «غير متصل». كل ثلاثين ثانية كي
+        // لا يتأخّر ذلك عن دقيقتين.
+        $schedule->call(fn () => \App\Services\AgentPresence::sweep())
+            ->everyThirtySeconds()
+            ->name('agent-presence-sweep')
             ->withoutOverlapping();
 
         // الرصيد المشحون قبل انتهاء الاشتراك لا يستهلكه شيء: الخصم يجري لحظة

@@ -4,20 +4,24 @@ namespace App\Rules;
 
 use Illuminate\Contracts\Validation\Rule;
 use App\Models\User;
-use app\Services\SubscriptionService;
+use App\Services\SubscriptionService;
 
 class TeamLimit implements Rule
 {
     protected $ignoreId;
 
-    public function __construct($ignoreId = null)
+    /** المنشأة صراحةً: طلبات تطبيق الجوال بلا جلسة. */
+    protected $organizationId;
+
+    public function __construct($ignoreId = null, $organizationId = null)
     {
         $this->ignoreId = $ignoreId;
+        $this->organizationId = $organizationId;
     }
     
     public function passes($attribute, $value)
     {
-        $organizationId = session()->get('current_organization');
+        $organizationId = $this->organizationId ?? session()->get('current_organization');
 
         return !SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'team_limit');
     }

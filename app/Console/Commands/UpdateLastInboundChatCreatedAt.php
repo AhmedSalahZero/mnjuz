@@ -18,6 +18,8 @@ class UpdateLastInboundChatCreatedAt extends Command
                 SELECT contact_id, MAX(created_at) AS last_inbound
                 FROM chats
                 WHERE type = 'inbound' AND deleted_at IS NULL
+                  -- الرسائل المستوردة لم تصل عبر واتساب هنا، فلا تفتح نافذة الـ24 ساعة.
+                  AND chat_import_id IS NULL
                 GROUP BY contact_id
             ) sub ON c.id = sub.contact_id
             SET c.last_inbound_chat_created_at = sub.last_inbound

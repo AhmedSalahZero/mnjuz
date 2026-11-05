@@ -209,4 +209,61 @@ class BroadcastAuthEndpointTest extends TestCase
             ])
             ->assertForbidden();
     }
+
+    // ------------------------------------------------------ قناة حالة الموظفين
+
+    private function presenceChannel(): string
+    {
+        return 'private-agents.presence.ch' . $this->organization->id;
+    }
+
+    /**
+     * قناة جديدة لا يعرف رقمَ منشأتها تحليلُ الاسم كانت ستُوقَّع بسرّ المنصّة،
+     * فيرفضها Reverb ولا تصل صفحةَ الأداء حالةٌ لحظية.
+     */
+    public function test_the_agents_presence_channel_is_signed_with_the_reverb_secret(): void
+    {
+        $this->useReverb();
+
+        $response = $this->actingAs($this->user)->postJson('/broadcasting/auth', [
+            'socket_id' => self::SOCKET,
+            'channel_name' => $this->presenceChannel(),
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(
+            'reverb-key:' . hash_hmac('sha256', self::SOCKET . ':' . $this->presenceChannel(), 'reverb-secret'),
+            $response->json('auth')
+        );
+    }
+
+    /** الموظف لا يرى حالة زملائه — كما تُحجب عنه صفحة الأداء. */
+    public function test_an_agent_cannot_subscribe_to_the_agents_presence_channel(): void
+    {
+        $this->useReverb();
+        $agent = User::factory()->create(['role' => 'user']);
+        Team::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'user_id' => $agent->id,
+            'role' => 'agent',
+            'status' => 'active',
+            'created_by' => $this->user->id,
+        ]);
+
+        $this->actingAs($agent)->postJson('/broadcasting/auth', [
+            'socket_id' => self::SOCKET,
+            'channel_name' => $this->presenceChannel(),
+        ])->assertForbidden();
+    }
+
+    public function test_an_outsider_cannot_subscribe_to_the_agents_presence_channel(): void
+    {
+        $this->useReverb();
+
+        $this->actingAs(User::factory()->create(['role' => 'user']))->postJson('/broadcasting/auth', [
+            'socket_id' => self::SOCKET,
+            'channel_name' => $this->presenceChannel(),
+        ])->assertForbidden();
+    }
 }

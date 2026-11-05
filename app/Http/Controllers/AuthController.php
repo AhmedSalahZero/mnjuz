@@ -26,6 +26,7 @@ use App\Models\User;
 use App\Models\UserDevice;
 use App\Mail\ResetLinkedDevicesMail;
 use App\Services\AgentPerformanceService;
+use App\Services\AgentPresence;
 use App\Services\UserDeviceService;
 use App\Services\AuthService;
 use App\Services\PasswordResetService;
@@ -296,7 +297,7 @@ class AuthController extends BaseController
                     $currentOrganizationId = $organizations[0]['id'];
 					$user->current_mobile_organization_id = $currentOrganizationId;
 					$user->save();
-                    AgentPerformanceService::markPresent((int) $currentOrganizationId, (int) $user->id);
+                    AgentPerformanceService::markPresent((int) $currentOrganizationId, (int) $user->id, AgentPresence::MOBILE);
                 }
             }
 
@@ -441,6 +442,8 @@ class AuthController extends BaseController
                 
                         //Create Organization
                         $organization = $this->createOrganization($user);
+
+                        app(\App\Services\ReferralService::class)->recordSignup($user, $request);
                 
                         // Send Registration Email
                         Email::send('Registration', $user);
@@ -556,6 +559,8 @@ class AuthController extends BaseController
                     'valid_until' => $has_trial ? date('Y-m-d H:i:s', strtotime('+' . $config->value . ' days')) : now(),
                 ]);
 
+                app(\App\Services\ReferralService::class)->recordSignup($user, $request);
+
                 Email::send('Registration', $user);
 
                 $verifyEmailConfig = Setting::where('key', 'verify_email')->first();
@@ -620,6 +625,11 @@ class AuthController extends BaseController
 
     public function showRegistrationForm(WazBusinessService $waz)
     {
+        // /signup?ref=CODE يعمل كرابط الإحالة /r/CODE.
+        if (request()->filled('ref')) {
+            app(\App\Services\ReferralService::class)->remember(request(), (string) request()->query('ref'));
+        }
+
         $keys = ['logo', 'company_name', 'address', 'email', 'phone', 'socials', 'trial_period', 'allow_facebook_login', 'allow_google_login'];
         $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
 
@@ -654,6 +664,8 @@ class AuthController extends BaseController
         $user->forceFill(['waz_contact_id' => $contactId])->save();
         Organization::whereIn('id', $user->teams()->pluck('organization_id'))
             ->update(['waz_company_id' => $companyId]);
+
+        app(\App\Services\ReferralService::class)->recordSignup($user, $request);
 
         $authService = (new AuthService($user))->authenticateSession($request);
         $config = Setting::where('key', 'verify_email')->first();
@@ -916,6 +928,16 @@ class AuthController extends BaseController
             }
         }
 
+        // الخروج يُسقط حضور هذه الجلسة وحدها، لا بعد انقضاء النافذة. التطبيق
+        // يحذف كل توكنات المستخدم أدناه، فتسقط كل جلساته فيه؛ والويب جلسته هذه.
+        if ($logoutUser) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                AgentPresence::leavePlatform((int) $logoutUser->id, AgentPresence::MOBILE);
+            } elseif ($request->hasSession()) {
+                AgentPresence::leaveSession((int) $logoutUser->id, $request->session()->getId());
+            }
+        }
+
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
             // Set locale based on user's language for proper translation
@@ -964,7 +986,9 @@ class AuthController extends BaseController
 			], 403);
 		}
 
-		AgentPerformanceService::markPresent((int) $organization->id, (int) $request->user()->id);
+		// عميل التطبيق نفسه (توكنه): يُغادر المنشأة السابقة وينتقل إلى هذه.
+		[$presenceClientId, $presenceSessionKey] = AgentPresence::mobileClient($request);
+		AgentPerformanceService::markPresent((int) $organization->id, (int) $request->user()->id, AgentPresence::MOBILE, $presenceClientId, $presenceSessionKey);
 
 		return response()->json([
 			'success' => true,

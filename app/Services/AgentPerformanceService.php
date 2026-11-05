@@ -14,13 +14,6 @@ use Illuminate\Support\Facades\Log;
  */
 class AgentPerformanceService
 {
-    /**
-     * نافذة اعتبار الموظف متصلاً. كانت دقيقتين والنبضة كل دقيقة، فنبضة
-     * واحدة تتأخّر — والمتصفّح يخنق مؤقّتات التبويبات الخلفية — تكفي
-     * لإظهاره غير متصل.
-     */
-    private const ONLINE_WINDOW_MINUTES = 5;
-
     private int $organizationId;
 
     public function __construct(int $organizationId)
@@ -47,22 +40,14 @@ class AgentPerformanceService
 
         // ملاحظة: الأعمدة المجمّعة تحتاج alias صريحاً مع select() قبل pluck()؛
         // pluck() يقصّ التعبير الخام عند آخر نقطة فيبحث عن عمود غير موجود.
-        // نجمع العدّ وآخر إرسال في مرور واحد: الثاني دليل حضورٍ مستقلّ عن النبضة.
-        $sentStats = DB::table('chats')
+        $messagesSent = DB::table('chats')
             ->where('organization_id', $org)
             ->where('type', 'outbound')
             ->whereNotNull('user_id')
             ->whereBetween('created_at', [$from, $to])
             ->groupBy('user_id')
-            ->select([
-                'user_id',
-                DB::raw('COUNT(*) as total'),
-                DB::raw('MAX(created_at) as last_action_at'),
-            ])
-            ->get()
-            ->keyBy('user_id');
-
-        $messagesSent = $sentStats->map(fn ($r) => $r->total);
+            ->select(['user_id', DB::raw('COUNT(*) as total')])
+            ->pluck('total', 'user_id');
 
         $ticketsAssigned = DB::table('chat_tickets')
             ->join('contacts', 'contacts.id', '=', 'chat_tickets.contact_id')
@@ -114,15 +99,13 @@ class AgentPerformanceService
 
         $firstResponse = $this->firstResponseAverages($from, $to);
 
-        $now = Carbon::now();
+        $at = AgentPresence::clock();
+        $live = AgentPresence::liveMap($org);
         $rows = [];
 
         foreach ($members as $m) {
             $userId = (int) $m->user_id;
-            $lastPing = $lastActivity[$userId] ?? null;
-
-            $lastSeen = self::latestOf($lastPing, $sentStats[$userId]->last_action_at ?? null);
-            $online = self::isOnline($lastSeen, $now);
+            $lastSeen = self::latestOf($lastActivity[$userId] ?? null, $live[$userId] ?? null);
 
             $rows[] = [
                 'user_id' => $userId,
@@ -136,7 +119,8 @@ class AgentPerformanceService
                 'avg_resolution_seconds' => isset($resolution[$userId]) ? (int) round($resolution[$userId]) : null,
                 'active_seconds' => (int) ($activity[$userId]->active_seconds ?? 0),
                 'last_activity_at' => $lastSeen,
-                'online' => $online,
+                'online' => isset($live[$userId]),
+                'at' => $at,
             ];
         }
 
@@ -147,60 +131,56 @@ class AgentPerformanceService
         ];
     }
 
-    /**
-     * آخر ظهور للموظف: الأحدث من آخر نبضة وآخر رسالة أرسلها.
-     *
-     * النبضة تأتي من الويب وحده، فمن يعمل من التطبيق أو من تبويب في الخلفية كان
-     * يظهر «غير متصل» وهو يرسل الرسائل. فِعلٌ مُثبت في قاعدة البيانات دليلُ
-     * حضورٍ لا يقلّ عن النبضة، فنأخذ الأحدث منهما.
-     */
-    private static function latestOf(?string $lastPing, ?string $lastAction): ?string
+    /** الأحدث من وقتين بصيغة قاعدة البيانات (Y-m-d H:i:s تُقارَن نصّاً). */
+    private static function latestOf(?string $a, ?string $b): ?string
     {
-        if ($lastAction && (!$lastPing || $lastAction > $lastPing)) {
-            return $lastAction;
+        if ($b && (!$a || $b > $a)) {
+            return $b;
         }
 
-        return $lastPing;
-    }
-
-    private static function isOnline(?string $lastSeen, ?Carbon $now = null): bool
-    {
-        if (!$lastSeen) {
-            return false;
-        }
-
-        return Carbon::parse($lastSeen)->gt(($now ?? Carbon::now())->copy()->subMinutes(self::ONLINE_WINDOW_MINUTES));
+        return $a;
     }
 
     /**
      * حالة الاتصال الآنية لأعضاء المنظمة — بلا بقية المقاييس.
      *
-     * صفحة الأداء تستدعيها كل بضع ثوانٍ، فلا تقرأ إلا ما يلزم للحالة: آخر نبضة
-     * (من أمس فصاعداً — النبضة الحيّة لا تكون أقدم) وآخر رسالة صادرة داخل نافذة
-     * الاتصال. أمّا حساب أول زمن استجابة فيمسح محادثات ثلاثين يوماً.
+     * المتصل من له عميل حيّ ({@see AgentPresence}) — تبويب أو تطبيق ينبض. كانت
+     * رسالةٌ صادرة باسمه تُحتسب حضوراً، فظهر منشئ الحملة «متصلاً» طوال إرسالها
+     * ولو في منتصف الليل: رسائل الحملة تُسجَّل باسمه.
      *
-     * @return list<array{user_id: int, online: bool, last_activity_at: ?string}>
+     * `at` لحظة القراءة (قبلها لا بعدها): حدثٌ لحظي أحدث منها يغلبها عند الدمج.
+     *
+     * @return list<array{user_id: int, online: bool, last_activity_at: ?string, at: int}>
      */
     public function presence(): array
     {
-        $now = Carbon::now();
+        $at = AgentPresence::clock();
 
         $memberIds = DB::table('teams')
             ->where('organization_id', $this->organizationId)
             ->whereNull('deleted_at')
             ->pluck('user_id');
 
-        $lastSeen = $this->lastSeenMap($now);
+        $live = AgentPresence::liveMap($this->organizationId);
+
+        // آخر نشاط لمن ليس متصلاً: آخر نبضة (من أمس فصاعداً — الصفحة تحمل الأقدم
+        // من المقاييس، والدمج لا يُرجع آخر نشاط إلى الوراء).
+        $pings = DB::table('agent_activity')
+            ->where('organization_id', $this->organizationId)
+            ->where('activity_date', '>=', Carbon::now()->subDay()->toDateString())
+            ->groupBy('user_id')
+            ->select(['user_id', DB::raw('MAX(last_ping_at) as last_ping_at')])
+            ->pluck('last_ping_at', 'user_id');
 
         $rows = [];
         foreach ($memberIds as $userId) {
             $userId = (int) $userId;
-            $seen = $lastSeen[$userId] ?? null;
 
             $rows[] = [
                 'user_id' => $userId,
-                'online' => self::isOnline($seen, $now),
-                'last_activity_at' => $seen,
+                'online' => isset($live[$userId]),
+                'last_activity_at' => self::latestOf($pings[$userId] ?? null, $live[$userId] ?? null),
+                'at' => $at,
             ];
         }
 
@@ -218,53 +198,7 @@ class AgentPerformanceService
      */
     public function onlineUserIds(): array
     {
-        $now = Carbon::now();
-
-        $ids = [];
-        foreach ($this->lastSeenMap($now) as $userId => $seen) {
-            if (self::isOnline($seen, $now)) {
-                $ids[] = (int) $userId;
-            }
-        }
-
-        return $ids;
-    }
-
-    /**
-     * آخر ظهور لكل موظف ظهر مؤخراً: آخر نبضة (من أمس فصاعداً — النبضة الحيّة
-     * لا تكون أقدم) وآخر رسالة صادرة داخل نافذة الاتصال، أيّهما أحدث.
-     *
-     * @return array<int, string>  user_id => آخر ظهور
-     */
-    private function lastSeenMap(Carbon $now): array
-    {
-        $org = $this->organizationId;
-
-        $pings = DB::table('agent_activity')
-            ->where('organization_id', $org)
-            ->where('activity_date', '>=', $now->copy()->subDay()->toDateString())
-            ->groupBy('user_id')
-            ->select(['user_id', DB::raw('MAX(last_ping_at) as last_ping_at')])
-            ->pluck('last_ping_at', 'user_id');
-
-        $actions = DB::table('chats')
-            ->where('organization_id', $org)
-            ->where('type', 'outbound')
-            ->whereNotNull('user_id')
-            ->where('created_at', '>=', $now->copy()->subMinutes(self::ONLINE_WINDOW_MINUTES))
-            ->groupBy('user_id')
-            ->select(['user_id', DB::raw('MAX(created_at) as last_action_at')])
-            ->pluck('last_action_at', 'user_id');
-
-        $lastSeen = [];
-        foreach ($pings->keys()->merge($actions->keys())->unique() as $userId) {
-            $seen = self::latestOf($pings[$userId] ?? null, $actions[$userId] ?? null);
-            if ($seen !== null) {
-                $lastSeen[(int) $userId] = $seen;
-            }
-        }
-
-        return $lastSeen;
+        return array_map('intval', array_keys(AgentPresence::liveMap($this->organizationId)));
     }
 
     /**
@@ -280,6 +214,9 @@ class AgentPerformanceService
             ->where('organization_id', $this->organizationId)
             ->whereIn('type', ['inbound', 'outbound'])
             ->whereNull('deleted_at')
+            // التاريخ المستورد من منصّة أخرى لم يُجب عنه أحد هنا: واردة مستوردة
+            // بلا ردّ تليها رسالة حقيقية كانت ستُحسب زمن ردّ بالأشهر.
+            ->whereNull('chat_import_id')
             ->whereBetween('created_at', [$from, $to])
             ->orderBy('contact_id')
             ->orderBy('created_at')
@@ -328,9 +265,19 @@ class AgentPerformanceService
      *
      * لا يزيد الوقت النشط (الحضور غير النشاط)، ولا يرمي أبداً: تعذّر التسجيل
      * لا يجوز أن يُفشل تسجيل دخول أو تبديل منظمة.
+     *
+     * @param  string  $platform  AgentPresence::WEB أو AgentPresence::MOBILE
+     * @param  ?string  $clientId  العميل الحقيقي إن عُرف (توكن التطبيق). غيابه
+     *   يعني عميلاً مؤقّتاً باسم الدخول ينقضي وحده بعد النافذة.
+     * @param  ?string  $sessionKey  جلسة الويب أو التوكن، ليُسقطه الخروج منها.
      */
-    public static function markPresent(int $organizationId, int $userId): void
-    {
+    public static function markPresent(
+        int $organizationId,
+        int $userId,
+        string $platform = AgentPresence::WEB,
+        ?string $clientId = null,
+        ?string $sessionKey = null,
+    ): void {
         if ($organizationId <= 0 || $userId <= 0) {
             return;
         }
@@ -349,6 +296,13 @@ class AgentPerformanceService
             }
 
             self::recordHeartbeat($organizationId, $userId, false);
+
+            // عميل مؤقّت باسم الدخول: يُظهره متصلاً قبل أن تنبض صفحته، وينقضي
+            // وحده بعد النافذة — نبضة التبويب أو التطبيق تكون قد تسلّمت.
+            if ($sessionKey === null && $platform === AgentPresence::WEB && request()->hasSession()) {
+                $sessionKey = request()->session()->getId();
+            }
+            AgentPresence::touch($organizationId, $userId, $clientId ?? $platform . '-login', $platform, $sessionKey);
         } catch (\Throwable $e) {
             Log::warning('Agent presence could not be recorded', [
                 'organization_id' => $organizationId,

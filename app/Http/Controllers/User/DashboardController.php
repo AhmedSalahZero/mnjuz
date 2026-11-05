@@ -118,6 +118,8 @@ class DashboardController extends BaseController
             $chatCount = Chat::where('organization_id', $organizationId)
                 ->where('type', $type)
                 ->whereNull('deleted_at')
+                // الرسوم تقيس نشاط المنشأة على المنصّة، لا سجلّاً استوردته.
+                ->whereNull('chat_import_id')
                 ->whereDate('created_at', $date->toDateString())
                 ->count();
             $chatCounts[] = $chatCount;

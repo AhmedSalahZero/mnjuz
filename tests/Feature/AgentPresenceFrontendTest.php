@@ -15,6 +15,8 @@ class AgentPresenceFrontendTest extends TestCase
 {
     private const PAGE = 'resources/js/Pages/User/Performance.vue';
     private const LAYOUT = 'resources/js/Pages/User/Layout/App.vue';
+    private const HEARTBEAT = 'resources/js/Composables/agentHeartbeat.js';
+    private const ECHO = 'resources/js/echo.js';
 
     private function source(string $path): string
     {
@@ -131,5 +133,94 @@ class AgentPresenceFrontendTest extends TestCase
         $this->assertNotFalse($catch);
         $this->assertLessThan($subscribe, $try, 'الاشتراك خارج try.');
         $this->assertLessThan($catch, $subscribe);
+    }
+
+    // ------------------------------------------------- الحالة اللحظية
+
+    /** الصفحة تستمع لحدث التغيّر، وتستدرك ما فاتها عند الاشتراك وعودة الاتصال. */
+    public function test_the_page_listens_for_realtime_presence(): void
+    {
+        $page = $this->source(self::PAGE);
+
+        $this->assertStringContainsString('subscribeAgentPresence(organizationId, page.props.broadcast, onPresenceChanged, refreshStatus)', $page);
+        $this->assertStringContainsString('applyPresence(agents.value, [event])', $page);
+        $this->assertStringContainsString('unsubscribePresence()', $page);
+    }
+
+    /** البثّ مساعد: اشتراك يرمي لا يكسر الصفحة، ويبقى الاستعلام. */
+    public function test_a_failing_presence_subscription_keeps_the_poll(): void
+    {
+        $page = $this->source(self::PAGE);
+
+        $interval = strpos($page, 'statusTimer = setInterval(refreshStatus');
+        $try = strpos($page, 'try {', $interval);
+        $subscribe = strpos($page, 'subscribeAgentPresence(organizationId', $interval);
+
+        $this->assertNotFalse($interval);
+        $this->assertNotFalse($try);
+        $this->assertLessThan($subscribe, $try, 'الاشتراك خارج try.');
+    }
+
+    /** اسم القناة والحدث كما يبثّهما الخادم (AgentPresenceChanged). */
+    public function test_the_client_channel_matches_the_server(): void
+    {
+        $echo = $this->source(self::ECHO);
+
+        $this->assertStringContainsString('`agents.presence.ch${organizationId}`', $echo);
+        $this->assertStringContainsString(".private(name)", $echo);
+        $this->assertStringContainsString("listen('.AgentPresenceChanged'", $echo);
+        $this->assertSame(
+            'private-agents.presence.ch7',
+            (new \App\Events\AgentPresenceChanged(7, 1, true, null, 0))->broadcastOn()[0]->name
+        );
+    }
+
+    // ------------------------------------------------- نبضة التبويب
+
+    /** مؤقّت واحد للتبويب لا للـ layout الذي يُركَّب مع كل تنقّل. */
+    public function test_the_layout_delegates_to_the_tab_heartbeat(): void
+    {
+        $layout = $this->source(self::LAYOUT);
+
+        $this->assertStringContainsString('startAgentHeartbeat(organization.value.id)', $layout);
+        $this->assertStringNotContainsString("axios.post('/performance/heartbeat'", $layout);
+        $this->assertStringNotContainsString('setInterval(sendHeartbeat', $layout);
+    }
+
+    /** إيقاع النبضة كما يتوقّعه الخادم في نافذته. */
+    public function test_the_heartbeat_interval_matches_the_server(): void
+    {
+        $heartbeat = $this->source(self::HEARTBEAT);
+
+        $this->assertStringContainsString(
+            'export const HEARTBEAT_MS = ' . (\App\Services\AgentPresence::HEARTBEAT_SECONDS * 1000),
+            $heartbeat
+        );
+        $this->assertLessThan(
+            \App\Services\AgentPresence::ONLINE_WINDOW_SECONDS,
+            \App\Services\AgentPresence::HEARTBEAT_SECONDS * 2,
+            'نبضتان فائتتان يجب أن تبقيا داخل النافذة.'
+        );
+    }
+
+    /** الإغلاق يُعلَن ولو كانت الصفحة تُغلق، بالمنظمة والتبويب. */
+    public function test_closing_the_tab_announces_leaving(): void
+    {
+        $heartbeat = $this->source(self::HEARTBEAT);
+
+        $this->assertStringContainsString("window.addEventListener('pagehide', onPageHide)", $heartbeat);
+        $this->assertStringContainsString("const OFFLINE_URL = '/performance/offline'", $heartbeat);
+        $this->assertStringContainsString('keepalive: true', $heartbeat);
+        $this->assertStringContainsString("'X-XSRF-TOKEN'", $heartbeat);
+        $this->assertStringContainsString('organization_id: state?.organizationId', $heartbeat);
+    }
+
+    /** الفشل لا يُبتلع صامتاً، وانتهاء الجلسة يوقف النبضة. */
+    public function test_heartbeat_failures_are_visible_and_stop_on_auth_errors(): void
+    {
+        $heartbeat = $this->source(self::HEARTBEAT);
+
+        $this->assertStringContainsString("console.warn('[Presence]", $heartbeat);
+        $this->assertStringContainsString('status === 401 || status === 403 || status === 419', $heartbeat);
     }
 }

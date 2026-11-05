@@ -99,8 +99,10 @@ class RestrictOrganizationAgent
             'templates',
             'support',
             'shortcuts',
-            // نبضة النشاط فقط — صفحة تقرير /performance تبقى محجوبة عن الموظف.
+            // نبضة النشاط وإشارة المغادرة فقط — صفحة تقرير /performance تبقى
+            // محجوبة عن الموظف.
             'performance/heartbeat',
+            'performance/offline',
             'settings/shortcuts',
             'settings/devices',
             'settings/device',
