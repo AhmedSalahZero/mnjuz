@@ -107,7 +107,10 @@
                             <h2 v-if="props.subscription?.status === 'trial' && subscriptionIsActive">{{ $t('Trial period') }}</h2>
 
                             <p v-if="props.subscription?.status === 'trial' && !subscriptionIsActive" class="text-sm">{{ $t('Please subscribe to a plan to continue using the app') }}</p>
-                            <p v-if="props.subscription?.status === 'active' && !subscriptionIsActive" class="text-sm">{{ $t('To continue using the app, please make a payment of') }} {{ props.subscriptionDetails?.accountBalance }}.</p>
+                            <p v-if="props.subscription?.status === 'active' && !subscriptionIsActive" class="text-sm">
+                                <template v-if="parseFloat(props.subscriptionDetails?.amountDue) > 0">{{ $t('To continue using the app, please make a payment of') }} {{ props.subscriptionDetails?.amountDue }}.</template>
+                                <template v-else>{{ $t('Please subscribe to a plan to continue using the app') }}</template>
+                            </p>
                             <p v-if="props.subscription?.status === 'trial' && subscriptionIsActive" class="text-sm">{{ $t('Your trial period expires on') }} {{ props.subscription?.valid_until }}</p>
                             <p v-if="props.subscription?.status === 'active' && subscriptionIsActive" class="text-sm">{{ $t('Your subscription expires on') }} {{ props.subscription?.valid_until }}</p>
 
