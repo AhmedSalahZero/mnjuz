@@ -121,6 +121,33 @@
                 :placeholder="$t('Select language')" />
             </div>
             <div v-if="form.category === 'UTILITY' || form.category === 'MARKETING'">
+              <div
+                v-if="form.category === 'MARKETING'"
+                class="mb-6">
+                <h2 class="text-slate-600">{{ $t('Template type') }}</h2>
+                <div class="grid grid-cols-2 mt-2 bg-[#f9f9fa] rounded-lg">
+                  <button
+                    type="button"
+                    class="p-2 text-sm rounded-lg"
+                    :class="templateKind === 'standard' ? 'bg-white shadow text-black' : 'text-slate-600'"
+                    @click="templateKind = 'standard'">
+                    {{ $t('Standard') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="p-2 text-sm rounded-lg"
+                    :class="templateKind === 'carousel' ? 'bg-white shadow text-black' : 'text-slate-600'"
+                    @click="templateKind = 'carousel'">
+                    {{ $t('Carousel') }}
+                  </button>
+                </div>
+                <p
+                  v-if="templateKind === 'carousel'"
+                  class="text-slate-600 text-xs mt-2 normal-case">
+                  {{ $t('A message followed by 2 to 10 cards the customer scrolls through. Each card has an image or video, short text and its own buttons.') }}
+                </p>
+              </div>
+              <template v-if="!isCarousel">
               <h2 class="text-slate-600">
                 {{ $t('Header') }} <span class="text-xs">({{ $t('Optional') }})</span>
               </h2>
@@ -407,6 +434,8 @@
                 </div>
               </div>
 
+              </template>
+
               <h2 class="text-slate-600">
                 {{ $t('Body') }} <span class="text-xs">({{ $t('Required') }})</span>
               </h2>
@@ -421,6 +450,14 @@
                 </div>
               </div>
 
+              <CarouselCardsEditor
+                v-if="isCarousel"
+                :draft="carouselDraft"
+                :errors="carouselTouched ? carouselValidation.errors : []"
+                :max-post-bytes="maxPostBytes"
+                :max-upload-bytes="maxUploadBytes" />
+
+              <template v-if="!isCarousel">
               <h2 class="text-slate-600">
                 {{ $t('Footer description') }} <span class="text-xs">({{ $t('Optional') }})</span>
               </h2>
@@ -538,6 +575,7 @@
                   </div>
                 </div>
               </div>
+              </template>
             </div>
             <div v-if="form.category === 'AUTHENTICATION'">
               <div class="mt-4 bg-gray-50 rounded-md p-3">
@@ -789,6 +827,7 @@
           style="background-image: url('/images/whatsapp-bg-02.png')">
           <div
             class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
+            <template v-if="!isCarousel">
             <div
               v-if="form.header.format != 'TEXT'"
               class="mb-4 bg-[#ccd0d5] flex justify-center rounded">
@@ -838,6 +877,7 @@
               class="text-gray-700 text-sm mb-1 px-2 normal-case whitespace-pre-wrap">
               {{ form.header.text }}
             </h2>
+            </template>
             <p
               v-if="form.category != 'AUTHENTICATION'"
               class="px-2 normal-case whitespace-pre-wrap"
@@ -852,7 +892,7 @@
               "></p>
             <div class="text-[#8c8c8c] mt-1 px-2">
               <span
-                v-if="form.category != 'AUTHENTICATION'"
+                v-if="form.category != 'AUTHENTICATION' && !isCarousel"
                 class="text-[13px]"
                 >{{ form.footer.text }}</span
               >
@@ -868,7 +908,14 @@
             </div>
           </div>
           <div
-            v-if="form.buttons.length > 0"
+            v-if="isCarousel"
+            class="mr-auto max-w-[25em]">
+            <CarouselCardsStrip
+              :format="carouselDraft.format"
+              :cards="draftPreviewCards(carouselDraft)" />
+          </div>
+          <div
+            v-if="!isCarousel && form.buttons.length > 0"
             class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
             <div
               v-for="(item, index) in form.buttons"
@@ -1005,8 +1052,16 @@ import FormTextArea from '@/Components/FormTextArea.vue'
 import FormToggleSwitch from '@/Components/FormToggleSwitch.vue'
 import Modal from '@/Components/Modal.vue'
 import BodyTextArea from '@/Components/Template/BodyTextArea.vue'
+import CarouselCardsEditor from '@/Components/Template/CarouselCardsEditor.vue'
+import CarouselCardsStrip from '@/Components/Template/CarouselCardsStrip.vue'
 import HeaderTextArea from '@/Components/Template/HeaderTextArea.vue'
-import { Link, router } from '@inertiajs/vue3'
+import {
+  buildCarouselCreatePayload,
+  draftPreviewCards,
+  newCarouselDraft,
+  validateCarouselDraft,
+} from '@/Composables/carouselTemplateDraft.js'
+import { Link, router, usePage } from '@inertiajs/vue3'
 import axios from 'axios'
 import { computed, ref, watch } from 'vue'
 import 'vue3-toastify/dist/index.css'
@@ -1093,6 +1148,33 @@ const form = ref({
 })
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
+
+// قالب carousel: حالته خارج form عمداً، فجسم طلب القالب العادي يبقى كما كان.
+const templateKind = ref('standard')
+const carouselDraft = ref(newCarouselDraft())
+const carouselTouched = ref(false)
+const isCarousel = computed(() => form.value.category === 'MARKETING' && templateKind.value === 'carousel')
+const maxPostBytes = computed(() => Number(usePage().props.max_post_bytes) || null)
+const maxUploadBytes = computed(() => Number(usePage().props.max_upload_bytes) || null)
+const carouselValidation = computed(() =>
+  validateCarouselDraft(form.value, carouselDraft.value, {
+    maxPostBytes: maxPostBytes.value,
+    maxUploadBytes: maxUploadBytes.value,
+  }),
+)
+
+watch(carouselDraft, () => {
+  carouselTouched.value = true
+}, { deep: true })
+
+watch(
+  () => form.value.category,
+  (category) => {
+    if (category !== 'MARKETING') {
+      templateKind.value = 'standard'
+    }
+  },
+)
 
 const formattedMessage = ref('')
 
@@ -1320,6 +1402,10 @@ const removeButton = (index) => {
 }
 
 const isFormValid = computed(() => {
+  if (isCarousel.value) {
+    return carouselValidation.value.valid
+  }
+
   if (
     form.value.name === null ||
     form.value.name.trim() === '' ||
@@ -1444,8 +1530,11 @@ const submitForm = () => {
   isLoading.value = true
   error.value = null
   isModalOpen.value = true
+  const payload = isCarousel.value
+    ? buildCarouselCreatePayload(form.value, carouselDraft.value)
+    : form.value
   axios
-    .post('/templates/create', form.value, {
+    .post('/templates/create', payload, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

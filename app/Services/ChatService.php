@@ -20,6 +20,9 @@ use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\Broadcasting\BroadcastProvider;
+use App\Services\Carousel\CarouselDefinition;
+use App\Services\Carousel\CarouselSendMetadata;
+use App\Services\Carousel\CarouselSendRules;
 use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
@@ -38,6 +41,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -958,6 +962,11 @@ class ChatService
         }
 
         $this->assertConversationAccess($contact);
+
+        if ($template && CarouselDefinition::isCarousel($template->metadata)) {
+            return $this->sendCarouselTemplateMessage($request, $template, $contact);
+        }
+
         $mediaId = null;
 	
         if (in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
@@ -1034,6 +1043,42 @@ class ChatService
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
         
         return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, auth()->user()->id, null, $mediaId);
+    }
+
+    /**
+     * إرسال قالب carousel من المحادثة.
+     *
+     * التحقّق هنا لا في المتحكّم: مسار الإرسال من المحادثة بلا FormRequest،
+     * والاستثناء يعيد النموذج بأخطاء كل بطاقة. والقالب من المنشأة نفسها
+     * حصراً.
+     */
+    private function sendCarouselTemplateMessage(object $request, Template $template, Contact $contact)
+    {
+        if ((int) $template->organization_id !== (int) $this->organizationId) {
+            return (object) ['success' => false, 'message' => __('Template not found!')];
+        }
+
+        $input = method_exists($request, 'all') ? $request->all() : (array) $request;
+        $carousel = is_array($input['carousel'] ?? null) ? $input['carousel'] : [];
+
+        Validator::make($input, CarouselSendRules::rules($carousel), CarouselSendRules::messages($carousel))->validate();
+
+        $definition = CarouselDefinition::fromMetadata($template->metadata);
+        $builder = app(CarouselSendMetadata::class);
+        $builder->assertMatches($carousel, $definition, $template);
+
+        $metadata = [
+            'header' => ['format' => null, 'parameters' => []],
+            'body' => $input['body'] ?? ['parameters' => []],
+            'footer' => ['text' => null],
+            'buttons' => [],
+            'media' => null,
+            'carousel' => $builder->build($carousel, $definition, $template, (int) $this->organizationId, auth()->id(), false),
+        ];
+
+        $payload = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
+
+        return $this->whatsappService->sendTemplateMessage($contact->uuid, $payload, auth()->user()->id, null, null);
     }
 
     public function clearMessage($uuid)

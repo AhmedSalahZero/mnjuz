@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Models\Campaign;
 use App\Models\Template;
+use App\Services\Carousel\CarouselPayloadBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -52,6 +53,15 @@ trait TemplateTrait{
             foreach ($buttonComponents as $buttonComponent) {
                 $template['components'][] = $buttonComponent;
             }
+        }
+
+        // قالب carousel: البطاقات مكوّن مستقلّ بعد الـ body. وما لا يحمل
+        // المفتاح يخرج كما كان تماماً.
+        if (!empty($metadata->carousel)) {
+            $template['components'][] = CarouselPayloadBuilder::sendComponent(
+                $metadata->carousel,
+                fn ($parameter) => $this->resolveTemplateTextValue($contact, $parameter)
+            );
         }
 
         //\Log::info($template);

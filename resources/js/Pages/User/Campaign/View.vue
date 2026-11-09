@@ -78,6 +78,9 @@
 					<div class="w-full rounded-lg p-5 mt-5 border chat-bg">
 						<WhatsappTemplate :parameters="JSON.parse(props.campaign.metadata)" :placeholder="false"
 							:visible="true" />
+						<div v-if="campaignCarousel" class="max-w-[25em]">
+							<CarouselCardsStrip :format="campaignCarousel.format" :cards="campaignCarousel.cards" />
+						</div>
 					</div>
 				</div>
 			</div>
@@ -88,13 +91,40 @@
 import AppLayout from "./../Layout/App.vue"
 import CampaignLogTable from '@/Components/Tables/CampaignLogTable.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
+import CarouselCardsStrip from '@/Components/Template/CarouselCardsStrip.vue'
+import { substituteVariables } from '@/Composables/carouselTemplate.js'
 import { Link, router } from "@inertiajs/vue3"
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
 const props = defineProps(['campaign', 'rows', 'filters', 'resendableCount'])
+
+// بطاقات حملة الـ carousel كما حُفظت: الوسائط المختارة، والمتغيّر الثابت بقيمته.
+const campaignCarousel = computed(() => {
+	let carousel = null
+	try {
+		carousel = JSON.parse(props.campaign.metadata)?.carousel ?? null
+	} catch (e) {
+		return null
+	}
+
+	if (!Array.isArray(carousel?.cards) || carousel.cards.length === 0) {
+		return null
+	}
+
+	return {
+		format: carousel.format,
+		cards: carousel.cards.map((card) => ({
+			media: card.header?.value ?? null,
+			body: card.body?.text
+				? substituteVariables(card.body.text, (card.body.parameters ?? []).map((p) => (p.selection === 'static' ? p.value : `[${p.value}]`)))
+				: null,
+			buttons: (card.buttons ?? []).map((button) => ({ type: button.type, text: button.text })),
+		})),
+	}
+})
 
 const isResending = ref(false)
 

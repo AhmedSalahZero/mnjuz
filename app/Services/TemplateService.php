@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Http\Resources\TemplateResource;
 use App\Models\Organization;
 use App\Models\Template;
+use App\Services\Carousel\CarouselDefinition;
+use App\Services\Carousel\CarouselTemplateCreator;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 
@@ -84,6 +86,16 @@ class TemplateService
 
         $data['languages'] = config('languages');
         $data['template'] = Template::where('uuid', $uuid)->first();
+
+        // محرّر القوالب لا يعرف البطاقات، وحفظه كان سيرسل القالب إلى Meta
+        // بلا مكوّن CAROUSEL.
+        if ($data['template'] && CarouselDefinition::isCarousel($data['template']->metadata)) {
+            return redirect('/templates')->with('status', [
+                'type' => 'error',
+                'message' => __('Carousel templates cannot be edited. Create a new template instead.'),
+            ]);
+        }
+
         $data['title'] = 'Edit Template';
         return Inertia::render('User/Templates/Edit', $data);
     }
@@ -110,6 +122,10 @@ class TemplateService
                 return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
             }
 
+            if ($request->input('template_type') === 'carousel') {
+                return (new CarouselTemplateCreator($this->whatsappService, (int) $this->organizationId))->create($request);
+            }
+
             return $this->whatsappService->createTemplate($request);
         }
     }
@@ -118,6 +134,14 @@ class TemplateService
     {
         if ($response = $this->abortIfDemo('update')) {
             return $response;
+        }
+
+        $existing = Template::where('uuid', $uuid)->where('organization_id', $this->organizationId)->first();
+        if ($existing && CarouselDefinition::isCarousel($existing->metadata)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Carousel templates cannot be edited. Create a new template instead.'),
+            ]);
         }
 
         $validator = Validator::make($request->all(),[

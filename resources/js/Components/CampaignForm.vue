@@ -3,7 +3,15 @@ import axios from "axios"
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
+import CarouselCardsParameters from '@/Components/CarouselCardsParameters.vue'
+import CarouselCardsStrip from '@/Components/Template/CarouselCardsStrip.vue'
 import { chosenHeaderPreviewSource } from '@/Composables/templateMediaPreview'
+import {
+	buildCarouselCardParameters,
+	carouselPreviewCards,
+	carouselRequestPayload,
+	extractCarousel,
+} from '@/Composables/carouselTemplate.js'
 import {
 	buildHeaderParameters,
 	headerMediaLabel,
@@ -132,6 +140,21 @@ const form = useForm({
 	'buttons': [],
 })
 
+/**
+ * قالب carousel: تعريفه وحالة بطاقاته خارج useForm، فحمولة القالب العادي
+ * لا تتغيّر. ولا يظهر إلا حيث يُرسَل فعلاً (submitEnabled) — صفحة الإعدادات
+ * تعرض القوالب للاختيار فقط.
+ */
+const carouselDefinition = ref(null)
+const carouselState = ref(null)
+const isCarousel = computed(() => Boolean(carouselState.value) && props.submitEnabled)
+const carouselCards = computed(() => carouselPreviewCards(carouselDefinition.value, carouselState.value))
+
+const resetCarousel = () => {
+	carouselDefinition.value = null
+	carouselState.value = null
+}
+
 const loadTemplate = async () => {
 	try {
 		const response = await axios.get('/templates/' + form.template)
@@ -201,6 +224,21 @@ const loadTemplate = async () => {
 				body: { parameters: form.body.parameters },
 				buttons: form.buttons,
 			})
+
+			resetCarousel()
+			const carousel = props.submitEnabled ? extractCarousel(metadata) : null
+			if (carousel) {
+				// قوالب المزامنة بأحرف صغيرة لا يلتقطها extractComponent، فالمتن
+				// يُقرأ من التعريف نفسه.
+				form.body.text = carousel.body.text
+				form.body.parameters = Array.from({ length: carousel.body.variables }, (_, k) => ({
+					type: 'text',
+					selection: 'static',
+					value: carousel.body.examples[k] ?? '',
+				}))
+				carouselDefinition.value = carousel
+				carouselState.value = buildCarouselCardParameters(carousel, response.data.carousel_media)
+			}
 
 			await loadMediaHistory()
 
@@ -385,10 +423,15 @@ const transformOptions = (options) => {
 
 const submitForm = () => {
 	isLoading.value = true
+	// البطاقات تُضاف إلى الطلب وقت الإرسال فقط، وللقالب العادي يمرّ كما هو.
+	form.transform((data) => (isCarousel.value
+		? { ...data, carousel: carouselRequestPayload(carouselState.value) }
+		: data))
 	form.post(props.isCampaignFlow ? '/campaigns' : '/chat/' + props.contact + '/send/template', {
 		onFinish: () => {
 			isLoading.value = false
-			if (!props.isCampaignFlow) {
+			// أخطاء البطاقات تظهر في النموذج نفسه؛ إغلاقه كان سيُخفيها.
+			if (!props.isCampaignFlow && !(isCarousel.value && Object.keys(form.errors).length > 0)) {
 				emit('viewTemplate', false)
 			}
 		},
@@ -439,6 +482,7 @@ watch(
 			form.body.parameters = []
 			form.footer.text = null
 			form.buttons = []
+			resetCarousel()
 		}
 	},
 )
@@ -687,6 +731,8 @@ watch(
 						</div>
 					</div>
 				</div>
+				<CarouselCardsParameters v-if="isCarousel" :state="carouselState" :definition="carouselDefinition"
+					:errors="form.errors" :variable-options="variableOptions" :dynamic-options="dynamicOptions" />
 				<div v-if="form.buttons.length > 0" class="bg-slate-100 p-3 mt-1 text-sm">
 					<h2 class="flex items-center justify-between space-x-2 pb-2 border-b">
 						<div class="flex items-center space-x-2">
@@ -757,6 +803,9 @@ watch(
 			<div>
 				<WhatsappTemplate :parameters="form" :visible="form.template ? true : false"
 					:placeholder="!headerPreview" />
+				<div v-if="isCarousel && form.template" class="max-w-[25em]">
+					<CarouselCardsStrip :format="carouselState.format" :cards="carouselCards" />
+				</div>
 			</div>
 		</div>
 	</div>

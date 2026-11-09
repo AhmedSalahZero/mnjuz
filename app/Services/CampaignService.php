@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\Carousel\CarouselDefinition;
+use App\Services\Carousel\CarouselSendMetadata;
 use App\Helpers\DateTimeHelper;
 use App\Jobs\SendCampaignJob;
 use App\Models\Campaign;
@@ -59,8 +61,15 @@ class CampaignService
             ]);
         }
 
+        // قالب carousel: الطلب يجب أن يطابق بطاقاته قبل أي حفظ أو رفع.
+        $carouselDefinition = CarouselDefinition::fromMetadata($template->metadata);
+        $carouselInput = $carouselDefinition ? ($request->carousel ?? null) : null;
+        if ($carouselDefinition) {
+            app(CarouselSendMetadata::class)->assertMatches($carouselInput, $carouselDefinition, $template);
+        }
+
         try {
-            return DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
+            return DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone, $carouselDefinition, $carouselInput) {
                 $historyService = app(CampaignMediaHistoryService::class);
                 //Request metadata
                 $mediaId = null;
@@ -170,6 +179,24 @@ class CampaignService
                 $metadata['footer'] = $request->footer;
                 $metadata['buttons'] = $request->buttons;
                 $metadata['media'] = $mediaId;
+
+                // الـ carousel بلا ترويسة ولا أزرار على المستوى الأعلى، لكن
+                // المفاتيح تبقى: buildCampaignTemplateChatMessage وصفحة
+                // الحملة يقرآنها بلا فحص null.
+                if ($carouselDefinition) {
+                    $metadata['header'] = ['format' => null, 'parameters' => []];
+                    $metadata['footer'] = ['text' => null];
+                    $metadata['buttons'] = [];
+                    $metadata['media'] = null;
+                    $metadata['carousel'] = app(CarouselSendMetadata::class)->build(
+                        $carouselInput,
+                        $carouselDefinition,
+                        $template,
+                        $organizationId,
+                        auth()->id(),
+                        true
+                    );
+                }
 
                 // Convert $request->time from organization's timezone to UTC
                 $scheduledAt = $request->skip_schedule ? Carbon::now('UTC') : Carbon::parse($request->time, $timezone)->setTimezone('UTC');

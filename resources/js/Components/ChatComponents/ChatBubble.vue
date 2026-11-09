@@ -6,6 +6,7 @@ import { computed, ref } from 'vue'
 import { GoogleMap, Marker } from 'vue3-google-map'
 import ImageLightbox from './ImageLightbox.vue'
 import ContactCardBubble from './ContactCardBubble.vue'
+import CarouselCardsStrip from '@/Components/Template/CarouselCardsStrip.vue'
 import { explainWhatsappError } from '@/Composables/whatsappErrors'
 
 const props = defineProps({
@@ -335,6 +336,9 @@ async function handleMediaDownload(event, content) {
 				</div>
 				<!-- Body: الروابط تظهر كـ <a href target="_blank"> -->
 				<p class="normal-case whitespace-pre-wrap" v-html="linkifyText(meta.text?.body || '')"></p>
+				<!-- بطاقات قالب الـ carousel: الرسالة نصّية، والبطاقات مفتاح إضافي فيها -->
+				<CarouselCardsStrip v-if="Array.isArray(meta.carousel?.cards) && meta.carousel.cards.length"
+					compact :format="meta.carousel.format" :cards="meta.carousel.cards" />
 				<div v-if="meta?.buttons"
 					class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
 					<div v-for="(item, index) in meta?.buttons" :key="index"

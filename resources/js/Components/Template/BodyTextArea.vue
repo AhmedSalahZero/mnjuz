@@ -7,13 +7,18 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    // حدّ الأحرف. الافتراضي كما كان؛ نصّ بطاقة الـ carousel يمرّر 160.
+    maxLength: {
+        type: [String, Number],
+        default: '1098',
+    },
 })
 
 const textInput = ref(props.modelValue);
 const textAreaRef = ref(null);
 const placeholders = ref([]);
 const customValues = ref(props.customValues);
-const characterLimit = ref('1098');
+const characterLimit = ref(String(props.maxLength));
 const characterCount = ref('0');
 const maxNu = ref(0);
 

@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use App\Models\ContactGroup;
 use App\Rules\CampaignLimit;
+use App\Services\Carousel\CarouselSendRules;
 use App\Services\CampaignAudienceService;
 
 class StoreCampaign extends FormRequest
@@ -108,7 +109,21 @@ class StoreCampaign extends FormRequest
             }
         }
 
+        // بطاقات الـ carousel: تُضاف قواعدها فقط حين يرسلها النموذج، فطلب
+        // القالب العادي يخرج بنفس القواعد تماماً.
+        if (is_array($this->input('carousel'))) {
+            $rules = array_merge($rules, CarouselSendRules::rules($this->carouselInput()));
+        }
+
         return $rules;
+    }
+
+    /** مُدخل الـ carousel مع ملفاته المرفوعة. */
+    protected function carouselInput(): array
+    {
+        $carousel = $this->all()['carousel'] ?? [];
+
+        return is_array($carousel) ? $carousel : [];
     }
 
     /**
@@ -175,7 +190,11 @@ class StoreCampaign extends FormRequest
 
     public function messages()
     {
-        return [
+        $carouselMessages = is_array($this->input('carousel'))
+            ? CarouselSendRules::messages($this->carouselInput())
+            : [];
+
+        return $carouselMessages + [
             'name.required' => __('The name field is required.'),
             'template.required' => __('The template field is required.'),
             'contacts.required' => __('The contacts field is required.'),

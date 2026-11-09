@@ -15,6 +15,7 @@ import TableBodyRowItem from '@/Components/TableBodyRowItem.vue'
 import Dropdown from '@/Components/Dropdown.vue'
 import DropdownItemGroup from '@/Components/DropdownItemGroup.vue'
 import DropdownItem from '@/Components/DropdownItem.vue'
+import { isCarouselMetadata } from '@/Composables/carouselTemplate.js'
 
 const props = defineProps({
 	rows: {
@@ -80,7 +81,11 @@ const findBodyText = (item) => {
 		</TableHeader>
 		<TableBody>
 			<TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
-				<TableBodyRowItem :position="'first'">{{ item.name }}</TableBodyRowItem>
+				<TableBodyRowItem :position="'first'">
+					{{ item.name }}
+					<span v-if="isCarouselMetadata(item.metadata)"
+						class="ms-1 py-0.5 px-2 rounded-[5px] text-[11px] bg-indigo-50 text-indigo-700">{{ $t('Carousel') }}</span>
+				</TableBodyRowItem>
 				<TableBodyRowItem class="hidden sm:table-cell">{{ capitalizeFirstLetter(item.category) }}
 				</TableBodyRowItem>
 				<TableBodyRowItem class="hidden sm:table-cell">
@@ -111,7 +116,7 @@ const findBodyText = (item) => {
 						<template #items>
 							<DropdownItemGroup>
 								<DropdownItem
-									v-if="item.status == 'APPROVED' || item.status == 'REJECTED' || item.status == 'PAUSED'"
+									v-if="(item.status == 'APPROVED' || item.status == 'REJECTED' || item.status == 'PAUSED') && !isCarouselMetadata(item.metadata)"
 									:href="'/templates/' + item.uuid">{{ $t('edit') }}</DropdownItem>
 								<DropdownItem as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}
 								</DropdownItem>

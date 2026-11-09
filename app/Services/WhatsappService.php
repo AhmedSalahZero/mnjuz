@@ -14,6 +14,8 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\Broadcasting\BroadcastProvider;
+use App\Services\Carousel\CarouselDefinition;
+use App\Services\Carousel\CarouselPayloadBuilder;
 use App\Models\Template;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -636,6 +638,8 @@ class WhatsappService
             }
         }
 
+        $array = $this->withCampaignCarousel($array, $templateMetadata, $contact);
+
         return JsonText::encode($array);
     }
 
@@ -750,8 +754,118 @@ class WhatsappService
             }
         }
 
+        $array = $this->withSentCarousel($array, $template, $templateContent, $contact);
+
         //\Log::info(json_encode($array));
         return JsonText::encode($array);
+    }
+
+    /**
+     * بطاقات الـ carousel في رسالة المحادثة، من metadata الحملة.
+     *
+     * يجري بعد أن قبلت Meta الرسالة: استثناء هنا يُفشل السجلّ فيُعاد إرساله
+     * ويصل العميل مرّتين. لذلك يُسجَّل الخطأ وتبقى الرسالة بشكلها العادي.
+     */
+    private function withCampaignCarousel(array $array, $templateMetadata, $contact): array
+    {
+        if (empty($templateMetadata->carousel)) {
+            return $array;
+        }
+
+        try {
+            $carousel = $templateMetadata->carousel;
+            $cards = [];
+
+            foreach (array_values((array) ($carousel->cards ?? [])) as $card) {
+                $values = [];
+                foreach ((array) ($card->body->parameters ?? []) as $parameter) {
+                    $values[] = ($parameter->selection ?? 'static') === 'static'
+                        ? (string) ($parameter->value ?? '')
+                        : (string) $this->getParameters($contact, $parameter->value ?? '');
+                }
+
+                $cards[] = [
+                    'media' => $card->header->value ?? null,
+                    'body' => isset($card->body->text) ? CarouselPayloadBuilder::substitute((string) $card->body->text, $values) : null,
+                    'buttons' => array_map(
+                        fn ($button) => ['type' => $button->type ?? '', 'text' => $button->text ?? ''],
+                        array_values((array) ($card->buttons ?? []))
+                    ),
+                ];
+            }
+
+            $array['carousel'] = CarouselPayloadBuilder::chatCarousel((string) ($carousel->format ?? 'IMAGE'), $cards);
+        } catch (\Throwable $e) {
+            Log::warning('Carousel chat metadata (campaign) failed; storing the plain message', [
+                'organization_id' => $this->organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $array;
+    }
+
+    /**
+     * بطاقات الـ carousel في رسالة المحادثة، من القالب وما أُرسل فعلاً
+     * (إرسال المحادثة والـ API). نفس حماية withCampaignCarousel.
+     */
+    private function withSentCarousel(array $array, $templateMetadata, array $templateContent, $contact): array
+    {
+        try {
+            $definition = CarouselDefinition::fromMetadata($templateMetadata);
+
+            if ($definition === null) {
+                return $array;
+            }
+
+            $sentCards = [];
+            foreach (($templateContent['components'] ?? []) as $component) {
+                if (strtolower((string) ($component['type'] ?? '')) === 'carousel') {
+                    foreach (array_values($component['cards'] ?? []) as $position => $card) {
+                        $sentCards[(int) ($card['card_index'] ?? $position)] = $card;
+                    }
+                    break;
+                }
+            }
+
+            $cards = [];
+            foreach ($definition['cards'] as $index => $definitionCard) {
+                $media = null;
+                $values = [];
+
+                foreach (($sentCards[$index]['components'] ?? []) as $component) {
+                    $type = strtolower((string) ($component['type'] ?? ''));
+
+                    if ($type === 'header') {
+                        $parameter = $component['parameters'][0] ?? [];
+                        $key = strtolower((string) ($parameter['type'] ?? ''));
+                        $media = $parameter[$key]['link'] ?? null;
+                    } elseif ($type === 'body') {
+                        foreach (($component['parameters'] ?? []) as $parameter) {
+                            $values[] = $this->resolveTemplateParameterValue($parameter, $contact);
+                        }
+                    }
+                }
+
+                $cards[] = [
+                    'media' => $media,
+                    'body' => $definitionCard['body'] ? CarouselPayloadBuilder::substitute($definitionCard['body']['text'], $values) : null,
+                    'buttons' => array_map(
+                        fn ($button) => ['type' => $button['type'], 'text' => $button['text']],
+                        $definitionCard['buttons']
+                    ),
+                ];
+            }
+
+            $array['carousel'] = CarouselPayloadBuilder::chatCarousel($definition['format'], $cards);
+        } catch (\Throwable $e) {
+            Log::warning('Carousel chat metadata (send) failed; storing the plain message', [
+                'organization_id' => $this->organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $array;
     }
 
     private function resolveTemplateParameterValue(array $parameter, $contact): string
@@ -1407,6 +1521,53 @@ class WhatsappService
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $e->getMessage();
+        }
+
+        return $responseObject;
+    }
+
+    /**
+     * إنشاء قالب عند Meta من حمولة جاهزة، بلا حفظ.
+     *
+     * نفس طلب createTemplate ونفس شكل الردّ، لكن البناء والحفظ عند
+     * المستدعي (CarouselTemplateCreator). createTemplate نفسها لم تُمسّ.
+     */
+    public function postMessageTemplate(array $payload): object
+    {
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
+        $responseObject = new \stdClass();
+
+        try {
+            $response = app(Client::class)->post($url, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->accessToken,
+                    'Content-Type' => 'application/json',
+                ],
+                'json' => $payload,
+                'connect_timeout' => 10,
+                'timeout' => 60,
+            ]);
+
+            $responseObject->success = true;
+            $responseObject->data = json_decode($response->getBody()->getContents());
+        } catch (ConnectException $e) {
+            $responseObject->success = false;
+            $responseObject->data = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->message = $e->getMessage();
+        } catch (GuzzleException $e) {
+            $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
+            $responseObject->success = false;
+            $responseObject->data = $response ? json_decode($response->getBody()->getContents()) : null;
+            $responseObject->message = $responseObject->data->error->error_user_msg
+                ?? $responseObject->data->error->message
+                ?? $e->getMessage();
+        } catch (\Exception $e) {
+            $responseObject->success = false;
+            $responseObject->data = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $e->getMessage();
+            $responseObject->message = $e->getMessage();
         }
 
         return $responseObject;
@@ -2137,7 +2298,11 @@ class WhatsappService
         return $responseObject;
     }
 
-    function initiateResumableUploadSession($file)
+    /**
+     * @param int $timeout ثانيتان كما كان لكل المستدعين القدامى؛ بطاقات الـ
+     *                     carousel تمرّر مهلة أطول لأنها ترفع حتى عشرة ملفات.
+     */
+    function initiateResumableUploadSession($file, int $timeout = 2)
     {
         $sessionResponse = $this->createResumableUploadSession($file);
 
@@ -2149,7 +2314,9 @@ class WhatsappService
         $fileName = $file->getPathname();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$uploadSessionId}";
 
-        $client = new Client();
+        // من الحاوية لا new: لا ربط للـ Client خارج الاختبارات، فالناتج
+        // نفسه في الإنتاج، والاختبار يستطيع أن يعترض الطلب.
+        $client = app(Client::class);
         $responseObject = new \stdClass();
 
         try {
@@ -2159,7 +2326,7 @@ class WhatsappService
                     'file_offset' => 0,
                 ],
                 'body' => fopen($fileName, 'r'),
-                'timeout' => 2,
+                'timeout' => $timeout,
             ]);
 
             $responseObject->success = true;
@@ -2195,7 +2362,7 @@ class WhatsappService
         $fileType = $file->getMimeType();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->appId}/uploads";
 
-        $client = new Client();
+        $client = app(Client::class);
         $responseObject = new \stdClass();
 
         try {

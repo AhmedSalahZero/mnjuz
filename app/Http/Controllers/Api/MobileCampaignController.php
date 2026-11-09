@@ -16,6 +16,7 @@ use App\Services\CampaignAudienceService;
 use App\Services\CampaignMediaHistoryService;
 use App\Services\CampaignResendService;
 use App\Services\CampaignService;
+use App\Services\Carousel\CarouselDefinition;
 use App\Services\SubscriptionService;
 use App\Support\WhatsappErrorExplainer;
 use Carbon\Carbon;
@@ -147,6 +148,12 @@ class MobileCampaignController extends Controller
             return $this->fail(404, __('Data not found'));
         }
 
+        // التطبيق لا يعرف بطاقات الـ carousel بعد: رسالة واضحة بدل نموذج
+        // ناقص تُرسَل منه حملة ترفضها Meta.
+        if (CarouselDefinition::isCarousel($template->getRawOriginal('metadata'))) {
+            return $this->fail(422, __('Carousel templates can only be sent from the web dashboard for now.'));
+        }
+
         $components = $this->components($template);
         $header = $this->component($components, 'HEADER');
         $body = $this->component($components, 'BODY');
@@ -251,6 +258,14 @@ class MobileCampaignController extends Controller
 
         if (!SubscriptionService::isSubscriptionActive((string) $organizationId)) {
             return $this->fail(403, __('Your subscription is not active. Renew it to continue.'));
+        }
+
+        $selectedTemplate = Template::where('uuid', (string) $request->input('template'))
+            ->where('organization_id', $organizationId)
+            ->first(['id', 'metadata']);
+
+        if ($selectedTemplate && CarouselDefinition::isCarousel($selectedTemplate->getRawOriginal('metadata'))) {
+            return $this->fail(422, __('Carousel templates can only be sent from the web dashboard for now.'));
         }
 
         try {
