@@ -64,10 +64,13 @@ class ContactResolver
             'channel' => $account->channel,
             'channel_identifier' => $externalId,
             'channel_account_id' => $account->id,
-            'phone' => null,
+            // phone لا يُذكر أصلاً: ذكره ولو null يجعله «متغيّراً» فيمسح
+            // ContactObserver::saving رقم العرض (formatted_phone) أدناه.
+            // والعمود فارغ افتراضياً، فالنتيجة phone = NULL كما كانت.
+            'formatted_phone' => $this->displayPhone($message),
             'first_name' => $firstName,
             'last_name' => $lastName,
-            'email' => null,
+            'email' => $this->email($message),
             'avatar' => $message->senderAvatar,
             'metadata' => $this->buildMetadata($message),
             'created_by' => 0,
@@ -115,6 +118,14 @@ class ContactResolver
             $updates['avatar'] = $message->senderAvatar;
         }
 
+        if (empty($contact->formatted_phone) && $this->displayPhone($message) !== null) {
+            $updates['formatted_phone'] = $this->displayPhone($message);
+        }
+
+        if (empty($contact->email) && $this->email($message) !== null) {
+            $updates['email'] = $this->email($message);
+        }
+
         if ($updates) {
             $contact->update($updates);
         }
@@ -137,6 +148,30 @@ class ContactResolver
         $parts = explode(' ', $name, 2);
 
         return [$parts[0], $parts[1] ?? null];
+    }
+
+    /**
+     * رقم للعرض والبحث فقط (formatted_phone بلا فهرس فريد)، بنفس صيغة
+     * عرض أرقام واتساب ليبدو واحداً في القائمة والترويسة والتطبيق.
+     */
+    private function displayPhone(InboundMessage $message): ?string
+    {
+        $phone = trim((string) $message->senderPhone);
+
+        if ($phone === '') {
+            return null;
+        }
+
+        $display = \App\Services\PhoneService::formatForDisplay($phone) ?: $phone;
+
+        return mb_substr((string) $display, 0, 64);
+    }
+
+    private function email(InboundMessage $message): ?string
+    {
+        $email = trim((string) $message->senderEmail);
+
+        return $email === '' ? null : mb_substr($email, 0, 255);
     }
 
     /** ما تعرفه المنصّة عن العميل ولا مكان له في أعمدة الجدول. */

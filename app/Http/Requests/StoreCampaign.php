@@ -31,7 +31,7 @@ class StoreCampaign extends FormRequest
         $rules = [
             'name' => 'required',
             'contacts' => 'required',
-            'channel' => ['nullable', \Illuminate\Validation\Rule::in(\App\Services\Messaging\Channel::all())],
+            'channel' => ['nullable', \Illuminate\Validation\Rule::in(app(\App\Services\Messaging\ChannelManager::class)->campaignCapableChannels())],
         ];
 
         // القالب لواتساب وحدها، والرسالة الحرّة لما عداها. القاعدتان

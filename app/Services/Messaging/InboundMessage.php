@@ -48,6 +48,15 @@ class InboundMessage
 
         /** الحمولة الخام — تُمرَّر إلى webhook العميل كما كانت. */
         public readonly array $raw = [],
+
+        /**
+         * رقم أعطاه المُرسِل بنفسه (نموذج المحادثة المباشرة)، بصيغة E.164.
+         * يُعرض ويُبحث به فقط: لا يصير contacts.phone، فذاك مفتاح هوية واتساب.
+         */
+        public readonly ?string $senderPhone = null,
+
+        /** بريد أعطاه المُرسِل بنفسه. */
+        public readonly ?string $senderEmail = null,
     ) {
     }
 

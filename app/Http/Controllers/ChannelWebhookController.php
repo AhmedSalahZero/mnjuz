@@ -38,7 +38,8 @@ class ChannelWebhookController extends Controller
     {
         $channel = Channel::normalize($channel);
 
-        if ($channel === null || $channel === Channel::WHATSAPP) {
+        // واتساب لها مسارها، والمحادثة المباشرة لا webhook لها أصلاً.
+        if ($channel === null || !in_array($channel, Channel::connectable(), true)) {
             return Response::json(['error' => 'Not found'], 404);
         }
 

@@ -56,6 +56,13 @@ class Kernel extends HttpKernel
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\EnsureCurrentOrganization::class,
         ],
+
+        // الواجهة العامّة للمحادثة المباشرة (routes/webchat.php): لا جلسة،
+        // ولا منشأة حالية، ولا حدّ api العامّ — لكل مسار حدّه وحرّاسه.
+        'webchat' => [
+            \App\Http\Middleware\SetApiLanguage::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        ],
     ];
 
     /**
@@ -67,6 +74,10 @@ class Kernel extends HttpKernel
      */
     protected $middlewareAliases = [
         'auth' => \App\Http\Middleware\Authenticate::class,
+        'webchat.widget' => \App\Http\Middleware\WebChat\ResolveWebChatWidget::class,
+        'webchat.origin' => \App\Http\Middleware\WebChat\EnsureWebChatOrigin::class,
+        'webchat.visitor' => \App\Http\Middleware\WebChat\AuthenticateWebChatVisitor::class,
+        'webchat.inbound' => \App\Http\Middleware\WebChat\EnsureWebChatAcceptsInbound::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
         'cache.headers' => \Illuminate\Http\Middleware\SetCacheHeaders::class,

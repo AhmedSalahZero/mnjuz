@@ -19,6 +19,12 @@ final class Channel
     public const INSTAGRAM = 'instagram';
     public const TIKTOK = 'tiktok';
 
+    /**
+     * المحادثة المباشرة من موقع التاجر (widget). لا منصّة خارجية: الرسائل
+     * تصل من واجهتنا العامّة لا من webhook، وتُرسَل إلى متصفّح الزائر.
+     */
+    public const WEBCHAT = 'webchat';
+
     /** القناة الافتراضية لكل ما هو مخزَّن قبل إضافة تعدّد القنوات. */
     public const DEFAULT = self::WHATSAPP;
 
@@ -35,6 +41,7 @@ final class Channel
             self::MESSENGER,
             self::INSTAGRAM,
             self::TIKTOK,
+            self::WEBCHAT,
         ];
     }
 
@@ -42,6 +49,15 @@ final class Channel
     public static function others(): array
     {
         return array_values(array_diff(self::all(), [self::WHATSAPP]));
+    }
+
+    /**
+     * القنوات التي تُربط بحساب على منصّة خارجية من صفحة القنوات وتستقبل
+     * webhook. المحادثة المباشرة ليست منها: لها صفحة إعداداتها وواجهتها.
+     */
+    public static function connectable(): array
+    {
+        return array_values(array_diff(self::others(), [self::WEBCHAT]));
     }
 
     public static function isValid(?string $channel): bool
@@ -74,6 +90,7 @@ final class Channel
             self::MESSENGER => 'Messenger',
             self::INSTAGRAM => 'Instagram',
             self::TIKTOK => 'TikTok',
+            self::WEBCHAT => 'Web Chat',
             default => ucfirst($channel),
         };
     }

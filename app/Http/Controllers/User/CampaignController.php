@@ -71,7 +71,7 @@ class CampaignController extends BaseController
             // القنوات المربوطة: النموذج يعرض منتقي القناة فقط حين تتجاوز
             // الواحدة، وقيود كل قناة تُقرأ منها لا تُكرَّر في الواجهة.
             $manager = app(\App\Services\Messaging\ChannelManager::class);
-            $data['connectedChannels'] = $manager->connectedChannels((int) $organizationId);
+            $data['connectedChannels'] = $manager->campaignChannels((int) $organizationId);
             $data['channelCapabilities'] = collect($data['connectedChannels'])
                 ->mapWithKeys(fn ($channel) => [$channel => $manager->capabilities($channel)->toArray()])
                 ->all();

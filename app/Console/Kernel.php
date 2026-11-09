@@ -58,6 +58,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->runInBackground();
 
+        // المحادثة المباشرة: زوّار بلا رسائل وملفات مؤقّتة. يومياً في وقت هادئ.
+        $schedule->command('webchat:prune')
+            ->dailyAt('04:40')
+            ->withoutOverlapping()
+            ->runInBackground();
+
         // الصورة عند Meta لا تنتهي — الذي ينتهي هو **الرابط الموقَّع** الذي
         // نخزّنه (`oe=` بعد نحو ثلاثين يوماً)، فيردّ CDN واتساب 403 والصورة
         // سليمة في مكانها. والمزامنة تُجدّد الإذن لا الصورة.

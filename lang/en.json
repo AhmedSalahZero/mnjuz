@@ -1954,5 +1954,8 @@
     "This template came from WhatsApp Manager, so its card media must be uploaded here.": "This template came from WhatsApp Manager, so its card media must be uploaded here.",
     "Type": "Type",
     "Link value": "Link value",
-    "Reply payload (optional)": "Reply payload (optional)"
+    "Reply payload (optional)": "Reply payload (optional)",
+    "Web Chat": "Web Chat",
+    "Web chat is set up from its own settings page.": "Web chat is set up from its own settings page.",
+    "The file has no public link.": "The file has no public link."
 }

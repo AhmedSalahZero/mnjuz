@@ -62,7 +62,7 @@ class ChannelAccountController extends Controller
         $organizationId = (int) session()->get('current_organization');
 
         $validated = $request->validate([
-            'channel' => ['required', Rule::in(Channel::others())],
+            'channel' => ['required', Rule::in(Channel::connectable())],
             'credentials' => ['required', 'array'],
         ]);
 
@@ -189,7 +189,7 @@ class ChannelAccountController extends Controller
 
         $cards = [];
 
-        foreach (Channel::others() as $channel) {
+        foreach (Channel::connectable() as $channel) {
             $capabilities = $this->channels->capabilities($channel);
             $account = $accounts->get($channel);
 

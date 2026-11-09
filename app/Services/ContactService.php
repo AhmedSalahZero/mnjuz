@@ -125,7 +125,10 @@ class ContactService
 		if($request->has('email')){
 			$contact->email = $request->email;
 		}
-		if($request->has('phone')){
+		// الرقم هويّة واتساب وحدها (فريد لكل منشأة). جهة من قناة أخرى تبقى
+		// بلا رقم: كتابته قد تصطدم بجهة واتساب لنفس الشخص بخطأ تكرار.
+		$isWhatsappContact = ($contact->channel ?? \App\Services\Messaging\Channel::WHATSAPP) === \App\Services\Messaging\Channel::WHATSAPP;
+		if($request->has('phone') && $isWhatsappContact){
 			$contact->phone = PhoneService::getE164Format(PhoneService::normalize($request->phone));
 		}
 

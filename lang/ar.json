@@ -2234,5 +2234,8 @@
     "This template came from WhatsApp Manager, so its card media must be uploaded here.": "هذا القالب جاء من WhatsApp Manager، لذلك يجب رفع وسائط بطاقاته هنا.",
     "Type": "النوع",
     "Link value": "قيمة الرابط",
-    "Reply payload (optional)": "قيمة الرد (اختياري)"
+    "Reply payload (optional)": "قيمة الرد (اختياري)",
+    "Web Chat": "المحادثة المباشرة",
+    "Web chat is set up from its own settings page.": "تُضبط المحادثة المباشرة من صفحة إعداداتها.",
+    "The file has no public link.": "الملف بلا رابط عام."
 }

@@ -10,6 +10,7 @@ use App\Services\Messaging\Drivers\InstagramDriver;
 use App\Services\Messaging\Drivers\MessengerDriver;
 use App\Services\Messaging\Drivers\TelegramDriver;
 use App\Services\Messaging\Drivers\TikTokDriver;
+use App\Services\Messaging\Drivers\WebChatDriver;
 use App\Services\Messaging\Drivers\WhatsappDriver;
 use App\Services\Messaging\Exceptions\ChannelException;
 
@@ -35,6 +36,7 @@ class ChannelManager
         Channel::MESSENGER => MessengerDriver::class,
         Channel::INSTAGRAM => InstagramDriver::class,
         Channel::TIKTOK => TikTokDriver::class,
+        Channel::WEBCHAT => WebChatDriver::class,
     ];
 
     /** السائق الخاصّ بقناة. */
@@ -124,6 +126,24 @@ class ChannelManager
             ->all();
 
         return array_values(array_unique(array_merge($channels, $others)));
+    }
+
+    /** القنوات المربوطة التي تصلح للحملات (المحادثة المباشرة ليست منها). */
+    public function campaignChannels(int $organizationId): array
+    {
+        return array_values(array_filter(
+            $this->connectedChannels($organizationId),
+            fn (string $channel) => $this->capabilities($channel)->campaigns
+        ));
+    }
+
+    /** كل القنوات التي تدعم الحملات، مربوطةً أم لا — لقواعد التحقّق. */
+    public function campaignCapableChannels(): array
+    {
+        return array_values(array_filter(
+            Channel::all(),
+            fn (string $channel) => $this->capabilities($channel)->campaigns
+        ));
     }
 
     /**

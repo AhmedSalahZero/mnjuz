@@ -252,7 +252,9 @@ class ChannelSettingsTest extends TestCase
 
         $props = $response->toResponse(request())->getOriginalContent()->getData()['page']['props'];
 
-        $this->assertCount(count(Channel::others()), $props['channels']);
+        // كل قناة تُربط بحساب خارجي. المحادثة المباشرة لها صفحتها الخاصّة.
+        $this->assertCount(count(Channel::connectable()), $props['channels']);
+        $this->assertNull(collect($props['channels'])->firstWhere('channel', Channel::WEBCHAT));
 
         $telegram = collect($props['channels'])->firstWhere('channel', Channel::TELEGRAM);
         $this->assertNotNull($telegram);

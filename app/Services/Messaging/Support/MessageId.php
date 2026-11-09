@@ -27,6 +27,7 @@ final class MessageId
         Channel::MESSENGER => 'fb',
         Channel::INSTAGRAM => 'ig',
         Channel::TIKTOK => 'tt',
+        Channel::WEBCHAT => 'wc',
     ];
 
     /**

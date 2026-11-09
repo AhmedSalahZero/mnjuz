@@ -39,6 +39,13 @@ class StoreContact extends FormRequest
             'email' => 'nullable|email|max:255',
         ];
 
+        // جهة اتصال من قناة أخرى (تيليجرام، المحادثة المباشرة…) بلا رقم
+        // واتساب: الرقم ليس هويّتها، وطلبه كان يمنع تعديل اسمها أصلاً.
+        // ContactService لا يكتبه لها، فلا معنى للتحقّق منه.
+        if ($uuid && $this->isNonWhatsappContact((string) $uuid)) {
+            $rules['phone'] = ['nullable'];
+        }
+
         if ($this->isMethod('post')) {
             $rules['first_name'] = ['required', new ContactLimit];
         } else {
@@ -46,5 +53,12 @@ class StoreContact extends FormRequest
         }
 
         return $rules;
+    }
+
+    private function isNonWhatsappContact(string $uuid): bool
+    {
+        $channel = \App\Models\Contact::where('uuid', $uuid)->value('channel');
+
+        return $channel !== null && $channel !== \App\Services\Messaging\Channel::WHATSAPP;
     }
 }
