@@ -615,28 +615,41 @@ class RegisterController extends BaseController
                 ])->get("https://graph.facebook.com/{$this->apiVersion}/{$wabaId}/message_templates")->throw()->json();
 
                 foreach($response['data'] as $templateData){
-                    $template = Template::where('organization_id', session()->get('current_organization'))
-                        ->where('meta_id', $templateData['id'])->first();
+                    // قالب واحد لا يُحفظ لا يُوقف بقيّة قوالب العميل.
+                    //
+                    // الـcatch الخارجية تحمي الصفحة من الانهيار، لكنها تقطع
+                    // الحلقة: عميل جديد يربط واتساب وفيه قالب باسم طويل
+                    // (وقع فعلاً — رابط خرائط جوجل) كانت تصله قائمة ناقصة
+                    // بلا أن يعرف.
+                    try {
+                        $template = Template::where('organization_id', session()->get('current_organization'))
+                            ->where('meta_id', $templateData['id'])->first();
 
-                    if($template){
-                        $template->metadata = json_encode($templateData);
-                        $template->status = $templateData['status'];
-                        $template->updated_at = now();
-                        $template->deleted_at = NULL;
-                        $template->save();
-                    } else {
-                        $template = new Template();
-                        $template->organization_id = session()->get('current_organization');
-                        $template->meta_id = $templateData['id'];
-                        $template->name = $templateData['name'];
-                        $template->category = $templateData['category'];
-                        $template->language = $templateData['language'];
-                        $template->metadata = json_encode($templateData);
-                        $template->status = $templateData['status'];
-                        $template->created_by = auth()->user()->id;
-                        $template->created_at = now();
-                        $template->updated_at = now();
-                        $template->save();
+                        if($template){
+                            $template->metadata = json_encode($templateData);
+                            $template->status = $templateData['status'];
+                            $template->updated_at = now();
+                            $template->deleted_at = NULL;
+                            $template->save();
+                        } else {
+                            $template = new Template();
+                            $template->organization_id = session()->get('current_organization');
+                            $template->meta_id = $templateData['id'];
+                            $template->name = $templateData['name'];
+                            $template->category = $templateData['category'];
+                            $template->language = $templateData['language'];
+                            $template->metadata = json_encode($templateData);
+                            $template->status = $templateData['status'];
+                            $template->created_by = auth()->user()->id;
+                            $template->created_at = now();
+                            $template->updated_at = now();
+                            $template->save();
+                        }
+                    } catch (\Throwable $e) {
+                        \Log::warning('Embedded signup skipped one template', [
+                            'meta_id' => $templateData['id'] ?? null,
+                            'error' => $e->getMessage(),
+                        ]);
                     }
                 };
 

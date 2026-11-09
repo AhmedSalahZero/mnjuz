@@ -147,20 +147,31 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
 
         try {
             $this->organizationId = $claim['organization_id'];
-            $this->initializeWhatsappService();
 
-            $log = CampaignLog::with('contact')->find($claim['log_id']);
-            $template = $this->buildTemplateRequest(
-                $claim['campaign_id'],
-                $log->contact
-            );
+            $log = CampaignLog::with('contact', 'campaign')->find($claim['log_id']);
+            $campaign = $log->campaign;
 
-            $responseObject = $this->whatsappService->sendTemplateMessage(
-                $log->contact->uuid,
-                $template,
-                $claim['created_by'],
-                $claim['campaign_id']
-            );
+            // نفس تفريع ProcessSingleCampaignLogJob: إعادة المحاولة يجب أن
+            // تسلك مسار الإرسال نفسه، وإلّا نجحت المحاولة الأولى على
+            // تيليجرام وفشلت إعادتها على قالب لا وجود له.
+            if ($campaign && !$campaign->isTemplateCampaign()) {
+                $responseObject = app(\App\Services\Messaging\ChannelCampaignSender::class)
+                    ->send($campaign, $log->contact, $claim['created_by']);
+            } else {
+                $this->initializeWhatsappService();
+
+                $template = $this->buildTemplateRequest(
+                    $claim['campaign_id'],
+                    $log->contact
+                );
+
+                $responseObject = $this->whatsappService->sendTemplateMessage(
+                    $log->contact->uuid,
+                    $template,
+                    $claim['created_by'],
+                    $claim['campaign_id']
+                );
+            }
         } catch (Throwable $e) {
             $sendError = $e;
             Log::error('RetryCampaignLogJob: send threw', [

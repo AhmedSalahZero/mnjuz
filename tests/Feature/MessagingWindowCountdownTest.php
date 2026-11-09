@@ -121,12 +121,23 @@ class MessagingWindowCountdownTest extends TestCase
         );
     }
 
-    /** الرقم في سطر واحد وبترتيبه: في RTL كان يُقسَم على سطرين ويظهر «5766 422 54 966+». */
+    /**
+     * الرقم في سطر واحد وبترتيبه: في RTL كان يُقسَم على سطرين ويظهر «5766 422 54 966+».
+     *
+     * السطر يعرض contactSubtitle: رقم الهاتف لجهة واتساب، واسم المستخدم لقنوات بلا رقم.
+     */
     public function test_the_phone_number_stays_on_one_line_and_left_to_right(): void
     {
+        $header = $this->source(self::HEADER);
+
         $this->assertStringContainsString(
-            '<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contact.formatted_phone_number }}</span>',
-            $this->source(self::HEADER)
+            '<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contactSubtitle }}</span>',
+            $header
+        );
+        $this->assertMatchesRegularExpression(
+            "/=== 'whatsapp'\) \{\s*return contact\.formatted_phone_number \|\| ''/",
+            $header,
+            'جهة واتساب يجب أن ترى رقمها في هذا السطر.'
         );
     }
 

@@ -20,6 +20,7 @@ $providers = [
     App\Providers\RouteServiceProvider::class,
         App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
+    App\Providers\MessagingServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
 	// ScrambleServiceProvider::class
 ];

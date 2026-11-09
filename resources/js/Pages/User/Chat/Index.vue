@@ -24,6 +24,7 @@
 					:contactCategoriesEnabled="props.contactCategoriesEnabled"
 					:hasMoreContacts="hasMoreContacts"
 					:isLoadingMoreContacts="isLoadingMoreContacts"
+					:connectedChannels="props.connectedChannels || []"
 					@load-more-contacts="loadMoreContacts" />
 			</div>
 			<div class="min-w-0 bg-cover flex flex-col chat-bg"
@@ -114,6 +115,9 @@ const props = defineProps({
 	contactCategoriesEnabled: Boolean,
 	hasMoreContacts: { type: Boolean, default: false },
 	nextContactsPage: { type: Number, default: null },
+	// القنوات المربوطة فعلاً — الفلتر لا يظهر إلّا مع أكثر من واحدة.
+	connectedChannels: { type: Array, default: () => [] },
+	channelFilter: { type: String, default: null },
 })
 
 /** إلغاء اشتراك هذا المكوّن عند الـ unmount (لا نستدعي leave لتبقى القناة للمكوّنات الأخرى) */

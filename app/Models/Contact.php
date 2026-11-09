@@ -26,6 +26,19 @@ class Contact extends Model
     public $timestamps = false;
 
     /**
+     * القناة الافتراضية في الذاكرة كذلك لا في المخطّط وحده.
+     *
+     * القيمة الافتراضية في MySQL تُطبَّق عند الكتابة، فالكائن العائد من
+     * Contact::create بلا ذكر للقناة كان يحمل channel = null حتى يُعاد
+     * تحميله. وكل من يقرأ ->channel مباشرةً بعد الإنشاء — كـ
+     * ChannelManager::forContact — كان يرى null بدل 'whatsapp'.
+     * والنتيجة هنا ليست قيمةً ناقصة بل توجيه رسالة إلى سائق خاطئ.
+     */
+    protected $attributes = [
+        'channel' => \App\Services\Messaging\Channel::DEFAULT,
+    ];
+
+    /**
      * يضبط مساعد الذكاء الاصطناعي لهذه المحادثة، ويُعلم الشاشات المفتوحة إن تغيّرت
      * القيمة فعلاً.
      *
@@ -251,6 +264,8 @@ class Contact extends Model
         $perPage = null,
         $page = 1,
         $categoryUuid = null,
+        // فلتر القناة. يُضاف آخراً ليبقى كل مُستدعٍ قائم صحيحاً بلا تعديل.
+        $channel = null,
     ) {
         $query = $this->newQuery()
             ->select([
@@ -266,11 +281,18 @@ class Contact extends Model
                 'contacts.is_blocked',
                 'contacts.is_favorite',
                 'contacts.avatar',
+                'contacts.channel',
             ])
 			// ->where('contacts.id', 142069)
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
             ->whereNull('contacts.deleted_at');
+
+        // الفهرس idx_contacts_org_channel_latest_chat يخدم هذا الشرط مع
+        // الترتيب على latest_chat_created_at في جملة واحدة.
+        if ($channel !== null && $channel !== '') {
+            $query->where('contacts.channel', $channel);
+        }
 
         if ($categoryUuid) {
             $categoryId = ContactCategory::query()

@@ -92,6 +92,18 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+        | مسار كل webhook لقنوات غير واتساب في ملف مستقلّ: هل وصل الطلب أصلاً،
+        | وأين توقّف (التحقّق، التوقيع، الحساب، الطابور، المعالجة).
+        */
+        'channel_webhooks' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/channel-webhooks.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

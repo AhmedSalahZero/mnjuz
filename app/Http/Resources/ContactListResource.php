@@ -23,6 +23,9 @@ class ContactListResource extends JsonResource
             'uuid' => $this->uuid,
             'full_name' => $this->full_name,
             'avatar' => $this->avatar ?? null,
+            // القناة تُعرَض أيقونةً مكان الحرف الأول، ويُفلتَر بها.
+            // القيمة الافتراضية تجعل كل جهة اتصال قائمة صحيحة بلا تعبئة.
+            'channel' => $this->channel ?? \App\Services\Messaging\Channel::DEFAULT,
             'latest_chat_created_at' => $this->latest_chat_created_at,
             'is_blocked' => $this->is_blocked,
             'ticket_status' => $this->ticket_status ?? null,

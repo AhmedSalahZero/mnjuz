@@ -28,6 +28,10 @@ use App\Models\Template;
 use App\Models\User;
 use App\Services\Chat\ChatReadService;
 use App\Services\ImageCompressionService;
+use App\Services\Messaging\Channel;
+use App\Services\Messaging\ChannelManager;
+use App\Services\Messaging\OutboundMedia;
+use App\Services\Messaging\OutboundMessageRecorder;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Support\OrganizationRole;
@@ -73,6 +77,268 @@ class ChatService
         $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
         $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $this->organizationId);
+    }
+
+    /* ───────────────────────── طبقة القنوات ───────────────────────── */
+
+    private function channels(): ChannelManager
+    {
+        return app(ChannelManager::class);
+    }
+
+    private function isWhatsappContact(Contact $contact): bool
+    {
+        return ($contact->channel ?? Channel::DEFAULT) === Channel::WHATSAPP;
+    }
+
+    /**
+     * اسم جهة الاتصال في السجلّات.
+     *
+     * كان الارتداد إلى الرقم وحده، وجهات الاتصال على القنوات الأخرى بلا
+     * رقم — فيظهر سطر السجلّ فارغاً. المعرّف الخارجي آخر ما نرتدّ إليه.
+     */
+    private function contactLabel(Contact $contact): string
+    {
+        $name = trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? ''));
+
+        return $name !== ''
+            ? $name
+            : ($contact->phone ?: (string) $contact->channel_identifier);
+    }
+
+    /**
+     * التحقّق من أن القناة تدعم ميزةً قبل استعمالها.
+     *
+     * نمنع الطلب من أصله بدل أن نُرسل وننتظر رفض المنصّة: خطؤها يصل بعد
+     * رحلة شبكة وبرسالة غامضة، وهذا يصل فوراً بنصّ يفهمه الموظّف.
+     *
+     * @return \Illuminate\Http\JsonResponse|null  ردّ الرفض، أو null إن كانت مدعومة
+     */
+    private function guardCapability(Contact $contact, string $feature, string $label)
+    {
+        $capabilities = $this->channels()->capabilities($contact->channel ?? Channel::DEFAULT);
+
+        if ($capabilities->{$feature}) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => __(':feature is not available on :channel.', [
+                'feature' => $label,
+                'channel' => Channel::label($contact->channel ?? Channel::DEFAULT),
+            ]),
+        ], 422);
+    }
+
+    /**
+     * إرسال رسالة على قناة غير واتساب.
+     *
+     * الفرق الجوهري عن مسار واتساب: لا تهيئة خاصّة بـ Meta. الملف يُخزَّن
+     * ليصير له رابط عام، والمنصّة تُنزّله بنفسها — وهو ما تفعله تيليجرام
+     * وميتا. تيك توك وحدها ترفع الملف، ويتكفّل سائقها بذلك.
+     */
+    private function sendOnChannel(object $request, Contact $contact)
+    {
+        BroadcastProvider::apply();
+
+        $channel = $contact->channel;
+        $driver = $this->channels()->driver($channel);
+        $account = $this->channels()->accountForContact($contact);
+
+        if (!$account) {
+            return response()->json([
+                'success' => false,
+                'message' => $this->channels()->connectionError((int) $this->organizationId, $channel),
+            ], 422);
+        }
+
+        if (!$driver->canAddress($contact)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('This contact has no :channel identifier.', [
+                    'channel' => Channel::label($channel),
+                ]),
+            ], 422);
+        }
+
+        $userId = auth()->id();
+        $messageUuid = $request->messageUUID ?? null;
+        $tempMessageId = Request()->get('tempMessageId');
+
+        $file = $request->file('file');
+
+        if ($file) {
+            return $this->sendMediaOnChannel($request, $contact, $file, [
+                'user_id' => $userId,
+                'message_uuid' => $messageUuid,
+                'temp_message_id' => $tempMessageId,
+            ]);
+        }
+
+        $body = trim((string) ($request->message ?? ''));
+
+        if ($body === '') {
+            return response()->json([
+                'success' => false,
+                'message' => __('Message cannot be empty.'),
+            ], 422);
+        }
+
+        $result = $driver->sendText($account, $contact, $body);
+
+        if (!$result->success) {
+            return response()->json([
+                'success' => false,
+                'message' => $result->errorMessage,
+            ], 422);
+        }
+
+        app(OutboundMessageRecorder::class)->recordText(
+            $contact,
+            $result->providerMessageId,
+            ['type' => 'text', 'text' => ['body' => $body]],
+            [
+                'user_id' => $userId,
+                'message_uuid' => $messageUuid,
+                'temp_message_id' => $tempMessageId,
+                'status' => $result->status,
+                'channel' => $channel,
+            ]
+        );
+
+        app(OutboundMessageRecorder::class)
+            ->fireSentWebhook((int) $this->organizationId, $result->toLegacyObject());
+
+        return $result->toLegacyObject();
+    }
+
+    /** رفع ملف وإرساله على قناة غير واتساب. */
+    private function sendMediaOnChannel(object $request, Contact $contact, $file, array $options)
+    {
+        $channel = $contact->channel;
+        $driver = $this->channels()->driver($channel);
+        $account = $this->channels()->accountForContact($contact);
+        $capabilities = $driver->capabilities();
+
+        $type = (string) $request->type;
+        $caption = $this->resolveMediaCaption($request, $type);
+
+        if (!$capabilities->supportsMedia($type)) {
+            return response()->json([
+                'success' => false,
+                'message' => __(':feature is not available on :channel.', [
+                    'feature' => __(':type attachments', ['type' => $type]),
+                    'channel' => Channel::label($channel),
+                ]),
+            ], 422);
+        }
+
+        $limit = $capabilities->mediaLimit($type);
+
+        if ($limit !== null && $file->getSize() > $limit) {
+            return response()->json([
+                'success' => false,
+                'message' => __('This file is larger than :channel allows (:limit MB).', [
+                    'channel' => Channel::label($channel),
+                    'limit' => round($limit / 1024 / 1024, 1),
+                ]),
+            ], 422);
+        }
+
+        $fileName = $file->getClientOriginalName();
+        $stored = $this->storeOutboundFile($file, $fileName);
+
+        if (!$stored) {
+            return response()->json([
+                'success' => false,
+                'message' => __('The file could not be stored.'),
+            ], 500);
+        }
+
+        $media = new OutboundMedia(
+            type: $type,
+            url: $stored['url'],
+            path: $file->getRealPath(),
+            fileName: $fileName,
+            mimeType: $file->getMimeType(),
+            size: (int) $file->getSize(),
+            // القناة التي لا تقبل تعليقاً مع المرفق يُرسله سائقها رسالةً
+            // تالية — لا نُسقطه هنا.
+            caption: $caption,
+        );
+
+        $result = $driver->sendMedia($account, $contact, $media);
+
+        if (!$result->success) {
+            return response()->json([
+                'success' => false,
+                'message' => $result->errorMessage,
+            ], 422);
+        }
+
+        app(OutboundMessageRecorder::class)->recordMedia(
+            $contact,
+            $result->providerMessageId,
+            [
+                'type' => $type,
+                $type => array_filter(
+                    ['caption' => $capabilities->mediaCaption ? $caption : null, 'filename' => $type === 'document' ? $fileName : null],
+                    static fn ($v) => $v !== null && $v !== ''
+                ),
+            ],
+            [
+                'name' => $fileName,
+                'path' => $stored['url'],
+                'location' => $stored['location'],
+                'type' => $file->getMimeType(),
+                'size' => (int) $file->getSize(),
+            ],
+            $options + ['status' => $result->status, 'channel' => $channel]
+        );
+
+        app(OutboundMessageRecorder::class)
+            ->fireSentWebhook((int) $this->organizationId, $result->toLegacyObject());
+
+        return $result->toLegacyObject();
+    }
+
+    /**
+     * تخزين ملف صادر ليصير له رابط عام تصل إليه المنصّة.
+     *
+     * نفس إعداد storage_system ونفس المجلّدات التي يستعملها مسار واتساب،
+     * فالنسخ الاحتياطي وسياسات الحذف تنطبق على الاثنين بلا استثناء.
+     *
+     * @return array{url: string, location: string}|null
+     */
+    private function storeOutboundFile($file, string $fileName): ?array
+    {
+        $contents = file_get_contents($file->getRealPath());
+        $storage = Setting::where('key', 'storage_system')->first()?->value;
+        $safeName = uniqid() . '_' . sanitize_filename_for_storage($fileName);
+
+        if ($storage === 'local') {
+            $path = Storage::disk('local')->put('public/' . $safeName, $contents);
+
+            return [
+                'url' => rtrim(config('app.url'), '/') . '/media/' . ltrim($path, '/'),
+                'location' => 'local',
+            ];
+        }
+
+        if ($storage === 'aws') {
+            $s3Path = 'uploads/media/sent/' . $this->organizationId . '/' . $safeName;
+            Storage::disk('s3')->put($s3Path, $contents, [
+                'ContentType' => $file->getMimeType() ?: 'application/octet-stream',
+            ]);
+
+            return [
+                'url' => Storage::disk('s3')->url($s3Path),
+                'location' => 'amazon',
+            ];
+        }
+
+        return null;
     }
 
     private function canAccessConversation(User $user, Contact $contact): bool
@@ -217,6 +483,14 @@ class ChatService
 		$hasMoreContacts = false;
 		$nextContactsPage = null;
 	
+		// قيمة مجهولة تُردّ إلى null لا إلى الافتراضي: الفلتر المشوّه يجب أن
+		// يُظهر الكلّ لا أن يُخفي كل شيء صامتاً.
+		//
+		// ويُسنَد هنا لا داخل الشرط أدناه: كل المخرجات تُصدّره، والطلب الجزئي
+		// الذي لا يطلب 'rows' (كالعودة من محادثة إلى القائمة) يتخطّى ذاك
+		// الشرط — فكان يبقى غير معرَّف ويرمي undefined variable.
+		$channelFilter = Channel::normalize($request->query('channel'));
+
 		if(!$skipRowsQuery){
 			$contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
 			$categoryUuid = $request->query('category');
@@ -234,6 +508,7 @@ class ChatService
 				50,
 				$contactPage,
 				$categoryUuid,
+				$channelFilter,
 			);
 
 			$contacts = $contactsPaginated;
@@ -288,6 +563,12 @@ class ChatService
                     'ai_assistance_enabled',
                     'last_inbound_chat_created_at',
                     'deleted_at',
+                    // بلا هذه الأعمدة يرتدّ النموذج إلى قيمته الافتراضية
+                    // 'whatsapp'، فتظهر محادثة تيليجرام وكأنها واتساب وتُوجَّه
+                    // رسالة الردّ إلى سائق خاطئ. الانتقاء الصريح يُخفي العطب.
+                    'channel',
+                    'channel_identifier',
+                    'channel_account_id',
                 ])
                 ->with($contactWith)
                 ->where('uuid', $uuid)
@@ -378,6 +659,8 @@ class ChatService
                     'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
                     'hasMoreContacts' => $hasMoreContacts,
                     'nextContactsPage' => $nextContactsPage,
+                    'connectedChannels' => $this->channels()->connectedChannels((int) $this->organizationId),
+                    'channelFilter' => $channelFilter,
                 ]);
             }
         }
@@ -417,6 +700,8 @@ class ChatService
                 'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
                 'hasMoreContacts' => $hasMoreContacts,
                 'nextContactsPage' => $nextContactsPage,
+                'connectedChannels' => $this->channels()->connectedChannels((int) $this->organizationId),
+                'channelFilter' => $channelFilter,
             ]);
         }
     }
@@ -437,6 +722,7 @@ class ChatService
         $categoryUuid = $request->query('category');
         $contactPage = $request->input('contact_page', 1);
         $contactCategoriesEnabled = SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled');
+        $channelFilter = Channel::normalize($request->query('channel'));
 
         $contactsPaginated = (new Contact)->contactsWithChatsOptimized(
             $this->organizationId,
@@ -450,6 +736,7 @@ class ChatService
             50,
             $contactPage,
             $categoryUuid,
+            $channelFilter,
         );
 
         return response()->json([
@@ -561,8 +848,6 @@ class ChatService
      */
     public function requestLocation(string $contactUuid, string $bodyText, $userId = null)
     {
-        $this->initializeWhatsappService();
-
         $contact = $this->findContactByUuidInOrganization($contactUuid);
         if (!$contact) {
             return response()->json([
@@ -573,8 +858,16 @@ class ChatService
 
         $this->assertConversationAccess($contact);
 
+        // طلب الموقع رسالة تفاعلية خاصّة بواتساب. المنصّات الأخرى لا مقابل
+        // لها فيها، فنرفض بوضوح بدل أن نُرسل نصّاً لا يفعل شيئاً.
+        if ($rejection = $this->guardCapability($contact, 'locationRequest', __('Location requests'))) {
+            return $rejection;
+        }
+
+        $this->initializeWhatsappService();
+
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowJsonResponse();
+            return MessagingWindowHelper::closedWindowJsonResponse($contact);
         }
 
         if (trim($bodyText) === '') {
@@ -608,8 +901,6 @@ class ChatService
      */
     public function sendLocation(string $contactUuid, array $location, $userId = null)
     {
-        $this->initializeWhatsappService();
-
         $contact = $this->findContactByUuidInOrganization($contactUuid);
         if (!$contact) {
             return response()->json([
@@ -620,8 +911,12 @@ class ChatService
 
         $this->assertConversationAccess($contact);
 
+        if ($rejection = $this->guardCapability($contact, 'location', __('Sending a location'))) {
+            return $rejection;
+        }
+
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowJsonResponse();
+            return MessagingWindowHelper::closedWindowJsonResponse($contact);
         }
 
         if (!WhatsappService::isUsableLocation($location)) {
@@ -633,14 +928,64 @@ class ChatService
 
         ActivityLogger::log(
             ActivityLogger::MESSAGE_SENT,
-            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            $this->contactLabel($contact),
             'contact',
             $contact->id,
             ['kind' => 'location'],
             (int) $this->organizationId
         );
 
-        return $this->whatsappService->sendLocation($contact->uuid, $location, $userId);
+        if ($this->isWhatsappContact($contact)) {
+            $this->initializeWhatsappService();
+
+            return $this->whatsappService->sendLocation($contact->uuid, $location, $userId);
+        }
+
+        return $this->sendLocationOnChannel($contact, $location, $userId);
+    }
+
+    /** إرسال موقع على قناة غير واتساب — تيليجرام وحدها تدعمه اليوم. */
+    private function sendLocationOnChannel(Contact $contact, array $location, $userId)
+    {
+        BroadcastProvider::apply();
+
+        $account = $this->channels()->accountForContact($contact);
+
+        if (!$account) {
+            return response()->json([
+                'success' => false,
+                'message' => $this->channels()->connectionError((int) $this->organizationId, $contact->channel),
+            ], 422);
+        }
+
+        $result = $this->channels()->driver($contact->channel)
+            ->sendLocation($account, $contact, $location, ['user_id' => $userId]);
+
+        if (!$result->success) {
+            return response()->json([
+                'success' => false,
+                'message' => $result->errorMessage,
+            ], 422);
+        }
+
+        // نفس شكل الموقع الوارد بالضبط، فتعرضه الفقاعة وتطبيق الجوال بلا
+        // كود عرض جديد — كما يفعل مسار واتساب حرفياً.
+        app(OutboundMessageRecorder::class)->recordText(
+            $contact,
+            $result->providerMessageId,
+            [
+                'type' => 'location',
+                'location' => array_filter([
+                    'latitude' => $location['latitude'] ?? null,
+                    'longitude' => $location['longitude'] ?? null,
+                    'name' => $location['name'] ?? null,
+                    'address' => $location['address'] ?? null,
+                ], static fn ($v) => $v !== null && $v !== ''),
+            ],
+            ['user_id' => $userId, 'status' => $result->status, 'channel' => $contact->channel]
+        );
+
+        return $result->toLegacyObject();
     }
 
     /**
@@ -700,7 +1045,6 @@ class ChatService
 
     public function sendMessage(object $request)
     {
-		$this->initializeWhatsappService();
         $contact = $this->findContactByUuidInOrganization((string) $request->uuid);
         if (!$contact) {
             return response()->json([
@@ -711,18 +1055,44 @@ class ChatService
 
         $this->assertConversationAccess($contact);
 
+        // الربط يُفحص قبل النافذة عمداً.
+        //
+        // القناة غير المربوطة نافذتها مغلقة حتماً (لا رسالة واردة قطّ)،
+        // فالترتيب المعكوس يُخبر الموظّف أن «النافذة انتهت» وهو يظنّ
+        // المشكلة في العميل — بينما الحساب غير مربوط أصلاً.
+        if (!$this->isWhatsappContact($contact)) {
+            $error = $this->channels()->connectionError((int) $this->organizationId, $contact->channel);
+
+            if ($error !== null) {
+                return response()->json(['success' => false, 'message' => $error], 422);
+            }
+        }
+
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowJsonResponse();
+            return MessagingWindowHelper::closedWindowJsonResponse($contact);
         }
 
         ActivityLogger::log(
             $request->file('file') ? ActivityLogger::MEDIA_SENT : ActivityLogger::MESSAGE_SENT,
-            trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: $contact->phone,
+            $this->contactLabel($contact),
             'contact',
             $contact->id,
             [],
             (int) $this->organizationId
         );
+
+        // القنوات الأخرى لها مسار مستقلّ تماماً.
+        //
+        // الفصل مقصود: ما تحت هذا السطر مليء بتهيئة خاصّة بواتساب — ضغط
+        // الصور لحدود Meta، وتحويل الفيديو إلى MP4 بـ faststart، وأسماء
+        // ملفات بصيغة whatsapp_media_content_type. إقحام شروط القناة في كل
+        // سطر منها يجعل المسار الذي يعمل على الإنتاج منذ سنة عرضةً للكسر
+        // مع كل منصّة نضيفها.
+        if (!$this->isWhatsappContact($contact)) {
+            return $this->sendOnChannel($request, $contact);
+        }
+
+		$this->initializeWhatsappService();
 
         // مرفقات متعدّدة في طلب واحد (اللصق والسحب والإفلات). كل ملف كان
         // يستهلك رحلة HTTP كاملة، فثلاثة ملفات ثلاث رحلات متعاقبة. الرحلة
@@ -951,7 +1321,7 @@ class ChatService
     public function sendTemplateMessage(object $request, $uuid)
     {
 		$this->initializeWhatsappService();
-	
+
         $template = Template::where('uuid', $request->template)->first();
         $contact = $this->findContactByUuidInOrganization((string) $uuid);
         if (!$contact) {
@@ -962,6 +1332,19 @@ class ChatService
         }
 
         $this->assertConversationAccess($contact);
+
+        // القوالب المعتمدة مسبقاً مفهوم خاصّ بواتساب: لا مقابل لها في
+        // تيليجرام ولا ميتا ولا تيك توك. الردّ كائن لا JsonResponse لأن
+        // هذه الدالّة تُرجع كائناً لمُستدعيها.
+        if (!$this->channels()->capabilities($contact->channel ?? Channel::DEFAULT)->templates) {
+            return (object) [
+                'success' => false,
+                'message' => __(':feature is not available on :channel.', [
+                    'feature' => __('Templates'),
+                    'channel' => Channel::label($contact->channel ?? Channel::DEFAULT),
+                ]),
+            ];
+        }
 
         if ($template && CarouselDefinition::isCarousel($template->metadata)) {
             return $this->sendCarouselTemplateMessage($request, $template, $contact);
@@ -1283,6 +1666,14 @@ class ChatService
     public function blockContact(Organization $organization, Contact $contact)
     {
         $this->assertConversationAccess($contact);
+
+        // الحظر على مستوى المنصّة متاح في واتساب وحدها. غيرها يحتاج قراراً
+        // منتَجياً (حظر محلّي يمنع الإرسال من عندنا دون أن يعلم العميل)
+        // ولم يُطلب بعد، فنرفض بوضوح.
+        if ($rejection = $this->guardCapability($contact, 'blockContact', __('Blocking a contact'))) {
+            return $rejection;
+        }
+
         $metadata = json_decode($organization->metadata);
         //  $organizationId = $organization->id;
         $config = json_decode(Organization::where('id', $this->organizationId)->first()->metadata?:'{}', true);
@@ -1452,9 +1843,15 @@ class ChatService
                 'is_favorite',
                 'address',
                 'avatar',
+                'channel',
             ]),
             $messagingWindow,
             [
+                // القدرات تصل الواجهة لتُخفي ما لا تدعمه القناة بدل أن
+                // تعرض زرّ قوالب يرمي خطأً عند الضغط.
+                'channel_capabilities' => app(ChannelManager::class)
+                    ->capabilities($contact->channel ?? Channel::DEFAULT)
+                    ->toArray(),
                 // بدونه يصل الـ prop undefined فيظهر المفتاح مطفأً بعد كل reload
                 // رغم أن الحفظ في قاعدة البيانات سليم.
                 'ai_assistance_enabled' => (bool) $contact->ai_assistance_enabled,

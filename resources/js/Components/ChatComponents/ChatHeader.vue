@@ -7,6 +7,7 @@ import FormSelectCombo from '@/Components/FormSelectCombo.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
 import MessagingWindowCountdown from '@/Components/ChatComponents/MessagingWindowCountdown.vue'
 import Modal from '@/Components/Modal.vue'
+import ChannelIcon from '@/Components/ChannelIcon.vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { useTrans } from '@/Composables/useTrans'
 
@@ -24,6 +25,33 @@ const props = defineProps([
 	'ticket',
 	'addon',
 ])
+/**
+ * ما يظهر تحت الاسم: الرقم على واتساب، واسم المستخدم على غيرها.
+ *
+ * لا نعرض المعرّف الخام (PSID أو conversation_id): سلسلة أرقام لا تعني
+ * الموظّف شيئاً، وإظهارها يُوهم أنها رقم هاتف.
+ */
+const contactSubtitle = computed(() => {
+	const contact = props.contact || {}
+
+	if ((contact.channel || 'whatsapp') === 'whatsapp') {
+		return contact.formatted_phone_number || ''
+	}
+
+	let username = null
+
+	try {
+		username = contact.metadata ? JSON.parse(contact.metadata)?.channel_username : null
+	} catch {
+		username = null
+	}
+
+	return username ? '@' + username : ''
+})
+
+/** القدرات كما أعلنها الخادم — بلا افتراضات في الواجهة. */
+const capabilities = computed(() => props.contact?.channel_capabilities || {})
+
 const blockContact = (contactId) => {
 	router.visit('/chat/' + props.contact.id + '/block', {
 		method: 'post',
@@ -186,19 +214,25 @@ const submitForm3 = () => {
 						d="M19 11H7.14l3.63-4.36a1 1 0 1 0-1.54-1.28l-5 6a1.19 1.19 0 0 0-.09.15c0 .05 0 .08-.07.13A1 1 0 0 0 4 12a1 1 0 0 0 .07.36c0 .05 0 .08.07.13a1.19 1.19 0 0 0 .09.15l5 6A1 1 0 0 0 10 19a1 1 0 0 0 .64-.23a1 1 0 0 0 .13-1.41L7.14 13H19a1 1 0 0 0 0-2" />
 				</svg>
 			</Link>
-			<div @click="toggleView">
-				<img v-if="contact.avatar" class="rounded-full w-14 h-14" :src="contact.avatar" />
-				<div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-100">
-					{{ contact.full_name?.substring(0, 1) || '?' }}
-				</div>
+			<div @click="toggleView" class="relative shrink-0">
+				<img v-if="contact.avatar" class="rounded-full w-14 h-14 object-cover" :src="contact.avatar" />
+				<ChannelIcon v-else :channel="contact.channel || 'whatsapp'" :size="40" filled />
+
+				<ChannelIcon v-if="contact.avatar" :channel="contact.channel || 'whatsapp'" :size="18" filled
+					class="absolute -bottom-0.5 -right-0.5 ring-2 ring-white" />
 			</div>
 			<div class="flex items-center w-full gap-x-4 xl:gap-x-8">
 				<div>
 					<div class="flex items-center" @click="toggleView">
 						<span>{{ contact.full_name }}</span>
 					</div>
+					<!--
+						السطر الثاني: الرقم لواتساب، واسم المستخدم لغيرها.
+						جهات الاتصال على القنوات الأخرى بلا رقم، فكان السطر
+						يظهر فارغاً تحت الاسم بلا معنى.
+					-->
 					<div class="w-full flex items-center text-xs">
-						<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contact.formatted_phone_number }}</span>
+						<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contactSubtitle }}</span>
 					</div>
 				</div>
 				<FormSelectCombo v-if="ticketingIsEnabled" v-model="user"
@@ -238,10 +272,17 @@ const submitForm3 = () => {
 							</DropdownItem>
 							<DropdownItem v-if="ticketState === 'closed' && ticketingIsEnabled"
 								@click="changeTicketStatus('open')" as="button">{{ $t('Mark as open') }}</DropdownItem>
-							<DropdownItem v-if="!props.contact.is_blocked" @click="showBlockAlert = true" as="button">
+							<!--
+								الحظر يظهر فقط حيث تدعمه المنصّة. عرض زرّ
+								يرمي خطأً عند الضغط أسوأ من عدم عرضه: الموظّف
+								يجرّبه مرّة ثم يفقد الثقة ببقيّة الأزرار.
+							-->
+							<DropdownItem v-if="capabilities.block_contact !== false && !props.contact.is_blocked"
+								@click="showBlockAlert = true" as="button">
 								{{ $t('Block') }}
 							</DropdownItem>
-							<DropdownItem v-if="props.contact.is_blocked" @click="showUnblockAlert = true" as="button">
+							<DropdownItem v-if="capabilities.block_contact !== false && props.contact.is_blocked"
+								@click="showUnblockAlert = true" as="button">
 								{{ $t('Unblock') }}
 							</DropdownItem>
 							<DropdownItem @click="showAlert = true" as="button">{{ $t('Clear chat') }}</DropdownItem>

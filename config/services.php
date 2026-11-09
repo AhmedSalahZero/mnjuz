@@ -72,4 +72,32 @@ return [
         'project_id' => env('FIREBASE_PROJECT_ID'),
         'credentials' => env('FIREBASE_CREDENTIALS', resource_path('firebase/wazz-chat-firebase-adminsdk-fbsvc-bd4e1c725b.json')),
     ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | قنوات التواصل
+     |--------------------------------------------------------------------------
+     |
+     | إعداد على مستوى التطبيق لا المنشأة: تطبيق ميتا واحد وتطبيق تيك توك
+     | واحد يخدمان كل العملاء، وتوكن كل عميل يُخزَّن في channel_accounts.
+     |
+     | app_secret يُستعمل للتحقّق من توقيع الـ webhook، فغيابه يعني قبول أي
+     | حمولة — والسائق يُسجّل تحذيراً حين يجده فارغاً.
+     */
+    'meta' => [
+        'app_id' => env('META_APP_ID'),
+        'app_secret' => env('META_APP_SECRET'),
+        // توكن الـ handshake — على مستوى التطبيق لا الحساب.
+        //
+        // ميتا تتحقّق من الويبهوك مرّة واحدة في لوحة التطبيق، وذلك يحدث
+        // **قبل** أن يربط أيّ عميل صفحته. فتوكن مخزَّن في الحساب لا وجود
+        // له لحظة التحقّق، والتحقّق يفشل ولا يمكن إكمال الإعداد أصلاً.
+        'webhook_verify_token' => env('META_WEBHOOK_VERIFY_TOKEN'),
+    ],
+
+    'tiktok' => [
+        'app_id' => env('TIKTOK_APP_ID'),
+        'app_secret' => env('TIKTOK_APP_SECRET'),
+        'api_version' => env('TIKTOK_API_VERSION', 'v1.3'),
+    ],
 ];

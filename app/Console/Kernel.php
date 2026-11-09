@@ -49,6 +49,26 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping()
             ->runInBackground();
 
+        // توكن تيك توك يعيش يوماً واحداً، و refresh token يموت بعد ثلاثين
+        // يوماً من الخمول. كل ساعة مع هامش ساعتين في الأمر نفسه: يكفي
+        // لتجديد كل توكن قبل انتهائه ولو تعثّرت دورة، ولا يُثقل شيئاً —
+        // الاستعلام على فهرس (status, token_expires_at) ويُرجع لا شيء غالباً.
+        $schedule->command('channels:refresh-tokens')
+            ->hourly()
+            ->withoutOverlapping()
+            ->runInBackground();
+
+        // الصورة عند Meta لا تنتهي — الذي ينتهي هو **الرابط الموقَّع** الذي
+        // نخزّنه (`oe=` بعد نحو ثلاثين يوماً)، فيردّ CDN واتساب 403 والصورة
+        // سليمة في مكانها. والمزامنة تُجدّد الإذن لا الصورة.
+        //
+        // يومياً في وقت هادئ: نداء أو اثنان لكل منشأة مربوطة — لا يُذكر
+        // مقابل ١٣٥ قالباً معاينته مكسورة اليوم على الإنتاج.
+        $schedule->command('templates:sync')
+            ->dailyAt('04:10')
+            ->withoutOverlapping()
+            ->runInBackground();
+
         $campaignSendInterval = max(1, (int) config('campaigns.send_interval_seconds', 5));
         $overlapSeconds = max(1, $campaignSendInterval - 1);
 

@@ -1,6 +1,8 @@
 <script setup>
 import { documentPreviewLabel } from '@/Composables/documentPreview'
 import Pagination from '@/Components/Pagination.vue'
+import ChannelIcon from '@/Components/ChannelIcon.vue'
+import ChannelFilter from '@/Components/ChannelFilter.vue'
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue'
 import TicketStatusToggle from '@/Components/TicketStatusToggle.vue'
 import { Link, router, usePage } from '@inertiajs/vue3'
@@ -50,6 +52,10 @@ const props = defineProps({
 		type: Boolean,
 		default: false,
 	},
+	connectedChannels: {
+		type: Array,
+		default: () => [],
+	},
 })
 
 const isSearching = ref(false)
@@ -57,6 +63,7 @@ const selectedContact = ref(null)
 const scrollContainer = ref(null)
 const loadMoreSentinel = ref(null)
 const categoryFilterUuid = ref(getCategoryFromUrl())
+const channelFilter = ref(getChannelFromUrl())
 const emit = defineEmits(['view', 'load-more-contacts'])
 
 let loadMoreObserver = null
@@ -64,6 +71,10 @@ let loadMoreRequested = false
 
 function getCategoryFromUrl() {
 	return new URLSearchParams(window.location.search).get('category') || null
+}
+
+function getChannelFromUrl() {
+	return new URLSearchParams(window.location.search).get('channel') || null
 }
 
 function buildChatsQuery(overrides = {}) {
@@ -77,6 +88,10 @@ function buildChatsQuery(overrides = {}) {
 	if ('category' in overrides) {
 		if (overrides.category) params.set('category', overrides.category)
 		else params.delete('category')
+	}
+	if ('channel' in overrides) {
+		if (overrides.channel) params.set('channel', overrides.channel)
+		else params.delete('channel')
 	}
 	if ('status' in overrides) {
 		params.delete('is_read')
@@ -111,6 +126,14 @@ function visitChatsQuery(overrides = {}, options = {}) {
 
 function visitWithCategoryFilter(categoryUuid) {
 	visitChatsQuery({ category: categoryUuid || null })
+}
+
+// الفلتر في العنوان لا في حالة المكوّن وحدها: يبقى بعد إعادة التحميل، ويُنقل
+// مع الرابط المحفوظ، ويُرسَل إلى الخادم الذي يُصفّي الاستعلام فعلياً — فلا
+// تُحمَّل آلاف المحادثات ثم تُخفى في المتصفّح.
+function setChannelFilter(channel) {
+	channelFilter.value = channel
+	visitChatsQuery({ channel: channel || null })
 }
 
 function viewChat(contact) {
@@ -490,6 +513,13 @@ watch(
 			</div>
 		</div>
 	</div>
+	<!--
+		فلتر المنصّة. خارج كتلة التذاكر عمداً: هو مستقلّ عنها ويجب أن يظهر
+		سواء كانت التذاكر مفعّلة أم لا. ولا يظهر إلّا مع أكثر من قناة —
+		المكوّن نفسه يتكفّل بذلك.
+	-->
+	<ChannelFilter :channels="connectedChannels" :model-value="channelFilter"
+		@update:model-value="setChannelFilter" />
 	<div class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer" @scroll="onScrollThrottled">
 		<div :style="{ height: virtualList.totalHeight + 'px', position: 'relative' }">
 			<div :style="{ transform: `translateY(${virtualList.offsetY}px)` }">
@@ -501,10 +531,20 @@ watch(
 					@click="(e) => { if (e.ctrlKey || e.metaKey || e.which === 2) return; e.preventDefault(); openChat(item.contact); }">
 					<div class="flex space-x-2 hover:bg-gray-50 overflow-auto cursor-pointer py-3 px-4 h-full">
 						<div class="w-[15%] flex items-center gap-1">
-							<img v-if="item.contact.avatar" class="rounded-full w-10 h-10" :src="item.contact.avatar" />
-							<div v-else
-								class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">
-								{{ item.contact.full_name?.substring(0, 1) || '?' }}
+							<!--
+								الصورة ومعها شارة المنصّة في ركنها.
+								ومن لا صورة له تحلّ أيقونة منصّته محلّ الحرف
+								الأول: الحرف لا يقول شيئاً، والأيقونة تقول من
+								أين وصلت المحادثة قبل أن يفتحها الموظّف.
+							-->
+							<div class="relative w-10 h-10 shrink-0">
+								<img v-if="item.contact.avatar" class="rounded-full w-10 h-10 object-cover"
+									:src="item.contact.avatar" />
+								<ChannelIcon v-else :channel="item.contact.channel || 'whatsapp'" :size="40" filled />
+
+								<ChannelIcon v-if="item.contact.avatar"
+									:channel="item.contact.channel || 'whatsapp'" :size="16" filled
+									class="absolute -bottom-0.5 -right-0.5 ring-2 ring-white" />
 							</div>
 							<svg v-if="item.contact.is_blocked" width="20" height="20" viewBox="0 0 24 24" fill="none"
 								xmlns="http://www.w3.org/2000/svg">

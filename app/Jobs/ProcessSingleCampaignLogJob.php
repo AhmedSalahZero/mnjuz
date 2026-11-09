@@ -109,20 +109,30 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         // every other worker and risks partial commits on timeout.
         try {
             $this->organizationId = $claim['organization_id'];
-            $this->initializeWhatsappService();
 
-            $log = CampaignLog::with('contact')->find($claim['log_id']);
-            $template = $this->buildTemplateRequest(
-                $claim['campaign_id'],
-                $log->contact
-            );
+            $log = CampaignLog::with('contact', 'campaign')->find($claim['log_id']);
+            $campaign = $log->campaign;
 
-            $responseObject = $this->whatsappService->sendTemplateMessage(
-                $log->contact->uuid,
-                $template,
-                $claim['created_by'],
-                $claim['campaign_id']
-            );
+            // حملة قناة أخرى: رسالة حرّة لا قالب. الفرع هنا يُبقي مسار
+            // واتساب أدناه كما هو حرفياً — القوالب وبناء الطلب والإرسال.
+            if ($campaign && !$campaign->isTemplateCampaign()) {
+                $responseObject = app(\App\Services\Messaging\ChannelCampaignSender::class)
+                    ->send($campaign, $log->contact, $claim['created_by']);
+            } else {
+                $this->initializeWhatsappService();
+
+                $template = $this->buildTemplateRequest(
+                    $claim['campaign_id'],
+                    $log->contact
+                );
+
+                $responseObject = $this->whatsappService->sendTemplateMessage(
+                    $log->contact->uuid,
+                    $template,
+                    $claim['created_by'],
+                    $claim['campaign_id']
+                );
+            }
         } catch (Throwable $e) {
             $this->markAttemptFailed(
                 $claim['attempt_id'],
