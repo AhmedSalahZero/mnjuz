@@ -57,6 +57,12 @@
                                 <span>{{ $t('Ticket settings') }}</span>
                             </Link>
                         </li>
+                        <li v-if="!isOrgAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/chat-imports') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/settings/chat-imports" class="flex items-center p-2 space-x-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 12.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12l3-3h6.5M17 15v6m-3-3l3-3l3 3"/></svg>
+                                <span>{{ $t('Import conversations') }}</span>
+                            </Link>
+                        </li>
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/devices') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/devices" class="flex items-center p-2 space-x-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><rect width="14" height="10" x="5" y="3" rx="2"/><path d="M8 21h8m-4-8v8"/></g></svg>

@@ -27,6 +27,28 @@ class MobileReportController extends Controller
     use MobileApi;
 
     /**
+     * حالة الاتصال الآنية لأعضاء المنشأة، بلا بقية المقاييس — لمصالحة شاشة
+     * الأداء في التطبيق حين يعود اتصال البثّ أو يرجع التطبيق إلى المقدّمة.
+     * التحديث اللحظي نفسه يصل حدثاً على presence_channel.
+     */
+    public function agentPresence(Request $request): JsonResponse
+    {
+        $organizationId = $this->organizationId($request);
+
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance')) {
+            return $this->fail(403, __('This feature is not available in your plan.'));
+        }
+
+        if (!$this->isPrivileged($request)) {
+            return $this->forbidden();
+        }
+
+        return $this->ok([
+            'agents' => (new AgentPerformanceService($organizationId))->presence(),
+        ]);
+    }
+
+    /**
      * أداء الموظفين خلال مدّة.
      *
      * الافتراضي آخر ثلاثين يوماً — نفس ما يفتح به الويب.

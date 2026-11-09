@@ -13,6 +13,24 @@ class Flow extends Model {
     protected $guarded = [];
     public $timestamps = true;
 
+    /**
+     * مسارات المنشأة المختارة في الجلسة فقط. البحث بالـ uuid وحده كان يفتح
+     * flow أيّ منشأة لمن عرف معرّفه.
+     */
+    public function scopeForCurrentOrganization($query)
+    {
+        return $query->where('organization_id', session()->get('current_organization'));
+    }
+
+    /**
+     * abort(404) لا firstOrFail: معالج الأخطاء يحوّل ModelNotFoundException
+     * في طلبات JSON إلى 500، والمحرّر يحفظ ويرفع عبر axios.
+     */
+    public static function ownedOrAbort(string $uuid): self
+    {
+        return static::forCurrentOrganization()->where('uuid', $uuid)->first() ?? abort(404);
+    }
+
     // Define the relationship to FlowLog
     public function flowLogs()
     {

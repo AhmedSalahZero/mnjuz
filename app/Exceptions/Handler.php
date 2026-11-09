@@ -6,6 +6,7 @@ use App\Jobs\SendErrorReportEmailJob;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -99,6 +100,17 @@ class Handler extends ExceptionHandler
             if ($exception instanceof AuthenticationException) {
                 return response()->json(self::unauthenticatedPayload($request), 401);
             }
+
+            // خطأ التحقّق 422 بحقوله كما يُرجعه Laravel ({message, errors}) —
+            // الشكل الموثَّق في API-ERROR-RESPONSES.md. كان يسقط إلى 500
+            // «An error occurred»، فلا يعرف المستخدم أيّ حقل أخطأ، وفي الإنتاج
+            // (debug مطفأ) يضيع السبب من الردّ كلّه.
+            if ($exception instanceof ValidationException) {
+                return parent::render($request, $exception);
+            }
+
+            // ModelNotFound ⇒ 404، والتفويض ⇒ 403، وانتهاء CSRF ⇒ 419 — لا 500.
+            $exception = $this->prepareException($exception);
 
             if ($this->isHttpException($exception)) {
                 $statusCode = method_exists($exception, 'getStatusCode') ? $exception->getStatusCode() : 500;

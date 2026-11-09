@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, inject } from 'vue'
 import { MoreHorizontalIcon } from 'lucide-vue-next'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 
@@ -11,15 +11,25 @@ import type { NodeProps } from '@vue-flow/core'
 
 const props = defineProps<NodeProps>()
 
+// مولّد القماش: معرّف عقدةٍ محذوفة لا يُعاد لنسخة جديدة (main-canvas.vue).
+const nextFlowNodeId = inject<(() => string) | null>('nextFlowNodeId', null)
+
 const textAreaRef = ref(null);
 const title = ref(props.data.title)
 const textInput = ref(props.data.metadata?.fields["body"] || '')
-const characterLimit = ref('1098');
+// حدّ واتساب لرسالة النصّ؛ الخادم يقصّ عنده.
+const characterLimit = ref('4096');
 const characterCount = ref('0');
 
 const isEditTitle = ref(false)
 
 const node = useNode()
+
+// الاسم الجديد يُحفظ في العقدة: كان متغيّرًا محليًا يضيع مع أوّل إعادة تحميل.
+function finishRename() {
+  isEditTitle.value = false
+  node.node.data = { ...node.node.data, title: title.value }
+}
 const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
 
 watch(textInput, (newValue) => {
@@ -44,7 +54,7 @@ function handleClickDuplicateBtn() {
   const newNode = {
     // معرّف فريد: «عدد العقد + 1» كان يصطدم بمعرّف عقدة موجودة، وعقدتان
     // بمعرّف واحد تجعلان توصيل إحداهما يحذف وصلة الأخرى.
-    id: nextNodeId(nodes.value),
+    id: nextFlowNodeId ? nextFlowNodeId() : nextNodeId(nodes.value),
     type,
     position: {
       x: position.x + 100,
@@ -79,8 +89,8 @@ const countCharacters = (type) => {
 const addVariable = (variable) => {
   const textarea = textAreaRef.value;
 
-  // Check if textarea is defined and get the cursor position
-  if (textarea && textInput.value.indexOf(variable) === -1) {
+  // المتغيّر نفسه قد يتكرّر في الرسالة ({first_name} في التحية والتوقيع).
+  if (textarea) {
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
 
@@ -148,7 +158,7 @@ onMounted(() => {
         <div class="flex gap-x-2">
           <img src="~@/assets/images/icon_LLM.png" class="mt-1 h-4 w-4" alt="LLM icon" />
           <div class="flex flex-col gap-y-1">
-            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @blur="() => (isEditTitle = false)"/>
+            <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @focusout="finishRename" @keyup.enter="finishRename"/>
             <h3 class="text-base" v-else>{{ title }}</h3>
           </div>
         </div>

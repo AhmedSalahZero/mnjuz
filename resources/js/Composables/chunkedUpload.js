@@ -45,10 +45,12 @@ export function chunkCount(size, chunkBytes = CHUNK_BYTES) {
  * التتابع مقصود لا توازٍ: القطع المتوازية تتقاسم نفس عرض النطاق فلا تُسرِّع
  * شيئاً، وتُصعّب حساب التقدّم، وتُربك الخادم في ترتيب الدمج.
  *
- * @param {{post: Function, file: File, fields: object, chunkBytes?: number,
+ * @param {{post: Function, file: File, fields: object, chunkBytes?: number, url?: string,
  *          signal?: AbortSignal, onProgress?: (loaded: number, total: number) => void}} options
+ *
+ * url: مسار استقبال القطع — مرفقات المحادثة افتراضياً، واستيراد المحادثات له مساره.
  */
-export async function uploadInChunks({ post, file, fields, chunkBytes = CHUNK_BYTES, signal, onProgress }) {
+export async function uploadInChunks({ post, file, fields, chunkBytes = CHUNK_BYTES, url = '/chats/upload/chunk', signal, onProgress }) {
     const chunks = planChunks(file.size, chunkBytes)
 
     if (chunks.length === 0) {
@@ -77,7 +79,7 @@ export async function uploadInChunks({ post, file, fields, chunkBytes = CHUNK_BY
 
         const base = uploaded
 
-        last = await post('/chats/upload/chunk', body, {
+        last = await post(url, body, {
             signal,
             onUploadProgress: (event) => {
                 // التقدّم يُقاس على الملف كلّه: نسبة القطعة وحدها تقفز وترتدّ

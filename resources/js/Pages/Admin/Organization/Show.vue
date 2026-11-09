@@ -62,6 +62,14 @@
                                     {{ $t('Links this organization to its customer record on the billing platform. Leave empty to unlink.') }}
                                 </p>
                             </div>
+                            <!-- مزوّد البثّ اللحظي لهذه المنشأة: يبلغ الداشبورد والتطبيق والخادم معاً. -->
+                            <div class="sm:col-span-6">
+                                <FormSelect v-model="form.broadcast_provider" :name="$t('Realtime provider')"
+                                    :error="form.errors.broadcast_provider" :options="broadcastOptions"/>
+                                <p class="mt-1 text-xs text-slate-500">
+                                    {{ $t('Where this organization receives new messages instantly, on the dashboard and the mobile app. Open pages switch on their next load.') }}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -143,7 +151,7 @@
 </template>
 <script setup>
     import AppLayout from "./../Layout/App.vue";
-    import{ ref } from 'vue';
+    import { computed, ref } from 'vue';
     import { Link, useForm } from "@inertiajs/vue3";
     import FormInput from '@/Components/FormInput.vue';
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
@@ -166,7 +174,26 @@ const trans = useTrans();
         invoices: Object, 
         plans: Object, 
         filters: Object, 
-        mode: String 
+        mode: String,
+        broadcastProviders: Object,
+    });
+
+    // «افتراضي المنصّة» قيمته فارغة: تتبع المنشأة الإعداد العام إن تغيّر لاحقاً.
+    // والمزوّد الناقص البيانات يظهر معطّلاً بدل أن يُختار فلا يتّصل أحد.
+    const providerLabel = (provider) => (provider === 'reverb' ? 'Reverb' : 'Pusher');
+    const broadcastOptions = computed(() => {
+        const ready = props.broadcastProviders?.ready ?? {};
+        const option = (value) => ({
+            value,
+            label: ready[value] === false ? `${providerLabel(value)} (${trans('not configured')})` : providerLabel(value),
+            disabled: ready[value] === false,
+        });
+
+        return [
+            { value: '', label: trans('Platform default ({provider})', { provider: providerLabel(props.broadcastProviders?.default) }) },
+            option('pusher'),
+            option('reverb'),
+        ];
     });
 
     const tab = ref('organization');
@@ -184,6 +211,7 @@ const trans = useTrans();
         name: props.organization?.name,
         plan: props.organization?.subscription?.plan?.uuid,
         waz_company_id: props.organization?.waz_company_id ?? null,
+        broadcast_provider: props.organization?.broadcast_provider ?? '',
         create_user: 1,
         first_name: null,
         last_name: null,

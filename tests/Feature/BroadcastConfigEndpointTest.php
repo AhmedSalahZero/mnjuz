@@ -134,7 +134,25 @@ class BroadcastConfigEndpointTest extends TestCase
 
         $this->getJson(self::ENDPOINT)
             ->assertOk()
-            ->assertJsonPath('data.auth_endpoint', url('/api/v1/broadcasting/auth'));
+            ->assertJsonPath('data.auth_endpoint', url('/api/broadcasting/auth'));
+    }
+
+    /**
+     * العنوان المُعلَن يجب أن يصل إلى مسار حقيقي. كان يشير إلى /api/v1/... وهو
+     * غير مسجّل، فيردّ 404 على كل اشتراك والاختبار السابق يثبّت الخطأ نفسه.
+     * هنا نسأل الموجِّه لا نقارن نصّاً بنصّ.
+     */
+    public function test_the_advertised_auth_endpoint_resolves_to_a_registered_route(): void
+    {
+        $this->asApp();
+
+        $endpoint = $this->getJson(self::ENDPOINT)->json('data.auth_endpoint');
+
+        $route = app('router')->getRoutes()->match(
+            \Illuminate\Http\Request::create($endpoint, 'POST')
+        );
+
+        $this->assertSame('api/broadcasting/auth', $route->uri());
     }
 
     /**

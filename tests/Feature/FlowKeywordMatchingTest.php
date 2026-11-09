@@ -8,7 +8,7 @@ use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\FlowBuilder\Services\ActionExecutionService;
-use Modules\FlowBuilder\Support\FlowKeywords;
+use Modules\FlowBuilder\Support\KeywordMatcher;
 use Tests\TestCase;
 
 /**
@@ -45,7 +45,7 @@ class FlowKeywordMatchingTest extends TestCase
         $oldMatch = \DB::selectOne('SELECT FIND_IN_SET(?, ?) AS p', ['stop', self::HUMAN_INPUT])->p;
 
         $this->assertSame(0, (int) $oldMatch, 'FIND_IN_SET كانت تطابق — العطب لم يعد قائماً أصلاً؟');
-        $this->assertTrue(FlowKeywords::matches(self::HUMAN_INPUT, 'STOP'));
+        $this->assertTrue(KeywordMatcher::matches('STOP', self::HUMAN_INPUT));
     }
 
     /** وكل كلمة في القائمة تعمل، لا الأولى وحدها. */
@@ -53,7 +53,7 @@ class FlowKeywordMatchingTest extends TestCase
     {
         foreach (['ايقاف تلقي الاعلانات', 'إيقاف الأعلانات؟', 'STOP'] as $keyword) {
             $this->assertTrue(
-                FlowKeywords::matches(self::HUMAN_INPUT, $keyword),
+                KeywordMatcher::matches($keyword, self::HUMAN_INPUT),
                 "الكلمة «{$keyword}» لا تُطابَق."
             );
         }
@@ -63,15 +63,15 @@ class FlowKeywordMatchingTest extends TestCase
     public function test_matching_ignores_letter_case(): void
     {
         foreach (['STOP', 'stop', 'Stop', 'sToP'] as $written) {
-            $this->assertTrue(FlowKeywords::matches(self::HUMAN_INPUT, $written), $written);
+            $this->assertTrue(KeywordMatcher::matches($written, self::HUMAN_INPUT), $written);
         }
     }
 
     /** والمسافات حول الرسالة كذلك. */
     public function test_matching_ignores_surrounding_whitespace(): void
     {
-        $this->assertTrue(FlowKeywords::matches(self::HUMAN_INPUT, '  STOP  '));
-        $this->assertTrue(FlowKeywords::matches("أ ,  ب  , STOP", 'stop'));
+        $this->assertTrue(KeywordMatcher::matches('  STOP  ', self::HUMAN_INPUT));
+        $this->assertTrue(KeywordMatcher::matches('stop', "أ ,  ب  , STOP"));
     }
 
     /**
@@ -82,51 +82,53 @@ class FlowKeywordMatchingTest extends TestCase
      */
     public function test_a_single_word_inside_a_sentence_still_triggers(): void
     {
-        $this->assertTrue(FlowKeywords::matches(self::HUMAN_INPUT, 'من فضلك STOP'));
+        $this->assertTrue(KeywordMatcher::matches('من فضلك STOP', self::HUMAN_INPUT));
     }
 
     /** ورسالة لا تحوي أي كلمة لا تُشغّل شيئاً. */
     public function test_an_unrelated_message_does_not_trigger(): void
     {
-        $this->assertFalse(FlowKeywords::matches(self::HUMAN_INPUT, 'السلام عليكم'));
-        $this->assertFalse(FlowKeywords::matches(self::HUMAN_INPUT, 'stopping'));
+        $this->assertFalse(KeywordMatcher::matches('السلام عليكم', self::HUMAN_INPUT));
+        $this->assertFalse(KeywordMatcher::matches('stopping', self::HUMAN_INPUT));
     }
 
     /** والفارغ لا يُشغّل شيئاً — وإلّا شغّلت كل رسالة كل flow. */
     public function test_empty_input_never_triggers(): void
     {
-        $this->assertFalse(FlowKeywords::matches(self::HUMAN_INPUT, ''));
-        $this->assertFalse(FlowKeywords::matches(self::HUMAN_INPUT, '   '));
-        $this->assertFalse(FlowKeywords::matches(self::HUMAN_INPUT, null));
-        $this->assertFalse(FlowKeywords::matches(null, 'STOP'));
-        $this->assertFalse(FlowKeywords::matches('', 'STOP'));
-        $this->assertFalse(FlowKeywords::matches('  ,  , ', 'STOP'));
+        $this->assertFalse(KeywordMatcher::matches('', self::HUMAN_INPUT));
+        $this->assertFalse(KeywordMatcher::matches('   ', self::HUMAN_INPUT));
+        $this->assertFalse(KeywordMatcher::matches('STOP', null));
+        $this->assertFalse(KeywordMatcher::matches('STOP', ''));
+        $this->assertFalse(KeywordMatcher::matches('STOP', '  ,  , '));
     }
 
     /* ───────────────── التطبيع عند الحفظ ───────────────── */
 
-    /** الحفظ يُخرج صيغة بلا مسافات. */
+    /**
+     * الحفظ يُخرج صيغة بلا مسافات — وبلا علامات ترقيم: KeywordMatcher يُسقطها
+     * من الكلمة ومن الرسالة معاً، فـ«إيقاف الأعلانات؟» تُطابق بعلامة أو بلاها.
+     */
     public function test_storage_form_has_no_stray_whitespace(): void
     {
         $this->assertSame(
-            'ايقاف تلقي الاعلانات,إيقاف الأعلانات؟,stop',
-            FlowKeywords::normalizeForStorage(self::HUMAN_INPUT)
+            'ايقاف تلقي الاعلانات,إيقاف الأعلانات,stop',
+            KeywordMatcher::normalize(self::HUMAN_INPUT)
         );
     }
 
     /** والتكرار يُزال — كلمة مكرّرة لا تُغيّر شيئاً وتُربك القراءة. */
     public function test_duplicates_are_removed(): void
     {
-        $this->assertSame('stop,ايقاف', FlowKeywords::normalizeForStorage('STOP, stop , Stop, ايقاف'));
+        $this->assertSame('stop,ايقاف', KeywordMatcher::normalize('STOP, stop , Stop, ايقاف'));
     }
 
     /** والفارغ يُحفظ null لا نصّاً فارغاً. */
     public function test_blank_input_is_stored_as_null(): void
     {
-        $this->assertNull(FlowKeywords::normalizeForStorage(''));
-        $this->assertNull(FlowKeywords::normalizeForStorage('   '));
-        $this->assertNull(FlowKeywords::normalizeForStorage(', ,  ,'));
-        $this->assertNull(FlowKeywords::normalizeForStorage(null));
+        $this->assertNull(KeywordMatcher::normalize(''));
+        $this->assertNull(KeywordMatcher::normalize('   '));
+        $this->assertNull(KeywordMatcher::normalize(', ,  ,'));
+        $this->assertNull(KeywordMatcher::normalize(null));
     }
 
     /**
@@ -137,9 +139,9 @@ class FlowKeywordMatchingTest extends TestCase
      */
     public function test_the_stored_form_also_works_with_find_in_set(): void
     {
-        $normalized = FlowKeywords::normalizeForStorage(self::HUMAN_INPUT);
+        $normalized = KeywordMatcher::normalize(self::HUMAN_INPUT);
 
-        foreach (['stop', 'ايقاف تلقي الاعلانات', 'إيقاف الأعلانات؟'] as $keyword) {
+        foreach (['stop', 'ايقاف تلقي الاعلانات', 'إيقاف الأعلانات'] as $keyword) {
             $found = \DB::selectOne('SELECT FIND_IN_SET(?, ?) AS p', [$keyword, $normalized])->p;
             $this->assertGreaterThan(0, (int) $found, $keyword);
         }
@@ -270,6 +272,6 @@ class FlowKeywordMatchingTest extends TestCase
     {
         $source = file_get_contents(base_path('modules/FlowBuilder/Services/FlowService.php'));
 
-        $this->assertStringContainsString('FlowKeywords::normalizeForStorage', $source);
+        $this->assertStringContainsString('KeywordMatcher::normalize', $source);
     }
 }

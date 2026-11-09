@@ -1,10 +1,10 @@
 <script setup lang="ts">
     import axios from "axios"
-    import { ref } from 'vue'
+    import { h, onBeforeUnmount, onMounted, ref } from 'vue'
     import AppLayout from "./../../../../resources/js/Pages/User/Layout/App.vue";
-    import { Link, useForm } from "@inertiajs/vue3"
-    import { useVueFlow } from '@vue-flow/core'
+    import { Link, router, useForm } from "@inertiajs/vue3"
     import { useClipboard } from '@vueuse/core'
+    import { useTrans } from '@/Composables/useTrans'
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormTextArea from '@/Components/FormTextArea.vue';
@@ -13,10 +13,12 @@
     import mainCanvas from '@modules/FlowBuilder/Pages/User/Components/main-canvas.vue'
     import { Button } from '@modules/FlowBuilder/Pages/User/Components/ui/button'
     import { Toaster, useToast } from '@modules/FlowBuilder/Pages/User/Components/ui/toast'
+    import { flowSignature } from '@modules/FlowBuilder/Pages/User/Components/vue-flow/flowEdges.js'
 
     const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'availableActions']);
     const isOpenFormModal = ref(false);
     const activeTab = ref('basic-nodes');
+    const trans = useTrans()
 
     function handleOnDragStart(event: DragEvent, nodeType: any) {
       if (event.dataTransfer) {
@@ -25,66 +27,89 @@
       }
     }
 
-    const { toObject } = useVueFlow()
     const { copy } = useClipboard()
     const { toast } = useToast()
     const toastClass = ref('');
     const status = ref(props.flow.status);
     const metadata = ref(props.flow.metadata);
     const loading = ref(false);
+    const invalidNodeIds = ref<string[]>([]);
 
-    const handleClickSaveBtn = async () => {
+    // التعديلات غير المحفوظة: البصمة تتجاهل الإزاحة والتكبير وما يحسبه vue-flow
+    // من أبعاد، فلا يُعدّ تحريك العرض تعديلاً. خط الأساس أوّل حمولة بعد الفتح.
+    const savedSignature = ref<string | null>(null);
+    const isDirty = () => savedSignature.value !== null && flowSignature(metadata.value) !== savedSignature.value;
+
+    const nodeTypeLabels: Record<string, string> = {
+      start: 'Start',
+      text: 'Text',
+      media: 'Media',
+      buttons: 'Buttons',
+      list: 'List',
+      action: 'Action',
+    };
+
+    /** قائمة مقروءة بالأخطاء: الخطوة ورقمها ثم الرسالة. */
+    const errorList = (errors: any[]) => h('ul', { class: 'mt-1 list-disc ps-4 space-y-1' }, errors.map((error) => h('li', [
+      error.node_id
+        ? h('strong', `${trans(nodeTypeLabels[error.node_type] ?? 'Step')} #${error.node_id}: `)
+        : null,
+      error.message,
+    ])));
+
+    /**
+     * حفظ، أو حفظ ونشر (1)، أو حفظ وإلغاء نشر (0).
+     *
+     * loading يعود في finally: كان يُعاد في مسار النجاح وحده، فأيّ خطأ من
+     * الخادم أو انقطاع الجلسة يُخفي أزرار الحفظ والرجوع حتى إعادة تحميل الصفحة
+     * — فتضيع التعديلات.
+     */
+    const save = async (publish: number | null = null) => {
       loading.value = true;
 
       try {
-        const payload = {
-          metadata: metadata.value,
-        };
+        const payload: Record<string, any> = { metadata: metadata.value };
+        if (publish !== null) {
+          payload.publish = publish;
+        }
 
-        const response = await axios.put(`/automation/flows/${props.uuid}`, payload);
-        status.value = response.data.original.status;
+        const { data } = await axios.put(`/automation/flows/${props.uuid}`, payload);
+        const errors = Array.isArray(data.errors) ? data.errors : [];
 
-        toastClass.value = response.data.original.success ? 'bg-green-700 text-white' : 'bg-red-700 text-white';
-        status.value = response.data.original.status;
+        status.value = data.status;
+        invalidNodeIds.value = errors.map((error: any) => error.node_id).filter(Boolean);
 
+        if (data.success) {
+          savedSignature.value = flowSignature(metadata.value);
+          // نسخة الصفحة في سجلّ المتصفح تُحدَّث: زرّ «رجوع» كان يُعيد المسار كما
+          // كان قبل الحفظ، وحفظه بعدها يمحو العمل المحفوظ.
+          router.reload({ only: ['flow'] });
+        }
+
+        toastClass.value = data.success && errors.length === 0 ? 'bg-green-700 text-white' : (data.success ? 'bg-amber-600 text-white' : 'bg-red-700 text-white');
         toast({
-            title: response.data.original.success ? 'Success' : 'Error',
-            description: response.data.original.success ? response.data.original.message : response.data.original.errors,
-        })
-
+          title: data.message ?? (data.success ? trans('Success') : trans('Error')),
+          description: errors.length ? errorList(errors) : undefined,
+        });
+      } catch (error: any) {
+        toastClass.value = 'bg-red-700 text-white';
+        toast({
+          title: trans('Error'),
+          description: error?.response?.data?.message || trans('Something went wrong. Please try again.'),
+        });
+      } finally {
         loading.value = false;
-      } catch (error) {
-        //console.error('Failed to update flow:', error);
       }
     }
 
+    const handleClickSaveBtn = () => save();
+    const handleClickPublishBtn = (publish: number) => save(publish);
+
     function handlePayloadUpdate(flowMetadata) {
       metadata.value = flowMetadata;
-    }
 
-    const handleClickPublishBtn = async (publish) => {
-      loading.value = true;
-
-      try {
-        const payload = {
-          metadata: metadata.value,
-          publish: publish
-        };
-
-        const response = await axios.put(`/automation/flows/${props.uuid}`, payload);
-        status.value = response.data.original.status;
-
-        toastClass.value = response.data.original.success ? 'bg-green-700 text-white' : 'bg-red-700 text-white';
-        status.value = response.data.original.status;
-
-        toast({
-            title: response.data.original.success ? 'Success' : 'Error',
-            description: response.data.original.success ? response.data.original.message : response.data.original.errors,
-        })
-
-        loading.value = false;
-      } catch (error) {
-        //console.error('Failed to update flow:', error);
+      if (savedSignature.value === null) {
+        savedSignature.value = flowSignature(flowMetadata);
       }
     }
 
@@ -92,18 +117,52 @@
       status.value = newStatus;
     }
 
+    // تحذير قبل مغادرة المحرّر بتعديلات غير محفوظة: إغلاق التبويب، وأيّ رابط
+    // في التطبيق. زيارات الحفظ نفسها (put) لا تُعترض.
+    const confirmLeave = () => window.confirm(trans('You have unsaved changes. Leave without saving?'));
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (isDirty()) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+
+    let removeRouterGuard: (() => void) | null = null;
+
+    onMounted(() => {
+      window.addEventListener('beforeunload', onBeforeUnload);
+      removeRouterGuard = router.on('before', (event) => {
+        const visit = event.detail.visit;
+        const leavingEditor = visit.method === 'get' && !visit.only?.length;
+
+        if (leavingEditor && isDirty() && !confirmLeave()) {
+          event.preventDefault();
+        }
+      });
+    });
+
+    onBeforeUnmount(() => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      removeRouterGuard?.();
+    });
+
     const form = useForm({
         name: props.flow.name,
         description: props.flow.description
     });
 
+    // الاسم يُحفظ مع المسار الحالي: كان يُرسل الاسم وحده ثم يُعيد تحميل
+    // الصفحة كاملةً، فتضيع تعديلات القماش غير المحفوظة.
     const submitForm = () => {
-        form.put(`/automation/flows/${props.uuid}`, {
-            preserveScroll: true,
-            onSuccess: () => {
-                window.location.href = '/automation/flows';
-            }
-        })
+        form.transform((data) => ({ ...data, metadata: metadata.value }))
+            .put(`/automation/flows/${props.uuid}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    savedSignature.value = flowSignature(metadata.value);
+                    isOpenFormModal.value = false;
+                }
+            })
     }
 
     // Get availableActions from backend props
@@ -473,7 +532,7 @@
           </Tabs>
         </div>
         <div class="relative h-full flex-1 overflow-hidden">
-          <main-canvas :uuid="props.uuid" :flow="props.flow" :contactGroups="props.contactGroups" :contactFields="props.contactFields" @updateStatus="handleStatusUpdate" @updatePayload="handlePayloadUpdate"/>
+          <main-canvas :uuid="props.uuid" :flow="props.flow" :contactGroups="props.contactGroups" :contactFields="props.contactFields" :invalidNodeIds="invalidNodeIds" @updateStatus="handleStatusUpdate" @updatePayload="handlePayloadUpdate"/>
         </div>
       </main>
     </div>

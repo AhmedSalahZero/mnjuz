@@ -3,8 +3,27 @@ import Pusher from 'pusher-js';
 
 let echoInstance = null;
 
+/**
+ * بصمة الإعداد الذي بُني به الاتصال. الأدمن يختار لكل منشأة Pusher أو Reverb،
+ * فالانتقال إلى منشأة على مزوّدٍ آخر (أو تبديل الأدمن) يأتي بإعدادٍ مختلف مع
+ * الصفحة التالية — والاتصال القديم يظلّ يستمع إلى مزوّدٍ لا يُبثّ إليه.
+ */
+let echoConfigKey = null;
+
+const configKeyOf = (broadcast) => JSON.stringify([
+    broadcast?.provider ?? null,
+    broadcast?.key ?? null,
+    broadcast?.host ?? null,
+    broadcast?.port ?? null,
+    broadcast?.cluster ?? null,
+    broadcast?.force_tls ?? null,
+]);
+
 /** قنوات مشتركة: اسم القناة → { channel, handlers } — اشتراك فيزيائي واحد = طلب auth واحد */
 const sharedChannelEntries = new Map();
+
+/** قنوات حالة الموظفين: اسم القناة → { channel, handlers } */
+const presenceChannelEntries = new Map();
 
 /**
  * اتصال البثّ. يقبل إعداد المزوّد كما يبنيه الخادم بدل مفتاح وتجميعة.
@@ -16,6 +35,19 @@ const sharedChannelEntries = new Map();
  * @param {{key: string, cluster?: ?string, host?: ?string, port?: number, force_tls?: boolean}} broadcast
  */
 export function getEchoInstance(broadcast) {
+    // إعدادٌ مختلف: يُغلق الاتصال القديم وتُنسى قنواته، فيُبنى اتصالٌ بالمزوّد
+    // الجديد وتشترك الصفحة من جديد عند تركيبها.
+    if (echoInstance && broadcast && configKeyOf(broadcast) !== echoConfigKey) {
+        try {
+            echoInstance.disconnect();
+        } catch (error) {
+            console.warn('[Echo] تعذّر إغلاق الاتصال السابق', error);
+        }
+        echoInstance = null;
+        sharedChannelEntries.clear();
+        presenceChannelEntries.clear();
+    }
+
     if (!echoInstance) {
         // مفتاح غائب = اتصال يُبنى ويفشل بلا خطأ ظاهر: تُحفظ الرسائل ولا تصل
         // لحظياً فيبدو النظام بطيئاً لا معطّلاً. حدث هذا فعلاً حين مُرِّر
@@ -57,6 +89,7 @@ export function getEchoInstance(broadcast) {
         }
 
         echoInstance = new Echo(options);
+        echoConfigKey = configKeyOf(broadcast);
     }
     return echoInstance;
 }
@@ -71,13 +104,7 @@ export function getEchoInstance(broadcast) {
 export function getOrJoinChatChannel(organizationId, userId, broadcast) {
     const name = `chats.ch${organizationId}.${userId}`;
     if (sharedChannelEntries.has(name)) {
-        const entry = sharedChannelEntries.get(name);
-        return {
-            subscribe(handler) {
-                entry.handlers.add(handler);
-                return () => entry.handlers.delete(handler);
-            },
-        };
+        return channelApi(sharedChannelEntries.get(name));
     }
 
     const echo = getEchoInstance(broadcast);
@@ -97,22 +124,107 @@ export function getOrJoinChatChannel(organizationId, userId, broadcast) {
     });
 
     const handlers = new Set();
-    channel.listen('NewChatEvent', (event) => {
-        handlers.forEach((h) => {
+    const contactHandlers = new Set();
+
+    // معالج يرمي لا يمنع بقية المعالجات ولا يقطع الاستماع.
+    const fanOut = (set, label) => (event) => {
+        set.forEach((h) => {
             try {
                 h(event);
             } catch (e) {
-                console.warn('[Echo NewChatEvent handler]', e);
+                console.warn(label, e);
             }
         });
-    });
+    };
 
-    sharedChannelEntries.set(name, { channel, handlers });
+    channel.listen('NewChatEvent', fanOut(handlers, '[Echo NewChatEvent handler]'));
+    // حالة جهة الاتصال تتغيّر من الخادم (مساعد الذكاء الاصطناعي) دون رسالة جديدة.
+    channel.listen('ContactAiAssistanceUpdated', fanOut(contactHandlers, '[Echo ContactAiAssistanceUpdated handler]'));
 
+    const entry = { channel, handlers, contactHandlers };
+    sharedChannelEntries.set(name, entry);
+
+    return channelApi(entry);
+}
+
+/**
+ * واجهة الاشتراك على قناة مشتركة: كل دالة تُرجع دالة إلغاء الاشتراك.
+ * subscribe: رسائل المحادثات. subscribeContactUpdates: تحديثات جهة الاتصال.
+ */
+function channelApi(entry) {
     return {
         subscribe(handler) {
-            handlers.add(handler);
-            return () => handlers.delete(handler);
+            entry.handlers.add(handler);
+            return () => entry.handlers.delete(handler);
         },
+        subscribeContactUpdates(handler) {
+            entry.contactHandlers.add(handler);
+            return () => entry.contactHandlers.delete(handler);
+        },
+    };
+}
+
+/**
+ * حالة اتصال موظفي المنظمة لحظياً — لصفحة الأداء (المالك والمدير).
+ *
+ * الحدث AgentPresenceChanged يُطلَق عند تغيّر الحالة وحده. ما يفوت الصفحة وهي
+ * غير مشتركة (قبل اكتمال الاشتراك، أو أثناء انقطاع الاتصال) تستدركه بـ onSync:
+ * يُستدعى عند نجاح الاشتراك وكلّما عاد الاتصال، فتسأل الصفحة نقطة الحالة.
+ *
+ * @param {number} organizationId
+ * @param {{key: string, cluster?: ?string, host?: ?string, port?: number, force_tls?: boolean}} broadcast
+ * @param {(event: {user_id: number, online: boolean, last_activity_at: ?string, at: number}) => void} handler
+ * @param {() => void} [onSync]
+ * @returns {() => void} إلغاء الاشتراك
+ */
+export function subscribeAgentPresence(organizationId, broadcast, handler, onSync) {
+    const name = `agents.presence.ch${organizationId}`;
+    const echo = getEchoInstance(broadcast);
+
+    let entry = presenceChannelEntries.get(name);
+    if (!entry) {
+        const handlers = new Set();
+        const syncs = new Set();
+        const channel = echo
+            .private(name)
+            .subscribed(() => syncs.forEach((sync) => sync()))
+            .error((error) => {
+                console.error('[Echo] فشل الاشتراك في ' + name, error);
+            });
+
+        channel.listen('.AgentPresenceChanged', (event) => {
+            handlers.forEach((h) => {
+                try {
+                    h(event);
+                } catch (e) {
+                    console.warn('[Echo AgentPresenceChanged handler]', e);
+                }
+            });
+        });
+
+        entry = { channel, handlers, syncs };
+        presenceChannelEntries.set(name, entry);
+    }
+
+    entry.handlers.add(handler);
+    if (onSync) entry.syncs.add(onSync);
+
+    const connection = echo.connector?.pusher?.connection;
+    const onConnected = () => onSync?.();
+    connection?.bind('connected', onConnected);
+
+    return () => {
+        entry.handlers.delete(handler);
+        if (onSync) entry.syncs.delete(onSync);
+        connection?.unbind('connected', onConnected);
+
+        if (entry.handlers.size === 0 && presenceChannelEntries.get(name) === entry) {
+            presenceChannelEntries.delete(name);
+            try {
+                echo.leave(name);
+            } catch (e) {
+                // اتصال أُغلق أصلاً.
+            }
+        }
     };
 }

@@ -7,6 +7,8 @@ use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Prunable;
 
 class CampaignLog extends Model {
@@ -33,23 +35,23 @@ class CampaignLog extends Model {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 
-    public function campaign(){
+    public function campaign(): BelongsTo {
         return $this->belongsTo(Campaign::class, 'campaign_id', 'id');
     }
 
-    public function contact(){
+    public function contact(): BelongsTo {
         return $this->belongsTo(Contact::class, 'contact_id', 'id');
     }
 
-    public function chat(){
+    public function chat(): BelongsTo {
         return $this->belongsTo(Chat::class, 'chat_id', 'id');
     }
 
-    public function retries(){
+    public function retries(): HasMany {
         return $this->hasMany(CampaignLogRetry::class);
     }
 
-    public function attempts()
+    public function attempts(): HasMany
     {
         return $this->hasMany(CampaignMessageAttempt::class)->orderBy('attempt_number');
     }

@@ -10,12 +10,32 @@
         <form @submit.prevent="submitForm()">
             <div class="space-y-12">
                 <div class="pb-12">
-                    <div v-if="form.broadcast_driver === 'pusher'" class="grid gap-6 grid-cols-2 pb-10 border-b md:w-2/3">
+                    <div class="grid gap-6 grid-cols-2 pb-6 md:w-2/3">
                         <FormSelect v-model="form.broadcast_driver" :name="$t('Broadcast driver')" :type="'text'"  :options="methods" :error="form.errors.broadcast_driver" :class="'col-span-2'"/>
+                    </div>
+                    <!-- المزوّد الافتراضي: تتبعه كل منشأة لم يُختَر لها مزوّد في صفحتها. -->
+                    <div v-if="form.broadcast_driver === 'pusher'" class="grid gap-6 grid-cols-2 pb-10 border-b md:w-2/3">
+                        <div class="col-span-2">
+                            <FormSelect v-model="form.broadcast_provider" :name="$t('Default realtime provider')" :options="providers" :error="form.errors.broadcast_provider"/>
+                            <p class="mt-1 text-xs text-slate-500">{{ $t('Organizations set to “Platform default” use this provider. You can choose a provider for each organization on its page.') }}</p>
+                        </div>
+                    </div>
+                    <div v-if="form.broadcast_driver === 'pusher'" class="grid gap-6 grid-cols-2 pt-6 pb-10 border-b md:w-2/3">
+                        <h3 class="col-span-2 text-sm font-medium">Pusher</h3>
                         <FormInput v-model="form.pusher_app_id" :name="$t('Pusher app id')" :type="'text'" :placeholder="getValueByKey('pusher_app_id_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.pusher_app_id" :class="'col-span-1'"/>
                         <FormInput v-model="form.pusher_app_key" :name="$t('Pusher app key')" :type="'text'" :error="form.errors.pusher_app_key" :class="'col-span-1'"/>
                         <FormInput v-model="form.pusher_app_secret" :name="$t('Pusher app secret')" :type="'password'" :placeholder="getValueByKey('pusher_app_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.pusher_app_secret" :class="'col-span-1'"/>
                         <FormInput v-model="form.pusher_app_cluster" :name="$t('Pusher app cluster')" :type="'text'" :error="form.errors.pusher_app_cluster" :class="'col-span-1'"/>
+                    </div>
+                    <!-- Reverb: خادمنا. يتكلّم بروتوكول Pusher، فيحتاج عنواناً صريحاً بدل التجميعة. -->
+                    <div v-if="form.broadcast_driver === 'pusher'" class="grid gap-6 grid-cols-2 pt-6 pb-10 border-b md:w-2/3">
+                        <h3 class="col-span-2 text-sm font-medium">Reverb</h3>
+                        <FormInput v-model="form.reverb_app_id" :name="$t('Reverb app id')" :type="'text'" :placeholder="getValueByKey('reverb_app_id_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.reverb_app_id" :class="'col-span-1'"/>
+                        <FormInput v-model="form.reverb_app_key" :name="$t('Reverb app key')" :type="'text'" :error="form.errors.reverb_app_key" :class="'col-span-1'"/>
+                        <FormInput v-model="form.reverb_app_secret" :name="$t('Reverb app secret')" :type="'password'" :placeholder="getValueByKey('reverb_app_secret_is_set') ? '•••••••••• ' + $t('Leave blank to keep current value') : ''" :error="form.errors.reverb_app_secret" :class="'col-span-1'"/>
+                        <FormInput v-model="form.reverb_host" :name="$t('Reverb host')" :type="'text'" placeholder="reverb.example.com" :error="form.errors.reverb_host" :class="'col-span-1'"/>
+                        <FormInput v-model="form.reverb_port" :name="$t('Reverb port')" :type="'number'" :min="1" :max="65535" :error="form.errors.reverb_port" :class="'col-span-1'"/>
+                        <FormSelect v-model="form.reverb_scheme" :name="$t('Reverb scheme')" :options="schemes" :error="form.errors.reverb_scheme" :class="'col-span-1'"/>
                     </div>
 
                     <div class="mt-6 flex items-center justify-end gap-x-6 md:w-2/3">
@@ -58,10 +78,27 @@
         pusher_app_id: getValueByKey('pusher_app_id'),
         pusher_app_secret: getValueByKey('pusher_app_secret'),
         pusher_app_cluster: getValueByKey('pusher_app_cluster'),
+        broadcast_provider: getValueByKey('broadcast_provider') || 'pusher',
+        reverb_app_id: getValueByKey('reverb_app_id'),
+        reverb_app_key: getValueByKey('reverb_app_key'),
+        reverb_app_secret: getValueByKey('reverb_app_secret'),
+        reverb_host: getValueByKey('reverb_host'),
+        reverb_port: getValueByKey('reverb_port') || '443',
+        reverb_scheme: getValueByKey('reverb_scheme') || 'https',
     })
 
     const methods = [
         { label: 'Pusher', value: 'pusher' },
+    ]
+
+    const providers = [
+        { label: 'Pusher', value: 'pusher' },
+        { label: 'Reverb', value: 'reverb' },
+    ]
+
+    const schemes = [
+        { label: 'https', value: 'https' },
+        { label: 'http', value: 'http' },
     ]
 
     const submitForm = async () => {

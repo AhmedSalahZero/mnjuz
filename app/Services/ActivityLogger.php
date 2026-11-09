@@ -35,6 +35,10 @@ class ActivityLogger
     public const TEMPLATE_SENT = 'template_sent';
     public const MEDIA_SENT = 'media_sent';
     public const CHAT_DELETED = 'chat_deleted';
+    public const CHAT_IMPORT_STARTED = 'chat_import_started';
+    public const CHAT_IMPORT_COMPLETED = 'chat_import_completed';
+    public const CHAT_IMPORT_FAILED = 'chat_import_failed';
+    public const CHAT_IMPORT_ROLLED_BACK = 'chat_import_rolled_back';
 
     // التذاكر
     public const TICKET_ASSIGNED = 'ticket_assigned';
@@ -115,6 +119,10 @@ class ActivityLogger
             self::TEMPLATE_SENT => 'أرسل قالباً إلى «%s»',
             self::MEDIA_SENT => 'أرسل ملفاً إلى «%s»',
             self::CHAT_DELETED => 'حذف محادثة «%s»',
+            self::CHAT_IMPORT_STARTED => 'بدأ استيراد محادثات من الملف «%s»',
+            self::CHAT_IMPORT_COMPLETED => 'اكتمل استيراد محادثات الملف «%s»',
+            self::CHAT_IMPORT_FAILED => 'فشل استيراد محادثات الملف «%s»',
+            self::CHAT_IMPORT_ROLLED_BACK => 'تراجع عن استيراد محادثات الملف «%s»',
 
             self::TICKET_ASSIGNED => 'أسند تذكرة «%s»',
             self::TICKET_CLOSED => 'أغلق تذكرة «%s»',
@@ -150,7 +158,8 @@ class ActivityLogger
             'account' => [self::LOGIN, self::LOGOUT, self::ORGANIZATION_SWITCHED],
             'contacts' => [self::CONTACT_CREATED, self::CONTACT_UPDATED, self::CONTACT_DELETED,
                 self::CONTACT_BLOCKED, self::CONTACT_UNBLOCKED, self::CONTACT_IMPORTED],
-            'chats' => [self::MESSAGE_SENT, self::TEMPLATE_SENT, self::MEDIA_SENT, self::CHAT_DELETED],
+            'chats' => [self::MESSAGE_SENT, self::TEMPLATE_SENT, self::MEDIA_SENT, self::CHAT_DELETED,
+                self::CHAT_IMPORT_STARTED, self::CHAT_IMPORT_COMPLETED, self::CHAT_IMPORT_FAILED, self::CHAT_IMPORT_ROLLED_BACK],
             'tickets' => [self::TICKET_ASSIGNED, self::TICKET_CLOSED, self::TICKET_REOPENED],
             'team' => [self::TEAM_MEMBER_INVITED, self::TEAM_MEMBER_REMOVED, self::TEAM_MEMBER_ROLE_CHANGED,
                 self::TEAM_MEMBER_RESTORED],

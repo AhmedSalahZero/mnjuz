@@ -51,7 +51,7 @@ class BillingController extends BaseController
         // إعداد البثّ كما يحتاجه العميل: المفتاح والعنوان لا السرّ. يأتي من
         // BroadcastProvider فيتبع مفتاح التبديل تلقائياً — تغيير المزوّد يظهر
         // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء.
-        $data['pusherSettings'] = BroadcastProvider::clientConfig();
+        $data['pusherSettings'] = BroadcastProvider::clientConfig((int) $organizationId ?: null);
         $data['setting'] = Setting::whereIn('key', ['enable_custom_payment'])->pluck('value', 'key')->toArray();
         $data['organizationId'] = $organizationId;
 

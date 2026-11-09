@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Helpers\DateTimeHelper;
 use App\Helpers\Email;
 use App\Http\Controllers\Controller as BaseController;
@@ -24,6 +25,8 @@ use App\Models\TeamInvite;
 use App\Models\User;
 use App\Models\UserDevice;
 use App\Mail\ResetLinkedDevicesMail;
+use App\Services\AgentPerformanceService;
+use App\Services\AgentPresence;
 use App\Services\UserDeviceService;
 use App\Services\AuthService;
 use App\Services\PasswordResetService;
@@ -277,12 +280,15 @@ class AuthController extends BaseController
             $currentOrganizationId = null;
             if($guard == 'user'){
                 $teams = Team::where('user_id', $user->id)->with('organization')->get();
-                $organizations = $teams->map(function($team) {
+                $organizations = $teams->map(function($team) use ($user) {
                     return [
                         'id' => $team->organization_id,
                         'name' => $team->organization->name ?? '',
                         'role' => $team->role,
 						'timezone' => DateTimeHelper::getCurrentTimeZone($team->organization_id),
+						// إعداد البثّ لهذه المنشأة (Pusher أو Reverb كما يختاره
+						// الأدمن): يتّصل به التطبيق عند اختيارها بلا مفاتيح مضمّنة.
+						'broadcast' => BroadcastProvider::appConfig((int) $team->organization_id, (int) $user->id),
                     ];
                 })->toArray();
                 
@@ -291,6 +297,7 @@ class AuthController extends BaseController
                     $currentOrganizationId = $organizations[0]['id'];
 					$user->current_mobile_organization_id = $currentOrganizationId;
 					$user->save();
+                    AgentPerformanceService::markPresent((int) $currentOrganizationId, (int) $user->id, AgentPresence::MOBILE);
                 }
             }
 
@@ -321,6 +328,13 @@ class AuthController extends BaseController
             $teams = Team::where('user_id', auth()->user()->id);
             if($teams->count() == 1){
                 session()->put('current_organization', $teams->first()->organization_id);
+            }
+
+            // حاضرٌ منذ لحظة الدخول لا بعد انتهاء لوحة التحكّم من التحميل. ومن له
+            // عدّة شركات ولم يخترها بعد يثبّته اختيارُه لها (selectOrganization).
+            $presenceOrganizationId = (int) (session('current_organization') ?: $user->current_web_organization_id);
+            if ($presenceOrganizationId) {
+                AgentPerformanceService::markPresent($presenceOrganizationId, (int) $user->id);
             }
         }
 
@@ -428,6 +442,8 @@ class AuthController extends BaseController
                 
                         //Create Organization
                         $organization = $this->createOrganization($user);
+
+                        app(\App\Services\ReferralService::class)->recordSignup($user, $request);
                 
                         // Send Registration Email
                         Email::send('Registration', $user);
@@ -543,6 +559,8 @@ class AuthController extends BaseController
                     'valid_until' => $has_trial ? date('Y-m-d H:i:s', strtotime('+' . $config->value . ' days')) : now(),
                 ]);
 
+                app(\App\Services\ReferralService::class)->recordSignup($user, $request);
+
                 Email::send('Registration', $user);
 
                 $verifyEmailConfig = Setting::where('key', 'verify_email')->first();
@@ -607,6 +625,11 @@ class AuthController extends BaseController
 
     public function showRegistrationForm(WazBusinessService $waz)
     {
+        // /signup?ref=CODE يعمل كرابط الإحالة /r/CODE.
+        if (request()->filled('ref')) {
+            app(\App\Services\ReferralService::class)->remember(request(), (string) request()->query('ref'));
+        }
+
         $keys = ['logo', 'company_name', 'address', 'email', 'phone', 'socials', 'trial_period', 'allow_facebook_login', 'allow_google_login'];
         $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
 
@@ -641,6 +664,8 @@ class AuthController extends BaseController
         $user->forceFill(['waz_contact_id' => $contactId])->save();
         Organization::whereIn('id', $user->teams()->pluck('organization_id'))
             ->update(['waz_company_id' => $companyId]);
+
+        app(\App\Services\ReferralService::class)->recordSignup($user, $request);
 
         $authService = (new AuthService($user))->authenticateSession($request);
         $config = Setting::where('key', 'verify_email')->first();
@@ -903,6 +928,16 @@ class AuthController extends BaseController
             }
         }
 
+        // الخروج يُسقط حضور هذه الجلسة وحدها، لا بعد انقضاء النافذة. التطبيق
+        // يحذف كل توكنات المستخدم أدناه، فتسقط كل جلساته فيه؛ والويب جلسته هذه.
+        if ($logoutUser) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                AgentPresence::leavePlatform((int) $logoutUser->id, AgentPresence::MOBILE);
+            } elseif ($request->hasSession()) {
+                AgentPresence::leaveSession((int) $logoutUser->id, $request->session()->getId());
+            }
+        }
+
         // Check if this is an API request (mobile)
         if ($request->expectsJson() || $request->is('api/*')) {
             // Set locale based on user's language for proper translation
@@ -951,11 +986,17 @@ class AuthController extends BaseController
 			], 403);
 		}
 
+		// عميل التطبيق نفسه (توكنه): يُغادر المنشأة السابقة وينتقل إلى هذه.
+		[$presenceClientId, $presenceSessionKey] = AgentPresence::mobileClient($request);
+		AgentPerformanceService::markPresent((int) $organization->id, (int) $request->user()->id, AgentPresence::MOBILE, $presenceClientId, $presenceSessionKey);
+
 		return response()->json([
 			'success' => true,
 			'message' => __('Organization set successfully'),
 			'data' => [
 				'current_organization_id' => $organization->id,
+				// المنشأة الجديدة قد تكون على مزوّد بثّ آخر: يُعيد التطبيق اتصاله به.
+				'broadcast' => BroadcastProvider::appConfig((int) $organization->id, (int) $request->user()->id),
 			],
 		], 200);
 	}
@@ -1003,6 +1044,7 @@ class AuthController extends BaseController
                 'message' => __('You have left the organization. Your session has been closed.'),
                 'data' => [
                     'current_organization_id' => null,
+                    'broadcast' => null,
                 ],
             ], 200);
         }
@@ -1012,6 +1054,10 @@ class AuthController extends BaseController
             'message' => __('You have left this organization.'),
             'data' => [
                 'current_organization_id' => (int) $user->current_mobile_organization_id,
+                // المنشأة التي انتقل إليها قد تكون على مزوّد بثّ آخر.
+                'broadcast' => $user->current_mobile_organization_id
+                    ? BroadcastProvider::appConfig((int) $user->current_mobile_organization_id, (int) $user->id)
+                    : null,
             ],
         ], 200);
     }

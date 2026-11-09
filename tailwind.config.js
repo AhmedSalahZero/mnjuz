@@ -4,6 +4,11 @@ module.exports = {
     "./resources/**/*.blade.php",
     "./resources/**/*.js",
     "./resources/**/*.vue",
+    // الوحدات (modules/FlowBuilder وغيرها) فيها واجهات بكلاسات Tailwind؛ بلا هذا
+    // لا يولّد الـ build إلا ما صادف وجوده في resources، فتفقد عقد المسارات
+    // حدودها وألوانها (border-teal-200، !bg-teal-500، w-[400px]…).
+    "./modules/**/*.vue",
+    "./modules/**/*.js",
     "./src/**/*.{html,js}",
   ],
   theme: {

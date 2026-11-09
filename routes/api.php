@@ -2,7 +2,6 @@
 
 use App\Http\Middleware\AuthenticateBearerToken;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -139,6 +138,8 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::post('/send-location', [App\Http\Controllers\ApiController::class, 'sendLocation']);
 	Route::get('/organization-location', [App\Http\Controllers\ApiController::class, 'organizationLocation']);
 	Route::post('/performance/heartbeat', [App\Http\Controllers\ApiController::class, 'performanceHeartbeat']);
+	Route::post('/performance/offline', [App\Http\Controllers\ApiController::class, 'performanceOffline']);
+	Route::get('/performance/status', [App\Http\Controllers\Api\MobileReportController::class, 'agentPresence']);
 	Route::get('/list-teams', [App\Http\Controllers\ApiController::class, 'listTeamMembers']);
 
 	/*
@@ -189,6 +190,31 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::put('/automation/basic/{uuid}', [App\Http\Controllers\Api\MobileAutomationController::class, 'update']);
 	Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\Api\MobileAutomationController::class, 'destroy']);
 
+	// الحملات — كالويب: لكل أعضاء المنشأة. المسارات الثابتة قبل {uuid}.
+	Route::get('/campaigns', [App\Http\Controllers\Api\MobileCampaignController::class, 'index']);
+	Route::get('/campaigns/options', [App\Http\Controllers\Api\MobileCampaignController::class, 'options']);
+	Route::get('/campaigns/templates/{uuid}', [App\Http\Controllers\Api\MobileCampaignController::class, 'template']);
+	Route::get('/campaigns/media-history', [App\Http\Controllers\Api\MobileCampaignController::class, 'mediaHistory']);
+	Route::delete('/campaigns/media-history/{uuid}', [App\Http\Controllers\Api\MobileCampaignController::class, 'destroyMediaHistory']);
+	Route::post('/campaigns', [App\Http\Controllers\Api\MobileCampaignController::class, 'store']);
+	Route::get('/campaigns/{uuid}', [App\Http\Controllers\Api\MobileCampaignController::class, 'show']);
+	Route::get('/campaigns/{uuid}/logs', [App\Http\Controllers\Api\MobileCampaignController::class, 'logs']);
+	Route::post('/campaigns/{uuid}/resend-failed', [App\Http\Controllers\Api\MobileCampaignController::class, 'resendFailed']);
+	Route::delete('/campaigns/{uuid}', [App\Http\Controllers\Api\MobileCampaignController::class, 'destroy']);
+
+	// الفريق — للمالك والمدير. قبول الدعوة يبقى من رابط البريد في المتصفّح.
+	Route::get('/team', [App\Http\Controllers\Api\MobileTeamController::class, 'index']);
+	Route::post('/team/invite', [App\Http\Controllers\Api\MobileTeamController::class, 'invite']);
+	Route::post('/team/invites/{id}/resend', [App\Http\Controllers\Api\MobileTeamController::class, 'resendInvite'])->whereNumber('id');
+	Route::delete('/team/invites/{id}', [App\Http\Controllers\Api\MobileTeamController::class, 'cancelInvite'])->whereNumber('id');
+	Route::put('/team/{uuid}', [App\Http\Controllers\Api\MobileTeamController::class, 'update']);
+	Route::delete('/team/{uuid}', [App\Http\Controllers\Api\MobileTeamController::class, 'destroy']);
+	Route::post('/team/{uuid}/restore', [App\Http\Controllers\Api\MobileTeamController::class, 'restore']);
+
+	// ادعُ صديقاً — رابط الإحالة ومن سجّل به. لكل الأدوار.
+	Route::get('/referral', [App\Http\Controllers\Api\MobileReferralController::class, 'show']);
+	Route::get('/referral/referrals', [App\Http\Controllers\Api\MobileReferralController::class, 'referrals']);
+
 	// إعداد البثّ: يسأله التطبيق عند كل فتح فيتبع تبديل المزوّد بلا إصدار جديد.
 	Route::get('/broadcast-config', [App\Http\Controllers\Api\BroadcastConfigController::class, 'show']);
 
@@ -213,6 +239,6 @@ Route::middleware(['auth:sanctum', 'check.active.organization', 'check.has.selec
     Route::get('/status/{paymentId}', [App\Http\Controllers\Api\MyFatoorahPaymentController::class, 'status']);
 });
 
-Route::post('/broadcasting/auth', function (Request $request) {
-    return Broadcast::auth($request);
-})->middleware('auth:sanctum'); // أو auth:api
+// يوقّع بسرّ مزوّد المنشأة صاحبة القناة (Pusher أو Reverb).
+Route::post('/broadcasting/auth', App\Http\Controllers\BroadcastAuthController::class)
+    ->middleware('auth:sanctum')->name('api.broadcasting.auth');

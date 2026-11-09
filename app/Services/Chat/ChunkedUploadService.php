@@ -77,16 +77,19 @@ class ChunkedUploadService
      * الدمج بالتدفّق لا بالقراءة الكاملة: ملفٌ من مئة ميغابايت يُقرأ كلّه إلى
      * الذاكرة كان سيُسقط العملية عند أوّل ملف كبير.
      *
+     * @param string $targetDirectory مجلّد الملف المدموج على قرص local — مرفقات
+     *                                المحادثة تذهب إلى الإرسال، وملف استيراد
+     *                                المحادثات إلى مجلّد المنشأة.
      * @return string|null المسار النسبي، أو null إن نقصت قطعة
      */
-    public static function assemble(string $directory, int $total, string $extension): ?string
+    public static function assemble(string $directory, int $total, string $extension, string $targetDirectory = 'temp/send-media'): ?string
     {
         if (!self::hasAllChunks($directory, $total)) {
             return null;
         }
 
         $disk = Storage::disk('local');
-        $target = 'temp/send-media/' . basename($directory) . ($extension !== '' ? '.' . $extension : '');
+        $target = rtrim($targetDirectory, '/') . '/' . basename($directory) . ($extension !== '' ? '.' . $extension : '');
 
         $disk->put($target, '');
         $handle = fopen($disk->path($target), 'wb');

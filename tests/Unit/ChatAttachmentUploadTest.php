@@ -95,8 +95,11 @@ class ChatAttachmentUploadTest extends TestCase
     public function test_the_composer_rejects_files_above_the_server_limit_first(): void
     {
         $this->assertStringContainsString('serverMaxUploadBytes', $this->composer);
+        // الحدّ بين الطلب الواحد والتجزئة حجم القطعة الذي يقبله الخادم
+        // (upload_chunk_bytes)، لا 5MB ثابتة.
+        $this->assertStringContainsString('usePage().props.upload_chunk_bytes', $this->composer);
         $this->assertMatchesRegularExpression(
-            '/if \(file\.size <= CHUNK_BYTES && file\.size > serverMaxUploadBytes\.value\)/',
+            '/if \(file\.size <= serverChunkBytes && file\.size > serverMaxUploadBytes\.value\)/',
             $this->composer,
             'حدّ الخادم يجب أن يُفحَص على ما يُرسَل في طلب واحد لا على الملف كلّه'
         );

@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\BroadcastsOnOrganizationProvider;
 use Exception;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 class ContactChatDeletedEvent implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+    use BroadcastsOnOrganizationProvider;
 
     public $organizationId;
     public $queue = 'high';

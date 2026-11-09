@@ -42,11 +42,12 @@
 import { useRtl } from '@/Composables/useRtl'
 import { useForm, usePage } from "@inertiajs/vue3"
 import { default as axios } from 'axios'
-import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
+import { computed, onMounted, provide, ref, watch } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 import { shouldCountAsUnread, shouldPlaySound } from '@/Composables/unreadBadge'
 import { getOrJoinChatChannel } from '../../../echo'
+import { startAgentHeartbeat, stopAgentHeartbeat } from '@/Composables/agentHeartbeat'
 import MobileSidebar from "./MobileSidebar.vue"
 import Sidebar from "./Sidebar.vue"
 
@@ -119,25 +120,17 @@ provide('updateTotalUnreadMessages', (val) => {
 	unreadMessages.value -= val
 })
 
-// نبضة نشاط لقياس أداء الموظفين (مفعّلة فقط عند اشتراك المنظمة في الميزة).
-// نرسل النبضة دائماً لإثبات الحضور، ونُعلم الخادم هل النافذة مرئية ليقرّر
-// احتساب الوقت النشط. كان الإرسال يتوقّف كلّياً حين يُخفى التبويب، فيظهر
-// الموظف «غير متصل» بعد دقيقتين وهو على المنصة.
-let heartbeatTimer = null
-const sendHeartbeat = () => {
-	axios.post('/performance/heartbeat', { visible: document.visibilityState === 'visible' }).catch(() => { })
-}
+// نبضة حضور التبويب لصفحة أداء الموظفين (مفعّلة فقط عند اشتراك المنظمة في
+// الميزة). مؤقّتها على مستوى التبويب لا هذا الـ layout الذي يُركَّب من جديد
+// مع كل تنقّل — انظر agentHeartbeat.js.
 const setupActivityHeartbeat = () => {
-	if (!organization.value?.plan?.features?.agent_performance) return
-	sendHeartbeat()
-	heartbeatTimer = setInterval(sendHeartbeat, 60000)
-	document.addEventListener('visibilitychange', sendHeartbeat)
+	// شركة بلا الميزة (بعد التبديل): يتوقّف ما كان ينبض للسابقة.
+	if (!organization.value?.plan?.features?.agent_performance) {
+		stopAgentHeartbeat()
+		return
+	}
+	startAgentHeartbeat(organization.value.id)
 }
-
-onUnmounted(() => {
-	if (heartbeatTimer) clearInterval(heartbeatTimer)
-	document.removeEventListener('visibilitychange', sendHeartbeat)
-})
 
 onMounted(() => {
 	setupSound()
@@ -146,24 +139,31 @@ onMounted(() => {
 		return
 	}
 
-	const { subscribe } = getOrJoinChatChannel(
-		organization.value.id,
-		user.value.id,
-		broadcast.value,
-	)
-	subscribe((event) => {
-		const chat = event.chat
-
-		if (shouldPlaySound(chat)) {
-			playSound()
-		}
-
-		if (shouldCountAsUnread(chat, window.location.pathname)) {
-			unreadMessages.value += 1
-		}
-	})
-
+	// النبضة أولاً ومستقلّة عن البثّ: كانت تأتي بعد الاشتراك في القناة، فإن رمى
+	// الاشتراك (مفتاح بثّ غير صالح مثلاً) لم تنطلق النبضة قطّ ولا يظهر الموظف
+	// متصلاً — وهما أمران لا علاقة لأحدهما بالآخر.
 	setupActivityHeartbeat()
+
+	try {
+		const { subscribe } = getOrJoinChatChannel(
+			organization.value.id,
+			user.value.id,
+			broadcast.value,
+		)
+		subscribe((event) => {
+			const chat = event.chat
+
+			if (shouldPlaySound(chat)) {
+				playSound()
+			}
+
+			if (shouldCountAsUnread(chat, window.location.pathname)) {
+				unreadMessages.value += 1
+			}
+		})
+	} catch (error) {
+		console.warn('Chat channel subscription failed', error)
+	}
 
 	// const SB_BASE = 'https://business.waz.com.sa/support'
 	// const loadExternalScript = (src, id) =>

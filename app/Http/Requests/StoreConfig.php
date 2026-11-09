@@ -79,6 +79,19 @@ class StoreConfig extends FormRequest
             $rules['pusher_app_id'] = $this->secretRule('pusher_app_id');
             $rules['pusher_app_secret'] = $this->secretRule('pusher_app_secret');
             $rules['pusher_app_cluster'] = 'required';
+
+            // مزوّد المنصّة الافتراضي، وبيانات Reverb. تُشترط بيانات Reverb متى
+            // كان مستعملاً — افتراضياً أو لمنشأةٍ بعينها — فلا تُمسح من تحت
+            // منشآتٍ تتّصل به فتصمت رسائلها.
+            $rules['broadcast_provider'] = 'required|in:pusher,reverb';
+            $reverbInUse = $this->input('broadcast_provider') === 'reverb'
+                || \App\Models\Organization::where('broadcast_provider', 'reverb')->exists();
+            $rules['reverb_app_key'] = $reverbInUse ? 'required' : 'nullable';
+            $rules['reverb_host'] = $reverbInUse ? 'required' : 'nullable';
+            $rules['reverb_app_id'] = $reverbInUse ? $this->secretRule('reverb_app_id') : 'nullable';
+            $rules['reverb_app_secret'] = $reverbInUse ? $this->secretRule('reverb_app_secret') : 'nullable';
+            $rules['reverb_port'] = 'nullable|integer|between:1,65535';
+            $rules['reverb_scheme'] = 'nullable|in:http,https';
         }
 
         if ($this->type == 'socials') {

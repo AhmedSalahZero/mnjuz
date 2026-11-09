@@ -22,6 +22,8 @@ class SettingService
         'recaptcha_secret_key',
         'pusher_app_secret',
         'pusher_app_id',
+        'reverb_app_secret',
+        'reverb_app_id',
         'whatsapp_callback_token',
         'razorpay_secret_key',
         'razorpay_webhook_secret',

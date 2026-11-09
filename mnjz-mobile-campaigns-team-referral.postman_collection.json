@@ -1,0 +1,1557 @@
+{
+  "info": {
+    "name": "mnjz-chat — mobile: campaigns, team, invite a friend",
+    "description": "Campaigns, team management and invite-a-friend endpoints for the mobile app.\n\n## Run on localhost\n1. Import this collection and `mnjz-local.postman_environment.json`, select the **mnjz local** environment.\n2. Set `email` (an owner or manager on your local DB) and `base_url` (default `http://localhost:8000`, start the app with `php artisan serve`).\n3. Run the collection (Runner or `postman collection run`). `auth/login` stores the token; every other request uses it.\n\n⚠️ login revokes all of that user's tokens — the phone app on the same account is logged out.\n\nRequests whose name starts with **[manual]** are skipped unless `run_manual_examples = true` — they send real messages or remove a real member.\n\nDocs: `MOBILE_CAMPAIGNS_TEAM_REFERRAL.md`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "auth",
+      "description": "تسجيل الدخول وحفظ التوكن أوتوماتيك.\n\n⚠️ **login بيمسح كل توكنات المستخدم** (`doLogin` → `tokens()->delete()`) — يعني التطبيق على موبايل نفس الحساب هيخرج. استخدم حساب تجربة.\n\nعلى `APP_ENV=local` أي باسورد بيتقبل.",
+      "item": [
+        {
+          "name": "login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "**Who**: anyone\n\nبيحفظ `token` و`organization_id` في متغيرات الـ collection. لو المستخدم عضو في أكتر من منشأة، `current_organization_id` بيرجع null فبنختار أول منشأة، والطلب اللي بعده بيثبّتها.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"device_name\": \"Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('login succeeded (no TFA / verification step)', () => pm.expect(body.success).to.eql(true));",
+                  "if (body.requires_tfa) { console.warn('TFA is enabled for this user: call POST /api/v1/auth/tfa/verify manually.'); }",
+                  "pm.test('token returned', () => pm.expect(body.data.token).to.be.a('string'));",
+                  "pm.collectionVariables.set('token', body.data.token);",
+                  "const orgId = body.data.current_organization_id || ((body.data.organizations || [])[0] || {}).id;",
+                  "pm.collectionVariables.set('organization_id', orgId || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "set current organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/set-current-organization",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "set-current-organization"
+              ]
+            },
+            "description": "**Who**: any member of the organization\n\nكل طلبات `/api/v1/*` اللي بعده بتشتغل على المنشأة دي.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{organization_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('organization selected', () => pm.expect(body.data.current_organization_id).to.eql(Number(pm.collectionVariables.get('organization_id'))));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "campaigns",
+      "description": "الحملات — **لكل الأدوار** زي الويب (owner, manager, agent).\n\nالتسلسل: options → template skeleton → create (مجدولة بعد 7 أيام) → list → show → logs → resend-failed → media-history → delete.\n\n**محتاج**: قالب معتمد (APPROVED) وجهة اتصال واحدة على الأقل في المنشأة.\n\nالأمثلة اليدوية (رفع ملف، إرسال فوري) بيتخطّاها الـ runner إلا لو `run_manual_examples = true`.",
+      "item": [
+        {
+          "name": "campaign form options",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/options",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "options"
+              ]
+            },
+            "description": "**Who**: everyone\n\nالقوالب المعتمدة، والمجموعات بعدد من سيصلهم فعلاً، وحدّ الباقة، والمنطقة الزمنية اللي بيتقري بيها `time`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('has templates, groups, limits', () => {",
+                  "    pm.expect(body.data.templates).to.be.an('array');",
+                  "    pm.expect(body.data.contact_groups).to.be.an('array');",
+                  "    pm.expect(body.data.limits).to.have.property('campaign_limit');",
+                  "});",
+                  "const templates = body.data.templates || [];",
+                  "// قالب بلا ترويسة وسائط أسهل للتجربة (لا يحتاج ملف).",
+                  "const pick = templates.find(t => !['IMAGE', 'VIDEO', 'DOCUMENT'].includes(t.header_format)) || templates[0];",
+                  "pm.collectionVariables.set('template_uuid', pick ? pick.uuid : '');",
+                  "pm.collectionVariables.set('group_uuid', ((body.data.contact_groups || [])[0] || {}).uuid || '');",
+                  "pm.collectionVariables.set('campaign_contacts', body.data.all_contacts_count > 0 ? 'all' : (((body.data.contact_groups || []).find(g => g.contacts_count > 0) || {}).uuid || 'all'));",
+                  "pm.collectionVariables.set('org_now', body.data.now);",
+                  "pm.test('an approved template exists (needed for the next requests)', () => pm.expect(pick).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "template parameters skeleton",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/templates/{{template_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "templates",
+                "{{template_uuid}}"
+              ]
+            },
+            "description": "**Who**: everyone\n\nنفس اللي بيبنيه فورم الويب. التطبيق يملا `value` في كل معامل ويبعت `header` و`body` و`footer` و`buttons` زي ما هي في create.\n\n- `selection` في body/header: `static` (نص) أو `dynamic` (قيمة من `dynamic_values` زي `first name`).\n- ترويسة الوسائط: `selection` = `upload` (ملف) أو `history` (uuid من media-history) أو `default` (رابط)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('template_uuid')) {",
+                  "    console.log('skipped: no approved template');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('skeleton has header/body/footer/buttons', () => pm.expect(body.data.parameters).to.include.keys('header', 'body', 'footer', 'buttons'));",
+                  "pm.collectionVariables.set('campaign_parameters', JSON.stringify(body.data.parameters));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "create campaign (scheduled)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns"
+              ]
+            },
+            "description": "**Who**: everyone · subscription must be active · `campaign_limit`\n\nالجسم بيتبني في pre-request script من الطلب اللي قبله. `time` بصيغة `Y-m-d H:i` بتوقيت المنشأة، أو `skip_schedule: true` للإرسال فوراً.\n\n`contacts`: `all` أو uuid مجموعة. أخطاء التحقق: 400 و`errors` (نفس قواعد الويب).",
+            "body": {
+              "mode": "raw",
+              "raw": "{{campaign_body}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('template_uuid')) {",
+                  "    console.log('skipped: no approved template');",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "// يبني جسم الحملة من هيكل القالب (GET campaigns/templates/{uuid}) ويجدولها بعد 7 أيام —",
+                  "// فلا تُرسل أي رسالة فعلاً، والطلب الأخير في الـ folder يحذفها.",
+                  "const p = JSON.parse(pm.collectionVariables.get('campaign_parameters') || '{}');",
+                  "const header = p.header || { format: null, parameters: [] };",
+                  "if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(header.format)) {",
+                  "    const example = (header.parameters[0] || {}).example_url;",
+                  "    // رابط مثال Meta — للتجربة فقط؛ في التطبيق ارفع ملفاً (selection=upload) أو اختر من media-history.",
+                  "    header.parameters = [{ type: header.format, selection: 'default', value: example }];",
+                  "}",
+                  "const buttons = (p.buttons || []).map(b => ({",
+                  "    ...b,",
+                  "    parameters: (b.parameters || []).map(param => ({ ...param, value: param.value ?? (b.type === 'QUICK_REPLY' ? (b.text || 'OK').slice(0, 25) : param.value) })),",
+                  "}));",
+                  "const now = pm.collectionVariables.get('org_now') || new Date().toISOString().slice(0, 16).replace('T', ' ');",
+                  "const at = new Date(now.replace(' ', 'T') + ':00Z');",
+                  "at.setUTCDate(at.getUTCDate() + 7);",
+                  "const payload = {",
+                  "    name: 'Postman test ' + Date.now(),",
+                  "    template: pm.collectionVariables.get('template_uuid'),",
+                  "    contacts: pm.collectionVariables.get('campaign_contacts') || 'all',",
+                  "    skip_schedule: false,",
+                  "    time: at.toISOString().slice(0, 16).replace('T', ' '),",
+                  "    header: header,",
+                  "    body: { text: (p.body || {}).text, parameters: (p.body || {}).parameters || [] },",
+                  "    footer: p.footer || { text: null },",
+                  "    buttons: buttons,",
+                  "};",
+                  "pm.variables.set('campaign_body', JSON.stringify(payload));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('campaign created as scheduled', () => pm.expect(body.data.status).to.eql('scheduled'));",
+                  "pm.collectionVariables.set('campaign_uuid', body.data.uuid);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "list campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns?page=1&per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10",
+                  "description": "max 50"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "campaign or template name",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "scheduled|ongoing|completed|failed",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Who**: everyone\n\n`status`: scheduled | ongoing | completed | failed. كل عنصر فيه `stats` (total/sent/delivered/read/failed) و`can_resend`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('paginated list', () => pm.expect(body.data).to.include.keys('items', 'pagination'));",
+                  "pm.test('the new campaign is listed', () => pm.expect(body.data.items.map(c => c.uuid)).to.include(pm.collectionVariables.get('campaign_uuid')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "campaign details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/{{campaign_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "{{campaign_uuid}}"
+              ]
+            },
+            "description": "**Who**: everyone\n\nالتفاصيل + `metadata` (المعاملات المحفوظة) + `resendable_count`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('campaign_uuid')) {",
+                  "    console.log('skipped: no campaign was created');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('details', () => pm.expect(body.data.uuid).to.eql(pm.collectionVariables.get('campaign_uuid')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "campaign recipients (logs)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/{{campaign_uuid}}/logs?page=1&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "{{campaign_uuid}}",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25",
+                  "description": "max 100"
+                },
+                {
+                  "key": "status",
+                  "value": "failed",
+                  "description": "pending|sent|delivered|read|failed",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "name or phone",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Who**: everyone\n\nكل مستلم وحالة رسالته، و`error` (code + reason مترجم + raw) لو فشلت.\n\n`status`: pending | sent | delivered | read | failed. الحملة المجدولة لسه مالهاش سجلات."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('campaign_uuid')) {",
+                  "    console.log('skipped: no campaign was created');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('paginated logs', () => pm.expect(body.data.items).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "resend failed messages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/{{campaign_uuid}}/resend-failed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "{{campaign_uuid}}",
+                "resend-failed"
+              ]
+            },
+            "description": "**Who**: everyone · subscription active\n\nبيعيد الفاشل اللي ينفع يتعاد بس (مش 131026/131050/131047/130472). على حملة مجدولة أو مفيهاش فاشل → **422** وده متوقع هنا.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('campaign_uuid')) {",
+                  "    console.log('skipped: no campaign was created');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200, 422]', () => pm.expect([200, 422]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "media history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/media-history?type=IMAGE",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "media-history"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "IMAGE",
+                  "description": "IMAGE | VIDEO | DOCUMENT"
+                }
+              ]
+            },
+            "description": "**Who**: everyone\n\nآخر 30 ملف ترويسة اتستخدموا. اختار منهم بـ `selection: history` و`value: <uuid>`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('a list', () => pm.expect(body.data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "delete campaign",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns/{{campaign_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns",
+                "{{campaign_uuid}}"
+              ]
+            },
+            "description": "**Who**: everyone\n\nحذف ناعم — الإرسال بيقف. (بينضّف الحملة اللي اتعملت فوق.)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('campaign_uuid')) {",
+                  "    console.log('skipped: no campaign was created');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.collectionVariables.unset('campaign_uuid');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[manual] create campaign with uploaded header file",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/campaigns",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "campaigns"
+              ]
+            },
+            "description": "**Manual example** — اختار ملف في `header[parameters][0][value]` واكتب uuid قالب ترويسته VIDEO.\n\nصور: png/jpg حتى 5MB · فيديو: mp4 حتى 16MB · مستند: pdf/doc/xls/ppt/txt حتى 100MB.\n\n⚠️ `skip_schedule = 1` يعني **إرسال فعلي فوراً** لكل الجمهور.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "Video campaign",
+                  "type": "text"
+                },
+                {
+                  "key": "template",
+                  "value": "<video template uuid>",
+                  "type": "text"
+                },
+                {
+                  "key": "contacts",
+                  "value": "{{group_uuid}}",
+                  "type": "text"
+                },
+                {
+                  "key": "skip_schedule",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "key": "time",
+                  "value": "2030-01-01 10:00",
+                  "type": "text"
+                },
+                {
+                  "key": "header[format]",
+                  "value": "VIDEO",
+                  "type": "text"
+                },
+                {
+                  "key": "header[parameters][0][type]",
+                  "value": "VIDEO",
+                  "type": "text"
+                },
+                {
+                  "key": "header[parameters][0][selection]",
+                  "value": "upload",
+                  "type": "text"
+                },
+                {
+                  "key": "header[parameters][0][value]",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// مثال يدوي: يتخطّاه الـ runner إلا إذا run_manual_examples = true",
+                  "if (pm.variables.get('run_manual_examples') !== 'true') {",
+                  "    console.log('skipped (manual example): ' + pm.info.requestName);",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "team",
+      "description": "إدارة الفريق — **owner و manager بس** (agent → 403).\n\nالدعوة بتتبعت بالإيميل برابط `/invite/{code}` صالح يوم، والمدعوّ يقبلها من المتصفّح. رابط الدعوة **مش** بيرجع في الـ API عمداً.\n\n`email_sent: false` معناه إن SMTP مش مفعّل: الدعوة اتحفظت بس الإيميل موصلش.\n\nحذف واستعادة عضو أمثلة يدوية (بيتخطّاهم الـ runner) لأنهم بيلمسوا بيانات حقيقية.",
+      "item": [
+        {
+          "name": "team members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team?page=1&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25",
+                  "description": "max 100"
+                },
+                {
+                  "key": "trashed",
+                  "value": "1",
+                  "description": "removed members",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "name or email",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n`data.items` (الأعضاء) + `data.limits` + `data.roles` + `data.pending_invites`. `trashed=1` للمحذوفين."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('members, limits, invites', () => pm.expect(body.data).to.include.keys('items', 'limits', 'roles', 'pending_invites'));",
+                  "const editable = (body.data.items || []).find(m => m.can_edit);",
+                  "pm.collectionVariables.set('member_uuid', editable ? editable.uuid : '');",
+                  "pm.collectionVariables.set('member_role', editable ? editable.role : '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "invite member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team/invite",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team",
+                "invite"
+              ]
+            },
+            "description": "**Who**: owner, manager · `team_limit`\n\n`role`: manager | agent. إعادة دعوة نفس الإيميل بتجدد الكود وتاخد الدور الجديد.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{invite_email}}\",\n  \"role\": \"agent\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('invite_email', 'postman+' + Date.now() + '@example.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('invite created', () => pm.expect(body.data.invite.email).to.eql(pm.collectionVariables.get('invite_email')));",
+                  "pm.collectionVariables.set('invite_id', body.data.invite.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "resend invite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team/invites/{{invite_id}}/resend",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team",
+                "invites",
+                "{{invite_id}}",
+                "resend"
+              ]
+            },
+            "description": "**Who**: owner, manager\n\nبيبعت الإيميل تاني (وبيجدد الكود لو انتهى).",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('invite_id')) {",
+                  "    console.log('skipped: no invite');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "cancel invite",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team/invites/{{invite_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team",
+                "invites",
+                "{{invite_id}}"
+              ]
+            },
+            "description": "**Who**: owner, manager\n\nبيلغي الدعوة — الرابط اللي اتبعت يبطل."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('invite_id')) {",
+                  "    console.log('skipped: no invite');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.collectionVariables.unset('invite_id');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "change member role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team/{{member_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team",
+                "{{member_uuid}}"
+              ]
+            },
+            "description": "**Who**: owner, manager\n\n`role`: manager | agent. المالك ونفسك ممنوع (422).\n\nفي الـ runner بيبعت نفس دور العضو الحالي، فمفيش تغيير فعلي.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"{{member_role}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('member_uuid')) {",
+                  "    console.log('skipped: no editable member');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('role kept', () => pm.expect(body.data.role).to.eql(pm.collectionVariables.get('member_role')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[manual] remove member",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team/{{member_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team",
+                "{{member_uuid}}"
+              ]
+            },
+            "description": "**Manual example** — **Who**: owner, manager\n\nحذف ناعم. المالك ونفسك ممنوع (422)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// مثال يدوي: يتخطّاه الـ runner إلا إذا run_manual_examples = true",
+                  "if (pm.variables.get('run_manual_examples') !== 'true') {",
+                  "    console.log('skipped (manual example): ' + pm.info.requestName);",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "if (!pm.collectionVariables.get('member_uuid')) {",
+                  "    console.log('skipped: no editable member');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[manual] restore member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/team/{{member_uuid}}/restore",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "team",
+                "{{member_uuid}}",
+                "restore"
+              ]
+            },
+            "description": "**Manual example** — **Who**: owner, manager · `team_limit`\n\nبيرجّع عضو محذوف.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// مثال يدوي: يتخطّاه الـ runner إلا إذا run_manual_examples = true",
+                  "if (pm.variables.get('run_manual_examples') !== 'true') {",
+                  "    console.log('skipped (manual example): ' + pm.info.requestName);",
+                  "    pm.execution.skipRequest();",
+                  "}",
+                  "if (!pm.collectionVariables.get('member_uuid')) {",
+                  "    console.log('skipped: no editable member');",
+                  "    pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "referral (invite a friend)",
+      "description": "ادعُ صديقاً — **للموبايل بس**، ولكل الأدوار.\n\nالصديق بيفتح `link` (`/r/CODE`) → صفحة التسجيل في الويب → لما يسجّل (فورم أو جوجل أو فيسبوك) الإحالة بتتسجل باسمك. الكود بيتحفظ 30 يوم في cookie.",
+      "item": [
+        {
+          "name": "my referral link",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/referral",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "referral"
+              ]
+            },
+            "description": "**Who**: everyone\n\n`code`، `link`، `share_text` (جاهز للـ share sheet)، `stats.total` و`stats.subscribed` (اللي عندهم باقة مدفوعة سارية)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('code and link', () => {",
+                  "    pm.expect(body.data.code).to.match(/^[A-Z0-9]{8}$/);",
+                  "    pm.expect(body.data.link).to.include('/r/' + body.data.code);",
+                  "    pm.expect(body.data.share_text).to.include(body.data.link);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "people who joined with my link",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept-Language",
+                "value": "{{lang}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/referral/referrals?page=1&per_page=25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "referral",
+                "referrals"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "page number"
+                },
+                {
+                  "key": "per_page",
+                  "value": "25",
+                  "description": "max 100"
+                }
+              ]
+            },
+            "description": "**Who**: everyone\n\nكل عنصر: `name`، `email` (مخفي جزئياً)، `status` (registered | subscribed)، `joined_at`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is one of [200]', () => pm.expect([200]).to.include(pm.response.code));",
+                  "const body = pm.response.json();",
+                  "pm.test('mobile envelope (statusCode, success, message)', () => {",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('message');",
+                  "});",
+                  "pm.test('paginated list', () => pm.expect(body.data).to.include.keys('items', 'pagination'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": "",
+      "description": "filled by auth/login"
+    },
+    {
+      "key": "organization_id",
+      "value": "",
+      "description": "filled by auth/login"
+    },
+    {
+      "key": "template_uuid",
+      "value": "",
+      "description": "filled by campaigns/options"
+    },
+    {
+      "key": "group_uuid",
+      "value": "",
+      "description": "filled by campaigns/options"
+    },
+    {
+      "key": "campaign_contacts",
+      "value": "",
+      "description": "filled by campaigns/options"
+    },
+    {
+      "key": "org_now",
+      "value": "",
+      "description": "organization local time, filled by campaigns/options"
+    },
+    {
+      "key": "campaign_parameters",
+      "value": "",
+      "description": "template skeleton, filled by campaigns/template"
+    },
+    {
+      "key": "campaign_uuid",
+      "value": "",
+      "description": "filled by campaigns/create"
+    },
+    {
+      "key": "member_uuid",
+      "value": "",
+      "description": "first editable member, filled by team/list"
+    },
+    {
+      "key": "member_role",
+      "value": "",
+      "description": "filled by team/list"
+    },
+    {
+      "key": "invite_email",
+      "value": "",
+      "description": "generated by team/invite"
+    },
+    {
+      "key": "invite_id",
+      "value": "",
+      "description": "filled by team/invite"
+    }
+  ]
+}

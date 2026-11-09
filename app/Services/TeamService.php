@@ -19,34 +19,46 @@ use Validator;
 
 class TeamService
 {
-    public function invite(object $request)
+    /**
+     * @param int|null $organizationId صراحةً من تطبيق الجوال (لا جلسة هناك)؛ الويب يتركه للجلسة.
+     * @param int|null $inviterId      من أرسل الدعوة؛ الافتراضي المستخدم الحالي.
+     */
+    public function invite(object $request, ?int $organizationId = null, ?int $inviterId = null)
     {
-        //check if invite already exists
-        $invite = TeamInvite::where('email', $request->email)->first();
+        $organizationId = $organizationId ?? (int) session()->get('current_organization');
+        $inviterId = $inviterId ?? (int) auth()->id();
+
+        // الدعوة لهذه المنشأة وحدها. كان البحث بالبريد وحده، فشخصٌ دعته منشأة
+        // أخرى قبلاً يصله رابط تلك المنشأة بدورها هي — فينضمّ إلى غير من دعاه.
+        $invite = TeamInvite::where('email', $request->email)
+            ->where('organization_id', $organizationId)
+            ->first();
 
         if(!$invite){     
-            $inviteCode = md5(Carbon::now()->timestamp . session()->get('current_organization') . Str::random(32)); 
+            $inviteCode = md5(Carbon::now()->timestamp . $organizationId . Str::random(32)); 
             $invite = TeamInvite::create([
-                'organization_id' => session()->get('current_organization'),
+                'organization_id' => $organizationId,
                 'email' => $request->email,
                 'code' => $inviteCode,
                 'role' => $request->role,
-                'invited_by' => auth()->user()->id,
+                'invited_by' => $inviterId,
                 'expire_at' => now()->addDay(), 
             ]);
         } else  {
             $inviteCode = $invite->code;
             if($invite->expire_at <= now()){
-                $inviteCode = md5(Carbon::now()->timestamp . session()->get('current_organization') . Str::random(32));
+                $inviteCode = md5(Carbon::now()->timestamp . $organizationId . Str::random(32));
                 $invite->code = $inviteCode;
                 $invite->expire_at = now()->addDay();
-                $invite->invited_by = auth()->user()->id;
-                $invite->save();
             }
+            // إعادة الدعوة بدور آخر تأخذ الدور الأخير لا الأوّل.
+            $invite->role = $request->role;
+            $invite->invited_by = $inviterId;
+            $invite->save();
         }
 
         //Send invite email
-        $inviter = User::where('id', auth()->user()->id)->first();
+        $inviter = User::where('id', $inviterId)->first();
         Email::sendInvite('Invite', $request->email, $inviter, url('/invite/' . $inviteCode));
 
         return $invite;
@@ -113,6 +125,8 @@ class TeamService
     public function update(object $request, $uuid)
     {
         Team::where('uuid', $uuid)
+            // بنطاق المنشأة: المعرّف وحده كان يغيّر دور عضو في منشأة أخرى.
+            ->where('organization_id', session()->get('current_organization'))
             ->where('role', '!=', 'owner')
             ->update([
                 'role' => $request->role,
@@ -192,9 +206,43 @@ class TeamService
         return ['ok' => true, 'message' => __('Member restored successfully!'), 'user' => $user];
     }
 
+    /**
+     * إزالة عضو (ليس المالك) — يتشاركها الويب وتطبيق الجوال.
+     */
+    public function removeMember(Team $team, ?int $deletedBy = null): void
+    {
+        if ($team->role === 'owner') {
+            return;
+        }
+
+        $user = User::find($team->user_id);
+
+        Team::where('id', $team->id)->where('role', '!=', 'owner')->update([
+            'deleted_at' => now(),
+            'deleted_by' => $deletedBy ?? auth()->id(),
+        ]);
+
+        // نحذف جهة اتصاله في واز أعمال أيضاً حتى لا يبقى لمن غادر وصول
+        // لفواتير المنشأة وتذاكرها هناك. لا نحذفها إن كان لا يزال عضواً
+        // في منظمة أخرى مربوطة، فجهة الاتصال واحدة لكل مستخدم.
+        if ($user && $user->waz_contact_id && !$this->belongsToOtherLinkedOrganization($user, $team->organization_id)) {
+            app(WazSyncService::class)->removeContact($user);
+        }
+    }
+
     public function destroy($uuid)
     {
-        $team = Team::where('uuid', $uuid)->first();
+        $team = Team::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->first();
+
+        // معرّف لا يخصّ المنشأة كان يُسقط الطلب (قراءة role من null).
+        if (!$team) {
+            return Redirect::back()->with('status', [
+                'type' => 'error',
+                'message' => __('Member not found.'),
+            ]);
+        }
 
         if($team->role === 'owner'){
             return Redirect::back()->with(
@@ -204,16 +252,7 @@ class TeamService
                 ]
             );
         } else {
-            $user = User::find($team->user_id);
-
-            Team::where('uuid', $uuid)->where('role', '!=', 'owner')->delete();
-
-            // نحذف جهة اتصاله في واز أعمال أيضاً حتى لا يبقى لمن غادر وصول
-            // لفواتير المنشأة وتذاكرها هناك. لا نحذفها إن كان لا يزال عضواً
-            // في منظمة أخرى مربوطة، فجهة الاتصال واحدة لكل مستخدم.
-            if ($user && $user->waz_contact_id && !$this->belongsToOtherLinkedOrganization($user, $team->organization_id)) {
-                app(WazSyncService::class)->removeContact($user);
-            }
+            $this->removeMember($team);
 
             return Redirect::back()->with(
                 'status', [

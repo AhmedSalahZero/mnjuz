@@ -7,8 +7,12 @@
         name: String,
         placeholder: String,
         type: String,
-        min: Number,
-        max: Number,
+        // نصّاً أو رقماً: min="1" في القوالب نصّ، وكان يُطلق تحذير نوع الخاصية.
+        min: [Number, String],
+        max: [Number, String],
+        // حدّ الأحرف في الحقل نفسه: maxLength على المكوّن كان يقع على الغلاف
+        // فيكتب المستخدم 30 حرفاً في حقلٍ حدّه 24 ولا يمنعه شيء.
+        maxLength: [Number, String],
         className: String,
         labelClass: String,
         required: Boolean,
@@ -80,6 +84,7 @@
                 :step="'any'"
                 :min="min"
                 :max="max"
+                :maxlength="maxLength"
                 :placeholder="placeholder"
                 :disabled="disabled"
                 :required="required"

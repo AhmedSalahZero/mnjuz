@@ -513,8 +513,9 @@ class ChatService
 			$nextContactsPage = $hasMoreContacts ? (int)$contactPage + 1 : null;
         // إعداد البثّ كما يحتاجه العميل: المفتاح والعنوان لا السرّ. يأتي من
         // BroadcastProvider فيتبع مفتاح التبديل تلقائياً — تغيير المزوّد يظهر
-        // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء.
-			$pusherSettings = BroadcastProvider::clientConfig();
+        // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء. ومزوّد
+        // المنشأة نفسها: الأدمن يختار لكل منشأة Pusher أو Reverb.
+			$pusherSettings = BroadcastProvider::clientConfig((int) $this->organizationId ?: null);
 			
 		}
 
@@ -555,6 +556,7 @@ class ChatService
                     'metadata',
                     'address',
                     'avatar',
+                    'ai_assistance_enabled',
                     'last_inbound_chat_created_at',
                     'deleted_at',
                     // بلا هذه الأعمدة يرتدّ النموذج إلى قيمته الافتراضية
@@ -601,8 +603,15 @@ class ChatService
 	
 		
 				$contact->encryptPhoneNumber(Contact::contactPhoneNumberShouldEncrypted());
+            // الأحدث لا «أي صفّ»: بلا ترتيب يرجع الأقدم حين يكون للعميل أكثر من تذكرة،
+            // فيعرض الرأس موظفاً وحالةً قديمين بينما يعدّل «Mark as closed» الأحدث
+            // (Contact::toggleTicketStatus يقصر نفسه على is_latest) فلا يتغيّر الزرّ.
+            // ORDER BY is_latest DESC, id DESC يسير على الفهرس (contact_id, is_latest)
+            // بمسح عكسي بلا filesort.
             $ticket = ChatTicket::with('user')
                 ->where('contact_id', $contact->id)
+                ->orderByDesc('is_latest')
+                ->orderByDesc('id')
                 ->first();
             $initialMessages = $this->getChatMessages($contact->id);
             // Mark messages as read
@@ -1112,7 +1121,7 @@ class ChatService
 				if ($prepared === false) {
 					return response()->json([
 						'success' => false,
-						'message' => __('Image is too large to send. Please use a smaller image.'),
+						'message' => ImageCompressionService::rejectionMessage($file->getRealPath(), $file->getMimeType()),
 					], 422);
 				}
 
@@ -1249,7 +1258,7 @@ class ChatService
                 if ($prepared === false) {
                     return response()->json([
                         'success' => false,
-                        'message' => __('Image is too large to send. Please use a smaller image.'),
+                        'message' => ImageCompressionService::rejectionMessage($file->getRealPath(), $file->getMimeType()),
                     ], 422);
                 }
 
@@ -1517,6 +1526,9 @@ class ChatService
         $query = ChatLog::where('contact_id', $contactId)
             ->where('deleted_at', null)
             ->orderBy('created_at', 'desc')
+            // رسائل الثانية الواحدة بترتيب كتابتها: السجلّ المستورد يحمل مئات
+            // الدفعات في الثانية نفسها، وبلا هذا يتبدّل ترتيبها بين صفحة وأخرى.
+            ->orderBy('id', 'desc')
           
 			->when($createdAt, function ($q) use ($createdAt) {
 				$q->where('created_at', '>=', $createdAt);
@@ -1598,6 +1610,11 @@ class ChatService
         })->toArray();
 
         collect($ticketsData)->chunk(500)->each(function ($chunk) {
+            // insertOrIgnore يتخطّى الصفّ الذي يخالف القيد الفريد على «التذكرة الأحدث»
+            // (uq_chat_tickets_single_latest): إن سبقتنا ProcessTicketAssignmentJob
+            // إلى هذه الجهة لا تُنشأ ثانية. قبل القيد كان «ignore» بلا أثر لأن الجدول
+            // لا يمنع شيئاً، فتُنتج صفحتان تُفتحان معاً — أو هذه الصفحة والـ job —
+            // تذكرتين بـ is_latest = 1 ويظهر العميل مرتين في القائمة.
             DB::table('chat_tickets')->insertOrIgnore($chunk->toArray());
         });
     }
@@ -1790,6 +1807,9 @@ class ChatService
                 'channel_capabilities' => app(ChannelManager::class)
                     ->capabilities($contact->channel ?? Channel::DEFAULT)
                     ->toArray(),
+                // بدونه يصل الـ prop undefined فيظهر المفتاح مطفأً بعد كل reload
+                // رغم أن الحفظ في قاعدة البيانات سليم.
+                'ai_assistance_enabled' => (bool) $contact->ai_assistance_enabled,
                 'full_name' => $contact->full_name,
                 'formatted_phone_number' => $contact->formatted_phone_number,
                 'contact_groups' => $contact->relationLoaded('contactGroups')

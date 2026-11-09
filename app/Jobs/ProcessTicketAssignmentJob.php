@@ -8,9 +8,12 @@ use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
 use App\Models\Organization;
 use App\Models\Team;
+use App\Services\AgentPerformanceService;
+use App\Services\SubscriptionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -110,17 +113,29 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
         // عند الإسناد التلقائي لوكيل محدد نضع assigned_seen = false حتى تظهر
         // للوكيل كمحادثة جديدة تحتاج فتحها.
         $assignedSeen = $assignedTo === null;
-        $ticket = ChatTicket::withoutEvents(function () use ($assignedTo, $assignedSeen) {
-            return ChatTicket::create([
-                'contact_id' => $this->contactId,
-                'assigned_to' => $assignedTo,
-                'status' => 'open',
-                'is_latest' => true,
-                'assigned_seen' => $assignedSeen,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        });
+
+        try {
+            $ticket = ChatTicket::withoutEvents(function () use ($assignedTo, $assignedSeen) {
+                return ChatTicket::create([
+                    'contact_id' => $this->contactId,
+                    'assigned_to' => $assignedTo,
+                    'status' => 'open',
+                    'is_latest' => true,
+                    'assigned_seen' => $assignedSeen,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // كاتبٌ آخر (صفحة المحادثات في ensureChatTicketsExist) أنشأ تذكرة
+            // هذه الجهة قبلنا. القيد الفريد على «الأحدث» رفض الثانية — وهو المقصود:
+            // كان يُنتج صفّين بـ is_latest = 1. نعتمد الموجودة بدل أن تسقط معالجة
+            // رسالة وصلت فعلاً. MySQL يتراجع عن الجملة وحدها لا عن المعاملة، فنكمل.
+            return ChatTicket::where('contact_id', $this->contactId)
+                ->orderByDesc('is_latest')
+                ->orderByDesc('id')
+                ->first();
+        }
 
         ChatTicket::syncLatestFlag($this->contactId, (int) $ticket->id);
 
@@ -160,6 +175,12 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
                 $ticket->assigned_to = null;
                 $ticket->assigned_seen = true;
             }
+        } elseif ($autoAssignment && empty($ticket->assigned_to)) {
+            // تذكرة مغلقة بلا موظّف — أنشأها استيراد سجلّ المحادثات مثلاً —
+            // تعود بلا أحد يراها إن لم تُسند. والعميل الجديد يُسند عند أوّل
+            // رسالة، فلا معنى لأن يُترك من له تاريخ معنا.
+            $ticket->assigned_to = $this->resolveAssignedAgent($settings);
+            $ticket->assigned_seen = $ticket->assigned_to === null;
         }
 
         // ✅ تحديث الحالة
@@ -182,11 +203,11 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             'created_at' => now()
         ]);
 
-        Log::info('Ticket reopened successfully', [
-            'ticket_id' => $ticket->id,
-            'contact_id' => $this->contactId,
-            'assigned_to' => $ticket->assigned_to
-        ]);
+        // Log::info('Ticket reopened successfully', [
+        //     'ticket_id' => $ticket->id,
+        //     'contact_id' => $this->contactId,
+        //     'assigned_to' => $ticket->assigned_to
+        // ]);
 
         return $ticket;
     }
@@ -206,24 +227,52 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
         };
     }
 
+    /**
+     * من يحقّ له استلام محادثة الآن: المتصلون وحدهم.
+     *
+     * كان الإسناد يوزّع على كل أعضاء الفريق، فتصل المحادثة لموظف غير متصل
+     * وتبقى بلا ردّ. إن لم يكن أحد متصلاً تبقى بلا موظف في Unassigned لمن يأخذها.
+     *
+     * null = الحضور غير مُتتبَّع في هذه المنظمة: النبضة لا تُسجَّل بلا ميزة
+     * agent_performance، فلو رشّحنا بالمتصلين لما وصلت محادثة لأحد أبداً.
+     *
+     * @return list<int>|null
+     */
+    private function eligibleAgentIds(): ?array
+    {
+        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'agent_performance')) {
+            return null;
+        }
+
+        return (new AgentPerformanceService((int) $this->organizationId))->onlineUserIds();
+    }
+
     private function getLeastBusyAgent()
     {
+        $eligible = $this->eligibleAgentIds();
+        if ($eligible === []) {
+            return null;
+        }
+
         // Always recompute so each new ticket is assigned to the currently least-busy agent.
         $agent = Team::where('organization_id', $this->organizationId)
             ->whereNull('deleted_at')
             ->where('status', 'active')
+            ->when($eligible !== null, fn ($query) => $query->whereIn('user_id', $eligible))
             ->withCount(['tickets' => function ($query) {
                 $query->where('status', 'open')
                     ->where('is_latest', true);
             }])
             ->orderBy('tickets_count', 'asc')
+            ->orderBy('id', 'asc')
             ->first();
 
         return $agent->user_id ?? null;
     }
 
     /**
-     * Assign the next active team member in stable order (teams.id ASC), wrapping around.
+     * Assign the next active, online team member in stable order (teams.id ASC), wrapping around.
+     * Offline members are skipped, not dropped from the order, so the turn carries on past them.
      * Persists tickets.round_robin_last_user_id on the organization under a row lock.
      */
     private function getNextRoundRobinAgent(): ?int
@@ -237,7 +286,16 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             ->values()
             ->all();
 
-        if ($agentIds === []) {
+        $eligible = $this->eligibleAgentIds();
+        if ($eligible !== null) {
+            $eligible = array_flip($eligible);
+        }
+
+        $isEligible = fn (int $userId) => $eligible === null || isset($eligible[$userId]);
+        $candidates = array_values(array_filter($agentIds, $isEligible));
+
+        // لا أحد متصلاً: نخرج قبل قفل صف المنظمة، ويبقى الدور حيث كان.
+        if ($candidates === []) {
             return null;
         }
 
@@ -246,7 +304,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             ->first();
 
         if (!$organization) {
-            return $agentIds[0];
+            return $candidates[0];
         }
 
         $metadata = $organization->metadata
@@ -257,11 +315,21 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
             ? (int) $metadata['tickets']['round_robin_last_user_id']
             : null;
 
-        $nextUserId = $agentIds[0];
+        $start = 0;
         if ($lastUserId !== null) {
             $index = array_search($lastUserId, $agentIds, true);
             if ($index !== false) {
-                $nextUserId = $agentIds[($index + 1) % count($agentIds)];
+                $start = $index + 1;
+            }
+        }
+
+        $count = count($agentIds);
+        $nextUserId = null;
+        for ($step = 0; $step < $count; $step++) {
+            $candidate = $agentIds[($start + $step) % $count];
+            if ($isEligible($candidate)) {
+                $nextUserId = $candidate;
+                break;
             }
         }
 

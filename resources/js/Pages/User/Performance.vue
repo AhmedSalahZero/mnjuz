@@ -37,7 +37,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="agent in metrics.agents" :key="agent.user_id" class="border-b last:border-b-0 hover:bg-slate-50">
+            <tr v-for="agent in agents" :key="agent.user_id" class="border-b last:border-b-0 hover:bg-slate-50">
               <td class="px-4 py-3">
                 <div class="font-medium text-gray-900">{{ agent.name }}</div>
                 <div class="text-xs text-slate-400">{{ $t(roleLabel(agent.role)) }}</div>
@@ -58,7 +58,7 @@
               <td class="px-4 py-3 text-center">{{ formatDuration(agent.active_seconds) }}</td>
               <td class="px-4 py-3 text-slate-500">{{ formatLastActivity(agent.last_activity_at) }}</td>
             </tr>
-            <tr v-if="!metrics.agents || metrics.agents.length === 0">
+            <tr v-if="agents.length === 0">
               <td colspan="9" class="px-4 py-8 text-center text-slate-400">{{ $t('No data available.') }}</td>
             </tr>
           </tbody>
@@ -70,12 +70,75 @@
 
 <script setup>
 import AppLayout from './Layout/App.vue'
-import { ref } from 'vue'
-import { router } from '@inertiajs/vue3'
+import axios from 'axios'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
+import { applyPresence } from '@/Composables/agentPresence'
+import { subscribeAgentPresence } from '../../echo'
 
 const props = defineProps({
   metrics: { type: Object, default: () => ({ agents: [] }) },
   filters: { type: Object, default: () => ({}) },
+})
+
+// نسخة محلية من الصفوف: حالة الاتصال تتجدّد وحدها، وزرّ «Apply» يستبدلها كلّها.
+const agents = ref(props.metrics?.agents ?? [])
+
+watch(() => props.metrics?.agents, (value) => {
+  agents.value = value ?? []
+})
+
+// الحالة تصل لحظياً: حدث AgentPresenceChanged عند كل تغيّر (دخول، إغلاق تبويب،
+// خروج، انقطاع). كانت الصفحة تسأل كل عشرين ثانية وحدها، فيتأخّر ظهور من دخل
+// ومغادرة من خرج. الاستعلام الخفيف يبقى مصالحةً: كل دقيقة، وفور عودة التبويب
+// إلى الظهور، وكلّما اكتمل الاشتراك أو عاد اتصال البثّ — ما يفوت أثناء الانقطاع.
+const STATUS_POLL_MS = 60000
+let statusTimer = null
+let statusInFlight = false
+let unsubscribePresence = null
+
+const refreshStatus = async () => {
+  if (statusInFlight || document.visibilityState !== 'visible') return
+
+  statusInFlight = true
+  try {
+    const { data } = await axios.get('/performance/status')
+    agents.value = applyPresence(agents.value, data.agents)
+  } catch (error) {
+    // انقطاع عابر: تبقى الحالة السابقة وتُعاد المحاولة في الدورة التالية.
+  } finally {
+    statusInFlight = false
+  }
+}
+
+const onVisibilityChange = () => {
+  if (document.visibilityState === 'visible') refreshStatus()
+}
+
+const onPresenceChanged = (event) => {
+  agents.value = applyPresence(agents.value, [event])
+}
+
+onMounted(() => {
+  statusTimer = setInterval(refreshStatus, STATUS_POLL_MS)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+
+  // البثّ مساعد: تعذّره يُبقي الصفحة على الاستعلام الدوري.
+  try {
+    const page = usePage()
+    const organizationId = page.props.organization?.id
+    if (organizationId && page.props.broadcast?.key) {
+      unsubscribePresence = subscribeAgentPresence(organizationId, page.props.broadcast, onPresenceChanged, refreshStatus)
+    }
+  } catch (error) {
+    console.warn('Agent presence subscription failed', error)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (statusTimer) clearInterval(statusTimer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (unsubscribePresence) unsubscribePresence()
 })
 
 const range = ref({

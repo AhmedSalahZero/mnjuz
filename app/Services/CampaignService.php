@@ -28,8 +28,12 @@ class CampaignService
 {
     use TemplateTrait;
 
-    public function store(object $request){
-        $organizationId = session()->get('current_organization');
+    /**
+     * @param int|null $organizationId صراحةً من تطبيق الجوال (لا جلسة هناك)؛ الويب يتركه للجلسة.
+     */
+    public function store(object $request, ?int $organizationId = null): Campaign
+    {
+        $organizationId = $organizationId ?? session()->get('current_organization');
 
         $timezone = Setting::where('key', 'timezone')->value('value');
         $organization = Organization::find($organizationId);
@@ -39,7 +43,15 @@ class CampaignService
         $channel = \App\Services\Messaging\Channel::normalize($request->channel ?? null)
             ?? \App\Services\Messaging\Channel::DEFAULT;
 
-        $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
+        // بنطاق المنشأة: معرّف قالب أو مجموعة من منشأة أخرى كان يُقبل فتُرسل
+        // الحملة بقالب غيرها أو إلى جمهور غيرها.
+        $contactGroup = ContactGroup::where('uuid', $request->contacts)->where('organization_id', $organizationId)->whereNull('deleted_at')->first();
+
+        if ($request->contacts !== 'all' && !$contactGroup) {
+            throw ValidationException::withMessages([
+                'contacts' => __('The selected contact group is no longer available.'),
+            ]);
+        }
 
         // حملة قناة أخرى: رسالة حرّة بلا قالب ولا ترويسة. مسار مستقلّ
         // لأن ما تحته كلّه بناء قالب واتساب — معاملات الترويسة ورفع
@@ -48,7 +60,7 @@ class CampaignService
             return $this->storeChannelCampaign($request, (int) $organizationId, $channel, $contactGroup, $timezone);
         }
 
-        $template = Template::where('uuid', $request->template)->first();
+        $template = Template::where('uuid', $request->template)->where('organization_id', $organizationId)->first();
 
         // القالب المحذوف يُخفيه الموديل الآن، فكانت السطور التالية تقرأ
         // خاصّية من null. ورسالة التحقّق أوضح من خطأ فادح.
@@ -59,7 +71,7 @@ class CampaignService
         }
 
         try {
-            DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
+            return DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
                 $historyService = app(CampaignMediaHistoryService::class);
                 //Request metadata
                 $mediaId = null;
@@ -102,12 +114,16 @@ class CampaignService
                                     throw new \Exception('Unsupported storage system');
                                 }
 
-                                if (!empty($mediaUrl)) {
-                                    $contentType = $this->getContentTypeFromUrl($mediaUrl);
-                                    $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
-                                } else {
-                                    $contentType = null;
-                                    $mediaSize = null;
+                                // النوع والحجم من الملف المرفوع نفسه لا من رابطه: جلب
+                                // الرابط طلبٌ من الخادم إلى نفسه، يفشل حيث لا يصل
+                                // عنوانه (localhost، شبكة مغلقة) فيصل الحجم null
+                                // ويسقط الحفظ — chat_media.size لا يقبل null.
+                                $contentType = $fileContent->getMimeType() ?: null;
+                                $mediaSize = $fileContent->getSize() ?: null;
+
+                                if (!empty($mediaUrl) && ($contentType === null || $mediaSize === null)) {
+                                    $contentType ??= $this->getContentTypeFromUrl($mediaUrl);
+                                    $mediaSize ??= $this->getMediaSizeInBytesFromUrl($mediaUrl);
                                 }
 
                                 $chatMedia = new ChatMedia;
@@ -180,6 +196,8 @@ class CampaignService
                 $campaign['status'] = 'scheduled';
                 $campaign['scheduled_at'] = $scheduledAt;
                 $campaign->save();
+
+                return $campaign;
             });
         } catch (\Exception $e) {
             Log::error('Failed to store campaign', [

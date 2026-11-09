@@ -266,12 +266,12 @@ const assignmentModes = [
   {
     value: 'auto',
     label: 'Auto',
-    description: 'Distribute conversations among all your available team members.',
+    description: 'Distribute conversations among online team members. If no one is online, they wait in Unassigned.',
   },
   {
     value: 'round_robin',
     label: 'Round robin',
-    description: 'Assign conversations in order: agent 1, then 2, then 3, then back to 1.',
+    description: 'Assign conversations in order to online agents only: agent 1, then 2, then 3, then back to 1.',
   },
   {
     value: 'shared',

@@ -75,6 +75,9 @@ class FlowFirstMessageTriggerTest extends TestCase
         ]);
 
         $this->service = new FlowExecutionService($this->organization->id);
+
+        // حفظ المسار محصور بمنشأة الجلسة، كما في أيّ طلب حقيقي من المحرّر.
+        session(['current_organization' => $this->organization->id]);
     }
 
     private function flow(string $trigger, ?string $keywords = null, string $status = 'active'): int
@@ -409,6 +412,64 @@ class FlowFirstMessageTriggerTest extends TestCase
 
         $this->assertNotNull($flow, 'العائد بعد المهلة يجب أن يستقبل الترحيب');
         $this->assertSame($flowId, (int) $flow->id);
+    }
+
+    /** رسالة مستوردة: تُكتب الآن (معرّف أكبر) وتاريخها قديم. */
+    private function importedInboundAt(string $body, \Carbon\Carbon $at): int
+    {
+        return DB::table('chats')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'contact_id' => $this->contact->id,
+            'type' => 'inbound',
+            'metadata' => json_encode(['type' => 'text', 'text' => ['body' => $body]]),
+            'status' => 'delivered',
+            'is_read' => 1,
+            'created_at' => $at->toDateTimeString(),
+            'chat_import_id' => 1,
+        ]);
+    }
+
+    /**
+     * التاريخ المستورد بعد رسائل حيّة لا يُعيد الترحيب.
+     *
+     * بالمعرّف كانت «السابقة» هي المستوردة (معرّفها أكبر) وعمرها أشهر، فيبدأ
+     * الترحيب لعميلٍ في منتصف محادثته.
+     */
+    public function test_imported_history_does_not_restart_the_flow_mid_conversation(): void
+    {
+        $this->timedFlow('first_message', 60);
+
+        $this->inboundAt('السلام عليكم', now()->subMinutes(10));
+        $this->importedInboundAt('رسالة قديمة من المنصة السابقة', now()->subMonths(3));
+        $now = $this->inboundAt('أبغى أستفسر', now());
+
+        $this->assertNull($this->service->resolveTriggeredFlow($now, false, 'أبغى أستفسر'));
+    }
+
+    /** عميل لا نعرفه إلا من السجلّ المستورد يُستقبل بالترحيب حين يعود بعد المهلة. */
+    public function test_a_contact_known_only_from_imported_history_is_welcomed_after_the_timeout(): void
+    {
+        $flowId = $this->timedFlow('first_message', 60);
+
+        $this->importedInboundAt('رسالة قديمة', now()->subMonths(3));
+        $back = $this->inboundAt('مرحبا', now());
+
+        $this->assertFalse($this->service->isFirstInboundMessage($back), 'history makes him a returning contact');
+        $this->assertSame($flowId, (int) $this->service->resolveTriggeredFlow($back, false, 'مرحبا')->id);
+    }
+
+    /** رسالتان في الثانية نفسها بعد صمت طويل: الأولى تُستقبل، والثانية لا تُكرّر. */
+    public function test_two_messages_in_the_same_second_after_a_long_silence(): void
+    {
+        $flowId = $this->timedFlow('first_message', 60);
+
+        $this->inboundAt('قديمة', now()->subHours(3));
+        $first = $this->inboundAt('مرحبا', now()->startOfSecond());
+        $second = $this->inboundAt('عندي سؤال', now()->startOfSecond());
+
+        $this->assertSame($flowId, (int) $this->service->resolveTriggeredFlow($first, false, 'مرحبا')->id);
+        $this->assertNull($this->service->resolveTriggeredFlow($second, false, 'عندي سؤال'));
     }
 
     /** وقبل انقضائها لا شيء — وإلا تكرّر الترحيب في المحادثة الواحدة. */

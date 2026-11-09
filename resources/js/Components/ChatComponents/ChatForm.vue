@@ -15,12 +15,19 @@ import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
+import { isWindowOpen } from '@/Composables/messagingWindow'
 
 const trans = useTrans()
 
 // الطابور مشترك على مستوى الوحدة: يبقى حيّاً بعد أن يترك الموظّف هذه المحادثة،
 // فيكمل الرفع بدل أن يموت مع المكوّن.
-const uploads = initUploadQueue({ post: (url, data, config) => axios.post(url, data, config) })
+// حجم القطعة من الخادم: 5MB ثابتة كانت تُرفض كلّها حيث upload_max_filesize
+// أصغر منها، فيفشل كل مرفق فوق ميغابايتين.
+const serverChunkBytes = Number(usePage().props.upload_chunk_bytes) || CHUNK_BYTES
+const uploads = initUploadQueue({
+	post: (url, data, config) => axios.post(url, data, config),
+	chunkBytes: serverChunkBytes,
+})
 const uploadsExpanded = ref(false)
 
 // المؤشّر خاصّ بالمحادثة المعروضة: يختفي عند الانتقال ويعود عند الرجوع إليها.
@@ -448,35 +455,10 @@ const onComposeKeydown = (event) => {
 const nowTick = ref(null)
 let messagingWindowTimer = null
 
-const parseUtcDate = (value) => {
-	if (!value) return null
-	if (value instanceof Date) return value
-	const normalized = typeof value === 'string' && !value.endsWith('Z') && !value.includes('+')
-		? value.replace(' ', 'T') + 'Z'
-		: value
-	const parsed = new Date(normalized)
-	return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
 const isInboundChatWithin24Hours = computed(() => {
 	nowTick.value
 
-	const iso = props.contact?.last_inbound_chat_created_at_iso
-		?? props.contact?.last_inbound_chat?.created_at_iso
-		?? props.contact?.last_inbound_chat?.created_at
-
-	if (iso) {
-		const lastInbound = parseUtcDate(iso)
-		if (lastInbound) {
-			return Date.now() - lastInbound.getTime() < 24 * 60 * 60 * 1000
-		}
-	}
-
-	if (typeof props.contact?.is_messaging_window_open === 'boolean') {
-		return props.contact.is_messaging_window_open
-	}
-
-	return false
+	return isWindowOpen(props.contact)
 })
 
 const handleFileUpload = (event) => {
@@ -566,7 +548,7 @@ const buildAttachment = (file) => {
 	// الملف الكبير يُرفَع على قطع، فما يبلغ الخادم قطعةٌ لا الملف كلّه — ولا
 	// شأن لحجمه بحدّ upload_max_filesize. أمّا الصغير فيذهب في طلب واحد،
 	// فيُقاس به. وفحص الملف كلّه كان يردّ ملفات صار الرفع المجزّأ يقبلها.
-	if (file.size <= CHUNK_BYTES && file.size > serverMaxUploadBytes.value) {
+	if (file.size <= serverChunkBytes && file.size > serverMaxUploadBytes.value) {
 		toast.error(trans('File is larger than the :size limit.').replace(':size', humanSize(serverMaxUploadBytes.value)))
 		return null
 	}
@@ -1054,12 +1036,11 @@ onBeforeUnmount(() => {
 				@cancel="(job) => uploads.cancel(job.id)"
 				@dismiss="(job) => uploads.dismiss(job.id)"
 			/>
-			<div
+			<!-- النافذة مغلقة: يُخفى الحقل كله (v-show لا v-if فيبقى textInputRef) — كان باهتاً معطّلاً
+			     يملأ المساحة تحت اللافتة، وزرّ القوالب فيه مكرّر ولا يعمل. -->
+			<div v-show="isInboundChatWithin24Hours"
 				class="flex items-center py-4 md:py-2 pl-2 pr-2"
-				:class="[
-					processingForm ? 'bg-gray-200' : 'bg-white',
-					!isInboundChatWithin24Hours ? 'pointer-events-none opacity-40' : '',
-				]">
+				:class="processingForm ? 'bg-gray-200' : 'bg-white'">
 				<div class="absolute">
 					<button type="button" @click="toggleEmojiPicker"> 😀 </button>
 					<div v-if="emojiPicker" class="absolute left-0 bottom-full" ref="emojiPickerRef">
@@ -1224,7 +1205,7 @@ onBeforeUnmount(() => {
 				@cancel="(job) => uploads.cancel(job.id)"
 				@dismiss="(job) => uploads.dismiss(job.id)"
 			/>
-			<div class="p-4" :class="!isInboundChatWithin24Hours ? 'pointer-events-none opacity-40' : ''">
+			<div v-show="isInboundChatWithin24Hours" class="p-4">
 			<div>
 				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown="onComposeKeydown" @keydown.enter.exact.prevent="handleEnterKey"
 					class="w-full outline-none resize-none text-sm rounded-md p-2"

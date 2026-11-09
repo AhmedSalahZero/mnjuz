@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Services\Broadcasting\BroadcastProvider;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreOrganization;
 use App\Models\Organization;
@@ -60,7 +61,8 @@ class OrganizationController extends BaseController
             'plans' => $res['plans'], 
             'invoices' => $res['billing'],
             'mode' => $mode,
-            'filters' => $request->all()
+            'filters' => $request->all(),
+            'broadcastProviders' => $this->broadcastProviders(),
         ]);
     }
 
@@ -78,7 +80,8 @@ class OrganizationController extends BaseController
             'users' => $res['users'],
             'plans' => $res['plans'], 
             'invoices' => $res['billing'],
-            'filters' => $request->all()
+            'filters' => $request->all(),
+            'broadcastProviders' => $this->broadcastProviders(),
         ]);
     }
 
@@ -232,4 +235,21 @@ class OrganizationController extends BaseController
 			'message' => __('Returned to admin panel.'),
 		]);
 	}
+
+    /**
+     * ما تحتاجه قائمة مزوّد البثّ: افتراضي المنصّة الآن، وأيّ المزوّدين
+     * مكتمل البيانات (الناقص يُعطَّل في القائمة).
+     *
+     * @return array{default: string, ready: array<string, bool>}
+     */
+    private function broadcastProviders(): array
+    {
+        return [
+            'default' => BroadcastProvider::active(),
+            'ready' => [
+                BroadcastProvider::PUSHER => BroadcastProvider::isConfigured(BroadcastProvider::PUSHER),
+                BroadcastProvider::REVERB => BroadcastProvider::isConfigured(BroadcastProvider::REVERB),
+            ],
+        ];
+    }
 }

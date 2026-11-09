@@ -195,11 +195,25 @@ class ChunkedUploadController extends Controller
             ]));
         }
 
+        $fileName = $validated['file_name'];
+
+        // الصورة تُهيّأ لواتساب كما في الرفع العادي (ChatService): كانت تُرسل
+        // كما وصلت، فتردّها Meta إن كانت HEIC أو CMYK أو بعمق 16 بت.
+        if ($fileType === 'image') {
+            $prepared = ChatMediaUploadHelper::prepareAssembledImage($path, $fileName);
+
+            if (!$prepared['ok']) {
+                return self::fail(400, $prepared['message']);
+            }
+
+            [$path, $fileName] = [$prepared['path'], $prepared['file_name']];
+        }
+
         SendMediaJob::dispatch(
             $organizationId,
             $contact->uuid,
             $fileType,
-            $validated['file_name'],
+            $fileName,
             $path,
             $userId,
             null,

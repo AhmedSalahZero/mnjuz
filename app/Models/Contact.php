@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+use App\Events\ContactAiAssistanceUpdated;
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use App\Services\PhoneService;
@@ -36,6 +37,34 @@ class Contact extends Model
     protected $attributes = [
         'channel' => \App\Services\Messaging\Channel::DEFAULT,
     ];
+
+    /**
+     * يضبط مساعد الذكاء الاصطناعي لهذه المحادثة، ويُعلم الشاشات المفتوحة إن تغيّرت
+     * القيمة فعلاً.
+     *
+     * نقطة واحدة لكل من يغيّر الحالة — المفتاح في الترويسة، وكلمات البدء والإيقاف،
+     * والتفعيل التلقائي — كي لا يُنسى البثّ في أحدها فتبقى الشاشة المفتوحة على
+     * حالة قديمة. ولا شيء يُكتب ولا يُبثّ إن لم تتغيّر القيمة.
+     *
+     * @return bool هل تغيّرت القيمة
+     */
+    public function setAiAssistanceEnabled(bool $enabled): bool
+    {
+        if ((bool) $this->ai_assistance_enabled === $enabled) {
+            return false;
+        }
+
+        $this->forceFill(['ai_assistance_enabled' => $enabled])->save();
+
+        event(new ContactAiAssistanceUpdated(
+            (int) $this->organization_id,
+            (int) $this->id,
+            (string) $this->uuid,
+            $enabled
+        ));
+
+        return true;
+    }
 
     public function getCreatedAtAttribute($value)
     {

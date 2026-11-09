@@ -135,14 +135,14 @@ class AutoReplyService
             }
         }
 
-        // Override response sequence if there is an active flow
+        // Use the response sequence from metadata or fallback to default
+        $response_sequence = $metadataArray['automation']['response_sequence'] ?? ['Basic Replies', 'Automated Flows', 'AI Reply Assistant'];
+
+        // الـ flow الجاري يُجيب أوّلاً، ثم بقية الترتيب إن لم يتولَّ الرسالة.
+        // كان وحده في الترتيب: من أنهى الـ flow أو كتب نصّاً حرّاً أمام أزراره
+        // تضيع رسالته بلا ردّ، والمساعد الذكي والردود الآلية مغلقة عنه.
         if ($activeFlow) {
-			// logger('inside $activeFlow if');
-            $response_sequence = ['Automated Flows'];
-        } else {
-			// logger('inside $activeFlow else');
-            // Use the response sequence from metadata or fallback to default
-            $response_sequence = $metadataArray['automation']['response_sequence'] ?? ['Basic Replies', 'Automated Flows', 'AI Reply Assistant'];
+            $response_sequence = array_values(array_unique(array_merge(['Automated Flows'], $response_sequence)));
         }
 
         // Define mapping of sequence items to functions
@@ -248,7 +248,10 @@ class AutoReplyService
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/IntelliReply/Services/AIResponseService.php'))) {
-            $query = new \Modules\IntelliReply\Services\AIResponseService();
+            // من الحاوية لا new: الخدمة بلا مُنشئ فالسلوك واحد في الإنتاج، ويستطيع
+            // الاختبار ربط نسخة تتجاوز البحث بالـ embeddings (مكتبة openai-php
+            // لا تمرّ بـ Http::fake) فيمرّ ما سواه كاملاً بلا شبكة.
+            $query = app(\Modules\IntelliReply\Services\AIResponseService::class);
             if ($query->handleAIResponse($chat, $receivedMessage)) {
                 return true;
             }

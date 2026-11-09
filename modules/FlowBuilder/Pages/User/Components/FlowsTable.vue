@@ -1,5 +1,5 @@
 <script setup>
-    import { ref } from 'vue';
+    import { onBeforeUnmount, ref } from 'vue';
     import debounce from 'lodash/debounce';
     import { router } from '@inertiajs/vue3';
     import { useForm } from "@inertiajs/vue3";
@@ -72,6 +72,9 @@
         isSearching.value = true;
         runSearch();
     }, 1000);
+
+    // بحثٌ مؤجَّل يُلغى بمغادرة الصفحة: كان يُطلق بعد فتح مسار فيعيد إلى القائمة.
+    onBeforeUnmount(() => search.cancel());
 
     const runSearch = () => {
         router.visit('/automation/flows', {

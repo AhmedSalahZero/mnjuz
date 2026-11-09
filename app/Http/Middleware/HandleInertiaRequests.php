@@ -174,7 +174,8 @@ class HandleInertiaRequests extends Middleware
             'applicationReleaseDate' => fn () => Config::get('version.release_date'),
             'config' => $config,
             // إعداد البثّ للعميل — يتبع مفتاح التبديل بلا إعادة بناء.
-            'broadcast' => BroadcastProvider::clientConfig(),
+            // مزوّد المنشأة الحالية؛ صفحات الأدمن بلا منشأة فتأخذ الافتراضي.
+            'broadcast' => BroadcastProvider::clientConfig((int) session('current_organization') ?: null),
             // أقصى حجم يقبله الخادم فعلاً. الملف الأكبر يرفضه PHP قبل بلوغ
             // Laravel، فتصل حمولة بلا ملف ويظنّ المستخدم أن الإرسال نجح.
             // نمرّره للواجهة لتردّ الملف مبكّراً برسالة تذكر الحدّ الحقيقي.
@@ -182,6 +183,9 @@ class HandleInertiaRequests extends Middleware
             // سقف الطلب الواحد: مجموع الدفعة يُقاس به لا بسقف الملف. وهو أصغر
             // ما بين حدّ PHP وحدّ الوكيل الأمامي — والثاني غير مرئي لـPHP.
             'max_post_bytes' => \App\Helpers\ChatMediaUploadHelper::maxRequestBytes(),
+            // حجم قطعة الرفع المجزّأ الذي يقبله هذا الخادم: 5MB ثابتة كانت
+            // تُرفض كلّها حيث upload_max_filesize أصغر منها (2MB افتراضياً).
+            'upload_chunk_bytes' => \App\Helpers\ChatMediaUploadHelper::chunkBytes(),
             'admin_organization_impersonation' => (bool) session('admin_org_impersonation', false),
             'admin_impersonation_org_name' => session('admin_impersonation_org_name'),
             'auth' => [

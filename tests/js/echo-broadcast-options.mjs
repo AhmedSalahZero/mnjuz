@@ -18,9 +18,18 @@ const body = src.slice(start, end)
 	.replace(/document\.querySelector\([^)]*\)\?\.content/, "'csrf'")
 
 let captured = null
+const keyStart = src.indexOf('let echoConfigKey')
+const keyEnd = src.indexOf(']);', keyStart) + 3
+const configKey = src.slice(keyStart, keyEnd)
+
 const mod = `
 let echoInstance = null
-class Echo { constructor(o) { captured = o } }
+const sharedChannelEntries = new Map()
+const presenceChannelEntries = new Map()
+globalThis.__built = 0
+globalThis.__disconnected = 0
+class Echo { constructor(o) { captured = o; globalThis.__built++ } disconnect() { globalThis.__disconnected++ } }
+${configKey}
 ${body}
 export { getEchoInstance }
 export function reset() { echoInstance = null }
@@ -77,12 +86,23 @@ for (const bad of [null, undefined, {}, { key: 'k' }]) {
 reset(); getEchoInstance({ key: 'k' })
 check('بلا تجميعة · قيمة بديلة', seen().cluster, 'mt1')
 
-// (٥) اتصال واحد لا يُعاد بناؤه
+// (٥) الإعداد نفسه: اتصال واحد مشترك
 reset()
-getEchoInstance({ key: 'first', host: 'a.test' })
-const first = seen()
-getEchoInstance({ key: 'second', host: 'b.test' })
-check('اتصال واحد مشترك', seen().key, first.key)
+globalThis.__built = 0
+globalThis.__disconnected = 0
+const pusherOrg = { provider: 'pusher', key: 'first', cluster: 'us2', host: null, port: 443, force_tls: true }
+const a = getEchoInstance(pusherOrg)
+const b = getEchoInstance({ ...pusherOrg })
+check('الإعداد نفسه · لا يُعاد البناء', globalThis.__built, 1)
+check('الإعداد نفسه · الكائن نفسه', a === b, true)
+check('بلا إعداد · يُستعمل القائم', getEchoInstance(undefined) === a, true)
+
+// (٦) منشأة على مزوّدٍ آخر (أو تبديل الأدمن): اتصالٌ جديد ويُغلق القديم
+getEchoInstance({ provider: 'reverb', key: 'second', host: 'ws.example.com', port: 443, force_tls: true })
+check('مزوّد آخر · يُعاد البناء', globalThis.__built, 2)
+check('مزوّد آخر · يُغلق القديم', globalThis.__disconnected, 1)
+check('مزوّد آخر · المفتاح الجديد', seen().key, 'second')
+check('مزوّد آخر · عنوان Reverb', seen().wsHost, 'ws.example.com')
 
 if (failures.length) { failures.forEach(f => console.error('❌ ' + f)); process.exit(1) }
-console.log('✅ 18 فحصاً — السحابة بلا عنوان، وReverb بعنوان صريح')
+console.log('✅ 24 فحصاً — السحابة بلا عنوان، وReverb بعنوان صريح، والاتصال يتبع مزوّد المنشأة')

@@ -13,6 +13,7 @@ class CreateFlowUserDataTable extends Migration
             $table->unsignedBigInteger('contact_id');  // Reference to the user interacting with the flow
             $table->foreignId('flow_id')->constrained('flows')->onDelete('cascade');
             $table->unsignedBigInteger('current_step');
+            $table->unsignedTinyInteger('unmatched_replies')->default(0);
             $table->timestamps();
 
             $table->index('contact_id');

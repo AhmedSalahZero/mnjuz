@@ -29,8 +29,9 @@ class Email
     {
         $smtpQuery = Setting::where('key', 'smtp_email_active')->first();
 
-        if($smtpQuery->value == 1){
-            $emailTemplate = EmailTemplate::where('name', $template)->first();
+        // بلا إعداد البريد أو قالب الدعوة لا يُرسل شيء — كان يُسقط الدعوة كلّها
+        // بقراءة خاصّية من null، والدعوة نفسها حُفظت قبلها.
+        if ($smtpQuery && $smtpQuery->value == 1 && ($emailTemplate = EmailTemplate::where('name', $template)->first())) {
             $subject = self::replacePlaceholders($emailTemplate->subject, $inviter, $link);
             $body = self::replacePlaceholders($emailTemplate->body, $inviter, $link);
 

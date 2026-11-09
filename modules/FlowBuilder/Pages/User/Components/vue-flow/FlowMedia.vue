@@ -1,11 +1,18 @@
 <script setup>
 import axios from "axios"
 import { ref } from 'vue'
+import { useTrans } from '@/Composables/useTrans'
+
+const trans = useTrans()
 
 const props = defineProps(['type', 'uuid', 'nodeId', 'modelValue'])
 const file = ref(null)
 const uuid = ref(props.uuid)
 const nodeId = ref(props.nodeId)
+
+const uploading = ref(false)
+const progress = ref(0)
+const error = ref('')
 
 const handleFileChange = (event) => {
 	const input = event.target
@@ -13,10 +20,17 @@ const handleFileChange = (event) => {
 		file.value = input.files[0]
 		uploadMedia()  // Call uploadMedia immediately when a file is selected
 	}
+
+	// الحقل يُفرَّغ: اختيار الملف نفسه مرّةً ثانية (بعد خطأ أو حذف) لا يُطلق
+	// change إن بقيت قيمته كما هي، فلا يحدث شيء.
+	if (input) {
+		input.value = ''
+	}
 }
 
 const emit = defineEmits(['update:modelValue'])
 
+// الخطأ يظهر تحت الحقل: كان يُبتلع، فلا يعرف المستخدم لماذا لم يُرفع ملفّه.
 const uploadMedia = async () => {
 	if (!file.value) {
 		return
@@ -24,17 +38,32 @@ const uploadMedia = async () => {
 
 	const formData = new FormData()
 	formData.append('file', file.value)
+	// الخادم يطبّق حدود واتساب لهذا النوع (الحجم والامتدادات).
+	formData.append('type', props.type)
+
+	uploading.value = true
+	progress.value = 0
+	error.value = ''
 
 	try {
 		const response = await axios.post(`/automation/flows/upload-media/${uuid.value}/${nodeId.value}`, formData, {
 			headers: {
 				'Content-Type': 'multipart/form-data', // Ensure the content type is set for file upload
 			},
+			onUploadProgress: (event) => {
+				if (event.total) {
+					progress.value = Math.round((event.loaded * 100) / event.total)
+				}
+			},
 		})
 
 		emit('update:modelValue', response.data)
-	} catch (error) {
-		//console.error('Error uploading file:', error);
+	} catch (exception) {
+		error.value = exception?.response?.status === 413
+			? trans('The file is too large.')
+			: (exception?.response?.data?.message || trans('The file could not be uploaded. Please try again.'))
+	} finally {
+		uploading.value = false
 	}
 }
 
@@ -46,7 +75,7 @@ const removeMedia = () => {
 	<label class="mb-2 text-sm"><span class="text-red-500">*</span> {{ $t('Upload media') }}</label>
 	<div class="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
 		<input @change="handleFileChange($event)" v-if="props.type == 'image'" type="file" class="sr-only"
-			accept=".jpg, .png" :id="'file-upload' + props.nodeId">
+			accept=".jpg, .jpeg, .png" :id="'file-upload' + props.nodeId">
 		<input @change="handleFileChange($event)" v-if="props.type == 'video'" type="file" class="sr-only"
 			accept=".mp4, .3gp" :id="'file-upload' + props.nodeId">
 		<input @change="handleFileChange($event)" v-if="props.type == 'audio'" type="file" class="sr-only"
@@ -55,7 +84,7 @@ const removeMedia = () => {
 			accept=".pdf, .txt, .xls, .xlsx, .doc, .docx, .ppt, .pptx" :id="'file-upload' + props.nodeId">
 		<div class="text-center">
 			<div v-if="modelValue.length == 0">
-				<label for="file-upload">
+				<label :for="'file-upload' + props.nodeId">
 					<svg v-if="props.type == 'image'" class="mx-auto h-12 w-12 text-gray-400 cursor-pointer"
 						xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 						<path fill="currentColor" d="M14 9a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0Z"></path>
@@ -104,6 +133,8 @@ const removeMedia = () => {
 				<p v-if="props.type == 'video'" class="text-xs text-gray-500">{{ $t('MP4 or 3GPP files only') }}</p>
 				<p v-if="props.type == 'audio'" class="text-xs text-gray-500">{{ $t('MP3/AAC/AMR or') }} <br> {{ $t('MP4 files only') }}</p>
 				<p v-if="props.type == 'document'" class="text-xs text-gray-500">{{ $t('PDF/TXT/XLS/XLSX/DOC/DOCX/PPT or PPTX files only') }}</p>
+				<p v-if="uploading" class="mt-2 text-xs text-gray-600">{{ $t('Uploading...') }} {{ progress }}%</p>
+				<p v-if="error" class="mt-2 text-xs text-red-600">{{ error }}</p>
 			</div>
 			<div v-else class="flex text-sm text-gray-600">
 				<div class="">

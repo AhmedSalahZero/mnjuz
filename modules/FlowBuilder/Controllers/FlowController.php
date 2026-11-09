@@ -9,8 +9,10 @@ use Modules\FlowBuilder\Models\Flow;
 use App\Models\Organization;
 use App\Models\Setting;
 use Modules\FlowBuilder\Services\FlowService;
+use Modules\FlowBuilder\Support\FlowSecrets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class FlowController extends BaseController
@@ -45,7 +47,10 @@ class FlowController extends BaseController
     public function view(Request $request, $uuid)
     {
         $data['uuid'] = $uuid;
-        $data['flow'] = Flow::where('uuid', $uuid)->firstOrFail();
+        $flow = Flow::ownedOrAbort($uuid);
+        // لا يُحفظ: النسخة المرسلة إلى المتصفح وحدها بلا كلمات مرور SMTP.
+        $flow->metadata = FlowSecrets::redact($flow->metadata);
+        $data['flow'] = $flow;
         
         // Get contact groups for the current organization
         $organizationId = session()->get('current_organization');
@@ -123,26 +128,29 @@ class FlowController extends BaseController
             'publish' => 'sometimes|boolean'
         ]);
 
-        $flow = Flow::where('uuid', $uuid)->firstOrFail();
+        $flow = Flow::ownedOrAbort($uuid);
 
         $data = [
             'name' => $data['name'] ?? $flow->name,
-            'description' => $data['description'] ?? $flow->description,
+            // array_key_exists لا ??: الوصف المُفرَّغ يصل null، و?? كان يُبقي القديم.
+            'description' => $request->exists('description') ? ($data['description'] ?? null) : $flow->description,
             'metadata' => $data['metadata'] ?? $flow->metadata,
         ];
 
-        $flow = $this->flowService->updateFlow($uuid, $data, $request->publish);
+        $response = $this->flowService->updateFlow($uuid, $data, $request->publish);
 
         // Check if the request expects JSON response
         if (request()->expectsJson()) {
-            return response()->json($flow);
+            return $response;
         }
 
         // If it's an Inertia request, redirect back
+        $result = $response->getData(true);
+
         return Redirect::back()->with(
             'status', [
-                'type' => 'success', 
-                'message' => __('Flow automation updated successfully!')
+                'type' => $result['success'] ? 'success' : 'error',
+                'message' => $result['success'] ? __('Flow automation updated successfully!') : $result['message'],
             ]
         );
     }
@@ -161,9 +169,28 @@ class FlowController extends BaseController
 
     public function uploadMedia(Request $request, $uuid, $stepId)
     {
-        $flow = $this->flowService->uploadMedia($request, $uuid, $stepId);
+        // المسار أوّلاً: كان الملف يُخزَّن قبل التحقق من وجود المسار وملكيته.
+        $flow = Flow::ownedOrAbort($uuid);
 
-        return response()->json($flow);
+        // ردّ 422 صريح: معالج الأخطاء يحوّل ValidationException في طلبات JSON
+        // إلى 500، فلا يعرف المحرّر سبب الرفض.
+        $type = $request->input('type');
+        $validator = Validator::make($request->all(), [
+            'type' => 'nullable|in:' . implode(',', array_keys(FlowService::MEDIA_RULES)),
+            'file' => ['required', 'file', 'max:' . FlowService::mediaMaxKilobytes($type)],
+        ]);
+
+        $reason = $validator->fails()
+            ? $validator->errors()->first()
+            : FlowService::mediaRejection($type, $request->file('file'));
+
+        if ($reason !== null) {
+            return response()->json(['success' => false, 'message' => $reason], 422);
+        }
+
+        $media = $this->flowService->uploadMedia($request, $flow, $stepId);
+
+        return response()->json($media);
     }
 
     /**

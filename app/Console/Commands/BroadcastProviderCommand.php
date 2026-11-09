@@ -70,7 +70,7 @@ class BroadcastProviderCommand extends Command
         $rows = [];
         foreach ([BroadcastProvider::PUSHER, BroadcastProvider::REVERB] as $provider) {
             $connection = $this->connectionFor($provider);
-            $missing = $this->missingKeys($connection);
+            $missing = $this->missingKeys($provider);
 
             $rows[] = [
                 ($stored !== false && $provider === $active) ? '◀ ' . $provider : '  ' . $provider,
@@ -117,7 +117,7 @@ class BroadcastProviderCommand extends Command
         }
 
         $connection = $this->connectionFor($target);
-        $missing = $this->missingKeys($connection);
+        $missing = $this->missingKeys($target);
 
         if ($missing !== [] && !$this->option('force')) {
             $this->error('لا يمكن التبديل إلى ' . $target . ': ينقصه ' . implode('، ', $missing));
@@ -234,25 +234,15 @@ class BroadcastProviderCommand extends Command
 
     /**
      * المفاتيح الناقصة. السرّ ضمنها: بدونه يُبنى العميل ثم يُرفض كل بثّ.
+     * الفحص نفسه يمنع الأدمن من اختيار مزوّدٍ ناقص لمنشأة (BroadcastProvider).
      *
-     * @param  array<string, mixed>  $connection
      * @return array<int, string>
      */
-    private function missingKeys(array $connection): array
+    private function missingKeys(string $provider): array
     {
-        $missing = [];
+        $labels = ['key' => 'المفتاح', 'secret' => 'السرّ', 'app_id' => 'المعرّف', 'host' => 'العنوان'];
 
-        foreach (['key' => 'المفتاح', 'secret' => 'السرّ', 'app_id' => 'المعرّف'] as $field => $label) {
-            if (trim((string) ($connection[$field] ?? '')) === '') {
-                $missing[] = $label;
-            }
-        }
-
-        if (trim((string) ($connection['options']['host'] ?? '')) === '') {
-            $missing[] = 'العنوان';
-        }
-
-        return $missing;
+        return array_map(fn (string $field) => $labels[$field], BroadcastProvider::missingCredentials($provider));
     }
 
     /** @param array<string, mixed> $connection */

@@ -114,11 +114,15 @@ class DashboardController extends BaseController
         $chatCounts = [];
 
         foreach ($this->period() as $dateString) {
-            $date = Carbon::parse($dateString);
+            $day = Carbon::parse($dateString)->toDateString();
             $chatCount = Chat::where('organization_id', $organizationId)
                 ->where('type', $type)
                 ->whereNull('deleted_at')
-                ->whereDate('created_at', $date->toDateString())
+                // الرسوم تقيس نشاط المنشأة على المنصّة، لا سجلّاً استوردته.
+                ->whereNull('chat_import_id')
+                // نطاق لا whereDate: DATE(created_at) يمنع الفهرس، فيستغرق العدّ
+                // الواحد ثوانيَ طويلة في المنشأة الكبيرة وهذه 14 عدّاً في الصفحة.
+                ->whereBetween('created_at', ["{$day} 00:00:00", "{$day} 23:59:59"])
                 ->count();
             $chatCounts[] = $chatCount;
         }

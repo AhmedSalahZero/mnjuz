@@ -95,159 +95,159 @@
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ isActive ? $t('Active') : $t('Inactive') }}
           </span>
         </div>
       </div>
     </div>
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Conditional Action') }}</h3>
-        </div>
-        
-        <form @submit.prevent="saveAction" class="p-6">
-          <div class="space-y-4">
-            <!-- Configuration Fields -->
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
-              <div class="space-y-3">
-                <!-- Conditional -->
-                <div class="space-y-4">
-                  <div>
+    <NodeEditModal :open="showEditModal" @close="closeEditModal">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-900">{{ $t('Edit Conditional Action') }}</h3>
+      </div>
+      
+      <form @submit.prevent="saveAction" class="p-6">
+        <div class="space-y-4">
+          <!-- Configuration Fields -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('Configuration') }}</label>
+            <div class="space-y-3">
+              <!-- Conditional -->
+              <div class="space-y-4">
+                <div>
+                  <FormSelect
+                    v-model="editForm.config.condition_type"
+                    name="Condition Type"
+                    :options="[
+                      { value: 'message_contains', label: 'Message Contains' },
+                      { value: 'message_equals', label: 'Message Equals' },
+                      { value: 'contact_field', label: 'Contact Field' }
+                    ]"
+                    required
+                  />
+                </div>
+                
+                <!-- Contact field configuration -->
+                <div v-if="editForm.config.condition_type === 'contact_field'">
+                  <div class="space-y-3">
                     <FormSelect
-                      v-model="editForm.config.condition_type"
-                      name="Condition Type"
+                      v-model="editForm.config.field_name"
+                      name="Contact Field"
+                      :options="availableContactFields"
+                      required
+                    />
+                    <FormSelect
+                      v-model="editForm.config.field_operator"
+                      name="Operator"
                       :options="[
-                        { value: 'message_contains', label: 'Message Contains' },
-                        { value: 'message_equals', label: 'Message Equals' },
-                        { value: 'contact_field', label: 'Contact Field' }
+                        { value: 'equals', label: 'Equals' },
+                        { value: 'contains', label: 'Contains' },
+                        { value: 'not_equals', label: 'Not Equals' },
+                        { value: 'is_empty', label: 'Is Empty' },
+                        { value: 'is_not_empty', label: 'Is Not Empty' }
                       ]"
                       required
                     />
                   </div>
-                  
-                  <!-- Contact field configuration -->
-                  <div v-if="editForm.config.condition_type === 'contact_field'">
-                    <div class="space-y-3">
-                      <FormSelect
-                        v-model="editForm.config.field_name"
-                        name="Contact Field"
-                        :options="availableContactFields"
-                        required
-                      />
-                      <FormSelect
-                        v-model="editForm.config.field_operator"
-                        name="Operator"
-                        :options="[
-                          { value: 'equals', label: 'Equals' },
-                          { value: 'contains', label: 'Contains' },
-                          { value: 'not_equals', label: 'Not Equals' },
-                          { value: 'is_empty', label: 'Is Empty' },
-                          { value: 'is_not_empty', label: 'Is Not Empty' }
-                        ]"
-                        required
-                      />
-                    </div>
+                </div>
+                
+                <!-- Values List -->
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t('Values') }}</h4>
+                    <button
+                      type="button"
+                      @click="addCondition"
+                      class="text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700"
+                    >
+                      {{ $t('Add Value') }}
+                    </button>
                   </div>
                   
-                  <!-- Values List -->
-                  <div class="space-y-3">
-                    <div class="flex items-center justify-between">
-                      <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t('Values') }}</h4>
-                      <button
-                        type="button"
-                        @click="addCondition"
-                        class="text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700"
-                      >
-                        {{ $t('Add Value') }}
-                      </button>
-                    </div>
-                    
-                    <div v-if="editForm.config.conditions && editForm.config.conditions.length > 0" class="space-y-2">
-                      <div 
-                        v-for="(condition, index) in editForm.config.conditions" 
-                        :key="index"
-                        class="border border-gray-200 rounded-lg p-3 bg-gray-50"
-                      >
-                        <div class="flex items-center justify-between mb-2">
-                          <span class="text-xs font-medium text-gray-700">Value {{ index + 1 }}</span>
-                          <button
-                            type="button"
-                            @click="removeCondition(index)"
-                            class="text-red-500 hover:text-red-700 text-xs"
-                          >
-                            {{ $t('Remove') }}
-                          </button>
-                        </div>
-                        
-                        <div>
-                          <FormInput
-                            v-model="condition.value"
-                            name="Value"
-                            type="text"
-                            :placeholder="getValuePlaceholder(editForm.config.condition_type)"
-                            required
-                          />
-                        </div>
+                  <div v-if="editForm.config.conditions && editForm.config.conditions.length > 0" class="space-y-2">
+                    <div 
+                      v-for="(condition, index) in editForm.config.conditions" 
+                      :key="index"
+                      class="border border-gray-200 rounded-lg p-3 bg-gray-50"
+                    >
+                      <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-medium text-gray-700">{{ $t('Value') }} {{ index + 1 }}</span>
+                        <button
+                          type="button"
+                          @click="removeCondition(index)"
+                          class="text-red-500 hover:text-red-700 text-xs"
+                        >
+                          {{ $t('Remove') }}
+                        </button>
+                      </div>
+                      
+                      <div>
+                        <FormInput
+                          v-model="condition.value"
+                          name="Value"
+                          type="text"
+                          :placeholder="getValuePlaceholder(editForm.config.condition_type)"
+                          required
+                        />
                       </div>
                     </div>
-                    
-                    <div v-else class="text-center py-4 text-gray-500 text-sm">
-                      {{ $t('No values added yet. Click "Add Value" to create your first condition.') }}
-                    </div>
                   </div>
                   
-                  <!-- Explanation -->
-                  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p class="text-sm font-medium text-blue-800 mb-3">
-                      {{ $t('How Conditional Flow Works:') }}
-                    </p>
-                    <div class="space-y-2 text-sm text-blue-700">
-                      <p class="text-xs">• Each value will be evaluated against the selected condition type</p>
-                      <p class="text-xs">• When a value matches, flow will branch to that value's connected node</p>
-                      <p class="text-xs">• If no values match, flow will continue to the default path</p>
-                      <p class="text-xs">• You can connect multiple nodes to different values</p>
-                    </div>
+                  <div v-else class="text-center py-4 text-gray-500 text-sm">
+                    {{ $t('No values added yet. Click "Add Value" to create your first condition.') }}
+                  </div>
+                </div>
+                
+                <!-- Explanation -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p class="text-sm font-medium text-blue-800 mb-3">
+                    {{ $t('How Conditional Flow Works:') }}
+                  </p>
+                  <div class="space-y-2 text-sm text-blue-700">
+                    <p class="text-xs">• {{ $t('Each value will be evaluated against the selected condition type') }}</p>
+                    <p class="text-xs">• {{ $t('When a value matches, flow will branch to that value\'s connected node') }}</p>
+                    <p class="text-xs">• {{ $t('If no values match, flow will continue to the default path') }}</p>
+                    <p class="text-xs">• {{ $t('You can connect multiple nodes to different values') }}</p>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Active Status -->
-            <div class="flex items-center">
-              <FormCheckbox
-                v-model="editForm.is_active"
-                :label="$t('Active')"
-                class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
-              />
-            </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
-            <button 
-              type="button"
-              @click="closeEditModal"
-              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              {{ $t('Cancel') }}
-            </button>
-            <button 
-              type="submit"
-              class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              {{ $t('Save Changes') }}
-            </button>
+          <!-- Active Status -->
+          <div class="flex items-center">
+            <FormCheckbox
+              v-model="editForm.is_active"
+              :label="$t('Active')"
+              class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+          <button 
+            type="button"
+            @click="closeEditModal"
+            class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            {{ $t('Cancel') }}
+          </button>
+          <button 
+            type="submit"
+            class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            {{ $t('Save Changes') }}
+          </button>
+        </div>
+      </form>
+    </NodeEditModal>
   </div>
 </template>
 
 <script setup>
+import { useTrans } from '@/Composables/useTrans'
+import NodeEditModal from './NodeEditModal.vue'
 import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'
@@ -259,6 +259,8 @@ const props = defineProps({
   data: Object,
   selected: Boolean,
 })
+
+const trans = useTrans()
 
 const { removeNodes } = useVueFlow()
 const node = useNode()
@@ -343,7 +345,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm(trans('Are you sure you want to delete this action?'))) {
     removeNodes([props.id])
   }
 }

@@ -1,6 +1,8 @@
 <?php
 
+use App\Events\AgentPresenceChanged;
 use App\Models\Team;
+use App\Support\OrganizationRole;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
 
@@ -57,4 +59,28 @@ Broadcast::channel('chats.ch{organizationId}.{userId}', function ($user, $organi
 	return [
 		'id' => $user->id,
 	];
+});
+
+/**
+ * حالة اتصال موظفي المنظمة لحظياً ({@see AgentPresenceChanged}) — لمن يرى صفحة
+ * الأداء وحده: المالك والمدير، كما تحجبها RestrictOrganizationAgent عن الموظف.
+ */
+Broadcast::channel('agents.presence.ch{organizationId}', function ($user, $organizationId) {
+	$role = Team::where('organization_id', (int) $organizationId)
+		->where('user_id', $user->id)
+		->whereNull('deleted_at')
+		->value('role');
+
+	if (!OrganizationRole::isPrivileged($role)) {
+		Log::warning('Broadcast channel authorization refused', [
+			'reason'          => 'not a manager of the organization',
+			'channel'         => AgentPresenceChanged::channelName((int) $organizationId),
+			'auth_user_id'    => $user->id,
+			'organization_id' => $organizationId,
+		]);
+
+		return false;
+	}
+
+	return true;
 });

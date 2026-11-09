@@ -5,13 +5,14 @@ import DropdownItem from '@/Components/DropdownItem.vue'
 import DropdownItemGroup from '@/Components/DropdownItemGroup.vue'
 import FormSelectCombo from '@/Components/FormSelectCombo.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
+import MessagingWindowCountdown from '@/Components/ChatComponents/MessagingWindowCountdown.vue'
 import Modal from '@/Components/Modal.vue'
 import ChannelIcon from '@/Components/ChannelIcon.vue'
 import { Link, router, useForm, usePage } from '@inertiajs/vue3'
 import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 
@@ -129,8 +130,18 @@ const form2 = useForm({
 })
 
 const form3 = useForm({
-	ai_assistant: props.contact?.ai_assistance_enabled,
+	ai_assistant: !!props.contact?.ai_assistance_enabled,
 })
+
+// المكوّن يبقى حيّاً عند التنقّل بين المحادثات (preserveState)، فكان المفتاح
+// يحمل حالة المحادثة السابقة. نُعيد مزامنته مع كل محادثة ومع كل تحديث للـ prop.
+watch(
+	() => [props.contact?.id, props.contact?.ai_assistance_enabled],
+	() => {
+		form3.ai_assistant = !!props.contact?.ai_assistance_enabled
+	},
+	{ immediate: true },
+)
 
 const changeTicketStatus = (value) => {
 	router.put(
@@ -180,17 +191,23 @@ const submitForm = () => {
 }
 
 const submitForm3 = () => {
-	form3.ai_assistant = !form3.ai_assistant
+	const previous = form3.ai_assistant
+	form3.ai_assistant = !previous
 
 	form3.post('/automation/contact/' + props.contact.uuid, {
 		preserveState: true,
+		preserveScroll: true,
+		// فشل الحفظ لا يترك المفتاح يُظهر حالة لم تُحفظ.
+		onError: () => {
+			form3.ai_assistant = previous
+		},
 	})
 }
 
 </script>
 <template>
 	<div class="h-20 bg-white border-b border-1 flex items-center justify-between px-4 md:px-4">
-		<div class="flex items-center gap-x-4 cursor-pointer w-3/4">
+		<div class="flex items-center gap-x-4 cursor-pointer flex-1 min-w-0">
 			<Link href="/chats" :only="['contact', 'chatThread', 'hasMoreMessages', 'nextPage', 'ticket', 'unreadMessages', 'flash']" preserve-state preserve-scroll class="flex md:hidden items-center justify-center min-w-[2.5rem] min-h-[2.5rem] p-1 -m-1 text-current shrink-0 touch-manipulation">
 				<svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24" class="pointer-events-none">
 					<path fill="currentColor"
@@ -204,7 +221,7 @@ const submitForm3 = () => {
 				<ChannelIcon v-if="contact.avatar" :channel="contact.channel || 'whatsapp'" :size="18" filled
 					class="absolute -bottom-0.5 -right-0.5 ring-2 ring-white" />
 			</div>
-			<div class="flex items-center w-full gap-x-8">
+			<div class="flex items-center w-full gap-x-4 xl:gap-x-8">
 				<div>
 					<div class="flex items-center" @click="toggleView">
 						<span>{{ contact.full_name }}</span>
@@ -215,7 +232,7 @@ const submitForm3 = () => {
 						يظهر فارغاً تحت الاسم بلا معنى.
 					-->
 					<div class="w-full flex items-center text-xs">
-						<span @click="toggleView">{{ contactSubtitle }}</span>
+						<span @click="toggleView" class="whitespace-nowrap" dir="ltr">{{ contactSubtitle }}</span>
 					</div>
 				</div>
 				<FormSelectCombo v-if="ticketingIsEnabled" v-model="user"
@@ -223,14 +240,17 @@ const submitForm3 = () => {
 					:placeholder="'Select Agent'" @update:modelValue="changeTicketAgent()" />
 			</div>
 		</div>
-		<div>
-			<div class="flex items-center space-x-4">
+		<!-- shrink-0: الجزء الأيسر هو اللي يتقلّص، مش الأزرار، فما يتكسّرش نص "وضع علامة مغلقة" -->
+		<div class="shrink-0 ms-4">
+			<!-- gap لا space-x: الأخير هامش فيزيائي على اليسار فلا فراغ بين العناصر في صفحة RTL -->
+			<div class="flex items-center gap-x-4">
+				<MessagingWindowCountdown :contact="contact" />
 				<button v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')"
-					class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+					class="text-sm whitespace-nowrap md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
 					{{ $t('Mark as closed') }}
 				</button>
 				<button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')"
-					class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+					class="text-sm whitespace-nowrap md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
 					{{ $t('Mark as open') }}
 				</button>
 				<Dropdown v-if="!displayContact">

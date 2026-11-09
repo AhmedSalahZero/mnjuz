@@ -43,13 +43,27 @@ Content-Type: application/json
             {
                 "id": 1,
                 "name": "John's organization",
-                "role": "owner"
+                "role": "owner",
+                "timezone": "Asia/Riyadh",
+                "broadcast": {
+                    "provider": "reverb",
+                    "key": "zsgyjtc10xgndtlt5mdj",
+                    "cluster": "mt1",
+                    "host": "reverb.mnjz.net",
+                    "port": 443,
+                    "scheme": "https",
+                    "force_tls": true,
+                    "auth_endpoint": "https://app.example.com/api/broadcasting/auth",
+                    "channel": "presence-chats.ch1.1"
+                }
             }
         ],
         "current_organization_id": 1
     }
 }
 ```
+
+كل شركة معاها `broadcast`: إعداد البث اللحظي بتاعها (Pusher أو Reverb). شوف [القسم 6](#6-إعداد-البث-اللحظي-لكل-شركة).
 
 #### Response (خطأ):
 ```json
@@ -140,6 +154,65 @@ Authorization: Bearer {token}
     "success": true,
     "message": "Logged out successfully"
 }
+```
+
+---
+
+### 6. **إعداد البث اللحظي لكل شركة**
+
+الأدمن بيختار لكل شركة تشتغل على **Pusher** أو **Reverb**، فالتطبيق ما يحطّش أي مفاتيح جوّاه: بياخد الإعداد من السيرفر مع كل شركة.
+
+#### بيوصل منين؟
+
+| المكان | الحقل |
+|--------|-------|
+| `POST /api/v1/auth/login` | `data.organizations[].broadcast` (لكل شركة) |
+| `POST /api/v1/auth/set-current-organization` | `data.broadcast` (للشركة اللي اختارها) |
+| `POST /api/v1/auth/leave-current-organization` | `data.broadcast` (للشركة اللي بقى عليها، أو `null`) |
+| `GET /api/v1/profile` | `data.organization.broadcast` |
+| `GET /api/v1/broadcast-config` | `data` (للشركة المختارة حالياً) |
+
+#### الحقول
+
+| الحقل | المعنى |
+|-------|--------|
+| `provider` | `pusher` أو `reverb` |
+| `key` | الـ app key |
+| `cluster` | لـ Pusher (مثلاً `us2`)؛ مع Reverb دايماً `mt1` ومالوش تأثير |
+| `host` | عنوان سيرفر Reverb. مع Pusher بيبقى **`null`**: سيب المكتبة تحدد العنوان من الـ cluster |
+| `port`, `scheme`, `force_tls` | منفذ الاتصال، وهل هو `wss` (TLS) |
+| `auth_endpoint` | مسار تصريح القنوات. ابعت عليه الـ Bearer token |
+| `channel` | اسم قناة المستخدم كامل: `presence-chats.ch{organization_id}.{user_id}` |
+
+**الـ secret مش بيتبعت أبداً، والتطبيق مش محتاجه:** السيرفر بيوقّع اشتراك القناة على `auth_endpoint` بالـ secret بتاع مزوّد الشركة.
+
+#### إمتى تتصل أو تعيد الاتصال؟
+
+1. بعد الـ login: اتصل بـ `broadcast` بتاعة الشركة المختارة (`current_organization_id`).
+2. بعد `set-current-organization` أو `leave-current-organization`: **اقفل الاتصال القديم** واتصل بالـ `broadcast` اللي رجعت في الـ response، لأن الشركة الجديدة ممكن تكون على مزوّد تاني.
+3. عند كل فتح للتطبيق: اقرا `GET /api/v1/broadcast-config`، عشان لو الأدمن غيّر المزوّد التطبيق يتبعه.
+
+#### الاشتراك والأحداث
+
+- القناة presence channel. Laravel Echo بيضيف `presence-` لوحده: `echo.join('chats.ch{org}.{user}')`. أما عميل Pusher المباشر (زي `pusher_channels_flutter`) فاشترك بـ `channel` زي ما هي.
+- الأحداث على القناة:
+  - `App\Events\NewChatEvent`: رسالة جديدة أو تحديث حالة رسالة.
+  - `App\Events\ContactAiAssistanceUpdated`: تغيّر حالة مساعد الذكاء الاصطناعي لجهة اتصال.
+  
+  (مع Echo: `.listen('NewChatEvent')`؛ مع Pusher المباشر: اسم الحدث بالـ namespace كامل.)
+
+```javascript
+// Pusher JS / React Native
+const b = organization.broadcast;
+const pusher = new Pusher(b.key, {
+    cluster: b.cluster,
+    ...(b.host ? { wsHost: b.host, wsPort: b.port, wssPort: b.port, forceTLS: b.force_tls, enabledTransports: ['ws', 'wss'] } : {}),
+    channelAuthorization: {
+        endpoint: b.auth_endpoint,
+        headers: { Authorization: `Bearer ${token}` },
+    },
+});
+pusher.subscribe(b.channel).bind('App\\Events\\NewChatEvent', (event) => { /* ... */ });
 ```
 
 ---

@@ -38,7 +38,15 @@ function randomId() {
  * @property {?string} error
  */
 
-export function createUploadQueue({ post, onError } = {}) {
+/**
+ * @param {{post: Function, onError?: Function, chunkBytes?: number}} options
+ *   chunkBytes: حجم القطعة الذي يقبله الخادم (usePage().props.upload_chunk_bytes).
+ *   هو نفسه الحدّ بين الطلب الواحد والتجزئة: حمولةٌ أكبر منه يرفضها الخادم
+ *   في طلب واحد كما يرفض قطعةً أكبر منه.
+ */
+export function createUploadQueue({ post, onError, chunkBytes = CHUNK_BYTES } = {}) {
+    const chunkSize = Number(chunkBytes) > 0 ? Number(chunkBytes) : CHUNK_BYTES
+
     const state = reactive({ jobs: [] })
 
     /**
@@ -193,7 +201,7 @@ export function createUploadQueue({ post, onError } = {}) {
         // تتجاوزها على خطّ بطيء كما يتجاوزها ملفٌ كبير. وربط التجزئة بعدد
         // الملفات كان يُسقط الدفعة إلى المسار القديم: ملفٌ واحد يمرّ، وملفان
         // يعودان إلى طلبٍ واحد بحجمهما معاً فيموت كما كان.
-        if (total <= CHUNK_BYTES) {
+        if (total <= chunkSize) {
             return post('/chats', buildFormData(request, job), {
                 signal: controller?.signal,
                 onUploadProgress: (event) => progress(event.loaded ?? 0, event.total),
@@ -206,6 +214,7 @@ export function createUploadQueue({ post, onError } = {}) {
             await uploadInChunks({
                 post,
                 file: item.file,
+                chunkBytes: chunkSize,
                 signal: controller?.signal,
                 onProgress: (loaded) => progress(uploaded + loaded, total),
                 fields: {

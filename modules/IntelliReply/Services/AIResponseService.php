@@ -71,8 +71,7 @@ class AIResponseService
 
             // Check if automatic response should be enabled
             if ($this->shouldEnableAutomaticResponse($contactId, $aiConfig)) {
-                $contact->ai_assistance_enabled = true;
-                $contact->save();
+                $contact->setAiAssistanceEnabled(true);
             }
 
             // Verify AI assistance is enabled
@@ -332,14 +331,12 @@ EOT;
         $message = strtolower($message);
 
         if ($this->containsKeyword($message, $aiConfig['start_keywords'])) {
-            $contact->ai_assistance_enabled = true;
-            $contact->save();
+            $contact->setAiAssistanceEnabled(true);
             return;
         }
 
         if ($this->containsKeyword($message, $aiConfig['stop_keywords'])) {
-            $contact->ai_assistance_enabled = false;
-            $contact->save();
+            $contact->setAiAssistanceEnabled(false);
         }
     }
 

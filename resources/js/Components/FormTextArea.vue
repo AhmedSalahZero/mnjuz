@@ -12,6 +12,10 @@
         className: String,
         placeholder: String,
         textAreaRows: Number,
+        // rows="4" كما في <textarea>: كان يقع على الغلاف فلا يتغيّر الارتفاع.
+        rows: [Number, String],
+        // يُمنع إرسال النموذج والحقل فارغ. كان required يقع على الغلاف بلا أثر.
+        required: Boolean,
         error: String,
     })
 
@@ -30,7 +34,8 @@
                 :value="props.modelValue"
                 @input="updateValue"
                 :placeholder="placeholder"
-                :rows="textAreaRows"
+                :rows="textAreaRows ?? rows"
+                :required="required"
                 >
                 {{ props.modelValue }}
             </textarea>
