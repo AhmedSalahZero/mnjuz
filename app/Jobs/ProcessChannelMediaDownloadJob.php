@@ -8,9 +8,12 @@ use App\Models\ChannelAccount;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatMedia;
+use App\Services\Messaging\Channel;
 use App\Services\Messaging\ChannelManager;
 use App\Services\Messaging\InboundMedia;
 use App\Services\Messaging\Support\MediaStorage;
+use App\Services\WebChat\WebChatVisitorNotifier;
+use App\Support\JsonText;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -91,6 +94,9 @@ class ProcessChannelMediaDownloadJob implements ShouldQueue
         $chat->update(['media_id' => $chatMedia->id]);
 
         $this->broadcast($chat, (int) $account->organization_id);
+
+        // ملف زائر المحادثة المباشرة: فقاعته «جارٍ الرفع» تأخذ رابطها الآن.
+        app(WebChatVisitorNotifier::class)->message($chat->fresh(['media']));
     }
 
     public function failed(\Throwable $exception): void
@@ -108,11 +114,40 @@ class ProcessChannelMediaDownloadJob implements ShouldQueue
             return;
         }
 
+        $this->markWebChatUploadFailed($chat);
+
         try {
             $this->broadcast($chat, (int) $chat->organization_id);
         } catch (\Throwable $e) {
             Log::error('ProcessChannelMediaDownloadJob: failed() broadcast error', [
                 'chat_id' => $this->chatId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * ملف الزائر لم يُحفظ: بلا علامة تبقى فقاعته «جارٍ الرفع» إلى الأبد،
+     * فلا يعرف أن عليه إعادة الإرسال.
+     */
+    private function markWebChatUploadFailed(Chat $chat): void
+    {
+        if (($chat->channel ?? null) !== Channel::WEBCHAT) {
+            return;
+        }
+
+        try {
+            $metadata = json_decode((string) $chat->metadata, true);
+
+            if (is_array($metadata)) {
+                $metadata['media_failed'] = true;
+                $chat->update(['metadata' => JsonText::encode($metadata)]);
+            }
+
+            app(WebChatVisitorNotifier::class)->message($chat->fresh());
+        } catch (\Throwable $e) {
+            Log::warning('ProcessChannelMediaDownloadJob: could not flag the web chat upload', [
+                'chat_id' => $chat->id,
                 'error' => $e->getMessage(),
             ]);
         }

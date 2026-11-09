@@ -1,0 +1,40 @@
+{
+    "requests": [
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "image",
+                "image": {
+                    "link": "https://cdn.example.com/uploads/media/menu.png"
+                }
+            }
+        }
+    ],
+    "chats": [
+        {
+            "wam_id": "wamid.FLOW-1",
+            "status": "sent",
+            "user_id": null,
+            "channel": "whatsapp",
+            "metadata": {
+                "id": "wamid.FLOW-1",
+                "type": "image",
+                "image": {
+                    "mime_type": "image/jpeg"
+                }
+            },
+            "media": {
+                "name": "menu.png",
+                "path": "https://cdn.example.com/uploads/media/menu.png",
+                "type": "image/jpeg",
+                "location": "amazon"
+            }
+        }
+    ],
+    "flow_logs": 0
+}

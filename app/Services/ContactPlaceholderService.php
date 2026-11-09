@@ -90,7 +90,8 @@ class ContactPlaceholderService
             'last_name' => $contact->last_name ?? null,
             'full_name' => $contact->full_name ?? null,
             'email' => $contact->email ?? null,
-            'phone' => $contact->phone ?? null,
+            // قنوات بلا رقم هويّة (المحادثة المباشرة) تحفظ رقم العميل للعرض.
+            'phone' => $contact->phone ?? $contact->formatted_phone ?? null,
             'organization_name' => $organization->name,
             'full_address' => $full_address,
             'street' => $address['street'] ?? null,

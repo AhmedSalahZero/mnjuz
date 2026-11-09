@@ -10,6 +10,8 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\WhatsappService;
+use App\Services\Messaging\AutomationTransport;
+use App\Services\Messaging\Contracts\AutomationSender;
 use FFMpeg\FFMpeg;
 use FFMpeg\Format\Audio\Mp3;
 use Illuminate\Support\Facades\Log;
@@ -30,6 +32,11 @@ class AIResponseService
             $organizationId = $chat->organization_id;
             $contactId = $chat->contact_id;
             $contact = Contact::find($chat->contact_id);
+
+            // قبل OpenAI: قناة لا يصلها الردّ الآلي لا تدفع ثمن ردٍّ لن يُرسَل.
+            if ($contact && !\App\Services\Messaging\AutomationChannels::allows($contact)) {
+                return false;
+            }
             
             // Process the response
             $response = $this->processResponse(true, $organizationId, $contactId);
@@ -130,7 +137,8 @@ class AIResponseService
 
     private function sendResponse(Contact $contact, string $messageType, array $response, array $aiConfig): bool
     {
-        $whatsappService = $this->getWhatsappService($contact->organization_id);
+        // واتساب: نفس الخدمة المخبّأة على v18.0 كما كانت. وغيرها: ناقل القنوات.
+        $whatsappService = AutomationTransport::for($contact, fn () => $this->getWhatsappService($contact->organization_id));
 
         if ($messageType === 'text') {
             return $this->sendTextResponse($whatsappService, $contact->uuid, $response['text']);
@@ -143,13 +151,13 @@ class AIResponseService
         return false;
     }
 
-    private function sendTextResponse(WhatsappService $whatsappService, string $uuid, string $text): bool
+    private function sendTextResponse(AutomationSender $whatsappService, string $uuid, string $text): bool
     {
         $result = $whatsappService->sendMessage($uuid, $text);
         return $this->isSuccessfulResponse($result);
     }
 
-    private function sendAudioResponse(WhatsappService $whatsappService, Contact $contact, $text): bool
+    private function sendAudioResponse(AutomationSender $whatsappService, Contact $contact, $text): bool
     {
         $organizationId = $contact->organization_id;
         $ttsResponse = $this->convertTextToSpeech($organizationId, $text);

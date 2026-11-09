@@ -180,8 +180,42 @@ const getAddressDetail = (value, key) => {
           <span>{{ $t('Contact') }}</span>
         </div>
         <div>
-          <span>{{ contact.formatted_phone_number }}</span>
+          <span dir="ltr">{{ contact.formatted_phone_number }}</span>
         </div>
+      </div>
+    </div>
+    <!-- زائر المحادثة المباشرة: من أين جاء وبماذا يتصفّح -->
+    <div v-if="contact.webchat_visitor" class="pr-20 border-gray-300 border-b py-4">
+      <div class="grid grid-cols-2 space-x-8 text-[14px]">
+        <div class="text-right text-slate-500 pb-2"><span>{{ $t('Visitor') }}</span></div>
+        <div><span>{{ $t('Web Chat') }}</span></div>
+        <template v-if="contact.webchat_visitor.last_page_url">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Current page') }}</span></div>
+          <div class="min-w-0">
+            <a :href="contact.webchat_visitor.last_page_url" target="_blank" rel="noopener noreferrer"
+               class="text-primary underline break-all" dir="ltr">{{ contact.webchat_visitor.last_page_url }}</a>
+          </div>
+        </template>
+        <template v-if="contact.webchat_visitor.first_page_url && contact.webchat_visitor.first_page_url !== contact.webchat_visitor.last_page_url">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('First page') }}</span></div>
+          <div class="min-w-0"><span class="break-all" dir="ltr">{{ contact.webchat_visitor.first_page_url }}</span></div>
+        </template>
+        <template v-if="contact.webchat_visitor.referrer">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Came from') }}</span></div>
+          <div class="min-w-0"><span class="break-all" dir="ltr">{{ contact.webchat_visitor.referrer }}</span></div>
+        </template>
+        <template v-if="contact.webchat_visitor.browser">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Browser') }}</span></div>
+          <div><span dir="ltr">{{ contact.webchat_visitor.browser }}</span></div>
+        </template>
+        <template v-if="contact.webchat_visitor.country">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Country') }}</span></div>
+          <div><span>{{ contact.webchat_visitor.country }}</span></div>
+        </template>
+        <template v-if="contact.webchat_visitor.last_seen_at">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Last seen') }}</span></div>
+          <div><span dir="ltr">{{ new Date(contact.webchat_visitor.last_seen_at).toLocaleString() }}</span></div>
+        </template>
       </div>
     </div>
     <div

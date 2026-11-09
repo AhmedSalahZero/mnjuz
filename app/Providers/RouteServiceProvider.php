@@ -65,8 +65,20 @@ class RouteServiceProvider extends ServiceProvider
             Limit::perMinute(120)->by('wcmi:' . $request->ip()),
         ]);
 
-        RateLimiter::for('webchat-upload', fn (Request $request) => Limit::perMinute(5)->by('wcu:' . $visitor($request)));
+        // الزائر يختار حتى ٣ ملفات مرّة واحدة (WebChatUploads::MAX_FILES_PER_SEND)،
+        // وكل ملف طلب. وحدّ الـ IP لمن يفتح جلسات جديدة ليلتفّ على حدّ الزائر.
+        RateLimiter::for('webchat-upload', fn (Request $request) => [
+            Limit::perMinute(5)->by('wcu:' . $visitor($request)),
+            Limit::perMinute(15)->by('wcui:' . $request->ip()),
+        ]);
 
         RateLimiter::for('webchat-read', fn (Request $request) => Limit::perMinute(60)->by('wcr:' . $visitor($request)));
+
+        // حدّ مستقلّ: pusher-js يعيد التوقيع مع كل إعادة اتصال، فلا يأكل من
+        // حصّة السجلّ والقراءة.
+        RateLimiter::for('webchat-auth', fn (Request $request) => [
+            Limit::perMinute(30)->by('wca:' . $visitor($request)),
+            Limit::perMinute(120)->by('wcai:' . $request->ip()),
+        ]);
     }
 }

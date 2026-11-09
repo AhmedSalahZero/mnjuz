@@ -11,6 +11,14 @@ use Propaganistas\LaravelPhone\PhoneNumber;
 
 class ContactResource extends JsonResource
 {
+    /** @var array<string, array> قدرات كل قناة مرّة واحدة لكل طلب، لا لكل جهة في القائمة. */
+    private static array $capabilities = [];
+
+    private static function capabilitiesFor(string $channel): array
+    {
+        return self::$capabilities[$channel] ??= app(\App\Services\Messaging\ChannelManager::class)->capabilities($channel)->toArray();
+    }
+
     /**
      * Transform the resource into an array.
      *
@@ -38,6 +46,11 @@ class ContactResource extends JsonResource
             'ticket_assigned_to' => $this->ticket_assigned_to ?? null,
             'full_name' => $this->full_name,
             'formatted_phone_number' => $this->formatted_phone_number,
+            // القناة وما تدعمه: التطبيق يُخفي ما لا تدعمه (القوالب، الموقع)
+            // ويرسل لجهات بلا رقم بـ contact_uuid. انظر MOBILE_WEBCHAT.md.
+            'channel' => $this->channel ?: \App\Services\Messaging\Channel::DEFAULT,
+            'channel_capabilities' => self::capabilitiesFor($this->channel ?: \App\Services\Messaging\Channel::DEFAULT),
+            'webchat_visitor' => $this->whenLoaded('webchatVisitor', fn () => $this->webchatVisitor?->agentView()),
             
             'last_chat' => $this->whenLoaded('lastChat', function() {
 			

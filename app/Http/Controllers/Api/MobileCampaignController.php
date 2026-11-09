@@ -94,7 +94,7 @@ class MobileCampaignController extends Controller
                 'name' => $template->name,
                 'language' => $template->language,
                 'category' => $template->category,
-                'header_format' => $this->component($this->components($template), 'HEADER')['format'] ?? null,
+                'header_format' => $template->component('HEADER')['format'] ?? null,
             ])
             ->values();
 
@@ -154,11 +154,10 @@ class MobileCampaignController extends Controller
             return $this->fail(422, __('Carousel templates can only be sent from the web dashboard for now.'));
         }
 
-        $components = $this->components($template);
-        $header = $this->component($components, 'HEADER');
-        $body = $this->component($components, 'BODY');
-        $footer = $this->component($components, 'FOOTER');
-        $buttons = $this->component($components, 'BUTTONS')['buttons'] ?? [];
+        $header = $template->component('HEADER');
+        $body = $template->component('BODY');
+        $footer = $template->component('FOOTER');
+        $buttons = $template->component('BUTTONS')['buttons'] ?? [];
 
         $format = $header['format'] ?? null;
 
@@ -492,26 +491,6 @@ class MobileCampaignController extends Controller
             'sent' => $query->where('status', 'success')->whereHas('chat', fn ($c) => $c->whereIn('status', ['accepted', 'sent'])),
             default => $query->where('status', 'success')->whereHas('chat', fn ($c) => $c->where('status', $status)),
         };
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    private function components(Template $template): array
-    {
-        $metadata = json_decode((string) $template->getRawOriginal('metadata'), true);
-
-        return is_array($metadata['components'] ?? null) ? $metadata['components'] : [];
-    }
-
-    /** @param array<int, array<string, mixed>> $components */
-    private function component(array $components, string $type): ?array
-    {
-        foreach ($components as $component) {
-            if (($component['type'] ?? null) === $type) {
-                return $component;
-            }
-        }
-
-        return null;
     }
 
     /**

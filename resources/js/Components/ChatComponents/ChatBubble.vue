@@ -336,6 +336,20 @@ async function handleMediaDownload(event, content) {
 				</div>
 				<!-- Body: الروابط تظهر كـ <a href target="_blank"> -->
 				<p class="normal-case whitespace-pre-wrap" v-html="linkifyText(meta.text?.body || '')"></p>
+				<!-- ما عرضه الردّ الآلي على زائر المحادثة المباشرة: أزراره أو قائمته -->
+				<div v-if="meta.interactive_options && meta.interactive_options.kind !== 'cta_url'"
+					class="mt-2 flex flex-col gap-1 text-sm">
+					<div v-if="meta.interactive_options.footer" class="text-xs text-slate-500">{{ meta.interactive_options.footer }}</div>
+					<template v-if="meta.interactive_options.kind === 'buttons'">
+						<span v-for="button in meta.interactive_options.buttons || []" :key="button.id"
+							class="rounded-lg border border-slate-200 bg-white text-center py-1.5 text-[#00a5f4]">{{ button.title }}</span>
+					</template>
+					<template v-else-if="meta.interactive_options.kind === 'list'">
+						<span class="rounded-lg border border-slate-200 bg-white text-center py-1.5 text-[#00a5f4]">☰ {{ meta.interactive_options.button }}</span>
+						<span v-for="row in (meta.interactive_options.sections || []).flatMap((section) => section.rows || [])" :key="row.id"
+							class="text-xs text-slate-600">• {{ row.title }}</span>
+					</template>
+				</div>
 				<!-- بطاقات قالب الـ carousel: الرسالة نصّية، والبطاقات مفتاح إضافي فيها -->
 				<CarouselCardsStrip v-if="Array.isArray(meta.carousel?.cards) && meta.carousel.cards.length"
 					compact :format="meta.carousel.format" :cards="meta.carousel.cards" />

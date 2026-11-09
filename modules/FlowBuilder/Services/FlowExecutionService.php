@@ -6,6 +6,7 @@ use App\Helpers\CustomHelper;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Services\WhatsappService;
+use App\Services\Messaging\AutomationTransport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\FlowBuilder\Models\Flow;
@@ -524,7 +525,7 @@ class FlowExecutionService
     {
         // WhatsApp requires a valid phone number in the "to" field.
         // A missing/empty phone produces error_code 100 "The parameter to is required".
-        if (empty($contact->phone)) {
+        if (AutomationTransport::isWhatsapp($contact) && empty($contact->phone)) {
             Log::error('Flow message skipped: contact has no phone number', [
                 'flow_id'    => $flowData->flow_id,
                 'contact_id' => $contactId,
@@ -533,6 +534,20 @@ class FlowExecutionService
 
             return false;
         }
+
+        // القنوات الأخرى (المحادثة المباشرة): الجهة بلا رقم، ويكفي أن تصلها قناتها.
+        if (!AutomationTransport::isWhatsapp($contact) && !AutomationTransport::canReach($contact)) {
+            Log::error('Flow message skipped: contact cannot be reached on its channel', [
+                'flow_id'    => $flowData->flow_id,
+                'contact_id' => $contactId,
+                'channel'    => $contact->channel,
+                'node_id'    => $metadataArray['id'] ?? null,
+            ]);
+
+            return false;
+        }
+
+        $sender = $this->senderFor($contact);
 
         $fieldsArray = \Arr::get($metadataArray, "data.metadata.fields", null);
         $type = $fieldsArray['type'] ?? null;
@@ -628,12 +643,12 @@ class FlowExecutionService
         // الإرسال مُغلَّف بإعادة المحاولة: 131000 «Something went wrong» وأخواتها
         // أعطال مؤقتة عند Meta توصي هي نفسها بإعادتها. كانت المحاولة الأولى
         // الأخيرة، فعميلٌ جديد لا يصله الترحيب أبداً ولا يعلم أحد.
-        [$response, $attempts] = $this->sendWithRetry(function () use ($type, $contact, $message, $buttonType, $buttonArray, $header, $footer, $buttonLabel, $fieldsArray) {
+        [$response, $attempts] = $this->sendWithRetry(function () use ($sender, $type, $contact, $message, $buttonType, $buttonArray, $header, $footer, $buttonLabel, $fieldsArray) {
             $response = null;
 
             switch ($type) {
                 case 'text':
-                    $response = $this->whatsappService->sendMessage($contact->uuid, $message, 0, $buttonType);
+                    $response = $sender->sendMessage($contact->uuid, $message, 0, $buttonType);
                     break;
     
                 case 'media':
@@ -641,7 +656,7 @@ class FlowExecutionService
                     $mediaLocation = $fieldsArray['media']['location'] ?? '';
                     $mediaLocation = ($mediaLocation === 'aws') ? 'amazon' : $mediaLocation;
 
-                    $response = $this->whatsappService->sendMedia(
+                    $response = $sender->sendMedia(
                         $contact->uuid,
                         $fieldsArray['mediaType'] ?? '',
                         $mediaInfo['name'] ?? '',
@@ -655,7 +670,7 @@ class FlowExecutionService
     
                 case 'interactive buttons':
                 case 'interactive list':
-                    $response = $this->whatsappService->sendMessage(
+                    $response = $sender->sendMessage(
                         $contact->uuid,
                         $message,
                         0,
@@ -706,6 +721,12 @@ class FlowExecutionService
         }
 
         return true;
+    }
+
+    /** واتساب: الخدمة التي بُنيت مع المنفّذ كما كانت. وغيرها: ناقل القنوات. */
+    private function senderFor($contact): \App\Services\Messaging\Contracts\AutomationSender
+    {
+        return AutomationTransport::for($contact, fn () => $this->whatsappService);
     }
 
     /**

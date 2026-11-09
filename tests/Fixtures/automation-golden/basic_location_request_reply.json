@@ -1,0 +1,41 @@
+{
+    "requests": [
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "interactive",
+                "interactive": {
+                    "type": "location_request_message",
+                    "body": {
+                        "text": "أرسل موقعك يا Maitha"
+                    },
+                    "action": {
+                        "name": "send_location"
+                    }
+                }
+            }
+        }
+    ],
+    "chats": [
+        {
+            "wam_id": "wamid.FLOW-1",
+            "status": "delivered",
+            "user_id": null,
+            "channel": "whatsapp",
+            "metadata": {
+                "text": {
+                    "body": "أرسل موقعك يا Maitha"
+                },
+                "type": "text",
+                "location_request": true
+            },
+            "media": null
+        }
+    ],
+    "flow_logs": 0
+}

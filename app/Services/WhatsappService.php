@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Session;
 
-class WhatsappService
+class WhatsappService implements \App\Services\Messaging\Contracts\AutomationSender
 {
     private $accessToken;
     private $apiVersion;

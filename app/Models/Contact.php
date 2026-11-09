@@ -185,6 +185,12 @@ class Contact extends Model
         return $this->belongsTo(Organization::class, 'organization_id', 'id');
     }
 
+    /** زائر المحادثة المباشرة الذي تمثّله الجهة (null لغيرها). */
+    public function webchatVisitor()
+    {
+        return $this->hasOne(WebChatVisitor::class, 'contact_id');
+    }
+
     public function contactGroups()
     {
         return $this->belongsToMany(ContactGroup::class, 'contact_contact_group', 'contact_id', 'contact_group_id')
@@ -282,6 +288,8 @@ class Contact extends Model
                 'contacts.is_favorite',
                 'contacts.avatar',
                 'contacts.channel',
+                // رقم العرض لقنوات بلا رقم هويّة (المحادثة المباشرة).
+                'contacts.formatted_phone',
             ])
 			// ->where('contacts.id', 142069)
             ->where('contacts.organization_id', $organizationId)

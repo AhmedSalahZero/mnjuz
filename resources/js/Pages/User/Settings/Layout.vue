@@ -87,6 +87,12 @@
                                 <span>{{ $t('Working hours') }}</span>
                             </Link>
                         </li>
+                        <li v-if="!isOrgAgent && $page.props.settingsModuleWebChat" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/webchat') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/settings/webchat" class="flex items-center p-2 space-x-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/></svg>
+                                <span>{{ $t('Web Chat') }}</span>
+                            </Link>
+                        </li>
                         <li v-if="$page.props.organization?.plan?.features?.shortcuts" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/shortcuts') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/shortcuts" class="flex items-center p-2 space-x-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6l-6-6"/><path d="M12 19h8"/></svg>

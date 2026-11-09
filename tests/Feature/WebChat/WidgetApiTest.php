@@ -13,98 +13,33 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
+use App\Models\Team;
 use App\Models\User;
 use App\Models\WebChatVisitor;
+use App\Services\ChatService;
 use App\Services\Messaging\Channel;
 use App\Services\WebChat\WebChatWidgetService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Tests\TestCase;
 
 /**
  * الواجهة العامّة للـ widget: من نموذج الزائر حتى صفّ في صندوق المحادثات.
  */
-class WidgetApiTest extends TestCase
+class WidgetApiTest extends WebChatTestCase
 {
-    use RefreshDatabase;
-
-    private Organization $organization;
-    private ChannelAccount $widget;
-    private SubscriptionPlan $plan;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Cache::flush();
-        Event::fake([NewChatEvent::class]);
-        // الردّ الآلي يُختبر في مرحلته؛ هنا يكفي أن يُطلَق.
-        Bus::fake([ProcessAutoReplyJob::class]);
-
-        $owner = User::factory()->create(['role' => 'user']);
-        $this->organization = Organization::factory()->create(['created_by' => $owner->id]);
-
-        $this->plan = SubscriptionPlan::create([
-            'name' => 'Plan',
-            'price' => 0,
-            'period' => 'monthly',
-            'metadata' => json_encode(['addons' => ['Web Chat' => true]]),
-        ]);
-        Subscription::create([
-            'uuid' => (string) Str::uuid(),
-            'organization_id' => $this->organization->id,
-            'plan_id' => $this->plan->id,
-            'status' => 'active',
-            'valid_until' => now()->addYear(),
-        ]);
-
-        // التذاكر مفعّلة كما عند أغلب العملاء: الرسالة الأولى تفتح تذكرة.
-        $this->organization->update(['metadata' => json_encode(['tickets' => ['active' => true, 'assignment_mode' => 'manual']])]);
-
-        $this->widget = app(WebChatWidgetService::class)->ensureForOrganization($this->organization->id, 'متجر الاختبار');
-    }
-
-    private function url(string $path, ?ChannelAccount $widget = null): string
-    {
-        return '/api/webchat/v1/w/' . ($widget ?? $this->widget)->external_id . '/' . $path;
-    }
-
-    private function openSession(array $overrides = []): array
-    {
-        $response = $this->postJson($this->url('sessions'), $overrides + [
-            'name' => 'سارة',
-            'phone' => '+966 50 123 4567',
-            'elapsed_ms' => 4000,
-            'page_url' => 'https://shop.example.com/products/1',
-        ])->assertCreated();
-
-        return [$response->json('token'), WebChatVisitor::where('uuid', $response->json('visitor.id'))->first()];
-    }
-
-    private function send(string $token, array $body): \Illuminate\Testing\TestResponse
-    {
-        return $this->postJson($this->url('messages'), $body + [
-            'client_message_id' => (string) Str::uuid(),
-            'type' => 'text',
-        ], ['X-Webchat-Token' => $token]);
-    }
-
-    private function setSettings(array $settings): void
-    {
-        $this->widget->forceFill(['settings' => $settings + ['enabled' => true]])->save();
-    }
-
     // ───────────────────── الـ widget ─────────────────────
 
     public function test_config_describes_the_widget_without_any_secret(): void
     {
+        config(['broadcasting.default' => 'pusher']);
         $this->setSettings(['allowed_domains' => [], 'appearance' => ['color' => '#123ABC', 'title' => 'تحدّث معنا']]);
 
         $response = $this->getJson($this->url('config'))->assertOk();
@@ -305,6 +240,26 @@ class WidgetApiTest extends TestCase
         $this->assertSame(1, Chat::where('contact_id', $visitor->fresh()->contact_id)->count());
     }
 
+    /**
+     * فشلٌ بعد حفظ الرسالة يُعيد المهمّة، والمُعادة تجد الرسالة مكرَّرة.
+     * يجب أن يُربط الزائر رغم ذلك، وإلّا لم يرَ محادثته ولا الردّ عليها.
+     */
+    public function test_a_retry_of_an_already_saved_message_still_links_the_visitor(): void
+    {
+        [$token, $visitor] = $this->openSession();
+        $clientId = (string) Str::uuid();
+        $this->send($token, ['client_message_id' => $clientId, 'text' => 'مرحبا'])->assertStatus(202);
+        $contactId = $visitor->refresh()->contact_id;
+
+        // كأنّ المحاولة الأولى سقطت قبل الربط.
+        $visitor->forceFill(['contact_id' => null])->save();
+
+        $this->send($token, ['client_message_id' => $clientId, 'text' => 'مرحبا'])->assertStatus(202);
+
+        $this->assertSame((int) $contactId, (int) $visitor->refresh()->contact_id);
+        $this->assertSame(1, Chat::where('contact_id', $contactId)->count());
+    }
+
     public function test_an_empty_message_after_cleaning_is_refused(): void
     {
         [$token] = $this->openSession();
@@ -499,5 +454,55 @@ class WidgetApiTest extends TestCase
             'client_message_id' => (string) Str::uuid(),
             'file' => UploadedFile::fake()->image('a.png'),
         ], ['X-Webchat-Token' => $token, 'Accept' => 'application/json'])->assertForbidden();
+    }
+
+    // ───────────────────── ردّ الموظّف ─────────────────────
+
+    /**
+     * الموظّف يردّ من صندوق المحادثات بعد أيام: لا نافذة ٢٤ ساعة ولا نداء
+     * شبكة، ويجد الزائر الردّ باسم الموظّف حين يعود.
+     */
+    public function test_an_agents_reply_reaches_the_visitor_days_later(): void
+    {
+        [$token, $visitor] = $this->openSession();
+        $this->send($token, ['text' => 'هل المنتج متوفّر؟'])->assertStatus(202);
+        $contact = Contact::find($visitor->refresh()->contact_id);
+
+        $this->travel(3)->days();
+        Http::fake();
+        $agent = $this->actAsOwner();
+
+        $result = (new ChatService($this->organization->id))->sendMessage(
+            Request::create('/chats', 'POST', ['uuid' => $contact->uuid, 'message' => 'نعم، متوفّر 👍'])
+        );
+
+        $this->assertTrue($result->success);
+        Http::assertNothingSent();
+
+        $last = collect($this->getJson($this->url('messages'), ['X-Webchat-Token' => $token])->assertOk()->json('messages'))->last();
+        $this->assertSame('out', $last['direction']);
+        $this->assertSame('نعم، متوفّر 👍', $last['text']);
+        $this->assertSame(['kind' => 'agent', 'name' => $agent->first_name], $last['sender']);
+    }
+
+    /** وما لا مقابل له في المتصفّح يُرفض قبل أن يُسجَّل: القوالب وطلب الموقع. */
+    public function test_templates_and_location_requests_are_refused_for_a_visitor(): void
+    {
+        [$token, $visitor] = $this->openSession();
+        $this->send($token, ['text' => 'مرحبا'])->assertStatus(202);
+        $contact = Contact::find($visitor->refresh()->contact_id);
+        Http::fake();
+        $this->actAsOwner();
+        $service = new ChatService($this->organization->id);
+
+        $template = $service->sendTemplateMessage(
+            (object) ['template' => 'no-such-template', 'header' => ['format' => 'TEXT', 'parameters' => []]],
+            $contact->uuid
+        );
+
+        $this->assertFalse($template->success);
+        $this->assertSame(422, $service->requestLocation($contact->uuid, 'أرسل موقعك')->getStatusCode());
+        Http::assertNothingSent();
+        $this->assertSame(0, Chat::where('contact_id', $contact->id)->where('type', 'outbound')->count());
     }
 }

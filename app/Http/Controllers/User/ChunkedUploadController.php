@@ -123,6 +123,14 @@ class ChunkedUploadController extends Controller
 
         $fileName = $validated['file_name'];
 
+        // جهة على قناة غير واتساب (المحادثة المباشرة وغيرها): SendMediaJob
+        // لواتساب وحده، فيُرسل الملف بمسار القناة الآن ثم يُحذف المؤقّت.
+        $contact = Contact::where('uuid', $validated['contact_uuid'])->where('organization_id', $organizationId)->first();
+
+        if ($contact && ($contact->channel ?: \App\Services\Messaging\Channel::WHATSAPP) !== \App\Services\Messaging\Channel::WHATSAPP) {
+            return $this->sendOnChannel($contact, $validated, $organizationId, $userId, $path, $fileName);
+        }
+
         // الصورة تُهيّأ لواتساب كما في الرفع العادي (ChatService): كانت تُرسل
         // كما وصلت، فتردّها Meta إن كانت HEIC أو CMYK أو بعمق 16 بت.
         if ($validated['file_type'] === 'image') {
@@ -148,5 +156,32 @@ class ChunkedUploadController extends Controller
         )->onQueue('high');
 
         return response()->json(['success' => true, 'completed' => true, 'received' => $total, 'total' => $total]);
+    }
+
+    /** @param array<string, mixed> $validated */
+    private function sendOnChannel(Contact $contact, array $validated, int $organizationId, int $userId, string $path, string $fileName): JsonResponse
+    {
+        try {
+            $result = (new \App\Services\ChatService($organizationId))->sendStoredFileOnChannel(
+                $contact,
+                \Illuminate\Support\Facades\Storage::disk('local')->path($path),
+                $fileName,
+                $validated['file_type'],
+                $validated['caption'] ?? null,
+                [
+                    'user_id' => $userId,
+                    'temp_message_id' => $validated['temp_message_id'] ?? null,
+                    'message_uuid' => $validated['message_uuid'] ?? null,
+                ]
+            );
+        } finally {
+            \Illuminate\Support\Facades\Storage::disk('local')->delete($path);
+        }
+
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        return response()->json(['success' => (bool) ($result->success ?? false), 'completed' => true]);
     }
 }

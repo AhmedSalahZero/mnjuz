@@ -49,7 +49,7 @@ class WebChatMessagePresenter
             'client_id' => $inbound ? self::clientIdFrom((string) $chat->wam_id) : null,
             'direction' => $inbound ? 'in' : 'out',
             'type' => $this->displayType($type, $metadata),
-            'text' => $this->text($type, $metadata),
+            'text' => $this->visibleText($this->text($type, $metadata), $inbound ? null : $metadata),
             'media' => $this->media($chat, $type, $metadata),
             'interactive' => $inbound ? null : $this->interactive($metadata),
             'status' => (string) $chat->status,
@@ -117,6 +117,24 @@ class WebChatMessagePresenter
         return $text === null || $text === '' ? null : $text;
     }
 
+    /**
+     * زرّ الرابط يُحفظ كما في واتساب: المتن ثم «النصّ: الرابط» ليقرأه الموظّف
+     * والجوال. الزائر يرى الزرّ نفسه، فتُحذف عنده هذه اللاحقة.
+     */
+    private function visibleText(?string $text, ?array $metadata): ?string
+    {
+        $options = $metadata['interactive_options'] ?? null;
+
+        if ($text === null || !is_array($options) || ($options['kind'] ?? null) !== 'cta_url') {
+            return $text;
+        }
+
+        $label = trim((string) ($options['display_text'] ?? ''));
+        $suffix = "\n\n" . ($label !== '' ? $label . ': ' : '') . (string) ($options['url'] ?? '');
+
+        return str_ends_with($text, $suffix) ? substr($text, 0, -strlen($suffix)) : $text;
+    }
+
     private function media(Chat $chat, string $type, array $metadata): ?array
     {
         if (!in_array($type, ['image', 'video', 'audio', 'document', 'sticker'], true)) {
@@ -125,9 +143,16 @@ class WebChatMessagePresenter
 
         $media = $chat->relationLoaded('media') ? $chat->media : $chat->media()->first();
 
-        // الوارد قبل اكتمال تنزيله: الفقاعة تعرض «جارٍ الرفع» حتى يصل البثّ.
+        // الوارد قبل اكتمال تنزيله: الفقاعة تعرض «جارٍ الرفع» حتى يصل البثّ،
+        // أو «تعذّر الرفع» إن يئست مهمّة التنزيل.
         if (!$media) {
-            return ['url' => null, 'name' => $metadata[$type]['filename'] ?? null, 'mime' => $metadata[$type]['mime_type'] ?? null, 'size' => null];
+            return [
+                'url' => null,
+                'name' => $metadata[$type]['filename'] ?? null,
+                'mime' => $metadata[$type]['mime_type'] ?? null,
+                'size' => null,
+                'failed' => (bool) ($metadata['media_failed'] ?? false),
+            ];
         }
 
         return [
@@ -135,6 +160,7 @@ class WebChatMessagePresenter
             'name' => $metadata[$type]['filename'] ?? ($media->name !== 'N/A' ? $media->name : null),
             'mime' => $media->type,
             'size' => $media->size !== null ? (int) $media->size : null,
+            'failed' => false,
         ];
     }
 
@@ -157,7 +183,8 @@ class WebChatMessagePresenter
             $path = 'media/' . $path;
         }
 
-        return rtrim((string) config('app.url'), '/') . '/' . $path;
+        // url(): مضيف الطلب في الـ API، وAPP_URL في الـ queue (البثّ).
+        return url($path);
     }
 
     private function interactive(array $metadata): ?array
@@ -168,7 +195,7 @@ class WebChatMessagePresenter
             return null;
         }
 
-        return match ($options['kind']) {
+        $view = match ($options['kind']) {
             'buttons' => [
                 'kind' => 'buttons',
                 'buttons' => array_values(array_map(
@@ -197,6 +224,42 @@ class WebChatMessagePresenter
                 'url' => self::safeUrl($options['url']),
             ],
         };
+
+        if ($view === null) {
+            return null;
+        }
+
+        $header = $this->interactiveHeader($options['header'] ?? null);
+
+        if ($header !== null) {
+            $view['header'] = $header;
+        }
+
+        if (is_string($options['footer'] ?? null) && trim($options['footer']) !== '') {
+            $view['footer'] = trim($options['footer']);
+        }
+
+        return $view;
+    }
+
+    /** رأس الرسالة: نصّ، أو وسائط برابط http(s) وحده. */
+    private function interactiveHeader($header): ?array
+    {
+        if (!is_array($header)) {
+            return null;
+        }
+
+        if (($header['type'] ?? null) === 'text') {
+            $text = trim((string) ($header['text'] ?? ''));
+
+            return $text === '' ? null : ['type' => 'text', 'text' => $text];
+        }
+
+        $url = self::safeUrl($header['url'] ?? null);
+
+        return in_array($header['type'] ?? null, ['image', 'video', 'document'], true) && $url !== null
+            ? ['type' => $header['type'], 'url' => $url]
+            : null;
     }
 
     /** روابط http(s) وحدها: «javascript:» في زرّ يُنفَّذ في موقع التاجر. */

@@ -1,0 +1,158 @@
+{
+    "requests": [
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "image",
+                "image": {
+                    "link": "https://cdn.example.com/catalog.jpg",
+                    "caption": "كتالوج Maitha"
+                }
+            }
+        },
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "interactive",
+                "interactive": {
+                    "type": "cta_url",
+                    "action": {
+                        "name": "cta_url",
+                        "parameters": {
+                            "display_text": "افتح المتجر",
+                            "url": "https://shop.example.com/?c=Maitha"
+                        }
+                    },
+                    "header": {
+                        "type": "text",
+                        "text": "عرض اليوم"
+                    },
+                    "body": {
+                        "text": "تصفّح المتجر"
+                    },
+                    "footer": {
+                        "text": "متجرنا"
+                    }
+                }
+            }
+        },
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "interactive",
+                "interactive": {
+                    "type": "list",
+                    "action": {
+                        "sections": [
+                            {
+                                "title": "المبيعات",
+                                "rows": [
+                                    {
+                                        "id": "s0_r0_0",
+                                        "title": "طلب جديد",
+                                        "description": "ابدأ طلباً"
+                                    },
+                                    {
+                                        "id": "s0_r1_1",
+                                        "title": "تتبّع طلب"
+                                    }
+                                ]
+                            },
+                            {
+                                "title": "الدعم",
+                                "rows": [
+                                    {
+                                        "id": "s1_r0_0",
+                                        "title": "مشكلة",
+                                        "description": "أخبرنا"
+                                    }
+                                ]
+                            }
+                        ],
+                        "button": "الأقسام"
+                    },
+                    "header": {
+                        "type": "image",
+                        "image": {
+                            "link": "https://cdn.example.com/header.jpg"
+                        }
+                    },
+                    "body": {
+                        "text": "اختر القسم"
+                    },
+                    "footer": {
+                        "text": "نردّ خلال دقائق"
+                    }
+                }
+            }
+        }
+    ],
+    "chats": [
+        {
+            "wam_id": "wamid.FLOW-1",
+            "status": "sent",
+            "user_id": null,
+            "channel": "whatsapp",
+            "metadata": {
+                "id": "wamid.FLOW-1",
+                "type": "image",
+                "image": {
+                    "mime_type": "image/jpeg",
+                    "caption": "كتالوج Maitha"
+                }
+            },
+            "media": {
+                "name": "catalog.jpg",
+                "path": "https://cdn.example.com/catalog.jpg",
+                "type": "image/jpeg",
+                "location": "amazon"
+            }
+        },
+        {
+            "wam_id": "wamid.FLOW-2",
+            "status": "delivered",
+            "user_id": 0,
+            "channel": "whatsapp",
+            "metadata": {
+                "type": "text",
+                "text": {
+                    "body": "تصفّح المتجر\n\nافتح المتجر: https://shop.example.com/?c=Maitha"
+                },
+                "cta_url": {
+                    "display_text": "افتح المتجر",
+                    "url": "https://shop.example.com/?c=Maitha"
+                }
+            },
+            "media": null
+        },
+        {
+            "wam_id": "wamid.FLOW-3",
+            "status": "delivered",
+            "user_id": 0,
+            "channel": "whatsapp",
+            "metadata": {
+                "text": {
+                    "body": "اختر القسم"
+                },
+                "type": "text"
+            },
+            "media": null
+        }
+    ],
+    "flow_logs": 3
+}

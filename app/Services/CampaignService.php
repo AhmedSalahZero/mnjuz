@@ -190,6 +190,7 @@ class CampaignService
                 $metadata['footer'] = $request->footer;
                 $metadata['buttons'] = $request->buttons;
                 $metadata['media'] = $mediaId;
+                $metadata = $this->withTemplateTexts($metadata, $template);
 
                 // الـ carousel بلا ترويسة ولا أزرار على المستوى الأعلى، لكن
                 // المفاتيح تبقى: buildCampaignTemplateChatMessage وصفحة
@@ -238,6 +239,38 @@ class CampaignService
 
             throw $e;
         }
+    }
+
+    /**
+     * نصوص القالب الناقصة من الطلب تُملأ من القالب نفسه.
+     *
+     * تطبيق الجوال يرسل body بمعاملاته وحدها بلا text، فكانت الرسالة تُسجَّل
+     * في المحادثة صورةً بلا نصّ (buildCampaignTemplateChatMessage تقرأ
+     * body.text). المستلم كان يراها كاملة لأن Meta تبنيها من القالب، فلا
+     * يتغيّر ما يُرسَل — يتغيّر ما نحفظه ونعرضه. الويب يرسل النصوص أصلاً
+     * فلا يُمسّ ما وصل.
+     */
+    private function withTemplateTexts(array $metadata, Template $template): array
+    {
+        $types = ['body' => 'BODY', 'footer' => 'FOOTER'];
+
+        // ترويسة الوسائط بلا نصّ أصلاً؛ النصّ للترويسة النصّية وحدها.
+        if (($metadata['header']['format'] ?? null) === 'TEXT') {
+            $types['header'] = 'HEADER';
+        }
+
+        foreach ($types as $key => $type) {
+            $text = $template->component($type)['text'] ?? null;
+
+            if (!filled($text) || filled($metadata[$key]['text'] ?? null)) {
+                continue;
+            }
+
+            $metadata[$key] = is_array($metadata[$key] ?? null) ? $metadata[$key] : [];
+            $metadata[$key]['text'] = $text;
+        }
+
+        return $metadata;
     }
 
     /**

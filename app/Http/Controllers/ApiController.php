@@ -936,6 +936,13 @@ class ApiController extends Controller
         // Mobile endpoints use the current_mobile_organization_id (never rely on request->organization).
         if ($mobileOrganizationId && ($request->is('api/v1/*') || $request->is('api/send-msg'))) {
             $organizationId = $mobileOrganizationId;
+
+            // جهات القنوات الأخرى (المحادثة المباشرة) بلا رقم: التطبيق يرسل
+            // بـ contact_uuid. ولمفتاح الـ API لا: لا موظّف خلفه يُنسب إليه.
+            if (!$request->filled('phone') && $request->filled('contact_uuid')) {
+                return $this->sendTextToContact($request, (int) $organizationId);
+            }
+
             $request->merge(['tempMessageId' => -1]); // to use queue to send message in background
         }
         $rules = [
@@ -1019,6 +1026,82 @@ class ApiController extends Controller
             'data' => $data,
         ], 200);
     }
+    /**
+     * رسالة من التطبيق إلى جهة بمعرّفها. جهة واتساب تكمل مسار الرقم كما
+     * هو؛ وغيرها يمرّ بـ ChatService الذي يرسل على قناتها ويسجّل وينسب
+     * الرسالة إلى الموظّف.
+     */
+    private function sendTextToContact(Request $request, int $organizationId)
+    {
+        $validator = Validator::make($request->all(), [
+            'contact_uuid' => ['required', 'uuid'],
+            'message' => ['required', 'string', 'min:1'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The provided data is invalid.'),
+                'errors' => $validator->errors(),
+            ], 400);
+        }
+
+        if (!SubscriptionService::isSubscriptionActive($organizationId)) {
+            return response()->json([
+                'statusCode' => 403,
+                'success' => false,
+                'message' => __('Please renew or subscribe to a plan to continue!'),
+            ], 403);
+        }
+
+        $contact = $this->findContactForMobile($request, $organizationId);
+
+        if (!$contact) {
+            return response()->json(['statusCode' => 404, 'success' => false, 'message' => __('Contact not found.')], 404);
+        }
+
+        if (\App\Services\Messaging\AutomationTransport::isWhatsapp($contact)) {
+            $request->merge(['phone' => $contact->phone]);
+
+            return $this->sendMessage($request);
+        }
+
+        $result = (new ChatService($organizationId))->sendMessage(
+            Request::create('/chats', 'POST', ['uuid' => $contact->uuid, 'message' => (string) $request->input('message')])
+        );
+
+        if ($result instanceof \Illuminate\Http\JsonResponse) {
+            $status = $result->status() >= 400 ? $result->status() : 422;
+
+            return response()->json([
+                'statusCode' => $status,
+                'success' => false,
+                'message' => $result->getData(true)['message'] ?? __('Message could not be sent.'),
+            ], $status);
+        }
+
+        return response()->json([
+            'statusCode' => 200,
+            'success' => (bool) ($result->success ?? false),
+            'message' => null,
+            'data' => [
+                'contact_id' => $contact->id,
+                'contact_uuid' => $contact->uuid,
+                'channel' => $contact->channel,
+                'message_id' => $result->data->messages[0]->id ?? null,
+            ],
+        ], 200);
+    }
+
+    private function findContactForMobile(Request $request, int $organizationId): ?Contact
+    {
+        return Contact::where('uuid', (string) $request->input('contact_uuid'))
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
     /**
      * نقطة واحدة للنصّ والملفات.
      *
@@ -1403,11 +1486,13 @@ class ApiController extends Controller
         $fileRule = 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp,svg,ico,heic,heif,mp4,avi,mov,wmv,flv,mkv,webm,3gp,mpeg,mpg,mp3,wav,ogg,aac,m4a,flac,wma,amr,opus,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,rtf,odt,ods,odp';
 
         $rules = [
-            'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
-                if (!PhoneService::isValid($value)) {
+            // أو contact_uuid لجهات القنوات الأخرى (بلا رقم).
+            'phone' => ['required_without:contact_uuid', 'nullable', 'string', 'max:255', function ($attribute, $value, $fail) {
+                if ($value !== null && $value !== '' && !PhoneService::isValid($value)) {
                     $fail('The phone number is not valid.');
                 }
             }],
+            'contact_uuid' => ['nullable', 'uuid'],
             'caption' => 'nullable',
         ];
 
@@ -1451,12 +1536,25 @@ class ApiController extends Controller
             ], 403);
         }
 
-        //Check if the whatsapp connection exists
-        if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
-            return $whatsappError;
-        }
+        if (!$request->filled('phone') && $request->filled('contact_uuid')) {
+            $contact = $this->findContactForMobile($request, (int) $organizationId);
 
-        $contact = $this->resolveContactByPhone($request, $organizationId);
+            if (!$contact) {
+                return response()->json(['statusCode' => 404, 'success' => false, 'message' => __('Contact not found.')], 404);
+            }
+
+            if (\App\Services\Messaging\AutomationTransport::isWhatsapp($contact)
+                && ($whatsappError = $this->whatsappNotConnectedResponse($organizationId))) {
+                return $whatsappError;
+            }
+        } else {
+            //Check if the whatsapp connection exists
+            if ($whatsappError = $this->whatsappNotConnectedResponse($organizationId)) {
+                return $whatsappError;
+            }
+
+            $contact = $this->resolveContactByPhone($request, $organizationId);
+        }
 
         // نافذة المراسلة تُفحص هنا لا في الخدمة: مسار الويب يردّ بشكله،
         // والتطبيق يقرأ statusCode.

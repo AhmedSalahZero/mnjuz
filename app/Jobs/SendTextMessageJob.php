@@ -59,6 +59,29 @@ class SendTextMessageJob implements ShouldQueue
             return;
         }
 
+        // رسالة ساعات العمل لزائر المحادثة المباشرة (وكل قناة غير واتساب).
+        // مسار الموظّف لا يصل هنا لغير واتساب: ChatService يرسله على قناته.
+        $contact = \App\Models\Contact::where('uuid', $this->contactUuid)
+            ->where('organization_id', $this->organizationId)
+            ->first(['id', 'uuid', 'channel']);
+
+        if ($contact && !\App\Services\Messaging\AutomationTransport::isWhatsapp($contact)) {
+            app(\App\Services\Messaging\ChannelAutomationTransport::class)->executeSendMessage(
+                $this->contactUuid,
+                $this->messageContent,
+                $this->userId,
+                $this->type,
+                $this->buttons ?? [],
+                $this->header ?? [],
+                $this->footer,
+                $this->buttonLabel,
+                $this->messageUUID,
+                $this->tempMessageId
+            );
+
+            return;
+        }
+
         $config = $organization->metadata ? json_decode($organization->metadata, true) : [];
         $accessToken = $config['whatsapp']['access_token'] ?? null;
         $apiVersion = config('graph.api_version');

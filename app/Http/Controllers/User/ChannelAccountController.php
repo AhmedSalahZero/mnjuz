@@ -159,6 +159,11 @@ class ChannelAccountController extends Controller
             return back()->with('status', ['type' => 'error', 'message' => __('Account not found')]);
         }
 
+        // الـ widget يُدار من صفحته (يُعطَّل هناك)؛ حذفه يُيتّم زوّاره ومحادثاتهم.
+        if ($account->channel === Channel::WEBCHAT) {
+            return back()->with('status', ['type' => 'error', 'message' => __('Web chat is set up from its own settings page.')]);
+        }
+
         try {
             $this->channels->driver($account->channel)->unregisterWebhook($account);
         } catch (\Throwable $e) {

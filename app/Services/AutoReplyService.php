@@ -14,6 +14,9 @@ use App\Services\Chat\ChatReadService;
 use App\Services\ContactPlaceholderService;
 use App\Services\MediaService;
 use App\Services\WhatsappService;
+use App\Services\Messaging\AutomationChannels;
+use App\Services\Messaging\AutomationTransport;
+use App\Services\Messaging\Contracts\AutomationSender;
 use DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -116,6 +119,12 @@ class AutoReplyService
 
     public function checkAutoReply(Chat $chat, $isNewContact)
     {
+        // واتساب دائماً، وغيرها بحسب config/messaging.php. قبل أي شيء: لا
+        // flow يبدأ، ولا مساعد ذكي يدفع لـ OpenAI ثمن ردٍّ لن يصل.
+        if (!AutomationChannels::allowsChannel($chat->channel ?? null)) {
+            return;
+        }
+
         $organizationId = $chat->organization_id;
 		// logger('inside check auto reply: ' . $organizationId . ' ' . $chat->id . ' ' . $isNewContact);
         $this->replySequence($organizationId, $chat, $isNewContact);
@@ -344,7 +353,7 @@ class AutoReplyService
             if ($message === '') {
                 return;
             }
-            $this->initializeWhatsappService($organization_id)->sendMessage($contact->uuid, $message);
+            $this->senderFor($contact, $organization_id)->sendMessage($contact->uuid, $message);
         } else if($replyType === self::REPLY_LOCATION_REQUEST){
             // رسالة تفاعلية بزرّ «إرسال الموقع». تخضع لنافذة الأربع وعشرين
             // ساعة كأي رسالة عادية — ونحن هنا نردّ على رسالة واردة للتوّ،
@@ -353,7 +362,7 @@ class AutoReplyService
             if ($message === '') {
                 return;
             }
-            $this->initializeWhatsappService($organization_id)->sendMessage(
+            $this->senderFor($contact, $organization_id)->sendMessage(
                 $contact->uuid,
                 $message,
                 null,
@@ -362,8 +371,16 @@ class AutoReplyService
         } else if($replyType === 'audio' || $replyType === 'image'){
 	//		logger('inside audio image');
             $location = strpos($metadata->data->file->location, 'public\\') === 0 ? 'local' : 'amazon';
-            $this->initializeWhatsappService($organization_id)->sendMedia($contact->uuid, $replyType, $metadata->data->file->name, $metadata->data->file->location, $metadata->data->file->url, $location);
+            $this->senderFor($contact, $organization_id)->sendMedia($contact->uuid, $replyType, $metadata->data->file->name, $metadata->data->file->location, $metadata->data->file->url, $location);
         }
+    }
+
+    /**
+     * واتساب: الخدمة نفسها كما كانت تُبنى لكل ردّ. وغيرها: ناقل القنوات.
+     */
+    private function senderFor(?Contact $contact, $organizationId): AutomationSender
+    {
+        return AutomationTransport::for($contact, fn () => $this->initializeWhatsappService($organizationId));
     }
 
     private function initializeWhatsappService($organizationId)

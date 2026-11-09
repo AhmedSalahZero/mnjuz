@@ -36,6 +36,14 @@ const currentUploadPercent = computed(() => uploads.percentFor(props.contact?.uu
 const currentUploadFileCount = computed(() => uploads.fileCountFor(props.contact?.uuid))
 const recorder = ref(null)
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
+
+// قدرات قناة الجهة كما أعلنها الخادم (channel_capabilities). ما لا تدعمه
+// القناة يُخفى بدل زرٍّ يرمي خطأً عند الضغط — المحادثة المباشرة بلا موقع
+// ولا قوالب. واتساب (وكل جهة بلا قدرات) يبقى كما كان.
+const channelCaps = computed(() => props.contact?.channel_capabilities || {})
+const canRequestLocation = computed(() => channelCaps.value.location_request !== false)
+const canSendLocation = computed(() => channelCaps.value.location !== false)
+const canUseTemplates = computed(() => channelCaps.value.templates !== false)
 const processingForm = ref(null)
 const processingAISuggestions = ref(false)
 const formTextInput = ref(null)
@@ -1060,6 +1068,9 @@ onBeforeUnmount(() => {
 						:show-ai-assist="false"
 						:requesting-location="requestingLocation"
 						:sending-location="sendingLocation"
+						:show-request-location="canRequestLocation"
+						:show-send-location="canSendLocation"
+						:show-templates="canUseTemplates"
 						:disabled="!isInboundChatWithin24Hours"
 						@action="handleAttachAction"
 					/>
@@ -1097,7 +1108,7 @@ onBeforeUnmount(() => {
 							d="M6.5 5.5A4.5 4.5 0 0 0 2 10v12a4.5 4.5 0 0 0 4.5 4.5h12A4.5 4.5 0 0 0 23 22v-1.5l4.2 3.15c1.153.865 2.8.042 2.8-1.4V9.75c0-1.442-1.647-2.265-2.8-1.4L23 11.5V10a4.5 4.5 0 0 0-4.5-4.5zM23 14l5-3.75v11.5L23 18zm-2-4v12a2.5 2.5 0 0 1-2.5 2.5h-12A2.5 2.5 0 0 1 4 22V10a2.5 2.5 0 0 1 2.5-2.5h12A2.5 2.5 0 0 1 21 10" />
 					</svg>
 				</label>
-				<button type="button" @click="requestLocation()" :disabled="requestingLocation"
+				<button v-if="canRequestLocation" type="button" @click="requestLocation()" :disabled="requestingLocation"
 					class="hidden md:inline-flex text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
 					:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
 					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
@@ -1107,7 +1118,7 @@ onBeforeUnmount(() => {
 						</g>
 					</svg>
 				</button>
-				<button type="button" @click="openLocationModal()"
+				<button v-if="canSendLocation" type="button" @click="openLocationModal()"
 					:disabled="sendingLocation || !isInboundChatWithin24Hours"
 					class="hidden md:inline-flex text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
 					:title="$t('Send our location')" :aria-label="$t('Send our location')">
@@ -1120,7 +1131,7 @@ onBeforeUnmount(() => {
 						</g>
 					</svg>
 				</button>
-				<label @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer hidden md:inline-flex">
+				<label v-if="canUseTemplates" @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer hidden md:inline-flex">
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
 						<path fill="currentColor"
 							d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z">
@@ -1268,7 +1279,7 @@ onBeforeUnmount(() => {
 				<audio ref="audioPlayer" :src="audioPreviewUrl" @ended="isPlaying = false" class="hidden" />
 			</div>
 			<div class="hidden md:flex gap-x-4 items-center text-gray-600">
-				<div @click="viewTemplate()" class="flex gap-x-1 text-sm items-center">
+				<div v-if="canUseTemplates" @click="viewTemplate()" class="flex gap-x-1 text-sm items-center">
 					<span>
 						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
 							<path fill="currentColor"
@@ -1339,7 +1350,7 @@ onBeforeUnmount(() => {
 						</label>
 					</div>
 					<div class="flex items-center gap-1">
-						<button type="button" class="py-1 cursor-pointer disabled:opacity-40"
+						<button v-if="canRequestLocation" type="button" class="py-1 cursor-pointer disabled:opacity-40"
 							@click="requestLocation()" :disabled="requestingLocation"
 							:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
 							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
@@ -1349,7 +1360,7 @@ onBeforeUnmount(() => {
 								</g>
 							</svg>
 						</button>
-						<button type="button" class="py-1 cursor-pointer disabled:opacity-40"
+						<button v-if="canSendLocation" type="button" class="py-1 cursor-pointer disabled:opacity-40"
 							@click="openLocationModal()" :disabled="sendingLocation || !isInboundChatWithin24Hours"
 							:title="$t('Send our location')" :aria-label="$t('Send our location')">
 							<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
@@ -1493,6 +1504,9 @@ onBeforeUnmount(() => {
 					:show-ai-assist="true"
 					:requesting-location="requestingLocation"
 					:sending-location="sendingLocation"
+						:show-request-location="canRequestLocation"
+						:show-send-location="canSendLocation"
+						:show-templates="canUseTemplates"
 					:disabled="!isInboundChatWithin24Hours"
 					@action="handleAttachAction"
 				/>

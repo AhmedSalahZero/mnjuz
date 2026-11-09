@@ -3,9 +3,12 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build"
+        "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
+        "build:widget": "vite build -c vite.widget.config.js --mode loader && vite build -c vite.widget.config.js --mode app"
     },
     "devDependencies": {
+        "@fortawesome/free-regular-svg-icons": "7.3.1",
+        "@fortawesome/free-solid-svg-icons": "7.3.1",
         "@vitejs/plugin-vue": "^4.6.2",
         "autoprefixer": "^10.4.15",
         "axios": "^1.5.0",
@@ -45,6 +48,7 @@
         "mic-recorder-to-mp3": "^2.2.2",
         "mic-recorder-to-mp3-fixed": "^2.2.2",
         "monaco-editor": "^0.52.0",
+        "preact": "^10.29.6",
         "pusher-js": "^8.3.0",
         "radix-vue": "^1.9.8",
         "socket.io-client": "^4.8.0",

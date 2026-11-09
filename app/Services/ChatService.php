@@ -166,10 +166,18 @@ class ChatService
         $messageUuid = $request->messageUUID ?? null;
         $tempMessageId = Request()->get('tempMessageId');
 
+        // مرفقات متعدّدة: الواجهة ترسل files[] دائماً (الاختيار واللصق والسحب)،
+        // والجوال كذلك. كانت هذه الدالّة تقرأ file وحده فيضيع الملف صامتاً.
+        if (method_exists($request, 'hasFile') && $request->hasFile('files')) {
+            return $this->sendMediaBatchOnChannel($request, $contact, $userId);
+        }
+
         $file = $request->file('file');
 
         if ($file) {
-            return $this->sendMediaOnChannel($request, $contact, $file, [
+            $type = (string) $request->type;
+
+            return $this->sendMediaOnChannel($contact, $file, $type, $this->resolveMediaCaption($request, $type), [
                 'user_id' => $userId,
                 'message_uuid' => $messageUuid,
                 'temp_message_id' => $tempMessageId,
@@ -213,16 +221,83 @@ class ChatService
         return $result->toLegacyObject();
     }
 
+    /**
+     * عدّة ملفات بترتيب اختيارها. التعليق للأول وحده كما في واتساب، وفشل
+     * ملفٍ لا يُسقط البقية.
+     */
+    private function sendMediaBatchOnChannel(object $request, Contact $contact, ?int $userId)
+    {
+        $files = $request->file('files');
+        $files = is_array($files) ? array_values($files) : [$files];
+        $types = array_values((array) $request->input('types', []));
+        $tempMessageIds = array_values((array) $request->input('tempMessageIds', []));
+        $messageUuids = array_values((array) ($request->input('msg_uuid') ?? []));
+
+        if (count($tempMessageIds) !== count($files)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Something went wrong. Refresh the page and try again'),
+            ], 422);
+        }
+
+        $sent = 0;
+        $failed = [];
+
+        foreach ($files as $index => $file) {
+            $type = (string) ($types[$index] ?? 'document');
+            $caption = $index === 0 ? $this->resolveMediaCaption($request, $type) : null;
+
+            $response = $this->sendMediaOnChannel($contact, $file, $type, $caption, [
+                'user_id' => $userId,
+                'message_uuid' => $messageUuids[$index] ?? null,
+                'temp_message_id' => $tempMessageIds[$index] ?? null,
+            ]);
+
+            if ($response instanceof \Illuminate\Http\JsonResponse) {
+                $failed[] = [
+                    'tempMessageId' => $tempMessageIds[$index] ?? null,
+                    'message' => $response->getData(true)['message'] ?? __('Message could not be sent.'),
+                ];
+
+                continue;
+            }
+
+            $sent++;
+        }
+
+        if ($sent === 0) {
+            return response()->json([
+                'success' => false,
+                'message' => $failed[0]['message'] ?? __('Message could not be sent.'),
+                'failed' => $failed,
+            ], 422);
+        }
+
+        return response()->json(['success' => true, 'queued' => $sent, 'failed' => $failed]);
+    }
+
+    /**
+     * ملف اكتمل رفعه على قطع، لجهة على قناة غير واتساب: يُرسل الآن بنفس
+     * مسار الرفع العادي، لا بـ SendMediaJob (ذاك لواتساب وحده).
+     */
+    public function sendStoredFileOnChannel(Contact $contact, string $absolutePath, string $fileName, string $type, ?string $caption, array $options)
+    {
+        $this->assertConversationAccess($contact);
+        BroadcastProvider::apply();
+
+        $file = new \Illuminate\Http\UploadedFile($absolutePath, $fileName, null, null, true);
+        $caption = $this->resolveMediaCaption((object) ['caption' => $caption], $type);
+
+        return $this->sendMediaOnChannel($contact, $file, $type, $caption, $options);
+    }
+
     /** رفع ملف وإرساله على قناة غير واتساب. */
-    private function sendMediaOnChannel(object $request, Contact $contact, $file, array $options)
+    private function sendMediaOnChannel(Contact $contact, $file, string $type, ?string $caption, array $options)
     {
         $channel = $contact->channel;
         $driver = $this->channels()->driver($channel);
         $account = $this->channels()->accountForContact($contact);
         $capabilities = $driver->capabilities();
-
-        $type = (string) $request->type;
-        $caption = $this->resolveMediaCaption($request, $type);
 
         if (!$capabilities->supportsMedia($type)) {
             return response()->json([
@@ -318,7 +393,12 @@ class ChatService
         $safeName = uniqid() . '_' . sanitize_filename_for_storage($fileName);
 
         if ($storage === 'local') {
-            $path = Storage::disk('local')->put('public/' . $safeName, $contents);
+            // put بمحتوى نصّي يُرجع true لا المسار — كان الرابط يصير /media/1.
+            $path = 'public/' . $safeName;
+
+            if (!Storage::disk('local')->put($path, $contents)) {
+                return null;
+            }
 
             return [
                 'url' => rtrim(config('app.url'), '/') . '/media/' . ltrim($path, '/'),
@@ -1471,6 +1551,13 @@ class ChatService
                 'deleted_by' => auth()->user()->id,
                 'deleted_at' => now()
             ]);
+
+        // زائر المحادثة المباشرة لا يبقى يرى رسالةً حذفها الموظّف.
+        $chat = Chat::where('uuid', $uuid)->first(['id', 'contact_id', 'channel']);
+
+        if ($chat && $chat->channel === Channel::WEBCHAT) {
+            app(\App\Services\WebChat\WebChatVisitorNotifier::class)->refresh(Contact::find($chat->contact_id));
+        }
     }
 
     public function clearContactChat($uuid): bool
@@ -1496,6 +1583,8 @@ class ChatService
         ]);
 		
 		event(new ContactChatDeletedEvent($this->organizationId, $contact->id));
+
+        app(\App\Services\WebChat\WebChatVisitorNotifier::class)->refresh($contact);
 
         return true;
     }
@@ -1857,6 +1946,10 @@ class ChatService
                 'ai_assistance_enabled' => (bool) $contact->ai_assistance_enabled,
                 'full_name' => $contact->full_name,
                 'formatted_phone_number' => $contact->formatted_phone_number,
+                // كارت «الزائر» للمحادثة المباشرة: من أين جاء وبماذا يتصفّح.
+                'webchat_visitor' => ($contact->channel ?? null) === Channel::WEBCHAT
+                    ? $contact->webchatVisitor?->agentView()
+                    : null,
                 'contact_groups' => $contact->relationLoaded('contactGroups')
                     ? $contact->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all()
                     : [],

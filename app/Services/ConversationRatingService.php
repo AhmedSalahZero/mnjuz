@@ -2,6 +2,10 @@
 
 namespace App\Services;
 
+use App\Services\Messaging\AutomationChannels;
+use App\Services\Messaging\AutomationTransport;
+use App\Services\Messaging\ChannelAutomationTransport;
+use App\Services\Messaging\ChannelManager;
 use App\Helpers\MessagingWindowHelper;
 use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
@@ -57,6 +61,11 @@ class ConversationRatingService
             $settings = self::settings($organizationId);
 
             if (empty($settings['active'])) {
+                return null;
+            }
+
+            // قناة لا يصلها الردّ الآلي (تيليجرام وأخواتها الآن) لا يصلها الاستبيان.
+            if (!AutomationChannels::allows($contact)) {
                 return null;
             }
 
@@ -204,7 +213,7 @@ class ConversationRatingService
             'contact_id' => (int) $contact->id,
             'agent_id' => $agentId,
             'contact_name' => trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')) ?: null,
-            'contact_phone' => $contact->phone,
+            'contact_phone' => $contact->phone ?: $contact->formatted_phone,
             'agent_name' => $agent
                 ? (trim(($agent->first_name ?? '') . ' ' . ($agent->last_name ?? '')) ?: $agent->email)
                 : null,
@@ -272,6 +281,11 @@ class ConversationRatingService
      */
     private static function send(int $organizationId, Contact $contact, string $body, string $buttonLabel, string $link): bool
     {
+        // قبل فحص إعداد واتساب: منشأة بلا واتساب تُقيّم زوّار المحادثة المباشرة.
+        if (!AutomationTransport::isWhatsapp($contact)) {
+            return self::sendOnChannel($organizationId, $contact, $body, $buttonLabel, $link);
+        }
+
         $config = Organization::find($organizationId)?->metadata;
         $config = $config ? json_decode($config, true) : [];
         $whatsapp = $config['whatsapp'] ?? [];
@@ -314,6 +328,32 @@ class ConversationRatingService
             null,
             'text'
         ));
+    }
+
+    /**
+     * الاستبيان على قناة غير واتساب: زرّ رابط حيث تُعرض الأزرار (المحادثة
+     * المباشرة)، ونصٌّ بالرابط حيث لا تُعرض — والارتداد إلى النصّ كما في واتساب.
+     */
+    private static function sendOnChannel(int $organizationId, Contact $contact, string $body, string $buttonLabel, string $link): bool
+    {
+        $error = app(ChannelManager::class)->connectionError($organizationId, (string) $contact->channel);
+
+        if ($error !== null) {
+            Log::info('Conversation rating skipped: channel is not connected', [
+                'organization_id' => $organizationId,
+                'channel' => $contact->channel,
+            ]);
+
+            return false;
+        }
+
+        $sender = app(ChannelAutomationTransport::class);
+
+        if (self::succeeded($sender->sendMessage($contact->uuid, $body, null, self::INTERACTIVE_CTA_URL, ['display_text' => $buttonLabel, 'url' => $link]))) {
+            return true;
+        }
+
+        return self::succeeded($sender->sendMessage($contact->uuid, rtrim($body) . "\n" . $link, null, 'text'));
     }
 
     /** نوع الرسالة التفاعلية كما يسمّيه WhatsappService. */

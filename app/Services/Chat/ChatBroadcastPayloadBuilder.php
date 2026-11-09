@@ -133,6 +133,8 @@ class ChatBroadcastPayloadBuilder
             'is_favorite'             => $contactInfo['is_favorite'],
             'contact_full_name'       => $contactInfo['full_name'],
             'unread_messages_count'   => $contactInfo['unread_messages_count'],
+            // مفتاح جديد لا يمسّ القائم: الصفّ الجديد في القائمة يرسم أيقونة قناته.
+            'channel'                 => $contactInfo['channel'],
             'created_at'              => $arr['created_at'] ?? null,
             'deleted_at'              => $arr['deleted_at'] ?? null,
             'metadata'                => $metadata,
@@ -317,6 +319,7 @@ class ChatBroadcastPayloadBuilder
      *   is_blocked: ?bool,
      *   is_favorite: ?bool,
      *   unread_messages_count: int,
+     *   channel: ?string,
      * }
      */
     private function loadContactInfo($contactId, int $organizationId): array
@@ -331,6 +334,7 @@ class ChatBroadcastPayloadBuilder
             'is_blocked'             => null,
             'is_favorite'            => null,
             'unread_messages_count'  => 0,
+            'channel'                => null,
         ];
 
         if (!$contactId) {
@@ -343,6 +347,9 @@ class ChatBroadcastPayloadBuilder
             ->first([
                 'id', 'phone', 'first_name', 'last_name', 'organization_id',
                 'latest_chat_created_at', 'is_blocked', 'is_favorite', 'uuid',
+                // قنوات بلا رقم هويّة (المحادثة المباشرة) تحفظ رقم العرض هنا،
+                // والقناة يحتاجها الصفّ الجديد في القائمة ليرسم أيقونته.
+                'formatted_phone', 'channel',
             ]);
 
         if (!$contact) {
@@ -372,6 +379,7 @@ class ChatBroadcastPayloadBuilder
             'is_blocked'             => $contact->is_blocked,
             'is_favorite'            => $contact->is_favorite,
             'unread_messages_count'  => $unread,
+            'channel'                => $contact->channel,
         ];
     }
 }

@@ -8,6 +8,7 @@ use App\Helpers\WhatsappConnectionHelper;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendMediaJob;
 use App\Models\Contact;
+use App\Services\Messaging\Channel;
 use App\Services\Chat\ChunkedUploadService;
 use App\Services\ContactService;
 use App\Services\PhoneService;
@@ -45,11 +46,13 @@ class ChunkedUploadController extends Controller
             'index' => ['required', 'integer', 'min:0', 'max:' . (ChunkedUploadService::MAX_CHUNKS - 1)],
             'total' => ['required', 'integer', 'min:1', 'max:' . ChunkedUploadService::MAX_CHUNKS],
             'chunk' => ['required', 'file'],
-            'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
-                if (!PhoneService::isValid($value)) {
+            // أو contact_uuid لجهات القنوات الأخرى (المحادثة المباشرة) — بلا رقم.
+            'phone' => ['required_without:contact_uuid', 'nullable', 'string', 'max:255', function ($attribute, $value, $fail) {
+                if ($value !== null && $value !== '' && !PhoneService::isValid($value)) {
                     $fail('The phone number is not valid.');
                 }
             }],
+            'contact_uuid' => ['nullable', 'uuid'],
             'file_name' => ['required', 'string', 'max:255'],
             'file_type' => ['nullable', 'string', 'in:image,video,audio,document,gif'],
             'caption' => ['nullable', 'string'],
@@ -84,14 +87,23 @@ class ChunkedUploadController extends Controller
             return self::fail(403, __('Please renew or subscribe to a plan to continue!'));
         }
 
-        if ($error = WhatsappConnectionHelper::errorFor($organizationId)) {
+        $byUuid = !$request->filled('phone') && $request->filled('contact_uuid');
+
+        if (!$byUuid && ($error = WhatsappConnectionHelper::errorFor($organizationId))) {
             return self::fail(403, $error);
         }
 
         $contact = $this->resolveContact($request, $organizationId);
 
         if (!$contact) {
-            return self::fail(400, __('The phone number is not valid.'));
+            return $byUuid
+                ? self::fail(404, __('Contact not found.'))
+                : self::fail(400, __('The phone number is not valid.'));
+        }
+
+        if ($byUuid && ($contact->channel ?: Channel::WHATSAPP) === Channel::WHATSAPP
+            && ($error = WhatsappConnectionHelper::errorFor($organizationId))) {
+            return self::fail(403, $error);
         }
 
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
@@ -197,6 +209,41 @@ class ChunkedUploadController extends Controller
 
         $fileName = $validated['file_name'];
 
+        // جهة على قناة غير واتساب: SendMediaJob لواتساب وحده.
+        if (($contact->channel ?: Channel::WHATSAPP) !== Channel::WHATSAPP) {
+            try {
+                $result = (new \App\Services\ChatService($organizationId))->sendStoredFileOnChannel(
+                    $contact,
+                    Storage::disk('local')->path($path),
+                    $fileName,
+                    $fileType,
+                    $validated['caption'] ?? null,
+                    ['user_id' => $userId, 'message_uuid' => $validated['msg_uuid'] ?? null]
+                );
+            } finally {
+                Storage::disk('local')->delete($path);
+            }
+
+            if ($result instanceof JsonResponse) {
+                return self::fail(422, $result->getData(true)['message'] ?? __('Message could not be sent.'));
+            }
+
+            return response()->json([
+                'statusCode' => 200,
+                'success' => true,
+                'message' => __('Message sent successfully'),
+                'data' => [
+                    'completed' => true,
+                    'queued' => false,
+                    'received' => $total,
+                    'total' => $total,
+                    'contact_id' => $contact->id,
+                    'contact_uuid' => (string) $contact->uuid,
+                    'channel' => $contact->channel,
+                ],
+            ], 200);
+        }
+
         // الصورة تُهيّأ لواتساب كما في الرفع العادي (ChatService): كانت تُرسل
         // كما وصلت، فتردّها Meta إن كانت HEIC أو CMYK أو بعمق 16 بت.
         if ($fileType === 'image') {
@@ -239,6 +286,13 @@ class ChunkedUploadController extends Controller
 
     private function resolveContact(Request $request, int $organizationId): ?Contact
     {
+        if (!$request->filled('phone') && $request->filled('contact_uuid')) {
+            return Contact::where('uuid', (string) $request->input('contact_uuid'))
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
         try {
             $contactService = new ContactService($organizationId);
 

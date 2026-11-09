@@ -26,7 +26,7 @@ class EnsureWebChatOrigin
 
         $host = self::requestHost($request);
 
-        if ($host !== null && ($host === self::ownHost() || WebChatSettings::hostAllowed($settings, $host))) {
+        if ($host !== null && (self::isOwnHost($request, $host) || WebChatSettings::hostAllowed($settings, $host))) {
             return $next($request);
         }
 
@@ -53,10 +53,26 @@ class EnsureWebChatOrigin
         return null;
     }
 
-    private static function ownHost(): ?string
+    /**
+     * صفحةٌ من نطاقنا (صفحة الإعدادات والمعاينة).
+     *
+     * نطاقنا = المضيف الذي يخدم هذا الطلب، ومعه مضيف APP_URL إن كان صالحاً.
+     * الأوّل لا يعتمد على APP_URL (محلياً قد يكون بلا scheme فلا مضيف له)،
+     * ولا يغيّر الحماية: متصفّحٌ على موقع تاجر لا يرسل Origin بمضيفنا.
+     */
+    public static function isOwnHost(Request $request, ?string $host): bool
     {
-        $host = parse_url((string) config('app.url'), PHP_URL_HOST);
+        if ($host === null) {
+            return false;
+        }
 
-        return is_string($host) ? WebChatSettings::normalizeDomain($host) : null;
+        $own = [WebChatSettings::normalizeDomain($request->getHost())];
+        $configured = parse_url((string) config('app.url'), PHP_URL_HOST);
+
+        if (is_string($configured) && $configured !== '') {
+            $own[] = WebChatSettings::normalizeDomain($configured);
+        }
+
+        return in_array($host, $own, true);
     }
 }

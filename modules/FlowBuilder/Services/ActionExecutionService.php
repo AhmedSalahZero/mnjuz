@@ -6,6 +6,7 @@ use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Services\WhatsappService;
+use App\Services\Messaging\AutomationTransport;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Modules\FlowBuilder\Jobs\ProcessDelayedFlowJob;
@@ -195,7 +196,7 @@ class ActionExecutionService
                     if ($invalidMessage === '') {
                         $invalidMessage = __('Please provide a valid email address.');
                     }
-                    $this->whatsappService->sendMessage($contact->uuid, $invalidMessage);
+                    $this->senderFor($contact)->sendMessage($contact->uuid, $invalidMessage);
                     
                     return false;
                 }
@@ -210,6 +211,17 @@ class ActionExecutionService
                 $currentValue = $contact->$jsonField ? json_decode($contact->$jsonField, true) : [];
                 $currentValue[$jsonKey] = $userMessage;
                 $contact->$jsonField = json_encode($currentValue);
+            } elseif ($field === 'phone' && !AutomationTransport::isWhatsapp($contact)) {
+                // جهة قناةٍ أخرى بلا رقم هويّة: phone هو مفتاح واتساب، وكتابته
+                // تجعلها «جهة واتساب» أو تصطدم بالفهرس الفريد مع جهة الرقم نفسه.
+                // الرقم يُحفظ للعرض والبحث، ولزائر المحادثة المباشرة في سجلّه.
+                $e164 = $this->visitorE164($contact, $userMessage);
+                $contact->formatted_phone = mb_substr(\App\Services\PhoneService::formatForDisplay($e164 ?? $userMessage) ?: $userMessage, 0, 64);
+
+                if ($contact->channel === \App\Services\Messaging\Channel::WEBCHAT) {
+                    \App\Models\WebChatVisitor::where('contact_id', $contact->id)
+                        ->update(['phone' => $e164 ?? mb_substr($userMessage, 0, 32)]);
+                }
             } else {
                 // Handle regular fields
                 $contact->$field = $userMessage;
@@ -397,7 +409,8 @@ class ActionExecutionService
                 'first_name' => $contact->first_name,
                 'last_name' => $contact->last_name,
                 'email' => $contact->email,
-                'phone' => $contact->phone,
+                // قنوات بلا رقم هويّة (المحادثة المباشرة) تحفظ رقم العميل للعرض.
+                'phone' => $contact->phone ?? $contact->formatted_phone,
                 'address' => $contact->address ? json_decode($contact->address, true) : [],
                 'metadata' => $contact->metadata ? json_decode($contact->metadata, true) : [],
             ],
@@ -460,7 +473,7 @@ class ActionExecutionService
             $confidence = 0.9; // Simulated confidence score
 
             // Send AI response via WhatsApp
-            $this->whatsappService->sendMessage($contact->uuid, $aiResponse);
+            $this->senderFor($contact)->sendMessage($contact->uuid, $aiResponse);
 
             // Check if we should proceed based on confidence
             if ($proceedCondition === 'confidence_threshold' && $confidence < $confidenceThreshold) {
@@ -527,6 +540,28 @@ class ActionExecutionService
     }
 
     /**
+     * رقم الزائر دولياً: المحلّي («055…») يُكمَّل بدولة الـ widget الافتراضية
+     * كما في نموذج المحادثة.
+     */
+    private function visitorE164($contact, string $value): ?string
+    {
+        $country = null;
+
+        if ($contact->channel === \App\Services\Messaging\Channel::WEBCHAT && $contact->channel_account_id) {
+            $account = \App\Models\ChannelAccount::find($contact->channel_account_id);
+            $country = $account ? (\App\Services\WebChat\WebChatSettings::for($account)['prechat']['default_country'] ?? null) : null;
+        }
+
+        return \App\Http\Requests\WebChat\StartWebChatSessionRequest::toE164($value, $country);
+    }
+
+    /** واتساب: الخدمة التي بُنيت مع المنفّذ كما كانت. وغيرها: ناقل القنوات. */
+    private function senderFor($contact): \App\Services\Messaging\Contracts\AutomationSender
+    {
+        return AutomationTransport::for($contact, fn () => $this->whatsappService);
+    }
+
+    /**
      * Get contact field value
      */
     private function getContactFieldValue($contact, $fieldName)
@@ -535,7 +570,7 @@ class ActionExecutionService
             'first_name' => $contact->first_name,
             'last_name' => $contact->last_name,
             'email' => $contact->email,
-            'phone' => $contact->phone,
+            'phone' => $contact->phone ?? $contact->formatted_phone,
         ];
 
         if (isset($fieldMapping[$fieldName])) {
@@ -599,7 +634,7 @@ class ActionExecutionService
             '{last_name}' => $contact->last_name ?? '',
             '{full_name}' => $contact->full_name ?? '',
             '{email}' => $contact->email ?? '',
-            '{phone}' => $contact->phone ?? '',
+            '{phone}' => $contact->phone ?? $contact->formatted_phone ?? '',
             '{organization_name}' => $this->organization->name ?? '',
             '{full_address}' => $fullAddress,
             '{street}' => $address['street'] ?? '',

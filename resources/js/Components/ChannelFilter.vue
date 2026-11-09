@@ -28,6 +28,7 @@ const label = (channel) => ({
     messenger: 'Messenger',
     instagram: 'Instagram',
     tiktok: 'TikTok',
+    webchat: 'Web Chat',
 }[channel] || channel)
 
 const select = (channel) => {

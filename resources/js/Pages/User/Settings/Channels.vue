@@ -149,6 +149,19 @@ const windowLabel = (hours) => (hours === null || hours === undefined
                         </a>
                     </div>
 
+                    <!-- المحادثة المباشرة: صفحتها الخاصّة (الكود والشكل والنموذج) -->
+                    <div v-if="$page.props.settingsModuleWebChat" class="bg-white border border-slate-200 rounded-lg p-4 mb-4 flex items-center gap-3 flex-wrap">
+                        <ChannelIcon channel="webchat" :size="32" filled />
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm font-medium">{{ $t('Web Chat') }}</div>
+                            <div class="text-xs text-slate-500">{{ $t('A chat window on your website.') }}</div>
+                        </div>
+                        <a href="/settings/webchat"
+                           class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 shrink-0">
+                            {{ $t('Manage') }}
+                        </a>
+                    </div>
+
                     <!-- تبويبات القنوات الأخرى -->
                     <div class="flex gap-1.5 overflow-x-auto pb-2 mb-4 scrollbar-none">
                         <button v-for="card in channels" :key="card.channel" type="button"

@@ -26,4 +26,21 @@ class Template extends Model {
     protected $guarded = [];
     public $timestamps = false;
     protected $dates = ['deleted_at'];
+
+    /**
+     * مكوّن القالب بنوعه (HEADER أو BODY أو FOOTER أو BUTTONS) كما خزّنته
+     * Meta في metadata.components، أو null إن لم يكن فيه.
+     */
+    public function component(string $type): ?array
+    {
+        $metadata = json_decode((string) $this->getRawOriginal('metadata'), true);
+
+        foreach ((array) ($metadata['components'] ?? []) as $component) {
+            if (is_array($component) && ($component['type'] ?? null) === $type) {
+                return $component;
+            }
+        }
+
+        return null;
+    }
 }

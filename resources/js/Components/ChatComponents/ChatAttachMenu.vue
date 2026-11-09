@@ -9,6 +9,10 @@ defineProps({
 	requestingLocation: { type: Boolean, default: false },
 	sendingLocation: { type: Boolean, default: false },
 	disabled: { type: Boolean, default: false },
+	// ما لا تدعمه قناة الجهة يختفي (المحادثة المباشرة: لا موقع ولا قوالب).
+	showRequestLocation: { type: Boolean, default: true },
+	showSendLocation: { type: Boolean, default: true },
+	showTemplates: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['action'])
@@ -111,6 +115,7 @@ const close = () => {
 						</button>
 
 						<button
+							v-if="showRequestLocation"
 							type="button"
 							class="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-slate-700 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40"
 							:disabled="requestingLocation"
@@ -126,6 +131,7 @@ const close = () => {
 						</button>
 
 						<button
+							v-if="showSendLocation"
 							type="button"
 							class="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-slate-700 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40"
 							:disabled="sendingLocation || disabled"
@@ -141,6 +147,7 @@ const close = () => {
 						</button>
 
 						<button
+							v-if="showTemplates"
 							type="button"
 							class="flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-slate-700 hover:bg-slate-50 active:bg-slate-100"
 							@click="select('templates')"

@@ -83,14 +83,88 @@ final class WebChatUploads
         return strtolower(trim((string) $detected));
     }
 
+    /** الزائر يختار حتى هذا العدد مرّة واحدة؛ كل ملف طلبٌ مستقلّ. */
+    public const MAX_FILES_PER_SEND = 3;
+
+    /**
+     * ما يحتاجه الطلب فوق الملف نفسه (الحقول وحدود multipart). يُطرح من
+     * post_max_size: ملفٌّ بحجمه تماماً يرفضه PHP مع ما حوله.
+     */
+    private const REQUEST_OVERHEAD = 64 * 1024;
+
     public static function limitFor(string $type): int
     {
-        return (int) (app(ChannelManager::class)->capabilities(Channel::WEBCHAT)->mediaLimit($type) ?? 0);
+        return self::limits()[$type] ?? 0;
     }
 
     public static function maxBytes(): int
     {
-        return (int) max(app(ChannelManager::class)->capabilities(Channel::WEBCHAT)->mediaLimits ?: [0]);
+        return (int) max(self::limits() ?: [0]);
+    }
+
+    /**
+     * الحدّ الفعلي لكل نوع — ما يُعلَن للـ widget وما يُفحص به الطلب.
+     *
+     * حدّ النوع وحده كذبة إن كان PHP لا يقبله: الملف يُرمى قبل أن يصلنا،
+     * ويرى الزائر «حدث خطأ» بلا سبب. فيُقصّ بحدّ الخادم الفعلي.
+     *
+     * @return array<string, int>
+     */
+    public static function limits(): array
+    {
+        $types = app(ChannelManager::class)->capabilities(Channel::WEBCHAT)->mediaLimits;
+
+        return self::effectiveLimits($types, self::serverMaxBytes());
+    }
+
+    /**
+     * @param  array<string, int>  $typeLimits
+     * @return array<string, int>
+     */
+    public static function effectiveLimits(array $typeLimits, ?int $serverMax): array
+    {
+        if ($serverMax === null) {
+            return array_map('intval', $typeLimits);
+        }
+
+        return array_map(static fn ($limit) => min((int) $limit, $serverMax), $typeLimits);
+    }
+
+    /** أصغر ما يقبله الخادم لملفّ واحد، أو null إن لم يُحدَّ بشيء. */
+    public static function serverMaxBytes(): ?int
+    {
+        $caps = array_filter([
+            self::iniBytes((string) ini_get('upload_max_filesize')),
+            ($post = self::iniBytes((string) ini_get('post_max_size'))) !== null ? max(0, $post - self::REQUEST_OVERHEAD) : null,
+            ($mb = config('messaging.webchat_upload_max_mb')) !== null && is_numeric($mb) && (float) $mb > 0
+                ? (int) round((float) $mb * 1024 * 1024)
+                : null,
+        ], static fn ($cap) => $cap !== null);
+
+        return $caps === [] ? null : (int) min($caps);
+    }
+
+    /** «2M» و«512K» و«1G» كما في php.ini؛ 0 أو سالب أو فارغ = بلا حدّ (null). */
+    public static function iniBytes(string $value): ?int
+    {
+        $value = strtolower(trim($value));
+
+        if ($value === '' || !preg_match('/^(-?\d+)\s*([kmg]?)b?$/', $value, $match)) {
+            return null;
+        }
+
+        $number = (int) $match[1];
+
+        if ($number <= 0) {
+            return null;
+        }
+
+        return $number * match ($match[2]) {
+            'g' => 1024 ** 3,
+            'm' => 1024 ** 2,
+            'k' => 1024,
+            default => 1,
+        };
     }
 
     /** @return array<int, string> */

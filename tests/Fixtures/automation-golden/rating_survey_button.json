@@ -1,0 +1,48 @@
+{
+    "requests": [
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "interactive",
+                "interactive": {
+                    "type": "cta_url",
+                    "action": {
+                        "name": "cta_url",
+                        "parameters": {
+                            "display_text": "قيّم الخدمة",
+                            "url": "http://localhost/rate/{token}"
+                        }
+                    },
+                    "body": {
+                        "text": "قيّمنا يا Maitha"
+                    }
+                }
+            }
+        }
+    ],
+    "chats": [
+        {
+            "wam_id": "wamid.FLOW-1",
+            "status": "delivered",
+            "user_id": null,
+            "channel": "whatsapp",
+            "metadata": {
+                "type": "text",
+                "text": {
+                    "body": "قيّمنا يا Maitha\n\nقيّم الخدمة: http://localhost/rate/{token}"
+                },
+                "cta_url": {
+                    "display_text": "قيّم الخدمة",
+                    "url": "http://localhost/rate/{token}"
+                }
+            },
+            "media": null
+        }
+    ],
+    "flow_logs": 0
+}

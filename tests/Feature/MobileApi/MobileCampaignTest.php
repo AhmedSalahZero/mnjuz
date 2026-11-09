@@ -233,6 +233,36 @@ class MobileCampaignTest extends MobileApiTestCase
         $this->assertSame('2026-12-01 07:30:00', Campaign::where('uuid', $later->json('data.uuid'))->value('scheduled_at'));
     }
 
+    /**
+     * التطبيق يرسل المعاملات وحدها بلا نصوص القالب، فكانت رسالة الحملة
+     * تُسجَّل في المحادثة بلا نصّ مع أن المستلم رآها كاملة.
+     */
+    public function test_texts_the_app_leaves_out_are_filled_from_the_template(): void
+    {
+        $this->contact();
+
+        $payload = $this->textCampaignPayload(['skip_schedule' => true, 'time' => null]);
+        unset($payload['header']['text'], $payload['body']['text'], $payload['footer']);
+
+        $response = $this->postJson('/api/v1/campaigns', $payload)->assertOk();
+
+        $metadata = json_decode(Campaign::where('uuid', $response->json('data.uuid'))->value('metadata'), true);
+        $this->assertSame('عرض {{1}}', $metadata['header']['text']);
+        $this->assertSame('مرحباً {{1}}، خصم {{2}}', $metadata['body']['text']);
+        $this->assertSame('منجز', $metadata['footer']['text']);
+        $this->assertSame('first name', $metadata['body']['parameters'][0]['value']);
+
+        // نصّ وصل في الطلب لا يُستبدل.
+        $kept = $this->postJson('/api/v1/campaigns', $this->textCampaignPayload([
+            'skip_schedule' => true,
+            'time' => null,
+            'body' => ['text' => 'نصّ الطلب'],
+        ]))->assertOk();
+
+        $keptMetadata = json_decode(Campaign::where('uuid', $kept->json('data.uuid'))->value('metadata'), true);
+        $this->assertSame('نصّ الطلب', $keptMetadata['body']['text']);
+    }
+
     public function test_a_campaign_to_a_group_with_an_uploaded_header_video(): void
     {
         Storage::fake('local');
@@ -258,6 +288,8 @@ class MobileCampaignTest extends MobileApiTestCase
         $this->assertSame('VIDEO', $metadata['header']['format']);
         $this->assertStringContainsString('/media/public/', $metadata['header']['parameters'][0]['value']);
         $this->assertNotNull($metadata['media']);
+        // التطبيق أرسل body بلا text، والمحادثة تعرض النصّ من هنا.
+        $this->assertSame('شاهد الجديد', $metadata['body']['text']);
 
         // الملف صار في «الملفات السابقة» ويُختار منها لحملة تالية.
         $history = $this->getJson('/api/v1/campaigns/media-history?type=VIDEO')->assertOk()->json('data');

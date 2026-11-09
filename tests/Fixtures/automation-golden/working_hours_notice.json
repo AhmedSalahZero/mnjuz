@@ -1,0 +1,35 @@
+{
+    "requests": [
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "text",
+                "text": {
+                    "preview_url": true,
+                    "body": "نحن خارج أوقات العمل وسنعود قريباً"
+                }
+            }
+        }
+    ],
+    "chats": [
+        {
+            "wam_id": "wamid.FLOW-1",
+            "status": "delivered",
+            "user_id": null,
+            "channel": "whatsapp",
+            "metadata": {
+                "text": {
+                    "body": "نحن خارج أوقات العمل وسنعود قريباً"
+                },
+                "type": "text"
+            },
+            "media": null
+        }
+    ],
+    "flow_logs": 0
+}

@@ -161,11 +161,14 @@ class HandleInertiaRequests extends Middleware
         $showResetDevicesLink = session()->pull('show_reset_devices_link', false);
 
         $settingsModuleWorkingHours = false;
+        $settingsModuleWebChat = false;
         if ($user && ($user->role ?? null) === 'user' && session()->has('current_organization')) {
             $settingsModuleWorkingHours = CustomHelper::isModuleEnabled(
                 'Working Hours',
                 (int) session('current_organization')
             );
+            // متخبَّأ دقيقة: يُسأل مع كل طلب Inertia.
+            $settingsModuleWebChat = \App\Services\WebChat\WebChatWidgetService::moduleEnabled((int) session('current_organization'));
         }
 
         return array_merge(parent::share($request), [
@@ -208,6 +211,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'isRtl' => $isRtl,
             'settingsModuleWorkingHours' => $settingsModuleWorkingHours,
+            'settingsModuleWebChat' => $settingsModuleWebChat,
         ]);
     }
 

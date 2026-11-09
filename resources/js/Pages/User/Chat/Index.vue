@@ -579,6 +579,9 @@ const updateSidePanel = async (chat, statusChanged) => {
 				is_messaging_window_open: true,
 				latest_chat_created_at: currentChat.created_at,
 				full_name: currentChat.contact_full_name,
+				// أيقونة القناة ورقم العرض من أوّل رسالة، لا بعد إعادة التحميل.
+				channel: currentChat.channel ?? 'whatsapp',
+				formatted_phone_number: currentChat.formatted_phone_number,
 				ticket_status: null,
 				ticket_assigned_to: null,
 			})

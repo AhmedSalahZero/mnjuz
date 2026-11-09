@@ -36,5 +36,7 @@ Route::prefix('w/{key}')
                 ->middleware(['throttle:webchat-upload', 'webchat.inbound']);
             Route::post('read', [WidgetController::class, 'markRead'])
                 ->middleware('throttle:webchat-read');
+            Route::post('broadcasting/auth', [WidgetController::class, 'broadcastAuth'])
+                ->middleware('throttle:webchat-auth');
         });
     });

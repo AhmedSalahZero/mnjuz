@@ -313,6 +313,13 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/channels/select', [App\Http\Controllers\User\ChannelOAuthController::class, 'cancelSelection']);
                     Route::delete('/settings/channels/{uuid}', [App\Http\Controllers\User\ChannelAccountController::class, 'destroy']);
                     Route::match(['get', 'post'], '/settings/working-hours', [App\Http\Controllers\User\SettingController::class, 'workingHours']);
+                    // المحادثة المباشرة: الكود الذي يُلصق في الموقع وإعدادات الـ widget.
+                    Route::get('/settings/webchat', [App\Http\Controllers\User\WebChatSettingsController::class, 'show']);
+                    Route::post('/settings/webchat', [App\Http\Controllers\User\WebChatSettingsController::class, 'update']);
+                    Route::post('/settings/webchat/logo', [App\Http\Controllers\User\WebChatSettingsController::class, 'uploadLogo']);
+                    Route::delete('/settings/webchat/logo', [App\Http\Controllers\User\WebChatSettingsController::class, 'removeLogo']);
+                    Route::post('/settings/webchat/rotate-key', [App\Http\Controllers\User\WebChatSettingsController::class, 'rotateKey']);
+                    Route::get('/settings/webchat/preview', [App\Http\Controllers\User\WebChatSettingsController::class, 'preview']);
                     Route::get('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'index']);
                     Route::post('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'sync']);
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');

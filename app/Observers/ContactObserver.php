@@ -3,6 +3,8 @@
 namespace App\Observers;
 
 use App\Models\Contact;
+use App\Models\WebChatVisitor;
+use App\Services\Messaging\Channel;
 use App\Services\PhoneService;
 
 class ContactObserver
@@ -46,5 +48,25 @@ class ContactObserver
         }
 
         $contact->formatted_phone = PhoneService::formatForDisplay($phone);
+    }
+
+    /**
+     * زائر المحادثة المباشرة يُربط بجهة اتصاله لحظة إنشائها.
+     *
+     * المهمّة تربطه بعد انتهاء التسجيل كلّه، والتسجيل يمرّ بالتذكرة وبـ
+     * webhook التاجر (بلا مهلة) قبل أن ينتهي. إلى أن يُربط لا يرى الزائر
+     * محادثته ولا يستطيع الضغط على أزرار الردّ الآلي الذي وصله.
+     */
+    public function created(Contact $contact): void
+    {
+        if (($contact->channel ?? null) !== Channel::WEBCHAT || trim((string) $contact->channel_identifier) === '') {
+            return;
+        }
+
+        WebChatVisitor::query()
+            ->where('organization_id', $contact->organization_id)
+            ->where('uuid', $contact->channel_identifier)
+            ->whereNull('contact_id')
+            ->update(['contact_id' => $contact->id]);
     }
 }

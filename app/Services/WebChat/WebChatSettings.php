@@ -23,6 +23,8 @@ final class WebChatSettings
             'offset_x' => 20,
             'offset_y' => 20,
             'logo_url' => null,
+            // شعار رُفع عندنا (تخزين محلّي): المسار يُحفظ والرابط يُحسب عند العرض.
+            'logo_path' => null,
             'title' => '',
             'subtitle' => '',
             'welcome_message' => '',
@@ -81,6 +83,10 @@ final class WebChatSettings
         $appearance['offset_x'] = max(0, min(200, (int) $appearance['offset_x']));
         $appearance['offset_y'] = max(0, min(200, (int) $appearance['offset_y']));
         $appearance['logo_url'] = self::httpsUrl($appearance['logo_url']);
+        $appearance['logo_path'] = is_string($appearance['logo_path'])
+            && preg_match('#^public/webchat-logos/\d+/[a-z0-9]+\.(png|jpe?g|webp)$#', $appearance['logo_path'])
+            ? $appearance['logo_path']
+            : null;
         foreach (['title', 'subtitle', 'welcome_message'] as $text) {
             $appearance[$text] = mb_substr(trim((string) $appearance[$text]), 0, $text === 'welcome_message' ? 500 : 80);
         }
@@ -110,9 +116,18 @@ final class WebChatSettings
     {
         $settings = self::for($account);
 
+        $appearance = $settings['appearance'];
+
+        // الشعار المرفوع عندنا يُخدم من /media، والمسار نفسه لا يخرج.
+        if ($appearance['logo_path']) {
+            $appearance['logo_url'] = WebChatMessagePresenter::publicUrl($appearance['logo_path']);
+        }
+
+        unset($appearance['logo_path']);
+
         return [
             'name' => (string) ($account->name ?? ''),
-            'appearance' => $settings['appearance'],
+            'appearance' => $appearance,
             'prechat' => $settings['prechat'],
             'behavior' => $settings['behavior'],
         ];

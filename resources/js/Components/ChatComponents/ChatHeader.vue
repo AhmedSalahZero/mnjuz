@@ -38,6 +38,11 @@ const contactSubtitle = computed(() => {
 		return contact.formatted_phone_number || ''
 	}
 
+	// المحادثة المباشرة: الرقم الذي كتبه الزائر في النموذج (للعرض لا للإرسال).
+	if (contact.channel === 'webchat') {
+		return contact.formatted_phone_number || ''
+	}
+
 	let username = null
 
 	try {

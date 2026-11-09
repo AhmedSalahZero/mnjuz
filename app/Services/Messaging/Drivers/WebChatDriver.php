@@ -8,8 +8,10 @@ use App\Services\Messaging\Channel;
 use App\Services\Messaging\ChannelCapabilities;
 use App\Services\Messaging\Contracts\ChannelDriver;
 use App\Services\Messaging\Contracts\DownloadedMedia;
+use App\Services\Messaging\Contracts\SupportsInteractive;
 use App\Services\Messaging\Exceptions\ChannelConfigurationException;
 use App\Services\Messaging\InboundMedia;
+use App\Services\Messaging\OutboundInteractive;
 use App\Services\Messaging\OutboundMedia;
 use App\Services\Messaging\SendResult;
 use App\Services\Messaging\Support\MessageId;
@@ -29,7 +31,7 @@ use Illuminate\Support\Str;
  * لذلك الإرسال هنا لا يفشل لأسباب شبكية: يُعطي معرّفاً فريداً ويترك
  * التسجيل لـ OutboundMessageRecorder كما يفعل كل سائق.
  */
-class WebChatDriver implements ChannelDriver
+class WebChatDriver implements ChannelDriver, SupportsInteractive
 {
     /** قرص الملفات المؤقّتة لرفع الزائر — خارج public فلا تُخدم مباشرة. */
     public const TEMP_DISK = 'local';
@@ -179,6 +181,19 @@ class WebChatDriver implements ChannelDriver
                 'feature' => $media->type,
                 'channel' => Channel::label(Channel::WEBCHAT),
             ]), 'unsupported_media');
+        }
+
+        return SendResult::success($this->newMessageId($account, $contact), 'sent');
+    }
+
+    /**
+     * أزرار الـ flow وقوائمه وزرّ الرابط: يرسمها الـ widget من
+     * interactive_options في صفّ المحادثة، فلا شيء يُرسل هنا أيضاً.
+     */
+    public function sendInteractive(ChannelAccount $account, Contact $contact, OutboundInteractive $message, array $options = []): SendResult
+    {
+        if (!$this->canAddress($contact)) {
+            return SendResult::failure(__('This contact has no :channel identifier.', ['channel' => Channel::label(Channel::WEBCHAT)]));
         }
 
         return SendResult::success($this->newMessageId($account, $contact), 'sent');

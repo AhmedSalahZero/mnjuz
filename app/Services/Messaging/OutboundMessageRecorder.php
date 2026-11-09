@@ -109,7 +109,16 @@ class OutboundMessageRecorder
 
         $this->broadcast($chat, $chatLogId, $contact, $options);
 
-        return $chat->fresh(['contact', 'media']);
+        $fresh = $chat->fresh(['contact', 'media']);
+
+        // زائر المحادثة المباشرة يرى الردّ لحظياً: ردّ الموظّف من الويب أو
+        // الجوال، والردّ الآلي — كلّها تمرّ من هنا. بعد المعرّف والوسائط حتى
+        // يصله الصفّ بمعرّفه النهائي ورابط ملفّه.
+        if ($channel === Channel::WEBCHAT) {
+            app(\App\Services\WebChat\WebChatVisitorNotifier::class)->message($fresh, $contact);
+        }
+
+        return $fresh;
     }
 
     /**

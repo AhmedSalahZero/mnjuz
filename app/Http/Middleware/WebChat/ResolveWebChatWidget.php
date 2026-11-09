@@ -31,7 +31,7 @@ class ResolveWebChatWidget
 
         if (!$account
             || !$account->isActive()
-            || !WebChatSettings::for($account)['enabled']
+            || (!WebChatSettings::for($account)['enabled'] && !self::isPreview($request))
             || !WebChatWidgetService::moduleEnabled((int) $account->organization_id)
         ) {
             return self::notFound();
@@ -40,6 +40,21 @@ class ResolveWebChatWidget
         $request->attributes->set(self::ATTRIBUTE, $account);
 
         return $next($request);
+    }
+
+    /**
+     * معاينة صفحة الإعدادات: الـ widget المعطَّل يعمل فيها ليرى التاجر شكله
+     * قبل تفعيله. من نطاقنا وحده — موقع التاجر لا يرى widget معطَّلاً.
+     */
+    public static function isPreview(Request $request): bool
+    {
+        $asked = $request->query('preview') === '1' || $request->headers->get('X-Webchat-Preview') === '1';
+
+        if (!$asked) {
+            return false;
+        }
+
+        return EnsureWebChatOrigin::isOwnHost($request, EnsureWebChatOrigin::requestHost($request));
     }
 
     public static function notFound()

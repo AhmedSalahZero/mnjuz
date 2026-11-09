@@ -6,6 +6,13 @@
 عقود المنصّات: [PLATFORM_CONTRACTS.md](PLATFORM_CONTRACTS.md)
 تحليل الكود القائم: [research/](research/)
 
+## المحادثة المباشرة (webchat) — نوفمبر ٢٠٢٦
+
+قناة سادسة على نفس الطبقة: widget في موقع التاجر بدل منصّة خارجية. دليل التاجر: [../webchat/MERCHANT_GUIDE.md](../webchat/MERCHANT_GUIDE.md) · الإطلاق: [../webchat/LAUNCH_CHECKLIST.md](../webchat/LAUNCH_CHECKLIST.md) · التطبيق: [../../MOBILE_WEBCHAT.md](../../MOBILE_WEBCHAT.md)
+
+- **الردّ الآلي صار يعرف القنوات** (`AutomationTransport`): واتساب بنفس كائنه حرفاً بحرف (لقطات `tests/Feature/Automation`)، وغيره عبر `ChannelAutomationTransport`. مفعَّل على `webchat` وحدها — `config/messaging.php` يضيف غيرها.
+- **أُصلح لكل القنوات**: ملفّات الموظّف (`files[]`) كانت تضيع، ورابط الملف المخزَّن محلّياً كان `/media/1`، والرفع على قطع كان يذهب لواتساب.
+
 ## القرارات المُتَّخذة
 
 1. **لا توحيد للهوية**: من يراسلنا من واتساب ومن تيليجرام **جهتا اتصال منفصلتان**. المفتاح `(organization_id, channel, channel_identifier)`.

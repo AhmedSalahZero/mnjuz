@@ -1,0 +1,114 @@
+{
+    "requests": [
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "text",
+                "text": {
+                    "preview_url": true,
+                    "body": "مرحباً Maitha"
+                }
+            }
+        },
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "interactive",
+                "interactive": {
+                    "type": "button",
+                    "action": {
+                        "buttons": [
+                            {
+                                "type": "reply",
+                                "reply": {
+                                    "id": "button1",
+                                    "title": "نعم"
+                                }
+                            },
+                            {
+                                "type": "reply",
+                                "reply": {
+                                    "id": "button2",
+                                    "title": "لا"
+                                }
+                            }
+                        ]
+                    },
+                    "body": {
+                        "text": "هل تريد المتابعة؟"
+                    },
+                    "footer": {
+                        "text": "اختر واحداً"
+                    }
+                }
+            }
+        },
+        {
+            "method": "POST",
+            "uri": "https://graph.facebook.com/v20.0/2/messages",
+            "authorization": "Bearer t",
+            "body": {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": "+966500000001",
+                "type": "text",
+                "text": {
+                    "preview_url": true,
+                    "body": "تمّ، شكراً"
+                }
+            }
+        }
+    ],
+    "chats": [
+        {
+            "wam_id": "wamid.FLOW-1",
+            "status": "delivered",
+            "user_id": 0,
+            "channel": "whatsapp",
+            "metadata": {
+                "text": {
+                    "body": "مرحباً Maitha"
+                },
+                "type": "text"
+            },
+            "media": null
+        },
+        {
+            "wam_id": "wamid.FLOW-2",
+            "status": "delivered",
+            "user_id": 0,
+            "channel": "whatsapp",
+            "metadata": {
+                "text": {
+                    "body": "هل تريد المتابعة؟"
+                },
+                "type": "text"
+            },
+            "media": null
+        },
+        {
+            "wam_id": "wamid.FLOW-3",
+            "status": "delivered",
+            "user_id": 0,
+            "channel": "whatsapp",
+            "metadata": {
+                "text": {
+                    "body": "تمّ، شكراً"
+                },
+                "type": "text"
+            },
+            "media": null
+        }
+    ],
+    "flow_logs": 3
+}

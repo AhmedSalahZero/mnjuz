@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\WebChat;
 
+use App\Events\NewChatEvent;
+use App\Events\WebChatVisitorEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\WebChat\AuthenticateWebChatVisitor;
 use App\Http\Middleware\WebChat\ResolveWebChatWidget;
@@ -21,6 +23,8 @@ use App\Services\WebChat\WebChatWidgetService;
 use App\Services\WorkingHoursService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -31,6 +35,9 @@ use Illuminate\Support\Str;
  */
 class WidgetController extends Controller
 {
+    /** أقصى ما يُبثّ للموظّف من صحّ القراءة في المرّة الواحدة. */
+    private const READ_BROADCAST_LIMIT = 20;
+
     public function __construct(private readonly WebChatInboundService $inbound)
     {
     }
@@ -45,14 +52,70 @@ class WidgetController extends Controller
             'widget' => WebChatSettings::publicView($account),
             'available' => WebChatWidgetService::acceptsInbound($organizationId),
             'open_now' => !WorkingHoursService::isOutsideConfiguredHours($organizationId),
-            'realtime' => BroadcastProvider::clientConfig($organizationId),
+            // بثّ معطَّل (log/null) لا يُعطى الـ widget إعداداً لا يتّصل بشيء:
+            // null تعني «اكتفِ بالمزامنة».
+            'realtime' => self::realtimeEnabled() ? BroadcastProvider::clientConfig($organizationId) : null,
+            // الواجهة الكاملة يُحمّلها الـ loader عند أول ضغطة، برابط فيه بصمة البناء.
+            'bundle' => \App\Services\WebChat\WebChatAssets::bundleUrl(),
             'limits' => [
                 'text' => SendWebChatMessageRequest::MAX_TEXT,
-                'media' => app(\App\Services\Messaging\ChannelManager::class)
-                    ->capabilities(\App\Services\Messaging\Channel::WEBCHAT)->mediaLimits,
+                // الحدّ الفعلي (حدّ النوع مقصوصاً بحدّ PHP): ما يُعلَن هو ما يُقبل،
+                // فيُرفض الملف الكبير في المتصفّح برسالة لا بعد رفعه.
+                'media' => WebChatUploads::limits(),
                 'accept' => WebChatUploads::acceptedMimeTypes(),
+                'files_per_send' => WebChatUploads::MAX_FILES_PER_SEND,
             ],
-        ])->header('Cache-Control', 'public, max-age=60');
+        ])->header('Cache-Control', ResolveWebChatWidget::isPreview($request) ? 'no-store' : 'public, max-age=60')
+            // الردّ نفسه يختلف قبولاً ورفضاً بحسب الموقع: لا يُخزَّن لموقعٍ ويُقدَّم لآخر.
+            ->header('Vary', 'Origin');
+    }
+
+    /**
+     * توقيع قناة الزائر الخاصّة بسرّ مزوّد منشأته.
+     *
+     * Broadcast::auth لا يصلح هنا: يرفض كل قناة خاصّة لمن لا مستخدم له.
+     * والقناة الوحيدة المسموحة قناة هذا الزائر نفسه — تُقارَن حرفاً بحرف.
+     */
+    public function broadcastAuth(Request $request)
+    {
+        $visitor = $this->visitor($request);
+        $organizationId = (int) $visitor->organization_id;
+        $socketId = (string) $request->input('socket_id', '');
+        $expected = 'private-' . WebChatVisitorEvent::channelName($organizationId, (string) $visitor->uuid);
+
+        if (!preg_match('/^\d{1,20}\.\d{1,20}$/', $socketId)
+            || !hash_equals($expected, (string) $request->input('channel_name', ''))
+        ) {
+            return response()->json(['error' => 'forbidden'], 403);
+        }
+
+        if (!self::realtimeEnabled()) {
+            return response()->json(['error' => 'unavailable'], 403);
+        }
+
+        try {
+            BroadcastProvider::apply();
+            $signature = Broadcast::connection(BroadcastProvider::connectionNameForOrganization($organizationId))
+                ->getPusher()
+                ->authorizeChannel($expected, $socketId);
+        } catch (\Throwable $e) {
+            Log::warning('Web chat: channel authorization failed', [
+                'organization_id' => $organizationId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'unavailable'], 403);
+        }
+
+        return response($signature, 200, ['Content-Type' => 'application/json']);
+    }
+
+    /** هل البثّ اللحظي يعمل أصلاً؟ log وnull مقبولان في الإعداد ولا يتّصلان بشيء. */
+    private static function realtimeEnabled(): bool
+    {
+        $default = (string) config('broadcasting.default');
+
+        return config("broadcasting.connections.{$default}.driver") === 'pusher';
     }
 
     /**
@@ -85,6 +148,7 @@ class WidgetController extends Controller
         return response()->json([
             'token' => $token,
             'visitor' => $this->visitorView($visitor),
+            'channel' => $this->channelFor($visitor),
         ], 201);
     }
 
@@ -96,6 +160,7 @@ class WidgetController extends Controller
 
         return response()->json([
             'visitor' => $this->visitorView($visitor),
+            'channel' => $this->channelFor($visitor),
             'unread_count' => $this->unreadCount($visitor),
             'last_message' => $last ? WebChatMessagePresenter::forVisitor($visitor)->present($last) : null,
         ]);
@@ -230,14 +295,48 @@ class WidgetController extends Controller
             $visitor->forceFill(['last_read_chat_id' => $seq])->saveQuietly();
 
             // صحّ القراءة للموظّف: الرسائل الصادرة حتى هذه العلامة صارت مقروءة.
-            Chat::where('contact_id', $visitor->contact_id)
+            $unread = Chat::where('contact_id', $visitor->contact_id)
                 ->where('type', 'outbound')
                 ->where('id', '<=', $seq)
-                ->whereIn('status', ['sent', 'delivered'])
-                ->update(['status' => 'read']);
+                ->whereIn('status', ['sent', 'delivered']);
+
+            $changed = (clone $unread)->orderByDesc('id')->limit(self::READ_BROADCAST_LIMIT)->pluck('id')->all();
+            $unread->update(['status' => 'read']);
+
+            if ($changed !== []) {
+                $organizationId = (int) $visitor->organization_id;
+
+                // بعد الردّ: كل بثّ يبني حمولته باستعلامات، والزائر لا ينتظرها.
+                dispatch(static fn () => self::broadcastReadStatuses($organizationId, $changed))->afterResponse();
+            }
         }
 
         return response()->json(['unread_count' => $this->unreadCount($visitor)]);
+    }
+
+    /**
+     * صحّ القراءة يصل الموظّف لحظياً، بنفس بثّ حالة واتساب (statusChanged).
+     * الأحدث وحده: الأقدم لا تراه الواجهة غالباً، والمزامنة تستدركه.
+     *
+     * @param  array<int, int>  $chatIds
+     */
+    public static function broadcastReadStatuses(int $organizationId, array $chatIds): void
+    {
+        foreach (Chat::with('chatLog')->whereIn('id', $chatIds)->get() as $chat) {
+            if (!$chat->chatLog) {
+                continue;
+            }
+
+            try {
+                event(new NewChatEvent([[
+                    'type' => 'chat',
+                    'value' => $chat->chatLog->relatedEntities,
+                    'tempMessageId' => $chat->wam_id,
+                ]], $organizationId, false, true));
+            } catch (\Throwable $e) {
+                Log::warning('Web chat: read status broadcast failed', ['chat_id' => $chat->id, 'error' => $e->getMessage()]);
+            }
+        }
     }
 
     /* ───────────────────────── مساعدات ───────────────────────── */
@@ -272,6 +371,14 @@ class WidgetController extends Controller
         return $query
             ? $query->where('type', 'outbound')->where('id', '>', (int) $visitor->last_read_chat_id)->count()
             : 0;
+    }
+
+    /** قناة الزائر الخاصّة كما يشترك بها pusher-js — أو null إن كان البثّ معطّلاً. */
+    private function channelFor(WebChatVisitor $visitor): ?string
+    {
+        return self::realtimeEnabled()
+            ? 'private-' . WebChatVisitorEvent::channelName((int) $visitor->organization_id, (string) $visitor->uuid)
+            : null;
     }
 
     private function visitorView(WebChatVisitor $visitor): array

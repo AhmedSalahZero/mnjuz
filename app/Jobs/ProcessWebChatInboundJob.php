@@ -3,9 +3,12 @@
 namespace App\Jobs;
 
 use App\Models\ChannelAccount;
+use App\Models\Contact;
 use App\Models\WebChatVisitor;
+use App\Services\Messaging\Channel;
 use App\Services\Messaging\InboundMessageRecorder;
 use App\Services\WebChat\WebChatInboundService;
+use App\Services\WebChat\WebChatVisitorNotifier;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -53,10 +56,34 @@ class ProcessWebChatInboundJob implements ShouldQueue
             return;
         }
 
-        $chat = $recorder->record($account, WebChatInboundService::messageFromPayload($this->payload));
+        $chat = null;
 
-        if ($chat && (int) $visitor->contact_id !== (int) $chat->contact_id) {
-            $visitor->forceFill(['contact_id' => $chat->contact_id])->save();
+        try {
+            $chat = $recorder->record($account, WebChatInboundService::messageFromPayload($this->payload));
+        } finally {
+            $this->linkVisitor($account, $visitor);
+        }
+
+        // تابات الزائر الأخرى ترى رسالته، والتاب الذي كتبها يستبدل فقاعته
+        // المتفائلة بالصفّ المحفوظ (client_id). المكرَّر يُرجع null فلا يُبثّ ثانيةً.
+        app(WebChatVisitorNotifier::class)->message($chat);
+    }
+
+    /**
+     * يُربط الزائر بجهة اتصاله منها هي لا من الصفّ المُعاد: إن فشلت خطوةٌ
+     * بعد حفظ الرسالة (التذكرة، الـ webhook) أعادت المحاولةُ null للمكرَّر،
+     * فلا يرى الزائر محادثته ولا الردّ عليها أبداً.
+     */
+    private function linkVisitor(ChannelAccount $account, WebChatVisitor $visitor): void
+    {
+        $contactId = Contact::query()
+            ->where('organization_id', $account->organization_id)
+            ->where('channel', Channel::WEBCHAT)
+            ->where('channel_identifier', $visitor->uuid)
+            ->value('id');
+
+        if ($contactId && (int) $visitor->contact_id !== (int) $contactId) {
+            $visitor->forceFill(['contact_id' => $contactId])->save();
         }
     }
 }
