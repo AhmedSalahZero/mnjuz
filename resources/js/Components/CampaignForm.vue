@@ -186,12 +186,16 @@ const channelLabel = (channel) => CHANNEL_LABELS[channel] || channel
  *
  * واتساب تُحسب من settings.whatsapp كما كان — مصدرها القديم لم يتغيّر —
  * والبقيّة من connectedChannels التي يُرسلها الخادم.
+ *
+ * settings هنا هو الـ metadata المُحلَّل لا props.settings: الأخير صفّ
+ * المنشأة كما هو و metadata فيه نصّ JSON، فـ props.settings.whatsapp دائماً
+ * undefined — وصفحتا المحادثة والإعدادات لا تُرسلان connectedChannels.
  */
 const availableChannels = computed(() => {
 	const fromServer = props.connectedChannels || []
 	const list = fromServer.length ? [...fromServer] : []
 
-	if (props.settings?.whatsapp && !list.includes('whatsapp')) {
+	if (settings.value?.whatsapp && !list.includes('whatsapp')) {
 		list.unshift('whatsapp')
 	}
 
