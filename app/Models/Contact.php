@@ -258,6 +258,24 @@ class Contact extends Model
     {
         return $this->hasMany(ChatLog::class);
     }
+
+    /**
+     * فهارس قائمة المحادثات: (المنشأة، الحذف، آخر رسالة)، وبالقناة لفلترها.
+     * فتبدأ القائمة دائماً من جهات المنشأة نفسها بترتيبها، وتقف عند الصفحة.
+     *
+     * بلا تقييد يختار المُحسِّن تقاطع فهرسي organization_id وdeleted_at (يقرأ
+     * 631 ألف صفّ «غير محذوف» من كل المنشآت)، أو يبدأ من chat_tickets بحالتها
+     * — وchat_tickets بلا organization_id: فلتر «مفتوحة» يمرّ على 442 ألف تذكرة
+     * مفتوحة في المنصّة كلها. ولذلك لا PRIMARY هنا: يسمح بذلك البدء.
+     *
+     * أسوأ حالة صارت محدودة بحجم المنشأة لا المنصّة: فلترٌ يطابق قليلاً (مغلقة
+     * في منشأة تذاكرها مفتوحة) يمرّ على جهاتها كلها — عشرات إلى مئات الأجزاء
+     * من الثانية. قيس على الإنتاج (قراءة فقط): التمرير في منشأة 54 من 444ms إلى
+     * 7ms، الصفحة الأولى لمنشأة صغيرة من 281ms إلى 0.9ms، «مفتوحة» من 430ms إلى
+     * 1ms، «غير مقروءة» من 3.1s إلى 0.4s، والبحث برقم من 2.1s إلى 0.1s.
+     */
+    public const CHAT_LIST_INDEXES = 'idx_contacts_org_deleted_latest_chat, idx_contacts_org_channel_latest_chat';
+
     public function contactsWithChatsOptimized(
         $organizationId,
         $searchTerm = null,
@@ -274,6 +292,10 @@ class Contact extends Model
         $channel = null,
     ) {
         $query = $this->newQuery()
+            // «مغلقة» تطابق قليلاً في أغلب المنشآت: البدء من جهات المنشأة يمرّ
+            // عليها كلّها، والمُحسِّن وحده يبدأ من التذاكر المغلقة أسرع. تبقى كما
+            // هي اليوم.
+            ->when(!($ticketingActive && $ticketState === 'closed'), fn ($q) => $q->forceIndex(self::CHAT_LIST_INDEXES))
             ->select([
                 'contacts.id',
                 'contacts.uuid',
@@ -333,8 +355,13 @@ class Contact extends Model
                   AND chats.deleted_at IS NULL) as unread_messages_count')
     	]);
     
-        // ✅ Eager load lastChat فقط؛ last_inbound_chat نعتمد على العمود last_inbound_chat_created_at
-        $with = ['lastChat'];
+        // آخر رسالة لكل صفّ تُحسب بعد الترقيم لصفوف الصفحة وحدها (attachLastChats)،
+        // لا هنا: subquery في الـ select يُحسب قبل الترتيب لكل صفّ حين يرتّب
+        // MySQL نتيجة ربطٍ (Stream results ثم Sort) — 42 ألف مرّة لفلتر «مفتوحة»
+        // في منشأة كبيرة: 31 ثانية بدل أجزاء من الثانية.
+
+        // last_inbound_chat نعتمد على العمود last_inbound_chat_created_at
+        $with = [];
         if ($eagerLoadCategories) {
             $with[] = 'contactCategories:id,name,uuid,background_color,text_color';
         }
@@ -350,9 +377,15 @@ class Contact extends Model
             });
         });
 
+        // هل يُغيّر ربط التذاكر عدد الصفوف؟ لا حين يكون LEFT JOIN بلا شرط عليه:
+        // لكل جهة اتصال تذكرة «أحدث» واحدة على الأكثر (القيد الفريد
+        // uq_chat_tickets_single_latest)، فالعدّ بدونه هو نفسه.
+        $ticketJoinKeepsRowCount = false;
+
         // ✅ شروط التذاكر — INNER JOIN عند الفلترة لبدء من chat_tickets المفهرسة
         if ($ticketingActive) {
             $isTicketFiltered = in_array($ticketState, ['open', 'closed', 'unassigned'], true);
+            $ticketJoinKeepsRowCount = !$isTicketFiltered && !($role === 'agent' && !$allowAgentsViewAllChats);
             $joinMethod = $isTicketFiltered ? 'join' : 'leftJoin';
 
             $query->{$joinMethod}('chat_tickets', function ($join) use ($ticketState) {
@@ -388,11 +421,84 @@ class Contact extends Model
 		 * @var Builder $query 
 		 */
 		if ($perPage !== null) {
-			return $query->paginate($perPage, ['*'], 'contact_page', $page);
+			// العدّ يُعاد مع كل تحميل للقائمة وكل تمرير. بربط التذاكر يمرّ على
+			// كل جهات المنشأة ويطابقها بتذاكرها: 185ms على منشأة 54 في الإنتاج،
+			// و15ms بدونه — والعدد واحد (انظر $ticketJoinKeepsRowCount).
+			$paginated = $ticketJoinKeepsRowCount
+				? $query->paginate($perPage, ['*'], 'contact_page', $page, fn () => $query->toBase()
+					->cloneWithout(['joins', 'indexHint'])
+					->cloneWithoutBindings(['join'])
+					->getCountForPagination())
+				: $query->paginate($perPage, ['*'], 'contact_page', $page);
+			self::attachLastChats($paginated->getCollection());
+
+			return $paginated;
 		}
-		return $query->get();
+		$rows = $query->get();
+		self::attachLastChats($rows);
+
+		return $rows;
 		// return $query->paginate($perPage); // for web app pagination
 
+    }
+
+    /**
+     * يملأ علاقة lastChat لصفوف الصفحة: استعلامٌ لمعرّفات آخر رسائلها
+     * (lastChatIds)، ثم الرسائل مع وسائطها، وnull لمن لا رسالة له — كما كان
+     * التحميل المسبق لـ lastChat() يفعل، فالموارد والواجهة لا ترى فرقاً.
+     */
+    public static function attachLastChats(\Illuminate\Support\Collection $contacts): void
+    {
+        $lastChatIds = self::lastChatIds($contacts->pluck('id')->filter()->all());
+        $ids = array_values(array_unique(array_filter($lastChatIds)));
+        $chats = $ids === []
+            ? collect()
+            : Chat::with('media')->whereIn('id', $ids)->get()->keyBy('id');
+
+        foreach ($contacts as $contact) {
+            $contact->setRelation('lastChat', $chats->get($lastChatIds[$contact->id] ?? null));
+        }
+    }
+
+    /**
+     * معرّف آخر رسالة لكل جهة — نفس ما يُرجعه lastChat() بالضبط (الأحدث،
+     * والأكبر معرّفاً عند التساوي، لا محذوفة، لها سجلّ، ليست تفاعلاً).
+     *
+     * lastChat() بـ ofMany يبني MAX(created_at) ثم MAX(id) على كل رسائل
+     * الصفوف: شرطا chat_logs و«ليست تفاعلاً» يمنعان أي فهرس من الإجابة،
+     * فيقرأ تاريخ الخمسين محادثة كلّه. هنا يمشي الفهرس من الأحدث لكل جهة
+     * ويقف عند أول رسالة تحقّق الشروط — لصفوف الصفحة وحدها.
+     *
+     * FORCE INDEX: المُحسِّن يختار (contact_id, organization_id, deleted_at)
+     * ثم يرتّب كل الرسائل. NO_SEMIJOIN: بدونه يحوّل EXISTS إلى semi-join
+     * فيضيع التوقّف عند أول صفّ.
+     *
+     * @param array<int, int> $contactIds
+     * @return array<int, ?int> contact_id => chat_id
+     */
+    public static function lastChatIds(array $contactIds): array
+    {
+        if ($contactIds === []) {
+            return [];
+        }
+
+        return DB::table('contacts')
+            ->whereIn('contacts.id', $contactIds)
+            ->select('contacts.id')
+            ->selectRaw(
+                '(SELECT /*+ NO_SEMIJOIN(@last_chat_log) */ last_chat.id'
+                . ' FROM chats AS last_chat FORCE INDEX (idx_chats_contact_org_deleted_created)'
+                . ' WHERE last_chat.contact_id = contacts.id'
+                . ' AND last_chat.organization_id = contacts.organization_id'
+                . ' AND last_chat.deleted_at IS NULL'
+                . ' AND last_chat.metadata NOT LIKE ?'
+                . ' AND EXISTS (SELECT /*+ QB_NAME(last_chat_log) */ 1 FROM chat_logs WHERE chat_logs.entity_id = last_chat.id AND chat_logs.entity_type = ?)'
+                . ' ORDER BY last_chat.created_at DESC, last_chat.id DESC LIMIT 1) AS last_chat_id',
+                ['%"type":"reaction"%', 'chat']
+            )
+            ->pluck('last_chat_id', 'id')
+            ->map(fn ($id) => $id === null ? null : (int) $id)
+            ->all();
     }
 
     

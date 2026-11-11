@@ -8,9 +8,11 @@ use App\Services\Messaging\Channel;
 use App\Services\Messaging\ChannelCapabilities;
 use App\Services\Messaging\Contracts\ChannelDriver;
 use App\Services\Messaging\Contracts\DownloadedMedia;
+use App\Services\Messaging\Contracts\SupportsInteractive;
 use App\Services\Messaging\Exceptions\ChannelConfigurationException;
 use App\Services\Messaging\InboundMedia;
 use App\Services\Messaging\InboundMessage;
+use App\Services\Messaging\OutboundInteractive;
 use App\Services\Messaging\OutboundMedia;
 use App\Services\Messaging\SendResult;
 use App\Services\Messaging\Support\MessageId;
@@ -29,12 +31,28 @@ use Illuminate\Support\Facades\Log;
  *   ٢. لا إشعارات تسليم ولا قراءة للبوتات — الحالة تقف عند sent.
  *   ٣. تنزيل الملفات محدود بعشرين ميغابايت (حدّ Bot API لا حدّ تيليجرام).
  */
-class TelegramDriver implements ChannelDriver
+class TelegramDriver implements ChannelDriver, SupportsInteractive
 {
     private const API = 'https://api.telegram.org';
 
     /** حدّ تنزيل البوت من تيليجرام. */
     private const DOWNLOAD_LIMIT = 20 * 1024 * 1024;
+
+    /**
+     * التحديثات التي يطلبها الـ webhook. callback_query ضغطة زرّ inline: بدونها
+     * تدور الأزرار ولا يصلنا شيء. وتيليجرام تحفظ القائمة مع الـ webhook، فالبوت
+     * المربوط قبل الأزرار يُعاد تسجيله مرّة (ensureButtonUpdates).
+     */
+    private const ALLOWED_UPDATES = ['message', 'edited_message', 'callback_query'];
+
+    /** علامة في بيانات الحساب: سُجّل الـ webhook بـ ALLOWED_UPDATES الحالية. */
+    private const UPDATES_MARK = 'callback_query';
+
+    /** حدّ callback_data في Bot API (بايت لا حرف). */
+    private const CALLBACK_DATA_LIMIT = 64;
+
+    /** حدّ تعليق الوسائط؛ المتن الأطول يُرسل رسالةً بعد الوسائط. */
+    private const CAPTION_LIMIT = 1024;
 
     public function channel(): string
     {
@@ -46,7 +64,7 @@ class TelegramDriver implements ChannelDriver
         return new ChannelCapabilities(
             windowHours: null,          // لا نافذة
             templates: false,
-            interactive: false,
+            interactive: true,          // inline keyboard: أزرار وقوائم وزرّ رابط
             location: true,
             locationRequest: false,
             mediaCaption: true,
@@ -117,6 +135,11 @@ class TelegramDriver implements ChannelDriver
     public function parseWebhook(Request $request, ChannelAccount $account): array
     {
         $update = $request->all();
+
+        if (is_array($update['callback_query'] ?? null)) {
+            return $this->parseButtonPress($update['callback_query'], $update, $account);
+        }
+
         $message = $update['message'] ?? $update['edited_message'] ?? null;
 
         if (!is_array($message)) {
@@ -165,6 +188,106 @@ class TelegramDriver implements ChannelDriver
                 : null,
             raw: $update,
         )];
+    }
+
+    /**
+     * ضغطة زرّ inline: تصل ردّاً تفاعلياً بشكل واتساب (button_reply/list_reply)
+     * بعنوان الزرّ، فيطابقها الـ flow كما يطابق ضغطة زرّ واتساب.
+     *
+     * العنوان من لوحة الأزرار في الرسالة نفسها — هو ما رآه العميل — ثم من
+     * callback_data إن لم تصل الرسالة (تيليجرام تحجب الرسائل القديمة جداً).
+     * callback_data يكتبها عميلٌ معدَّل كما يشاء، لكنّ أقصى ما تفعله أن تساوي
+     * كتابة العنوان نصّاً.
+     *
+     * @return array<int, InboundMessage>
+     */
+    private function parseButtonPress(array $callback, array $update, ChannelAccount $account): array
+    {
+        $message = is_array($callback['message'] ?? null) ? $callback['message'] : [];
+        $from = is_array($callback['from'] ?? null) ? $callback['from'] : [];
+
+        if (($message['chat']['type'] ?? 'private') !== 'private') {
+            return [];
+        }
+
+        $chatId = (string) ($message['chat']['id'] ?? $from['id'] ?? '');
+        $callbackId = (string) ($callback['id'] ?? '');
+        $data = (string) ($callback['data'] ?? '');
+
+        if ($chatId === '' || $callbackId === '' || $data === '') {
+            return [];
+        }
+
+        // يوقف دوران الزرّ عند العميل. قبل أيّ شيء آخر: الضغطة وصلت.
+        $this->answerButtonPress($account, $callbackId);
+
+        $title = $this->buttonTitle($message, $data);
+
+        if ($title === null) {
+            return [];
+        }
+
+        $kind = str_starts_with($data, 'l') ? 'list_reply' : 'button_reply';
+
+        return [new InboundMessage(
+            // معرّف الضغطة فريد عند تيليجرام، فإعادة الـ webhook لا تكرّرها.
+            providerMessageId: MessageId::namespaced(
+                Channel::TELEGRAM,
+                (string) $account->external_id,
+                'cb' . $callbackId,
+                $chatId
+            ),
+            senderId: $chatId,
+            metadata: [
+                'type' => 'interactive',
+                'interactive' => [
+                    'type' => $kind,
+                    $kind => ['id' => $data, 'title' => $title],
+                ],
+            ],
+            senderName: trim(($from['first_name'] ?? '') . ' ' . ($from['last_name'] ?? '')) ?: null,
+            senderUsername: $from['username'] ?? null,
+            raw: $update,
+        )];
+    }
+
+    /** عنوان الزرّ الذي ضُغط: من لوحة الرسالة، وإلا من callback_data. */
+    private function buttonTitle(array $message, string $data): ?string
+    {
+        foreach ((array) ($message['reply_markup']['inline_keyboard'] ?? []) as $row) {
+            foreach ((array) $row as $button) {
+                if (is_array($button) && ($button['callback_data'] ?? null) === $data) {
+                    $text = trim((string) ($button['text'] ?? ''));
+
+                    return $text !== '' ? $text : null;
+                }
+            }
+        }
+
+        // «b:العنوان» / «l:العنوان». الصيغة بالرقم («b#2») تحتاج اللوحة.
+        if (strlen($data) > 2 && $data[1] === ':') {
+            $title = trim(substr($data, 2));
+
+            return $title !== '' ? $title : null;
+        }
+
+        return null;
+    }
+
+    private function answerButtonPress(ChannelAccount $account, string $callbackId): void
+    {
+        try {
+            Http::timeout(5)->asJson()->post(
+                self::API . '/bot' . $this->token($account) . '/answerCallbackQuery',
+                ['callback_query_id' => $callbackId]
+            );
+        } catch (\Throwable $e) {
+            // ضغطةٌ بلا إجابة تتوقّف وحدها بعد ثوانٍ؛ لا تُسقط الردّ.
+            Log::warning('Telegram answerCallbackQuery failed', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -411,6 +534,164 @@ class TelegramDriver implements ChannelDriver
         return $this->call($account, $method, $payload, $contact);
     }
 
+    /**
+     * أزرار الـ flow وقوائمه وزرّ الرابط لوحةَ inline تحت الرسالة.
+     *
+     * لا قوائم منسدلة في تيليجرام: كل صفّ في القائمة زرٌّ في سطر، وما للصفوف
+     * من وصفٍ يُلحق بالمتن. ورأس الوسائط يُرسل صورةً (أو فيديو أو ملفاً)
+     * تعليقها المتن وتحتها الأزرار، ما لم يطُل المتن عن حدّ التعليق.
+     */
+    public function sendInteractive(ChannelAccount $account, Contact $contact, OutboundInteractive $message, array $options = []): SendResult
+    {
+        $this->ensureButtonUpdates($account);
+
+        $text = $this->interactiveText($message);
+        $markup = ['inline_keyboard' => $this->keyboard($message)];
+        $header = $message->header;
+
+        if (in_array($header['type'] ?? null, ['image', 'video', 'document'], true) && !empty($header['url'])) {
+            [$method, $field] = match ($header['type']) {
+                'image' => ['sendPhoto', 'photo'],
+                'video' => ['sendVideo', 'video'],
+                default => ['sendDocument', 'document'],
+            };
+
+            if (mb_strlen($text) <= self::CAPTION_LIMIT) {
+                return $this->call($account, $method, [
+                    'chat_id' => $contact->channel_identifier,
+                    $field => $header['url'],
+                    'caption' => $text,
+                    'reply_markup' => $markup,
+                ], $contact);
+            }
+
+            $media = $this->call($account, $method, [
+                'chat_id' => $contact->channel_identifier,
+                $field => $header['url'],
+            ], $contact);
+
+            if (!$media->success) {
+                return $media;
+            }
+        }
+
+        return $this->call($account, 'sendMessage', [
+            'chat_id' => $contact->channel_identifier,
+            'text' => $text,
+            'reply_markup' => $markup,
+        ], $contact);
+    }
+
+    /** المتن: رأسٌ نصّي، ثم الرسالة، ثم أوصاف صفوف القائمة، ثم التذييل. */
+    private function interactiveText(OutboundInteractive $message): string
+    {
+        $parts = [];
+
+        if (($message->header['type'] ?? null) === 'text') {
+            $parts[] = $message->header['text'];
+        }
+
+        $parts[] = $message->body;
+
+        if ($message->kind === OutboundInteractive::LIST) {
+            $described = [];
+
+            foreach ($message->sections as $section) {
+                foreach ($section['rows'] as $row) {
+                    if (!empty($row['description'])) {
+                        $described[] = '• ' . $row['title'] . ': ' . $row['description'];
+                    }
+                }
+            }
+
+            if ($described !== []) {
+                $parts[] = implode("\n", $described);
+            }
+        }
+
+        if ($message->footer !== null) {
+            $parts[] = $message->footer;
+        }
+
+        return trim(implode("\n\n", array_filter($parts, static fn ($p) => trim((string) $p) !== '')));
+    }
+
+    /**
+     * سطر لكل زرّ: العناوين العربية تُقصّ إن تجاورت.
+     *
+     * @return array<int, array<int, array<string, string>>>
+     */
+    private function keyboard(OutboundInteractive $message): array
+    {
+        if ($message->kind === OutboundInteractive::CTA_URL) {
+            return [[[
+                'text' => $message->displayText ?: (string) $message->url,
+                'url' => (string) $message->url,
+            ]]];
+        }
+
+        $titles = $message->kind === OutboundInteractive::BUTTONS
+            ? array_column($message->buttons, 'title')
+            : array_merge(...array_map(static fn ($s) => array_column($s['rows'], 'title'), $message->sections ?: [['rows' => []]]));
+
+        $prefix = $message->kind === OutboundInteractive::LIST ? 'l' : 'b';
+        $rows = [];
+
+        foreach (array_values($titles) as $index => $title) {
+            $rows[] = [['text' => (string) $title, 'callback_data' => $this->callbackData($prefix, $index, (string) $title)]];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * «b:العنوان» إن اتّسع له حدّ الـ 64 بايت، وإلا «b#الترتيب» ويُقرأ العنوان
+     * من لوحة الرسالة عند الضغط. والعنوان أوّلاً لأنه يُقرأ ولو حُجبت الرسالة.
+     */
+    private function callbackData(string $prefix, int $index, string $title): string
+    {
+        $data = $prefix . ':' . $title;
+
+        return strlen($data) <= self::CALLBACK_DATA_LIMIT ? $data : $prefix . '#' . $index;
+    }
+
+    /**
+     * بوتٌ رُبط قبل الأزرار سُجّل webhook-ه بلا callback_query، فتدور أزراره ولا
+     * يصلنا شيء. يُعاد تسجيله مرّة قبل أوّل رسالة بأزرار، بالرابط نفسه والسرّ
+     * نفسه. والفشل لا يمنع الإرسال: الأزرار تظهر، ويبقى للعميل أن يكتب.
+     */
+    private function ensureButtonUpdates(ChannelAccount $account): void
+    {
+        if ($account->credential('webhook_updates') === self::UPDATES_MARK) {
+            return;
+        }
+
+        try {
+            // الرابط الذي يعرفه تيليجرام لا route(): هذا يجري في عامل الطابور
+            // حيث يُبنى الرابط من APP_URL لا من النطاق الذي رُبط منه البوت —
+            // ورابطٌ خاطئ هنا يقطع رسائل البوت كلّها، لا الأزرار وحدها.
+            $info = $this->webhookInfo($account);
+            if ($info === null || ($info['url'] ?? '') === '') {
+                Log::warning('Telegram webhook info unavailable; buttons re-registration skipped', ['account_id' => $account->id]);
+
+                return;
+            }
+
+            if (in_array('callback_query', (array) ($info['allowed_updates'] ?? []), true)) {
+                $account->mergeCredentials(['webhook_updates' => self::UPDATES_MARK]);
+
+                return;
+            }
+
+            $this->registerWebhook($account, $info['url']);
+        } catch (\Throwable $e) {
+            Log::warning('Telegram webhook re-registration for buttons failed', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     /* ───────────────────────── الحساب ───────────────────────── */
 
     public function verifyCredentials(array $credentials): array
@@ -442,7 +723,23 @@ class TelegramDriver implements ChannelDriver
      * تسجيل الـ webhook. المسار يحمل uuid الحساب لأن تيليجرام لا تُرسل
      * معرّف البوت مع التحديثات، فالمسار وحده ما يُميّز حساباً عن آخر.
      */
-    public function registerWebhook(ChannelAccount $account): bool
+    /** ما سجّله تيليجرام لهذا البوت (url وallowed_updates)، أو null إن تعذّرت القراءة. */
+    private function webhookInfo(ChannelAccount $account): ?array
+    {
+        $response = Http::timeout(15)->get(self::API . '/bot' . $this->token($account) . '/getWebhookInfo');
+
+        if (!$response->successful() || $response->json('ok') !== true || !is_array($response->json('result'))) {
+            return null;
+        }
+
+        return $response->json('result');
+    }
+
+    /**
+     * @param string|null $url رابطٌ مسجّل سلفاً يُعاد كما هو؛ بدونه يُبنى من
+     *                         المسار (الربط الأوّل، من طلب الويب).
+     */
+    public function registerWebhook(ChannelAccount $account, ?string $url = null): bool
     {
         $secret = $account->credential('webhook_secret');
 
@@ -452,9 +749,9 @@ class TelegramDriver implements ChannelDriver
         }
 
         $response = Http::timeout(20)->post(self::API . '/bot' . $this->token($account) . '/setWebhook', [
-            'url' => route('channels.webhook', ['channel' => Channel::TELEGRAM, 'account' => $account->uuid]),
+            'url' => $url ?? route('channels.webhook', ['channel' => Channel::TELEGRAM, 'account' => $account->uuid]),
             'secret_token' => $secret,
-            'allowed_updates' => ['message', 'edited_message'],
+            'allowed_updates' => self::ALLOWED_UPDATES,
             'drop_pending_updates' => false,
         ]);
 
@@ -466,6 +763,8 @@ class TelegramDriver implements ChannelDriver
 
             return false;
         }
+
+        $account->mergeCredentials(['webhook_updates' => self::UPDATES_MARK]);
 
         return true;
     }

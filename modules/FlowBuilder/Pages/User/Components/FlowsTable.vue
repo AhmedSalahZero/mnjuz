@@ -102,6 +102,7 @@
                 <TableHeaderRow>
                     <TableHeaderRowItem :position="'first'">{{ $t('Name') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Runs') }}</TableHeaderRowItem>
+                    <TableHeaderRowItem>{{ $t('Channels') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Last updated') }}</TableHeaderRowItem>
                     <TableHeaderRowItem :position="'last'"></TableHeaderRowItem>
@@ -113,6 +114,11 @@
                     <TableBodyRowItem class="hidden sm:table-cell">
                         <div class="py-1 px-2 bg-gray-50 rounded-[5px] border border-dashed w-[fit-content] text-xs capitalize">
                             {{ item.flow_logs_count }}
+                        </div>
+                    </TableBodyRowItem>
+                    <TableBodyRowItem class="hidden sm:table-cell">
+                        <div class="flex flex-wrap gap-1">
+                            <span v-for="label in item.channel_labels" :key="label" class="py-0.5 px-2 rounded-[5px] text-xs bg-slate-100 text-slate-700">{{ label }}</span>
                         </div>
                     </TableBodyRowItem>
                     <TableBodyRowItem class="hidden sm:table-cell">{{ $t(item.status) }}</TableBodyRowItem>

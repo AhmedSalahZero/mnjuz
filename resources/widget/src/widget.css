@@ -200,6 +200,7 @@
 
 .mnjz-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .mnjz-choice {
+    display: block;
     border: 1px solid var(--mnjz-color);
     background: #fff;
     color: var(--mnjz-color);

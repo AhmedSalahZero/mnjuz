@@ -92,10 +92,14 @@ function Choices({ message, interactive, t, onChoose }: { message: WidgetMessage
     if (interactive.kind === 'cta_url') {
         const href = safeHref(interactive.url ?? null)
 
+        // داخل .mnjz-choices كالأزرار: الرابط وحده عنصرٌ سطري يجاور النص،
+        // فتعلو حشوته السطر الذي فوقه وتغطّيه (زرّ التقييم بعد الإغلاق).
         return href ? (
-            <a class="mnjz-choice mnjz-choice-link" href={href} target="_blank" rel="noopener noreferrer nofollow">
-                {interactive.display_text || href} <Icon icon={faArrowUpRightFromSquare} class="mnjz-svg-sm" />
-            </a>
+            <div class="mnjz-choices">
+                <a class="mnjz-choice mnjz-choice-link" href={href} target="_blank" rel="noopener noreferrer nofollow">
+                    {interactive.display_text || href} <Icon icon={faArrowUpRightFromSquare} class="mnjz-svg-sm" />
+                </a>
+            </div>
         ) : null
     }
 

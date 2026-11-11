@@ -91,7 +91,7 @@ class FlowExecutionService
             }
 
             // The flow did not take the message: a keyword may switch to (or restart) a flow.
-            $keywordFlow = $this->findFlowByKeyword($message, (int) $chat->organization_id);
+            $keywordFlow = $this->findFlowByKeyword($message, (int) $chat->organization_id, $chat->channel ?? null);
 
             return $keywordFlow ? $this->startFlow($chat, $isNewContact, $keywordFlow->id, $message) : false;
         }
@@ -135,8 +135,10 @@ class FlowExecutionService
      */
     public function resolveTriggeredFlow($chat, $isNewContact, $message)
     {
+        // ترحيب الموقع غير ترحيب واتساب: المسار يبدأ على قنواته وحدها.
         $flowQuery = Flow::where('organization_id', $chat->organization_id)
-            ->where('status', 'active');
+            ->where('status', 'active')
+            ->forChannel($chat->channel ?? null);
 
         if ($this->isFirstInboundMessage($chat)) {
             $flow = (clone $flowQuery)->where('trigger', 'first_message')
@@ -161,7 +163,7 @@ class FlowExecutionService
             }
         }
 
-        $flow = $this->findFlowByKeyword((string) $message, (int) $chat->organization_id);
+        $flow = $this->findFlowByKeyword((string) $message, (int) $chat->organization_id, $chat->channel ?? null);
 
         if ($flow) {
             return $flow;
@@ -224,6 +226,7 @@ class FlowExecutionService
 
         return Flow::where('organization_id', $chat->organization_id)
             ->where('status', 'active')
+            ->forChannel($chat->channel ?? null)
             ->whereIn('trigger', ['first_message', 'new_contact'])
             ->whereNotNull('trigger_timeout')
             ->where('trigger_timeout', '>', 0)
@@ -498,7 +501,7 @@ class FlowExecutionService
      */
     private function handleUnmatchedReply(array $metadata, $flowData, $contact, $contactId, string $message)
     {
-        if ($this->findFlowByKeyword($message, (int) $contact->organization_id)) {
+        if ($this->findFlowByKeyword($message, (int) $contact->organization_id, $contact->channel ?? null)) {
             return false;
         }
 
@@ -1271,15 +1274,20 @@ class FlowExecutionService
      * Returns the flow row (stdClass) or null if none found.
      *
      * المطابقة في PHP لا بـ FIND_IN_SET: انظر KeywordMatcher. والأقدم يفوز
-     * حين تتكرّر الكلمة في أكثر من flow نشط.
+     * حين تتكرّر الكلمة في أكثر من flow نشط. ومن قنوات الـ flow وحدها: كلمة
+     * مسار تيليجرام لا تبدأه على واتساب (انظر Flow::scopeForChannel).
      */
-    private function findFlowByKeyword(string $msg, int $organizationId): ?object
+    private function findFlowByKeyword(string $msg, int $organizationId, ?string $channel): ?object
     {
         $flows = \DB::table('flows')
             ->where('trigger', 'keywords')
             ->where('organization_id', $organizationId)
             ->where('status', 'active')
             ->whereNull('deleted_at')
+            ->where(function ($q) use ($channel) {
+                $q->whereNull('channels')
+                    ->orWhereJsonContains('channels', $channel ?: \App\Services\Messaging\Channel::DEFAULT);
+            })
             ->orderBy('id')
             ->get(['id', 'keywords']);
 

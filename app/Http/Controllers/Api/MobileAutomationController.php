@@ -6,9 +6,11 @@ use App\Http\Controllers\Api\Concerns\MobileApi;
 use App\Http\Controllers\Controller;
 use App\Models\AutoReply;
 use App\Services\ActivityLogger;
+use App\Services\Messaging\AutomationChannels;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 /**
  * الأتمتة الأساسية (الردود الجاهزة) من التطبيق.
@@ -158,6 +160,10 @@ class MobileAutomationController extends Controller
             'match_criteria' => 'required|in:exact match,contains',
             'response_type' => 'required|in:' . implode(',', self::SUPPORTED_RESPONSE_TYPES),
             'response' => 'required|string|max:4096',
+            // اختياريّ: نسخ التطبيق التي لا تعرف القنوات لا تُسقط ما اختاره
+            // التاجر من الويب، والإنشاء بلا قنوات يأخذ القنوات الافتراضية (defaults).
+            'channels' => 'sometimes|array|min:1',
+            'channels.*' => ['string', Rule::in(AutomationChannels::available())],
         ]);
     }
 
@@ -167,6 +173,13 @@ class MobileAutomationController extends Controller
         $reply->name = $data['name'];
         $reply->trigger = $data['trigger'];
         $reply->match_criteria = $data['match_criteria'];
+
+        if (array_key_exists('channels', $data)) {
+            $reply->channels = AutomationChannels::normalize($data['channels']);
+        } elseif (!$reply->exists) {
+            $reply->channels = AutomationChannels::defaults();
+        }
+
         $reply->metadata = json_encode([
             'type' => $data['response_type'],
             'data' => ['text' => $data['response']],
@@ -192,6 +205,7 @@ class MobileAutomationController extends Controller
             'name' => $reply->name,
             'trigger' => $reply->trigger,
             'match_criteria' => $reply->match_criteria,
+            'channels' => AutomationChannels::effective($reply->channels),
             'response_type' => $metadata['type'] ?? 'text',
             // الردود القديمة قد تحمل صورة أو صوتاً؛ يصل نصّها فارغاً ويبقى
             // النوع ظاهراً كي يعرف التطبيق أنه لا يحرّره.

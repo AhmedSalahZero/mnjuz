@@ -92,6 +92,8 @@ class FlowController extends BaseController
         $data['contactGroups'] = $contactGroups;
         $data['contactFields'] = $contactFields;
         $data['availableActions'] = $availableActions;
+        // ما تختار منه عقدة البداية قنوات الـ flow.
+        $data['automationChannels'] = \App\Services\Messaging\AutomationChannels::options();
 
         return Inertia::render('FlowBuilder::User/View', $data);
     }

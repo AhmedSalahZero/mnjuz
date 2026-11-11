@@ -298,9 +298,14 @@ class ChatController extends BaseController
 
     public function loadMoreMessages(Request $request, $contactId)
     {
-        $page = $request->query('page', 1);
-        $messages = $this->chatService()->getChatMessages($contactId, $page);
-        
+        $page = max(1, (int) $request->query('page', 1));
+        $messages = $this->chatService()->getConversationMessages((int) $contactId, $page);
+
+        // غير الموجود ومن لا يحقّ له الاطّلاع سواء: 404 لا تكشف أن الرقم لمنشأة أخرى.
+        if ($messages === null) {
+            return response()->json(['message' => __('Contact not found')], 404);
+        }
+
         return response()->json($messages);
     }
 

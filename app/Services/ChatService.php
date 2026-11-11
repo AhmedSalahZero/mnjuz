@@ -545,13 +545,16 @@ class ChatService
  
         $ticketingActive = false;
 	
-        $aimodule = CustomHelper::isModuleEnabled('AI Assistant',$this->organizationId);
+        $aimodule = fn () => CustomHelper::isModuleEnabled('AI Assistant', $this->organizationId);
         //Check if tickets module has been enabled
 		$allowAgentsToViewAllChats =true;
 		if($config->getTicketingActive()){
 			$ticketingActive = true;
-			if (!in_array($ticketState, ['open', 'closed', 'unassigned'], true)) {
-				$this->ensureChatTicketsExist();
+			// يُكمل تذاكر من راسلناهم ولم يراسلونا (حملة مثلاً) ليظهروا في «الكل».
+			// يخصّ القائمة وحدها: فتح محادثة (طلب جزئي بلا rows) لا يحتاجه، وكان
+			// يمسح كل جهات اتصال المنشأة مع كل نقرة.
+			if (!$skipRowsQuery && !in_array($ticketState, ['open', 'closed', 'unassigned'], true)) {
+				$this->ensureChatTicketsExistThrottled();
 			}
 			$allowAgentsToViewAllChats = $config->getAllowAgentsToViewAllChats();
 		}
@@ -599,7 +602,7 @@ class ChatService
         // BroadcastProvider فيتبع مفتاح التبديل تلقائياً — تغيير المزوّد يظهر
         // في المتصفّح عند تحميل الصفحة التالي بلا نشر ولا إعادة بناء. ومزوّد
         // المنشأة نفسها: الأدمن يختار لكل منشأة Pusher أو Reverb.
-			$pusherSettings = BroadcastProvider::clientConfig((int) $this->organizationId ?: null);
+			$pusherSettings = fn () => BroadcastProvider::clientConfig((int) $this->organizationId ?: null);
 			
 		}
 
@@ -612,7 +615,10 @@ class ChatService
 
         //   $perPage = 10; // Number of items per page
         //    $totalContacts = count($contacts); // Total number of contacts
-        $messageTemplates = Template::where('organization_id', $this->organizationId)
+        // ما لا يخصّ المحادثة المفتوحة يُحسب عند طلبه فقط: فتح محادثة طلبٌ
+        // جزئي (only: contact, chatThread, …) وInertia لا تستدعي closure لم
+        // يُطلب. التحميل الكامل يحسبها كلها كما كان.
+        $messageTemplates = fn () => Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
             ->select(['uuid', 'name', 'language'])
@@ -716,7 +722,7 @@ class ChatService
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => $rowsForResponse,
-                    'simpleForm' => CustomHelper::isModuleEnabled('AI Assistant') && optional(optional($settings)->ai)->ai_chat_form_active ? false : true,
+                    'simpleForm' => fn () => CustomHelper::isModuleEnabled('AI Assistant') && optional(optional($settings)->ai)->ai_chat_form_active ? false : true,
                     'rowCount' => $rowCount,
                     'filters' => request()->all(),
                     'pusherSettings' => $pusherSettings,
@@ -727,19 +733,19 @@ class ChatService
                     'nextPage' => $initialMessages['nextPage'],
                     'contact' => $uuid ? self::contactPayloadForChatView($contact) : null,
                     'chatThread' => $uuid ? $initialMessages['messages'] : [],
-                    'fields' => ContactField::where('organization_id', $this->organizationId)->where('deleted_at', null)->get(),
-                    'locationSettings' => $this->getLocationSettings(),
+                    'fields' => fn () => ContactField::where('organization_id', $this->organizationId)->where('deleted_at', null)->get(),
+                    'locationSettings' => fn () => $this->getLocationSettings(),
                     'ticket' => $ticket,
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'hasMoreMessages' => $initialMessages['hasMoreMessages'],
 					'user' => auth()->user()->only(['id', 'first_name', 'last_name']),
-					'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
-                    'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
-                    'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
+					'timezone' => fn () => DateTimeHelper::getCurrentTimeZone($this->organizationId),
+                    'isChatLimitReached' => fn () => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                    'contactCategoriesEnabled' => fn () => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
                     'hasMoreContacts' => $hasMoreContacts,
                     'nextContactsPage' => $nextContactsPage,
-                    'connectedChannels' => $this->channels()->connectedChannels((int) $this->organizationId),
+                    'connectedChannels' => fn () => $this->channels()->connectedChannels((int) $this->organizationId),
                     'channelFilter' => $channelFilter,
                 ]);
             }
@@ -756,7 +762,7 @@ class ChatService
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
                 'rows' => $rowsForResponse,
-                'simpleForm' => !CustomHelper::isModuleEnabled('AI Assistant') || empty($settings->ai->ai_chat_form_active),
+                'simpleForm' => fn () => !CustomHelper::isModuleEnabled('AI Assistant') || empty($settings->ai->ai_chat_form_active),
                 'rowCount' => $rowCount,
                 'filters' => request()->all(),
                 'pusherSettings' => $pusherSettings,
@@ -770,17 +776,17 @@ class ChatService
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
 				'user' => auth()->user()->only(['id', 'first_name', 'last_name']),
-				'timezone'=>DateTimeHelper::getCurrentTimeZone($this->organizationId),
-                'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+				'timezone' => fn () => DateTimeHelper::getCurrentTimeZone($this->organizationId),
+                'isChatLimitReached' => fn () => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
                 // لإرجاع عرض القائمة عند الطلب الجزئي (مثلاً الرجوع من محادثة) دون إعادة تحميل rows
                 'contact' => null,
                 'chatThread' => [],
                 'hasMoreMessages' => false,
                 'nextPage' => 1,
-                'contactCategoriesEnabled' => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
+                'contactCategoriesEnabled' => fn () => SubscriptionService::isSubscriptionFeatureEnabled((string) $this->organizationId, 'contact_categories_enabled'),
                 'hasMoreContacts' => $hasMoreContacts,
                 'nextContactsPage' => $nextContactsPage,
-                'connectedChannels' => $this->channels()->connectedChannels((int) $this->organizationId),
+                'connectedChannels' => fn () => $this->channels()->connectedChannels((int) $this->organizationId),
                 'channelFilter' => $channelFilter,
             ]);
         }
@@ -1655,6 +1661,25 @@ class ChatService
         }
     }
 
+    /**
+     * صفحة رسائل محادثة للمستخدم الحالي — أو null إن لم تكن جهة الاتصال من
+     * المنشأة الحالية أو لم يكن له حقّ فتحها (وكيلٌ والتذكرة لغيره).
+     * المعرّف يأتي من المتصفّح: getChatMessages وحدها تقرأ أي رقم يُعطى لها.
+     */
+    public function getConversationMessages(int $contactId, int $page = 1): ?array
+    {
+        $user = auth()->user();
+        $contact = Contact::where('id', $contactId)
+            ->where('organization_id', $this->organizationId)
+            ->first(['id', 'organization_id']);
+
+        if (!$user || !$contact || !$this->canAccessConversation($user, $contact)) {
+            return null;
+        }
+
+        return $this->getChatMessages($contact->id, $page);
+    }
+
     public function getChatMessages($contactId, $page = 1, $perPage = 50, ?string $createdAt = null , $entityTypes = [])
     {
         $query = ChatLog::where('contact_id', $contactId)
@@ -1681,7 +1706,8 @@ class ChatService
         $noteIds = $chatLogs->where('entity_type', 'notes')->pluck('entity_id')->unique()->filter()->values()->all();
 
         $chatsMap = !empty($chatIds)
-            ? Chat::with('media', 'user', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
+            // المرسل للفقاعة اسمه فقط (senderName.js): لا بريده ولا هاتفه.
+            ? Chat::with('media', 'user:id,first_name,last_name', 'logs')->whereIn('id', $chatIds)->get()->keyBy('id')
             : collect();
         $ticketLogsMap = !empty($ticketIds)
             ? ChatTicketLog::whereIn('id', $ticketIds)->get()->keyBy('id')
@@ -1712,6 +1738,24 @@ class ChatService
         ];
     }
 	
+    /** عمر الفاصل بين فحصين لتذاكر القائمة لكل منشأة. */
+    public const TICKET_BACKFILL_SECONDS = 120;
+
+    /**
+     * ensureChatTicketsExist مرّة كل دقيقتين لكل منشأة لا مع كل تحميل.
+     *
+     * الفحص يمرّ على كل جهات الاتصال التي راسلت المنشأة (عشرات الآلاف عند
+     * العملاء الكبار) ولا يجد شيئاً في الغالب: التذاكر تُنشأ عند أول رسالة
+     * واردة، وهذا يلحق فقط بمن راسلناهم أولاً. دقيقتان تأخير هنا لا تُخفي
+     * محادثة: من لا تذكرة له يظهر في «الكل» أصلاً.
+     */
+    private function ensureChatTicketsExistThrottled(): void
+    {
+        if (\Illuminate\Support\Facades\Cache::add('chat_tickets_backfill:' . (int) $this->organizationId, 1, self::TICKET_BACKFILL_SECONDS)) {
+            $this->ensureChatTicketsExist();
+        }
+    }
+
     private function ensureChatTicketsExist()
     {
         $contactsWithoutTickets = DB::table('contacts')

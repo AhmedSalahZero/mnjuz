@@ -779,6 +779,10 @@ class ApiController extends Controller
             'match_criteria' => 'required|in:exact match,contains',
             'response_type' => 'required|in:text,image,audio',
             'response' => 'required',
+            // اختياريّ كما في التطبيق: بلا قنوات يأخذ الردّ الجديد القنوات الافتراضية (AutomationChannels::defaults)،
+            // والتعديل لا يمسّ ما اختاره التاجر.
+            'channels' => 'sometimes|array|min:1',
+            'channels.*' => ['string', \Illuminate\Validation\Rule::in(\App\Services\Messaging\AutomationChannels::available())],
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -820,6 +824,12 @@ class ApiController extends Controller
             $model->name = $request->name;
             $model->trigger = $request->trigger;
             $model->match_criteria = $request->match_criteria;
+
+            if ($request->has('channels')) {
+                $model->channels = \App\Services\Messaging\AutomationChannels::normalize($request->input('channels'));
+            } elseif (!$model->exists) {
+                $model->channels = \App\Services\Messaging\AutomationChannels::defaults();
+            }
 
             $metadata = [
                 'type' => $request->response_type,
@@ -2561,6 +2571,25 @@ class ApiController extends Controller
      * تسجيل حدث من مسار التطبيق. مسارات API لا تملك جلسة، فالمنظمة تُؤخذ من
      * عمود المستخدم صراحةً بدل الاعتماد على الاستنتاج.
      */
+    /**
+     * جهة اتصال من منشأة المستخدم الحالية على التطبيق فقط.
+     *
+     * المعرّف رقمٌ متتابع يأتي من الطلب: بلا قيد المنشأة كان أي مستخدم يُغلق
+     * محادثة منشأة أخرى (فيصل لعميلها استبيان التقييم) أو يُسندها أو يعلّمها مقروءة.
+     */
+    private function mobileContact(Request $request, $id): ?Contact
+    {
+        $organizationId = (int) $request->user()?->current_mobile_organization_id;
+
+        if ($organizationId <= 0 || !is_numeric($id)) {
+            return null;
+        }
+
+        return Contact::where('id', (int) $id)
+            ->where('organization_id', $organizationId)
+            ->first();
+    }
+
     private function logMobileActivity(string $event, $contact = null, array $properties = [], ?int $organizationId = null): void
     {
         // كل شيء داخل try — بما فيه بناء الاسم. ActivityLogger::log يحمي نفسه،
@@ -3353,8 +3382,14 @@ class ApiController extends Controller
     }
     public function toggleTicketStatus(Request $request, $id)
     {
-        // $organizationId = $request->user()->current_mobile_organization_id;
-        $contact = Contact::find($id);
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:open,closed',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['error' => $validator->errors()], 400);
+        }
+
+        $contact = $this->mobileContact($request, $id);
         if (!$contact) {
             return response()->json([
                 'statusCode' => 404,
@@ -3504,7 +3539,7 @@ class ApiController extends Controller
 		if ($validator->fails()) {
 			return response()->json(['error' => $validator->errors()], 400);
 		}
-		$contact = Contact::where('id', $request->contact_id)->first();
+		$contact = $this->mobileContact($request, $request->contact_id);
 		
 		if (!$contact) {
 			return response()->json([
@@ -3513,7 +3548,10 @@ class ApiController extends Controller
 				'message' => __('Contact not found'),
 			], 404);
 		}
-		$user = User::find($request->user_id);
+		// المُسنَد إليه من أعضاء المنشأة نفسها، لا أي مستخدم في المنصّة.
+		$user = User::where('id', $request->user_id)
+			->whereHas('teams', fn ($q) => $q->where('organization_id', $contact->organization_id))
+			->first();
 		if (!$user) {
 			return response()->json([
 				'statusCode' => 404,
@@ -3542,7 +3580,7 @@ class ApiController extends Controller
 		if ($validator->fails()) {
 			return response()->json(['error' => $validator->errors()], 400);
 		}
-		$contact = Contact::find($request->contact_id);
+		$contact = $this->mobileContact($request, $request->contact_id);
 		if (!$contact) {
 			return response()->json([
 				'statusCode' => 404,

@@ -2294,5 +2294,9 @@
     "Contact not found.": "جهة الاتصال غير موجودة.",
     "Message could not be sent.": "تعذّر إرسال الرسالة.",
     "Automated replies are off on :channel.": "الردّ الآلي غير مفعّل على :channel.",
-    "The preview shows the saved settings. Messages you send here reach your inbox like a real visitor.": "المعاينة تعرض الإعدادات المحفوظة. ما ترسله هنا يصل صندوق المحادثات كزائر حقيقي."
+    "The preview shows the saved settings. Messages you send here reach your inbox like a real visitor.": "المعاينة تعرض الإعدادات المحفوظة. ما ترسله هنا يصل صندوق المحادثات كزائر حقيقي.",
+    "Choose at least one channel.": "اختر قناة واحدة على الأقل.",
+    "The reply is sent only to customers who write on these channels": "يُرسَل الردّ فقط للعملاء الذين يكتبون من هذه القنوات",
+    "The flow starts only for customers who write on these channels": "يبدأ المسار فقط للعملاء الذين يكتبون من هذه القنوات",
+    "Telegram": "تيليجرام"
 }

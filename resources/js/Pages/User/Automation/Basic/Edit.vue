@@ -78,6 +78,25 @@
 				</div>
 				<div class="flex border-b py-5">
 					<div class="w-[40%] mb-1">
+						<h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Channels') }}</h2>
+						<span class="flex text-xs mt-2">
+							<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+									stroke-width="2"
+									d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
+							</svg>
+							{{ $t('The reply is sent only to customers who write on these channels') }}
+						</span>
+					</div>
+					<div class="w-[60%] flex space-x-6">
+						<div class="w-[80%]">
+							<ChannelPicker v-model="form.channels" :options="props.automationChannels"
+								:error="form.errors.channels || form.errors['channels.0']" />
+						</div>
+					</div>
+				</div>
+				<div class="flex border-b py-5">
+					<div class="w-[40%] mb-1">
 						<h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Response type') }}</h2>
 					</div>
 					<div class="w-[60%] flex space-x-6">
@@ -291,11 +310,12 @@ import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import FormSelectCombo from '@/Components/FormSelectCombo.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
+import ChannelPicker from '@/Components/ChannelPicker.vue'
 import Modal from '@/Components/Modal.vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 
-const props = defineProps(['autoreply', 'placeholders'])
+const props = defineProps(['autoreply', 'placeholders', 'automationChannels'])
 const isModalOpen = ref(false)
 const textareaRef = ref(null)
 const emojiPicker = ref(false)
@@ -337,13 +357,22 @@ const response = () => {
 	}
 }
 
+const savedChannels = () => {
+	const available = (props.automationChannels || []).map((c) => c.value)
+	const saved = props.autoreply.channels
+
+	return Array.isArray(saved) ? available.filter((c) => saved.includes(c)) : available
+}
+
 const form = useForm({
 	'_method': "put",
 	'name': props.autoreply.name,
 	'trigger': props.autoreply.trigger,
 	'match_criteria': props.autoreply.match_criteria,
 	'response_type': type,
-	'response': response()
+	'response': response(),
+	// المحفوظ ممّا يُعرض اليوم؛ null (ردٌّ بلا اختيار) = كل القنوات.
+	'channels': savedChannels(),
 })
 
 const criteriaOptions = ref([

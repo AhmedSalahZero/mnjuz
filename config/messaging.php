@@ -11,15 +11,20 @@ return [
     | التقييم بُنيت لواتساب، وواتساب يعمل دائماً. هذه القائمة تقرّر أيّ قناة
     | أخرى يصلها الردّ الآلي.
     |
-    | المحادثة المباشرة وحدها الآن: بوتات التجار مكتوبة لواتساب، وتفعيلها على
-    | تيليجرام وميتا وتيك توك دفعةً واحدة يجعلها تردّ فجأة حيث لم يُقصد.
-    | لإضافة قناة بعد تجربتها: MESSAGING_AUTOMATION_CHANNELS=webchat,telegram
+    | المحادثة المباشرة وتيليجرام الآن. وكل ردّ وكل flow يختار التاجر قنواته
+    | منها (auto_replies.channels وflows.channels)، فتشغيل قناة هنا لا يجعل
+    | بوتاً كُتب لواتساب يردّ عليها: الردود القائمة عُبّئت بواتساب والمحادثة
+    | المباشرة (AutomationChannels::LEGACY).
+    |
+    | ميتا وتيك توك ليست بعد: نافذة الأربع وعشرين ساعة والأزرار فيهما لم
+    | تُجرَّب مع الـ flows. لإضافة قناة بعد تجربتها:
+    | MESSAGING_AUTOMATION_CHANNELS=webchat,telegram,messenger
     |
     */
 
     'automation_channels' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('MESSAGING_AUTOMATION_CHANNELS', 'webchat'))
+        explode(',', (string) env('MESSAGING_AUTOMATION_CHANNELS', 'webchat,telegram'))
     ))),
 
     /*

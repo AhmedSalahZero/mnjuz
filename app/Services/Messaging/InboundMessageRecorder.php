@@ -79,11 +79,13 @@ class InboundMessageRecorder
         $limitReached = SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'message_limit');
 
         // الردّ الآلي ورسالة ساعات العمل لقنوات config/messaging.php وحدها
-        // (المحادثة المباشرة الآن). بوتات التجار كُتبت لواتساب، وتشغيلها هنا
+        // (المحادثة المباشرة وتيليجرام الآن)، وكل ردّ على القنوات التي اختارها
+        // له التاجر (AutomationChannels::covers). بوتات التجار كُتبت لواتساب، وتشغيلها هنا
         // كان يُطلق مهامّ تفشل صامتة — والمساعد الذكي يدفع لـ OpenAI أوّلاً.
         $automated = AutomationChannels::allows($contact);
 
-        if (!$limitReached && $automated) {
+        // رسالة ساعات العمل بلا اختيار قنوات بعد: حيث كانت وحدها (assistantAllows).
+        if (!$limitReached && $automated && AutomationChannels::assistantAllows($contact->channel)) {
             $this->maybeSendWorkingHoursNotice($organizationId, $contact);
         }
 

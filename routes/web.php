@@ -214,7 +214,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/performance/heartbeat', [App\Http\Controllers\User\AgentPerformanceController::class, 'heartbeat']);
                 Route::post('/performance/offline', [App\Http\Controllers\User\AgentPerformanceController::class, 'offline']);
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
-                Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
+                // لا GET يُرسل رسالة: طلب GET لا يمرّ على حماية CSRF، فرابطٌ أو صورة
+                // في صفحة أخرى كانت ترسل باسم الموظف. الإرسال عبر POST /chats وحده.
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
 				Route::post('/chat/{uuid}/send/auth-template', [App\Http\Controllers\User\ChatController::class, 'sendAuthTemplate']);
                 Route::post('/chat/{uuid}/request-location', [App\Http\Controllers\User\ChatController::class, 'requestLocation']);

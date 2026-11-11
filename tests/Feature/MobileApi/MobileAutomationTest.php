@@ -101,6 +101,22 @@ class MobileAutomationTest extends MobileApiTestCase
         $this->assertSame('أهلاً بك', json_decode($row->metadata, true)['data']['text']);
     }
 
+    /**
+     * نسخ التطبيق المنشورة لا تعرف القنوات: الردّ الجديد يعمل حيث كانت الأتمتة
+     * تعمل قبل اختيار القنوات (واتساب والمحادثة المباشرة)، لا على تيليجرام فجأة.
+     * والتعديل بلا قنوات لا يمسّ ما اختاره التاجر من الويب.
+     */
+    public function test_a_reply_from_an_app_that_does_not_know_channels(): void
+    {
+        $this->postJson('/api/v1/automation/basic', $this->payload())->assertOk();
+        $row = AutoReply::where('organization_id', $this->organization->id)->first();
+        $this->assertSame(['whatsapp', 'webchat'], $row->channels);
+
+        $row->forceFill(['channels' => ['telegram']])->save();
+        $this->putJson('/api/v1/automation/basic/' . $row->uuid, $this->payload(['response' => 'جديد']))->assertOk();
+        $this->assertSame(['telegram'], $row->fresh()->channels);
+    }
+
     public function test_it_updates_a_reply(): void
     {
         $reply = $this->reply();

@@ -3,6 +3,7 @@
 namespace Modules\FlowBuilder\Services;
 
 use App\Models\Setting;
+use App\Services\Messaging\AutomationChannels;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowMedia;
 use Modules\FlowBuilder\Models\FlowUserData;
@@ -137,12 +138,20 @@ class FlowService
         $timeout = $fields['timeout'] ?? null;
         $timeout = is_numeric($timeout) ? (int) $timeout : null;
 
-        return [
+        $columns = [
             'trigger' => $trigger,
             // «hi, hello» و«مرحبا، عرض» تُخزَّن «hi,hello» و«مرحبا,عرض»: انظر KeywordMatcher.
             'keywords' => KeywordMatcher::normalize($fields['keywords'] ?? null),
             'trigger_timeout' => ($timeout !== null && $timeout > 0) ? $timeout : null,
         ];
+
+        // القنوات من عقدة البداية كبقيّة المحفّز. مسارٌ حُفظ قبل اختيارها لا
+        // يحمل المفتاح، فيبقى ما عُبّئ في العمود بدل أن يُمحى.
+        if (array_key_exists('channels', $fields)) {
+            $columns['channels'] = AutomationChannels::normalize($fields['channels']);
+        }
+
+        return $columns;
     }
 
     /**

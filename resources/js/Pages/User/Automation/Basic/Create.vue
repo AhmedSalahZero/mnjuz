@@ -78,6 +78,25 @@
 				</div>
 				<div class="flex border-b py-5">
 					<div class="w-[40%] mb-1">
+						<h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Channels') }}</h2>
+						<span class="flex text-xs mt-2">
+							<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+								<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+									stroke-width="2"
+									d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
+							</svg>
+							{{ $t('The reply is sent only to customers who write on these channels') }}
+						</span>
+					</div>
+					<div class="w-[60%] flex space-x-6">
+						<div class="w-[80%]">
+							<ChannelPicker v-model="form.channels" :options="props.automationChannels"
+								:error="form.errors.channels || form.errors['channels.0']" />
+						</div>
+					</div>
+				</div>
+				<div class="flex border-b py-5">
+					<div class="w-[40%] mb-1">
 						<h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Response type') }}</h2>
 					</div>
 					<div class="w-[60%] flex space-x-6">
@@ -271,12 +290,13 @@ import { useTrans } from '@/Composables/useTrans'
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import FormTextArea from '@/Components/FormTextArea.vue'
+import ChannelPicker from '@/Components/ChannelPicker.vue'
 import Modal from '@/Components/Modal.vue'
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
 
 const trans = useTrans()
-const props = defineProps(['placeholders'])
+const props = defineProps(['placeholders', 'automationChannels'])
 
 const isModalOpen = ref(false)
 
@@ -314,7 +334,9 @@ const form = useForm({
 	'trigger': null,
 	'match_criteria': null,
 	'response_type': 'text',
-	'response': null
+	'response': null,
+	// كل القنوات مختارة في البداية؛ التاجر يُزيل ما لا يريده.
+	'channels': (props.automationChannels || []).map((c) => c.value),
 })
 
 const criteriaOptions = ref([

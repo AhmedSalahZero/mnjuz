@@ -96,6 +96,7 @@
                     <TableHeaderRowItem :position="'first'">{{ $t('Name') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Trigger text') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Match criteria') }}</TableHeaderRowItem>
+                    <TableHeaderRowItem>{{ $t('Channels') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Response type') }}</TableHeaderRowItem>
                     <TableHeaderRowItem>{{ $t('Last updated') }}</TableHeaderRowItem>
                     <TableHeaderRowItem :position="'last'"></TableHeaderRowItem>
@@ -110,6 +111,11 @@
                         </div>
                     </TableBodyRowItem>
                     <TableBodyRowItem class="hidden sm:table-cell">{{ $t(capitalizeString(item.match_criteria)) }}</TableBodyRowItem>
+                    <TableBodyRowItem class="hidden sm:table-cell">
+                        <div class="flex flex-wrap gap-1">
+                            <span v-for="label in item.channel_labels" :key="label" class="py-0.5 px-2 rounded-[5px] text-xs bg-slate-100 text-slate-700">{{ label }}</span>
+                        </div>
+                    </TableBodyRowItem>
                     <TableBodyRowItem class="capitalize">
                         <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">{{ $t(JSON.parse(item.metadata).type) }}</span>
                     </TableBodyRowItem>

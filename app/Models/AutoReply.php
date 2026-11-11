@@ -12,6 +12,11 @@ class AutoReply extends Model {
     protected $guarded = [];
     public $timestamps = false;
 
+    /** القنوات التي يجيب عليها الردّ؛ null = كلها (AutomationChannels::covers). */
+    protected $casts = [
+        'channels' => 'array',
+    ];
+
     public function listAll($organizationId, $searchTerm)
     {
         return $this->where('organization_id', $organizationId)

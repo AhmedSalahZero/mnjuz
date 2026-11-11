@@ -104,7 +104,10 @@ class MediaPathTraversalTest extends TestCase
             'صعود بعد مجلّد صحيح' => ['public/../../.env.traversal-probe'],
             'صعود متكرّر' => ['public/../../../../../../etc/passwd'],
             'مسار مطلق' => ['/etc/passwd'],
-            'شرطة خلفية' => ['..\\.env.traversal-probe'],
+            // مُرمَّزة: الشرطة الخلفية الخام يرفضها Symfony قبل التطبيق (Invalid URI)،
+            // فالمحاولة التي تصل فعلاً هي %5C.
+            'شرطة خلفية' => ['..%5C.env.traversal-probe'],
+            'شرطة خلفية بعد مجلّد' => ['public%5C..%5C..%5C.env.traversal-probe'],
             'نقاط متتالية' => ['....//....//.env.traversal-probe'],
         ];
     }

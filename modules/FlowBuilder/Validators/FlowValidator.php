@@ -98,6 +98,13 @@ class FlowValidator
         if ($trigger === 'keywords' && KeywordMatcher::split($fields['keywords'] ?? null) === []) {
             $this->fail($id, 'start', __('Add at least one keyword.'));
         }
+
+        // مسارٌ بلا قنوات لا يبدأ في أيّ مكان. وغياب المفتاح (مسار حُفظ قبل
+        // اختيار القنوات) يُبقي ما في العمود.
+        if (array_key_exists('channels', $fields)
+            && \App\Services\Messaging\AutomationChannels::normalize($fields['channels']) === []) {
+            $this->fail($id, 'start', __('Choose at least one channel.'));
+        }
     }
 
     private function validateMedia(?string $id, array $fields): void

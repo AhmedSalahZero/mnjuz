@@ -38,12 +38,12 @@ class FlowTriggerMigrationTest extends TestCase
     {
         // إعادة الجدول إلى شكله الحالي كي لا يرث غيرُنا جدولاً قديماً:
         // DDL في MySQL يُغلق معاملة الاختبار ضمناً، فالتراجع لا يُنظّفه.
-        $this->rebuildFlows("enum('new_contact','keywords','first_message')", withTimeout: true);
+        $this->rebuildFlows("enum('new_contact','keywords','first_message')", withTimeout: true, withChannels: true);
 
         parent::tearDown();
     }
 
-    private function rebuildFlows(string $triggerType, bool $withTimeout): void
+    private function rebuildFlows(string $triggerType, bool $withTimeout, bool $withChannels = false): void
     {
         // flow_user_data و flow_logs تحملان foreign key إلى flows، فالحذف
         // يفشل متى كانتا موجودتين — وهو ما يحدث داخل الـ suite لا وحدنا،
@@ -52,13 +52,13 @@ class FlowTriggerMigrationTest extends TestCase
         Schema::disableForeignKeyConstraints();
 
         try {
-            $this->recreate($triggerType, $withTimeout);
+            $this->recreate($triggerType, $withTimeout, $withChannels);
         } finally {
             Schema::enableForeignKeyConstraints();
         }
     }
 
-    private function recreate(string $triggerType, bool $withTimeout): void
+    private function recreate(string $triggerType, bool $withTimeout, bool $withChannels): void
     {
         Schema::dropIfExists('flows');
 
@@ -72,6 +72,9 @@ class FlowTriggerMigrationTest extends TestCase
             . '`trigger` ' . $triggerType . ' NULL,'
             . '`keywords` text NULL,'
             . ($withTimeout ? '`trigger_timeout` int unsigned NULL,' : '')
+            // الشكل الحالي يحمل قنوات الـ flow (ترحيل 2026_11_10): من يأتي بعدنا
+            // يستعلم بها.
+            . ($withChannels ? '`channels` json NULL,' : '')
             . '`metadata` text NULL,'
             . "`status` enum('active','inactive') NOT NULL DEFAULT 'inactive',"
             . '`created_at` timestamp NULL,`updated_at` timestamp NULL,`deleted_at` timestamp NULL,'

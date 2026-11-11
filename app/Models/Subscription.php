@@ -15,6 +15,13 @@ class Subscription extends Model {
     protected $guarded = [];
     public $timestamps = true;
 
+    /** الاشتراك يُقرأ مرّة لكل طلب (SubscriptionService::subscriptionWithPlan): الكتابة تُسقط تلك النسخة. */
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Support\RequestLookupCache::forget('subscription:'));
+        static::deleted(fn () => \App\Support\RequestLookupCache::forget('subscription:'));
+    }
+
     public function getCreatedAtAttribute($value)
     {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();

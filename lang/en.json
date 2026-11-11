@@ -2014,5 +2014,9 @@
     "Contact not found.": "Contact not found.",
     "Message could not be sent.": "Message could not be sent.",
     "Automated replies are off on :channel.": "Automated replies are off on :channel.",
-    "The preview shows the saved settings. Messages you send here reach your inbox like a real visitor.": "The preview shows the saved settings. Messages you send here reach your inbox like a real visitor."
+    "The preview shows the saved settings. Messages you send here reach your inbox like a real visitor.": "The preview shows the saved settings. Messages you send here reach your inbox like a real visitor.",
+    "Choose at least one channel.": "Choose at least one channel.",
+    "The reply is sent only to customers who write on these channels": "The reply is sent only to customers who write on these channels",
+    "The flow starts only for customers who write on these channels": "The flow starts only for customers who write on these channels",
+    "Telegram": "Telegram"
 }

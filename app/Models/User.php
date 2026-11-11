@@ -46,6 +46,9 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+        // سرّ المصادقة الثنائية: المستخدم يُسلسَل كاملاً حيث يُحمَّل كعلاقة
+        // (مرسل الرسالة، صاحب التذكرة) فيصل إلى متصفّح كل موظف في المنشأة.
+        'tfa_secret',
     ];
 
     /**

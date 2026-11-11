@@ -45,6 +45,13 @@ class AutoReplyService
         $model['name'] = $request->name;
         $model['trigger'] = $request->trigger;
         $model['match_criteria'] = $request->match_criteria;
+        // StoreAutoReply: قناة واحدة على الأقل إن أُرسلت. وبلا مفتاح (صفحة فُتحت
+        // قبل التحديث) يبقى ما اختير، والجديد يأخذ القنوات الافتراضية.
+        if ($request->has('channels')) {
+            $model['channels'] = AutomationChannels::normalize($request->input('channels'));
+        } elseif (!$model->exists) {
+            $model['channels'] = AutomationChannels::defaults();
+        }
 
         $metadata['type'] = $request->response_type;
         if($request->response_type === 'image' || $request->response_type === 'audio'){
@@ -163,6 +170,11 @@ class AutoReplyService
                 return $this->handleAutomatedFlows($organizationId, $chat, $isNewContact);
             },
             'AI Reply Assistant' => function() use ($chat) {
+                // المساعد بلا اختيار قنوات بعد: يبقى على واتساب والمحادثة المباشرة.
+                if (!AutomationChannels::assistantAllows($chat->channel ?? null)) {
+                    return null;
+                }
+
                 return $this->handleAIReplyAssistant($chat);
             },
         ];
@@ -238,6 +250,11 @@ class AutoReplyService
             ->get();
 
         foreach ($autoReplies as $autoReply) {
+            // ردٌّ اختار التاجر له قنوات غير قناة هذه الرسالة لا يُجرَّب.
+            if (!AutomationChannels::covers($autoReply->channels, $chat->channel ?? null)) {
+                continue;
+            }
+
             $triggerValues = $this->getTriggerValues($autoReply->trigger);
 
             foreach ($triggerValues as $trigger) {

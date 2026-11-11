@@ -33,10 +33,12 @@ class CustomHelper {
     }
 
     public static function isModuleEnabled($module, $organizationId = NULL){
-        $addon = Addon::where('name', $module)
+        // القراءتان تتكرّران في الطلب الواحد (صفحة المحادثات تسأل عن المساعد
+        // الذكي مرّتين): RequestLookupCache يجعلها مرّة داخل طلب الويب.
+        $addon = \App\Support\RequestLookupCache::remember('addon:' . $module, fn () => Addon::where('name', $module)
             ->where('status', 1)
             ->where('is_active', 1)
-            ->exists();
+            ->exists());
 
         $orgId = $organizationId != NULL ? $organizationId : session()->get('current_organization');
         
@@ -45,11 +47,9 @@ class CustomHelper {
             return false;
         }
 
-        $subscription = Subscription::with('plan')
-            ->where('organization_id', $orgId)
-            ->first();
-
         if($addon){
+            $subscription = \App\Services\SubscriptionService::subscriptionWithPlan($orgId);
+
             // Check if subscription exists and is in trial period
             if($subscription && $subscription->status === 'trial' && $subscription->valid_until > now()){
                 return true; //Allow user to test features during trial period
@@ -60,11 +60,8 @@ class CustomHelper {
                 return false; // Subscription or plan not found
             }
 
-            $plan = SubscriptionPlan::where('id', $subscription->plan->id)->first();
-
-            if (!$plan) {
-                return false; // Plan not found
-            }
+            // الباقة محمّلة مع الاشتراك: قراءتها ثانيةً بالمعرّف نفسه لا تضيف شيئاً.
+            $plan = $subscription->plan;
 
             $metadata = json_decode($plan->metadata, true);
 

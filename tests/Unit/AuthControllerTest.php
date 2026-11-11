@@ -181,10 +181,11 @@ class AuthControllerTest extends TestCase
             'status' => 1,
         ]);
 
-        $this->user->update([
-            'tfa' => 1, // Use 1 instead of true for database compatibility
+        // tfa ليس في $fillable: update() كان يتجاهله فيمرّ الدخول بلا رمز.
+        $this->user->forceFill([
+            'tfa' => 1,
             'tfa_secret' => 'JBSWY3DPEHPK3PXP',
-        ]);
+        ])->save();
         
         // Refresh user to ensure changes are loaded
         $this->user->refresh();
@@ -211,10 +212,15 @@ class AuthControllerTest extends TestCase
     public function test_set_current_organization_updates_user(): void
     {
         $request = UserHasOrganizationRequest::create(
-            '/api/auth/set-current-organization',
+            '/api/v1/auth/set-current-organization',
             'POST',
             ['organization_id' => $this->organization->id]
         );
+        $request->headers->set('Accept', 'application/json');
+        // المنصّة (ويب أو تطبيق) تُقرأ من طلب الحاوية كما في الطلب الحقيقي:
+        // بلا ربطه يُحدَّث عمود منشأة الويب بدل التطبيق. قبل setUserResolver:
+        // إعادة الربط تستبدل مُحلّل المستخدم.
+        $this->app->instance('request', $request);
         
         $request->setUserResolver(function () {
             return $this->user;

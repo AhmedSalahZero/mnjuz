@@ -19,8 +19,10 @@ use App\Models\TaxRate;
 use App\Models\Team;
 use App\Models\User;
 use App\Resolvers\PaymentPlatformResolver;
+use App\Support\RequestLookupCache;
 use Carbon\Carbon;
 use DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
@@ -290,6 +292,7 @@ class SubscriptionService
                 'valid_until' => date('Y-m-d H:i:s', strtotime('+1 ' . ($plan->period === 'monthly' ? 'month' : 'year'))),
                 'status' => 'active',
             ]);
+            RequestLookupCache::forget('subscription:');
 
             return $invoice;
         });
@@ -499,106 +502,104 @@ class SubscriptionService
         return 0;
     }
 
+    /**
+     * الميزات المعدودة: مفتاحها في trial_limits.
+     */
+    private const COUNTED_FEATURES = [
+        'canned_replies_limit' => 'automated_replies',
+        'contacts_limit' => 'contacts',
+        'campaign_limit' => 'campaigns',
+        'message_limit' => 'messages',
+        'team_limit' => 'users',
+    ];
+
+    /** عمر عدّ الرسائل المخزَّن — كما يفعل ProcessAutoReplyJob منذ زمن. */
+    public const MESSAGE_USAGE_TTL = 60;
+
     public static function isSubscriptionFeatureLimitReached($organizationId, $feature)
     {
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
-		// return true;
+        $subscription = self::subscriptionWithPlan($organizationId);
+
         if (!$subscription) {
             return true;
         }
 
-        if($subscription->valid_until < now()){
+        if ($subscription->valid_until < now()) {
             return true;
         }
 
-        $subscriptionPlan = SubscriptionPlan::find($subscription->plan_id);
+        $subscriptionPlan = $subscription->plan;
+        $featureLimit = null;
 
         if ($subscriptionPlan) {
             $subscriptionPlanLimits = json_decode($subscriptionPlan->metadata, true);
 
-            if (!array_key_exists($feature, $subscriptionPlanLimits)) {
+            if (!is_array($subscriptionPlanLimits) || !array_key_exists($feature, $subscriptionPlanLimits)) {
                 return false;
             }
 
             $featureLimit = $subscriptionPlanLimits[$feature];
         }
 
-        if ($feature == 'canned_replies_limit') {
-            $count = AutoReply::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
-
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['automated_replies'] ?? '-1' : '-1';
-
-                return $usageLimit == -1 ? false : $count >= $usageLimit;
-            }
-
-            if ($subscriptionPlan) {
-                return $featureLimit == -1 ? false : $count >= $featureLimit;
-            }
+        if (!isset(self::COUNTED_FEATURES[$feature])) {
+            return false;
         }
 
-        if ($feature == 'contacts_limit') {
-            $count = Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+        // الحدّ أولاً ثم العدّ: الباقة غير المحدودة (-1) لا تحتاج أن تعدّ شيئاً،
+        // وكان العدّ يسبق المقارنة فيمسح رسائل المنشأة كلها بلا داعٍ.
+        if ($subscription->status === 'trial' && $subscription->valid_until > now()) {
+            $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
+            $usageLimit = $limit ? json_decode($limit, true)[self::COUNTED_FEATURES[$feature]] ?? '-1' : '-1';
 
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['contacts'] ?? '-1' : '-1';
-
-                return $usageLimit == -1 ? false : $count >= $usageLimit;
-            }
-
-            if ($subscriptionPlan) {
-                return $featureLimit == -1 ? false : $count >= $featureLimit;
-            }
+            return $usageLimit == -1 ? false : self::featureUsage($organizationId, $feature) >= $usageLimit;
         }
 
-        if ($feature == 'campaign_limit') {
-            $count = Campaign::where('organization_id', $organizationId)->count();
-
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['campaigns'] ?? '-1' : '-1';
-
-                return $usageLimit == -1 ? false : $count >= $usageLimit;
-            }
-
-            if ($subscriptionPlan) {
-                return $featureLimit == -1 ? false : $count >= $featureLimit;
-            }
-        }
-
-        if ($feature == 'message_limit') {
-            $count = Chat::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
-
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['messages'] ?? '-1' : '-1';
-
-                return $usageLimit == -1 ? false : $count >= $usageLimit;
-            }
-
-            if ($subscriptionPlan) {
-                return $featureLimit == -1 ? false : $count >= $featureLimit;
-            }
-        }
-
-        if ($feature == 'team_limit') {
-            $count = Team::where('organization_id', $organizationId)->count();
-
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['users'] ?? '-1' : '-1';
-
-                return $usageLimit == -1 ? false : $count >= $usageLimit;
-            }
-
-            if ($subscriptionPlan) {
-                return $featureLimit == -1 ? false : $count >= $featureLimit;
-            }
+        if ($subscriptionPlan) {
+            return $featureLimit == -1 ? false : self::featureUsage($organizationId, $feature) >= $featureLimit;
         }
 
         return false;
+    }
+
+    /**
+     * الاستهلاك الحالي لميزة معدودة.
+     *
+     * عدّ الرسائل يمرّ على كل رسائل المنشأة (مئات الآلاف عند العملاء الكبار)،
+     * ويُسأل مع كل فتح محادثة وكل رسالة واردة، فيُخزَّن دقيقة. الحدّ نفسه
+     * بالملايين، فدقيقة تأخير لا تغيّر قراراً عملياً. الباقي يُعدّ دائماً:
+     * أرقامه صغيرة، والتاجر يتوقّع أن يرى أثر الحذف فوراً.
+     */
+    private static function featureUsage($organizationId, string $feature): int
+    {
+        $count = match ($feature) {
+            'canned_replies_limit' => fn () => AutoReply::where('organization_id', $organizationId)->whereNull('deleted_at')->count(),
+            'contacts_limit' => fn () => Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count(),
+            'campaign_limit' => fn () => Campaign::where('organization_id', $organizationId)->count(),
+            'message_limit' => fn () => Chat::where('organization_id', $organizationId)->whereNull('deleted_at')->count(),
+            'team_limit' => fn () => Team::where('organization_id', $organizationId)->count(),
+        };
+
+        if ($feature === 'message_limit') {
+            return (int) Cache::remember(self::messageUsageKey($organizationId), self::MESSAGE_USAGE_TTL, $count);
+        }
+
+        return (int) $count();
+    }
+
+    public static function messageUsageKey($organizationId): string
+    {
+        return 'subscription_usage:message_limit:' . (int) $organizationId;
+    }
+
+    /**
+     * اشتراك المنشأة مع باقته — مرّة واحدة لكل طلب ويب (RequestLookupCache).
+     */
+    public static function subscriptionWithPlan($organizationId): ?Subscription
+    {
+        return RequestLookupCache::remember(
+            'subscription:' . (string) $organizationId,
+            fn () => Subscription::with('plan')->where('organization_id', $organizationId)->first()
+        );
     }
 
     /**
@@ -675,7 +676,7 @@ class SubscriptionService
      */
     public static function isSubscriptionFeatureEnabled(string $organizationId, string $featureKey): bool
     {
-        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $subscription = self::subscriptionWithPlan($organizationId);
         if (!$subscription || !$subscription->plan) {
             return false;
         }

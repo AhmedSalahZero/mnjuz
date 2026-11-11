@@ -16,6 +16,7 @@ use Inertia\Inertia;
 use Helper;
 use App\Services\ActivityLogger;
 use App\Services\ContactPlaceholderService;
+use App\Services\Messaging\AutomationChannels;
 
 class CannedReplyController extends BaseController
 {
@@ -46,6 +47,7 @@ class CannedReplyController extends BaseController
         $data['placeholders'] = ContactPlaceholderService::optionsForOrganization(
             (int) session()->get('current_organization')
         );
+        $data['automationChannels'] = AutomationChannels::options();
 
         return Inertia::render('User/Automation/Basic/Create', $data);
     }
@@ -71,6 +73,7 @@ class CannedReplyController extends BaseController
         $data['placeholders'] = ContactPlaceholderService::optionsForOrganization(
             (int) session()->get('current_organization')
         );
+        $data['automationChannels'] = AutomationChannels::options();
 
         return Inertia::render('User/Automation/Basic/Edit', $data);
     }

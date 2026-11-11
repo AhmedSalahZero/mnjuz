@@ -31,6 +31,10 @@ use Session;
 
 class WhatsappService implements \App\Services\Messaging\Contracts\AutomationSender
 {
+    /** مهلتا طلبات Graph بالثواني (sendHttpRequest). */
+    public const GRAPH_CONNECT_TIMEOUT = 10;
+    public const GRAPH_TIMEOUT = 30;
+
     private $accessToken;
     private $apiVersion;
     private $appId;
@@ -492,6 +496,11 @@ class WhatsappService implements \App\Services\Messaging\Contracts\AutomationSen
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 		// logger('responseObject: ' . json_encode($responseObject));
         if($responseObject->success === true){
+          // Meta قبلت الرسالة ووصلت العميل. ما بعدها حفظٌ عندنا: إن رمى استثناءً
+          // كان يصعد إلى ProcessSingleCampaignLogJob فيُعلَّم السجلّ فاشلاً
+          // ويُعاد إرساله — فتصل العميلَ مرّتين. يُسجَّل الخطأ وتبقى النتيجة نجاحاً
+          // بمعرّف الرسالة. الطلب إلى Meta نفسه لم يتغيّر.
+          try {
             if($campaignId != NULL){
                 $campaign = Campaign::where('id', $campaignId)->first();
                 $templateMetadata = json_decode($campaign->metadata);
@@ -526,14 +535,30 @@ class WhatsappService implements \App\Services\Messaging\Contracts\AutomationSen
             ]);
 
             event(new NewChatEvent($chatArray, $contact->organization_id));
+          } catch (\Throwable $e) {
+            Log::error('WhatsApp template accepted by Meta but saving it failed', [
+                'organization_id' => $this->organizationId,
+                'contact_uuid' => $contactUuId,
+                'campaign_id' => $campaignId,
+                'wam_id' => $responseObject->data->messages[0]->id ?? null,
+                'error' => $e->getMessage(),
+            ]);
+          }
         }
 
         // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $contact->organization_id);
+        try {
+            WebhookHelper::triggerWebhookEvent('message.sent', [
+                'data' => $responseObject,
+            ], $contact->organization_id);
+        } catch (\Throwable $e) {
+            Log::error('WhatsApp template message.sent webhook failed', [
+                'organization_id' => $this->organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
 		return $responseObject;
-		
+
 		};
 		if($sendByQueue){
 			dispatch($service)->onQueue('high');
@@ -2535,6 +2560,11 @@ class WhatsappService implements \App\Services\Messaging\Contracts\AutomationSen
         try {
             $requestOptions = [
                 'headers' => $headers,
+                // بلا مهلة ينتظر Guzzle إلى الأبد: ردٌّ بطيء من Meta يحجز عامل
+                // الطابور حتى تقتله مهلة الوظيفة، وخلفه على high كل إرسال وكل
+                // بثّ للواجهة. Meta يردّ في ثوانٍ؛ ثلاثون تقطع المعلّق وحده.
+                'connect_timeout' => self::GRAPH_CONNECT_TIMEOUT,
+                'timeout' => self::GRAPH_TIMEOUT,
             ];
 
             if (isset($data) && $method === 'POST' || $method === 'PUT' || $method === 'DELETE') {

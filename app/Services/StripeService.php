@@ -380,6 +380,7 @@ class StripeService
                             $subscription = Subscription::where('organization_id', $metadata->organization_id)->update([
                                 'plan_id' => $metadata->plan_id
                             ]);
+                            \App\Support\RequestLookupCache::forget('subscription:');
                         }
                     } else {
                         $payment = BillingPayment::create([

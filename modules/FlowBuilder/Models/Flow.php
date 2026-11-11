@@ -13,6 +13,23 @@ class Flow extends Model {
     protected $guarded = [];
     public $timestamps = true;
 
+    /** القنوات التي يعمل عليها الـ flow؛ null = كلها (AutomationChannels::covers). */
+    protected $casts = [
+        'channels' => 'array',
+    ];
+
+    /**
+     * ما يخصّ هذه القناة، أو ما لم تُختر له قنوات. whereJsonContains لا
+     * LIKE: «webchat» لا يطابق قناةً يحتوي اسمها الكلمة.
+     */
+    public function scopeForChannel($query, ?string $channel)
+    {
+        return $query->where(function ($q) use ($channel) {
+            $q->whereNull('channels')
+                ->orWhereJsonContains('channels', $channel ?: \App\Services\Messaging\Channel::DEFAULT);
+        });
+    }
+
     /**
      * مسارات المنشأة المختارة في الجلسة فقط. البحث بالـ uuid وحده كان يفتح
      * flow أيّ منشأة لمن عرف معرّفه.

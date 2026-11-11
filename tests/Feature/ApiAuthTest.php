@@ -22,6 +22,12 @@ class ApiAuthTest extends TestCase
     protected Organization $organization;
     protected string $password = 'password123';
 
+    /**
+     * نقطة حقيقية خلف بوّابات التطبيق نفسها (sanctum + إضافة Mobile App +
+     * منشأة مختارة). كان الاختبار يستعمل /api/test وقد أُزيلت.
+     */
+    private const MOBILE_ENDPOINT = '/api/v1/organization-location';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -52,7 +58,7 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_login_success(): void
     {
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
             'device_name' => 'Test Device',
@@ -73,7 +79,6 @@ class ApiAuthTest extends TestCase
                         'avatar',
                     ],
                     'token',
-                    'token_type',
                     'organizations',
                     'current_organization_id',
                 ],
@@ -85,7 +90,8 @@ class ApiAuthTest extends TestCase
                         'id' => $this->user->id,
                         'email' => $this->user->email,
                     ],
-                    'token_type' => 'Bearer',
+                    // منشأة واحدة: تُختار تلقائياً.
+                    'current_organization_id' => $this->organization->id,
                 ],
             ]);
 
@@ -101,7 +107,7 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_login_invalid_credentials(): void
     {
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => 'wrong-password',
         ]);
@@ -115,7 +121,7 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_login_email_not_found(): void
     {
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->postJson('/api/v1/auth/login', [
             'email' => 'nonexistent@example.com',
             'password' => $this->password,
         ]);
@@ -136,7 +142,7 @@ class ApiAuthTest extends TestCase
             'role' => 'user',
         ]);
 
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->postJson('/api/v1/auth/login', [
             'email' => $userWithoutOrg->email,
             'password' => $this->password,
         ]);
@@ -160,12 +166,13 @@ class ApiAuthTest extends TestCase
         ]);
 
         // Enable TFA for user
-        $this->user->update([
+        // tfa ليس في $fillable: update() كان يتجاهله فيدخل المستخدم بلا رمز ويسقط الاختبار.
+        $this->user->forceFill([
             'tfa' => true,
             'tfa_secret' => 'JBSWY3DPEHPK3PXP',
-        ]);
+        ])->save();
 
-        $response = $this->postJson('/api/auth/login', [
+        $response = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -193,13 +200,14 @@ class ApiAuthTest extends TestCase
         ]);
 
         // Enable TFA for user
-        $this->user->update([
+        // tfa ليس في $fillable: update() كان يتجاهله فيدخل المستخدم بلا رمز ويسقط الاختبار.
+        $this->user->forceFill([
             'tfa' => true,
             'tfa_secret' => 'JBSWY3DPEHPK3PXP',
-        ]);
+        ])->save();
 
         // First, get TFA token from login
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -208,7 +216,7 @@ class ApiAuthTest extends TestCase
         $this->assertNotEmpty($tfaToken);
 
         // Test with invalid code (will fail validation but shows structure)
-        $response = $this->postJson('/api/auth/tfa/verify', [
+        $response = $this->postJson('/api/v1/auth/tfa/verify', [
             'tfa_token' => $tfaToken,
             'tfa_code' => '000000', // Invalid code
         ]);
@@ -225,12 +233,13 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_tfa_verify_invalid_token(): void
     {
-        $response = $this->postJson('/api/auth/tfa/verify', [
+        $response = $this->postJson('/api/v1/auth/tfa/verify', [
             'tfa_token' => 'invalid-token',
             'tfa_code' => '123456',
         ]);
 
-        $response->assertStatus(401)
+        // رمز مؤقّت لا يُفكّ: يرفضه TfaRequest قبل المتحكّم (failedValidation ← 400).
+        $response->assertStatus(400)
             ->assertJson([
                 'success' => false,
             ]);
@@ -241,7 +250,7 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_tfa_verify_missing_parameters(): void
     {
-        $response = $this->postJson('/api/auth/tfa/verify', []);
+        $response = $this->postJson('/api/v1/auth/tfa/verify', []);
 
         $response->assertStatus(400)
             ->assertJson([
@@ -255,7 +264,7 @@ class ApiAuthTest extends TestCase
     public function test_api_logout_success(): void
     {
         // Login first to get token
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -263,7 +272,7 @@ class ApiAuthTest extends TestCase
         $token = $loginResponse->json('data.token');
 
         // Logout
-        $response = $this->postJson('/api/auth/logout', [], [
+        $response = $this->postJson('/api/v1/auth/logout', [], [
             'Authorization' => 'Bearer ' . $token,
         ]);
 
@@ -283,7 +292,7 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_logout_unauthenticated(): void
     {
-        $response = $this->postJson('/api/auth/logout');
+        $response = $this->postJson('/api/v1/auth/logout');
 
         $response->assertStatus(401)
             ->assertJson([
@@ -297,7 +306,7 @@ class ApiAuthTest extends TestCase
     public function test_api_set_current_organization_success(): void
     {
         // Login first
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -305,7 +314,7 @@ class ApiAuthTest extends TestCase
         $token = $loginResponse->json('data.token');
 
         // Set current organization
-        $response = $this->postJson('/api/auth/set-current-organization', [
+        $response = $this->postJson('/api/v1/auth/set-current-organization', [
             'organization_id' => $this->organization->id,
         ], [
             'Authorization' => 'Bearer ' . $token,
@@ -327,7 +336,7 @@ class ApiAuthTest extends TestCase
     public function test_api_set_current_organization_invalid(): void
     {
         // Login first
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -335,7 +344,7 @@ class ApiAuthTest extends TestCase
         $token = $loginResponse->json('data.token');
 
         // Try to set non-existent organization
-        $response = $this->postJson('/api/auth/set-current-organization', [
+        $response = $this->postJson('/api/v1/auth/set-current-organization', [
             'organization_id' => 99999,
         ], [
             'Authorization' => 'Bearer ' . $token,
@@ -354,7 +363,7 @@ class ApiAuthTest extends TestCase
         $otherOrg = Organization::factory()->create();
 
         // Login first
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -362,7 +371,7 @@ class ApiAuthTest extends TestCase
         $token = $loginResponse->json('data.token');
 
         // Try to set organization user doesn't belong to
-        $response = $this->postJson('/api/auth/set-current-organization', [
+        $response = $this->postJson('/api/v1/auth/set-current-organization', [
             'organization_id' => $otherOrg->id,
         ], [
             'Authorization' => 'Bearer ' . $token,
@@ -404,7 +413,7 @@ class ApiAuthTest extends TestCase
         ]);
 
         // Login first
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -412,14 +421,13 @@ class ApiAuthTest extends TestCase
         $token = $loginResponse->json('data.token');
 
         // Call test endpoint
-        $response = $this->postJson('/api/test', [], [
+        $response = $this->getJson(self::MOBILE_ENDPOINT, [
             'Authorization' => 'Bearer ' . $token,
         ]);
 
         $response->assertStatus(200)
             ->assertJson([
                 'success' => true,
-                'message' => 'Test successful',
             ]);
     }
 
@@ -428,7 +436,7 @@ class ApiAuthTest extends TestCase
      */
     public function test_api_test_endpoint_unauthenticated(): void
     {
-        $response = $this->postJson('/api/test');
+        $response = $this->getJson(self::MOBILE_ENDPOINT);
 
         $response->assertStatus(401);
     }
@@ -439,7 +447,7 @@ class ApiAuthTest extends TestCase
     public function test_api_test_endpoint_addon_disabled(): void
     {
         // Login first
-        $loginResponse = $this->postJson('/api/auth/login', [
+        $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => $this->user->email,
             'password' => $this->password,
         ]);
@@ -447,7 +455,7 @@ class ApiAuthTest extends TestCase
         $token = $loginResponse->json('data.token');
 
         // Call test endpoint (addon not enabled)
-        $response = $this->postJson('/api/test', [], [
+        $response = $this->getJson(self::MOBILE_ENDPOINT, [
             'Authorization' => 'Bearer ' . $token,
         ]);
 

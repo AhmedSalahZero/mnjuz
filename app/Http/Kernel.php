@@ -32,6 +32,8 @@ class Kernel extends HttpKernel
      */
     protected $middlewareGroups = [
         'web' => [
+            // أوّلاً: يغطّي كل ما بعده، بما فيه shared props وبناء الصفحة.
+            \App\Http\Middleware\CacheLookupsForRequest::class,
             \App\Http\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \Illuminate\Session\Middleware\StartSession::class,

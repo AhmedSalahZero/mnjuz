@@ -62,44 +62,29 @@ class HandleInertiaRequests extends Middleware
         
         $language = app()->getLocale();
         $unreadMessages = fn () => 0;
-        $tfaActive = false;
 
-        if ($user) {
-            $googleAuth = Addon::where('name', 'Google Authenticator')->first()->is_active;
-            $tfaActive = $googleAuth == 1 ? true : false;
-        }
+        // ما يقرأ القاعدة يُغلَّف في closure: Inertia لا تستدعيها إلا حين تبني
+        // صفحة تطلبها. فتح محادثة طلبٌ جزئي (only: contact, chatThread, …)،
+        // ونبض الحضور وتعليم المقروء طلبات JSON — وكلها كانت تدفع نحو عشرين
+        // استعلاماً هنا ثم تُرمى. التحميل الكامل يحسبها كلها كما كان.
+        $tfaActive = fn () => $user
+            ? Addon::where('name', 'Google Authenticator')->first()->is_active == 1
+            : false;
 
         if ($user && $user->role === 'user') {
             $organizationId = session('current_organization');
+            // يبقى مباشراً: ما بعده في الطلب قد يقرأ $user->teams مقصورةً على
+            // المنشأة الحالية، فتأجيله يغيّر ما يراه المتحكّم.
             $user->load(['teams' => function ($query) use ($organizationId) {
                 $query->where('organization_id', $organizationId);
             }]);
 
             // Only columns used in shared UI: switcher (uuid, name), Pusher (id), Menu/Profile (name, address), App/Dashboard (metadata)
-            $organizations = Team::with('organization:id,uuid,name')
+            $organizations = fn () => Team::with('organization:id,uuid,name')
                 ->where('user_id', $user->id)
                 ->get();
-            $organization = Organization::where('id', $organizationId)
-                ->first(['id', 'uuid', 'name', 'metadata', 'address']);
-            $organizationArray = $organization ? $organization->toArray() : null;
-            if ($organizationArray) {
-                $meta = json_decode($organization->metadata ?? '{}', true) ?: [];
+            $organization = fn () => $this->organizationProp($organizationId);
 
-                $organizationArray['notifications'] = $meta['notifications'] ?? null;
-                $organizationArray['notification'] = $meta['notification'] ?? null;
-                $organizationArray['plan'] = [
-                    'features' => [
-                        'ice_breakers' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'ice_breakers'),
-                        'shortcuts' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts'),
-                        'agent_performance' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance'),
-                        'activity_log' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'activity_log'),
-                        'rating_delete' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'rating_delete'),
-                    ],
-                ];
-
-                unset($organizationArray['metadata']);
-                $organization = $organizationArray;
-            }
             // العدّ مؤجَّل عمداً: Inertia تستدعي share() قبل المتحكّم، وفتح
             // محادثة يعلّم رسائلها مقروءة داخله. الحساب هنا مباشرةً كان يُرجع
             // عدد ما قبل القراءة، فيكتب فوق النقصان المتفائل في الواجهة ويبقى
@@ -118,13 +103,16 @@ class HandleInertiaRequests extends Middleware
                 'pusher_app_key', 'pusher_app_cluster', 'google_auth_active',
                 'allow_facebook_login', 'allow_google_login',
             ];
-            $config = Setting::whereIn('key', $keys)->get();
+            $config = fn () => Setting::whereIn('key', $keys)->get();
             // Only columns used in shared UI: LangToggle/ProfileModal (code, name), dropdowns (id for key)
-            $languages = Language::where('deleted_at', null)
+            $languages = fn () => Language::where('deleted_at', null)
                 ->where('status', 'active')
                 ->get(['id', 'code', 'name']);
-            $currentLanguage = Language::where('code', $language)->first(['is_rtl']);
-            $isRtl = $currentLanguage ? (bool) $currentLanguage->is_rtl : false;
+            $isRtl = function () use ($language) {
+                $currentLanguage = Language::where('code', $language)->first(['is_rtl']);
+
+                return $currentLanguage ? (bool) $currentLanguage->is_rtl : false;
+            };
         } else {
             $config = array();
             $languages = array();
@@ -163,13 +151,13 @@ class HandleInertiaRequests extends Middleware
         $settingsModuleWorkingHours = false;
         $settingsModuleWebChat = false;
         if ($user && ($user->role ?? null) === 'user' && session()->has('current_organization')) {
-            $settingsModuleWorkingHours = CustomHelper::isModuleEnabled(
-                'Working Hours',
-                (int) session('current_organization')
-            );
+            $currentOrganization = (int) session('current_organization');
+            $settingsModuleWorkingHours = fn () => CustomHelper::isModuleEnabled('Working Hours', $currentOrganization);
             // متخبَّأ دقيقة: يُسأل مع كل طلب Inertia.
-            $settingsModuleWebChat = \App\Services\WebChat\WebChatWidgetService::moduleEnabled((int) session('current_organization'));
+            $settingsModuleWebChat = fn () => \App\Services\WebChat\WebChatWidgetService::moduleEnabled($currentOrganization);
         }
+
+        $broadcastOrganization = session('current_organization');
 
         return array_merge(parent::share($request), [
             'csrf_token' => csrf_token(),
@@ -178,7 +166,7 @@ class HandleInertiaRequests extends Middleware
             'config' => $config,
             // إعداد البثّ للعميل — يتبع مفتاح التبديل بلا إعادة بناء.
             // مزوّد المنشأة الحالية؛ صفحات الأدمن بلا منشأة فتأخذ الافتراضي.
-            'broadcast' => BroadcastProvider::clientConfig((int) session('current_organization') ?: null),
+            'broadcast' => fn () => BroadcastProvider::clientConfig((int) $broadcastOrganization ?: null),
             // أقصى حجم يقبله الخادم فعلاً. الملف الأكبر يرفضه PHP قبل بلوغ
             // Laravel، فتصل حمولة بلا ملف ويظنّ المستخدم أن الإرسال نجح.
             // نمرّره للواجهة لتردّ الملف مبكّراً برسالة تذكر الحدّ الحقيقي.
@@ -205,14 +193,48 @@ class HandleInertiaRequests extends Middleware
             'languages' => $languages,
             'unreadMessages' => $unreadMessages,
             'currentLanguage' => $language,
-            'tfa' => [
-                'status' => $tfaActive,
+            'tfa' => fn () => [
+                'status' => $tfaActive(),
                 'enabled' => $user ? $user->tfa : false,
             ],
             'isRtl' => $isRtl,
             'settingsModuleWorkingHours' => $settingsModuleWorkingHours,
             'settingsModuleWebChat' => $settingsModuleWebChat,
         ]);
+    }
+
+    /**
+     * المنشأة الحالية كما تعرضها الواجهة المشتركة (القائمة، الملف، مزايا الباقة).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function organizationProp($organizationId): ?array
+    {
+        $organization = Organization::where('id', $organizationId)
+            ->first(['id', 'uuid', 'name', 'metadata', 'address']);
+
+        if (!$organization) {
+            return null;
+        }
+
+        $organizationArray = $organization->toArray();
+        $meta = json_decode($organization->metadata ?? '{}', true) ?: [];
+
+        $organizationArray['notifications'] = $meta['notifications'] ?? null;
+        $organizationArray['notification'] = $meta['notification'] ?? null;
+        $organizationArray['plan'] = [
+            'features' => [
+                'ice_breakers' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'ice_breakers'),
+                'shortcuts' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'shortcuts'),
+                'agent_performance' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance'),
+                'activity_log' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'activity_log'),
+                'rating_delete' => SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'rating_delete'),
+            ],
+        ];
+
+        unset($organizationArray['metadata']);
+
+        return $organizationArray;
     }
 
     /**

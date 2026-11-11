@@ -84,6 +84,34 @@ class CampaignRetryService
     }
 
     /**
+     * تُغلق الحملة الجارية حين لا يبقى فيها ما يُرسل: لا سجلّ pending/ongoing،
+     * ولا فشلٌ ينتظر إعادة محاولة. الشرط نفسه في نهاية كل إرسال
+     * (ProcessSingleCampaignLogJob::checkAndUpdateCampaignStatus)، لكن مسارات
+     * تخرج قبل بلوغه — إرسالٌ رمى استثناءً، جهة اتصال محذوفة، سجلٌّ عالق صُفِّر —
+     * وكانت تُبقي الحملة «جارية» إلى الأبد.
+     */
+    public function completeIfDone(int $campaignId): bool
+    {
+        $campaign = Campaign::find($campaignId);
+        if (!$campaign || $campaign->status !== 'ongoing' || $campaign->getRawOriginal('deleted_at') !== null) {
+            return false;
+        }
+
+        $sending = CampaignLog::where('campaign_id', $campaignId)
+            ->whereIn('status', ['pending', 'ongoing'])
+            ->exists();
+
+        if ($sending || $this->hasRetryableFailures($campaign)) {
+            return false;
+        }
+
+        $campaign->status = 'completed';
+        $campaign->save();
+
+        return true;
+    }
+
+    /**
      * هل هذا الفشل مؤقت ويستحق إعادة المحاولة؟
      *
      * @param  array<int, array<string, mixed>>  $errors  مصفوفة errors كما تصل من webhook واتساب
@@ -151,6 +179,8 @@ class CampaignRetryService
 
         if (!$this->scheduleNextRetry($log)) {
             $this->moveContactToFailedGroup($log);
+            // فُتحت الحملة أعلاه لإعادةٍ لن تُجدول: تُغلق ثانيةً بدل أن تبقى «جارية».
+            $this->completeIfDone((int) $log->campaign_id);
         }
     }
 

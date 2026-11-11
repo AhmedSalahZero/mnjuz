@@ -43,7 +43,10 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         // claim the attempt slot. The unique index on
         // (campaign_log_id, channel, attempt_number) makes the claim safe
         // against concurrent workers AND Laravel's automatic job retries.
-        $claim = DB::transaction(function () use ($retryService) {
+        // سجلٌّ أُغلق هنا بلا إرسال (جهة اتصال محذوفة) قد يكون آخر ما في الحملة.
+        $closedWithoutSendingCampaignId = null;
+
+        $claim = DB::transaction(function () use ($retryService, &$closedWithoutSendingCampaignId) {
             $log = CampaignLog::with('campaign')
                 ->where('id', $this->campaignLog->id)
                 ->lockForUpdate()
@@ -72,6 +75,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     null,
                     $attemptInfo['is_retry']
                 );
+                $closedWithoutSendingCampaignId = (int) $log->campaign_id;
 
                 return null;
             }
@@ -101,6 +105,10 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         });
 
         if ($claim === null) {
+            if ($closedWithoutSendingCampaignId !== null) {
+                $this->completeCampaignIfDone($closedWithoutSendingCampaignId, $retryService);
+            }
+
             return;
         }
 
@@ -149,6 +157,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
             // re-run the job, which would now be blocked by the unique claim
             // and would not recover. Schedule a business retry instead.
             $this->scheduleRetryAfterFailure($claim['log_id'], $retryService);
+            // وقد يكون آخر سجلّ في الحملة (قالبٌ حُذف يُفشل كل سجلّاتها هنا).
+            $this->completeCampaignIfDone($claim['campaign_id'], $retryService);
             return;
         }
 
@@ -212,6 +222,18 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
             Log::error('ProcessSingleCampaignLogJob: failed to mark attempt failed', [
                 'attempt_id' => $attemptId,
                 'log_id' => $logId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function completeCampaignIfDone(int $campaignId, CampaignRetryService $retryService): void
+    {
+        try {
+            $retryService->completeIfDone($campaignId);
+        } catch (Throwable $e) {
+            Log::error('ProcessSingleCampaignLogJob: completion check failed', [
+                'campaign_id' => $campaignId,
                 'error' => $e->getMessage(),
             ]);
         }

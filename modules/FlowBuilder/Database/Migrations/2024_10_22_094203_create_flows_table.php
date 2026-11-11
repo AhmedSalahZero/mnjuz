@@ -17,6 +17,8 @@ class CreateFlowsTable extends Migration
             $table->enum('trigger', ['new_contact', 'keywords', 'first_message'])->nullable();
             $table->text('keywords')->nullable();
             $table->unsignedInteger('trigger_timeout')->nullable();
+            // القنوات التي يعمل عليها الـ flow — انظر ترحيل 2026_11_10 add_channels.
+            $table->json('channels')->nullable();
             $table->longText('metadata')->nullable();
             $table->enum('status', ['active', 'inactive'])->default('inactive');
             $table->timestamps();

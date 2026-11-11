@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Messaging\Channel;
 use App\Services\Messaging\Drivers\TelegramDriver;
 use App\Services\Messaging\InboundMessage;
+use App\Services\Messaging\OutboundInteractive;
 use App\Services\Messaging\OutboundMedia;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -254,6 +255,7 @@ class TelegramChannelTest extends TestCase
         $this->assertFalse($capabilities->templates);
         $this->assertFalse($capabilities->deliveryReceipts);
         $this->assertTrue($capabilities->supportsMedia('document'));
+        $this->assertTrue($capabilities->interactive, 'أزرار inline');
     }
 
     /** ونافذة جهة اتصال تيليجرام مفتوحة دائماً — حتى بلا رسالة واردة. */
@@ -263,6 +265,227 @@ class TelegramChannelTest extends TestCase
 
         $this->assertNull(\App\Helpers\MessagingWindowHelper::windowHoursFor($contact));
         $this->assertTrue(\App\Helpers\MessagingWindowHelper::isMessagingWindowOpen($contact));
+    }
+
+    // ───────────────────── الأزرار ─────────────────────
+
+    /** أزرار الردّ: سطر لكل زرّ، وcallback_data تحمل العنوان. */
+    public function test_reply_buttons_become_an_inline_keyboard(): void
+    {
+        $this->fakeTelegram();
+
+        $result = $this->driver->sendInteractive($this->account, $this->contact('123456789'), $this->buttons(
+            ['نعم', 'لا'],
+            header: ['type' => 'text', 'text' => 'تأكيد'],
+            footer: 'متجرنا'
+        ));
+
+        $this->assertTrue($result->success);
+        $this->assertSame('tg:7654321:123456789:60', $result->providerMessageId);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+            && $request['text'] === "تأكيد\n\nهل تريد المتابعة؟\n\nمتجرنا"
+            && $request['reply_markup'] === ['inline_keyboard' => [
+                [['text' => 'نعم', 'callback_data' => 'b:نعم']],
+                [['text' => 'لا', 'callback_data' => 'b:لا']],
+            ]]);
+    }
+
+    /** القائمة: كل صفّ زرّ، وأوصاف الصفوف في المتن. */
+    public function test_a_list_puts_each_row_on_its_own_button(): void
+    {
+        $this->fakeTelegram();
+
+        $list = OutboundInteractive::fromWhatsappArgs('interactive list', 'اختر القسم', [
+            ['title' => 'الأقسام', 'rows' => [
+                ['id' => 'r1', 'title' => 'العطور', 'description' => 'من 50 ريال'],
+                ['id' => 'r2', 'title' => 'الساعات'],
+            ]],
+        ], null, null, 'القائمة');
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $list);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+            && $request['text'] === "اختر القسم\n\n• العطور: من 50 ريال"
+            && $request['reply_markup'] === ['inline_keyboard' => [
+                [['text' => 'العطور', 'callback_data' => 'l:العطور']],
+                [['text' => 'الساعات', 'callback_data' => 'l:الساعات']],
+            ]]);
+    }
+
+    public function test_a_link_button_opens_the_url(): void
+    {
+        $this->fakeTelegram();
+
+        $cta = OutboundInteractive::fromWhatsappArgs('interactive call to action url', 'تصفّح المتجر', [
+            'display_text' => 'المتجر',
+            'url' => 'https://shop.example.com',
+        ], null, null, null);
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $cta);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+            && $request['reply_markup'] === ['inline_keyboard' => [
+                [['text' => 'المتجر', 'url' => 'https://shop.example.com']],
+            ]]);
+    }
+
+    /** رأس الصورة: صورة تعليقها المتن وتحتها الأزرار، في رسالة واحدة. */
+    public function test_an_image_header_is_sent_as_a_photo_with_the_buttons(): void
+    {
+        $this->fakeTelegram();
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $this->buttons(
+            ['اطلب الآن'],
+            header: ['type' => 'image', 'image' => ['link' => 'https://cdn.example.com/p.jpg']]
+        ));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendPhoto')
+            && $request['photo'] === 'https://cdn.example.com/p.jpg'
+            && $request['caption'] === 'هل تريد المتابعة؟'
+            && isset($request['reply_markup']['inline_keyboard']));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/sendMessage'));
+    }
+
+    /** عنوانٌ لا تتّسع له الـ 64 بايت: رقمه، والعنوان من لوحة الرسالة عند الضغط. */
+    public function test_a_title_too_long_for_callback_data_is_sent_by_position(): void
+    {
+        $this->fakeTelegram();
+        $long = str_repeat('😀', 20);
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $this->buttons(['نعم', $long]));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+            && $request['reply_markup']['inline_keyboard'][1][0]['callback_data'] === 'b#1');
+
+        $events = $this->parse($this->press('b#1', [
+            [['text' => 'نعم', 'callback_data' => 'b:نعم']],
+            [['text' => $long, 'callback_data' => 'b#1']],
+        ]));
+
+        $this->assertSame($long, $events[0]->metadata['interactive']['button_reply']['title']);
+    }
+
+    /** البوت المربوط قبل الأزرار يُعاد تسجيل webhook-ه مرّة ليصله callback_query. */
+    public function test_the_first_buttons_re_register_the_webhook_once(): void
+    {
+        $this->fakeTelegram();
+        $contact = $this->contact('123456789');
+
+        $this->driver->sendInteractive($this->account, $contact, $this->buttons(['نعم']));
+        $this->driver->sendInteractive($this->account, $contact, $this->buttons(['نعم']));
+
+        $registrations = Http::recorded(fn ($request) => str_contains($request->url(), '/setWebhook'))->values();
+        $this->assertCount(1, $registrations);
+        $this->assertContains('callback_query', $registrations[0][0]['allowed_updates']);
+        $this->assertSame('s3cr3t', $registrations[0][0]['secret_token'], 'السرّ نفسه: لا تنقطع الرسائل.');
+        $this->assertSame('callback_query', $this->account->fresh()->credential('webhook_updates'));
+        Http::assertSentCount(4); // getWebhookInfo + setWebhook + رسالتان
+    }
+
+    /**
+     * إعادة التسجيل تجري في عامل الطابور حيث route() يُبنى من APP_URL. فتُعيد
+     * الرابط الذي يعرفه تيليجرام كما هو: رابطٌ خاطئ يقطع رسائل البوت كلّها.
+     */
+    public function test_re_registration_keeps_the_url_telegram_already_has(): void
+    {
+        config(['app.url' => 'http://localhost']);
+        $this->fakeTelegram(webhookUrl: 'https://app.example.com/webhook/channel/telegram/' . $this->account->uuid);
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $this->buttons(['نعم']));
+
+        $registration = Http::recorded(fn ($request) => str_contains($request->url(), '/setWebhook'))->values()[0][0];
+        $this->assertSame('https://app.example.com/webhook/channel/telegram/' . $this->account->uuid, $registration['url']);
+    }
+
+    /** لا رابط معروف (فشلت القراءة): لا يُمسّ الـ webhook، والرسالة تصل، ويُعاد المحاولة لاحقاً. */
+    public function test_without_webhook_info_the_webhook_is_left_untouched(): void
+    {
+        $this->fakeTelegram(webhookUrl: null);
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $this->buttons(['نعم']));
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/setWebhook'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage'));
+        $this->assertNotSame('callback_query', $this->account->fresh()->credential('webhook_updates'));
+    }
+
+    /** بوتٌ يستقبل الضغطات أصلاً: يُعلَّم بلا إعادة تسجيل. */
+    public function test_a_webhook_that_already_has_button_presses_is_not_re_registered(): void
+    {
+        $this->fakeTelegram(allowedUpdates: ['message', 'callback_query']);
+
+        $this->driver->sendInteractive($this->account, $this->contact('123456789'), $this->buttons(['نعم']));
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/setWebhook'));
+        $this->assertSame('callback_query', $this->account->fresh()->credential('webhook_updates'));
+    }
+
+    public function test_connecting_a_bot_asks_for_button_presses(): void
+    {
+        $this->fakeTelegram();
+
+        $this->assertTrue($this->driver->registerWebhook($this->account));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/setWebhook')
+            && $request['allowed_updates'] === ['message', 'edited_message', 'callback_query']);
+    }
+
+    // ───────────────────── ضغطة الزرّ ─────────────────────
+
+    /** الضغطة ردٌّ تفاعلي بشكل واتساب، والزرّ يتوقّف عن الدوران. */
+    public function test_a_button_press_reads_like_a_whatsapp_button_reply(): void
+    {
+        $this->fakeTelegram();
+
+        $events = $this->parse($this->press('b:نعم', [[['text' => 'نعم', 'callback_data' => 'b:نعم']]]));
+
+        $this->assertCount(1, $events);
+        $message = $events[0];
+        $this->assertSame('interactive', $message->type());
+        $this->assertSame(
+            ['type' => 'button_reply', 'button_reply' => ['id' => 'b:نعم', 'title' => 'نعم']],
+            $message->metadata['interactive']
+        );
+        $this->assertSame('123456789', $message->senderId);
+        $this->assertSame('tg:7654321:123456789:cb4411', $message->providerMessageId);
+        $this->assertSame('أحمد سالم', $message->senderName);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/answerCallbackQuery')
+            && $request['callback_query_id'] === '4411');
+    }
+
+    public function test_a_list_press_is_a_list_reply(): void
+    {
+        $this->fakeTelegram();
+
+        $events = $this->parse($this->press('l:العطور', [[['text' => 'العطور', 'callback_data' => 'l:العطور']]]));
+
+        $this->assertSame('list_reply', $events[0]->metadata['interactive']['type']);
+        $this->assertSame('العطور', $events[0]->metadata['interactive']['list_reply']['title']);
+    }
+
+    /** رسالةٌ قديمة حجبتها تيليجرام: العنوان من callback_data. */
+    public function test_a_press_on_an_inaccessible_message_still_reads_the_title(): void
+    {
+        $this->fakeTelegram();
+
+        $events = $this->parse($this->press('b:نعم', null));
+
+        $this->assertSame('نعم', $events[0]->metadata['interactive']['button_reply']['title']);
+    }
+
+    public function test_presses_that_cannot_be_read_are_ignored(): void
+    {
+        $this->fakeTelegram();
+
+        // بالرقم ولا لوحة: لا عنوان.
+        $this->assertSame([], $this->parse($this->press('b#1', null)));
+
+        // في مجموعة.
+        $group = $this->press('b:نعم', null);
+        $group['callback_query']['message']['chat']['type'] = 'group';
+        $this->assertSame([], $this->parse($group));
     }
 
     // ───────────────────── مساعدات ─────────────────────
@@ -283,6 +506,56 @@ class TelegramChannelTest extends TestCase
                 'chat' => ['id' => $chatId, 'type' => 'private'],
                 'date' => 1758600000,
             ], $content),
+        ];
+    }
+
+    private function fakeTelegram(?string $webhookUrl = 'https://app.example.com/webhook/channel/telegram/bot', array $allowedUpdates = ['message', 'edited_message']): void
+    {
+        Http::fake([
+            'api.telegram.org/*/getWebhookInfo' => $webhookUrl === null
+                ? Http::response(['ok' => false, 'description' => 'Unauthorized'], 401)
+                : Http::response(['ok' => true, 'result' => ['url' => $webhookUrl, 'allowed_updates' => $allowedUpdates]], 200),
+            'api.telegram.org/*/setWebhook' => Http::response(['ok' => true, 'result' => true], 200),
+            'api.telegram.org/*/answerCallbackQuery' => Http::response(['ok' => true, 'result' => true], 200),
+            'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 60]], 200),
+        ]);
+    }
+
+    /** @param array<int, string> $titles */
+    private function buttons(array $titles, ?array $header = null, ?string $footer = null): OutboundInteractive
+    {
+        $buttons = [];
+        foreach (array_values($titles) as $i => $title) {
+            $buttons[] = ['id' => 'button' . ($i + 1), 'title' => $title];
+        }
+
+        return OutboundInteractive::fromWhatsappArgs('interactive buttons', 'هل تريد المتابعة؟', $buttons, $header, $footer, null);
+    }
+
+    /** ضغطة زرّ inline كما تُرسلها تيليجرام؛ null = رسالة لم تعد متاحة. */
+    private function press(string $data, ?array $keyboard, int $chatId = 123456789): array
+    {
+        $message = ['message_id' => 60, 'date' => 0, 'chat' => ['id' => $chatId, 'type' => 'private']];
+
+        if ($keyboard !== null) {
+            $message = [
+                'message_id' => 60,
+                'date' => 1758600000,
+                'chat' => ['id' => $chatId, 'type' => 'private'],
+                'text' => 'هل تريد المتابعة؟',
+                'reply_markup' => ['inline_keyboard' => $keyboard],
+            ];
+        }
+
+        return [
+            'update_id' => 900002,
+            'callback_query' => [
+                'id' => '4411',
+                'from' => ['id' => $chatId, 'is_bot' => false, 'first_name' => 'أحمد', 'last_name' => 'سالم'],
+                'message' => $message,
+                'chat_instance' => '-1',
+                'data' => $data,
+            ],
         ];
     }
 
