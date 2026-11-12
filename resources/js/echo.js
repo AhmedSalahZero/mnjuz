@@ -19,6 +19,37 @@ const configKeyOf = (broadcast) => JSON.stringify([
     broadcast?.force_tls ?? null,
 ]);
 
+const AUTH_ENDPOINT = '/broadcasting/auth';
+
+/**
+ * ترويسات طلب المصادقة على القناة — تُقرأ مع كل طلب، لا مرّة عند بناء الاتصال.
+ *
+ * كل تسجيل دخول يُدوّر توكن CSRF (Session::regenerate)، والدخول يمرّ عبر
+ * Inertia فلا تُعاد الصفحة ويبقى <meta csrf-token> على التوكن القديم. التوكن
+ * المجمّد عند البناء كان يجعل /broadcasting/auth يردّ 419، فيفشل الاشتراك ولا
+ * تصل الرسائل لحظياً حتى إعادة التحميل. كوكي XSRF-TOKEN يجدّدها Laravel مع كل
+ * ردّ، وهي ما يقرؤه axios في طلبات الصفحة.
+ *
+ * ترويسة توكن واحدة لا اثنتان: Laravel يقرأ X-CSRF-TOKEN قبل X-XSRF-TOKEN،
+ * فإرسال القديمة بجانب الكوكي يُبقي الرفض. و X-Requested-With يجعل الجلسة
+ * المنتهية 401 صريحة بدل صفحة الدخول التي يقرؤها pusher-js «JSON غير صالح».
+ */
+function currentAuthHeaders() {
+    const headers = { 'X-Requested-With': 'XMLHttpRequest' };
+    const cookie = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/);
+
+    if (cookie && cookie[1]) {
+        headers['X-XSRF-TOKEN'] = decodeURIComponent(cookie[1]);
+    } else {
+        const meta = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (meta) {
+            headers['X-CSRF-TOKEN'] = meta;
+        }
+    }
+
+    return headers;
+}
+
 /** قنوات مشتركة: اسم القناة → { channel, handlers } — اشتراك فيزيائي واحد = طلب auth واحد */
 const sharedChannelEntries = new Map();
 
@@ -64,11 +95,14 @@ export function getEchoInstance(broadcast) {
 
         const options = {
             broadcaster: 'pusher',
-            authEndpoint: '/broadcasting/auth',
-            auth: {
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content,
-                },
+            authEndpoint: AUTH_ENDPOINT,
+            // وجود channelAuthorization يجعل pusher-js يتجاهل auth.headers
+            // الثابتة (ومنها توكن meta الذي يضعه Echo بنفسه)، ويستدعي
+            // headersProvider مع كل طلب مصادقة.
+            channelAuthorization: {
+                endpoint: AUTH_ENDPOINT,
+                transport: 'ajax',
+                headersProvider: currentAuthHeaders,
             },
             key: broadcast?.key,
             cluster: broadcast?.cluster ?? 'mt1',

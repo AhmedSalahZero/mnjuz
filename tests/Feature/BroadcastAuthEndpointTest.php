@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\VerifyCsrfToken;
 use App\Models\Addon;
 use App\Models\Organization;
 use App\Models\Setting;
@@ -265,5 +266,111 @@ class BroadcastAuthEndpointTest extends TestCase
             'socket_id' => self::SOCKET,
             'channel_name' => $this->presenceChannel(),
         ])->assertForbidden();
+    }
+
+    // ------------------------------------------------------ توكن CSRF بعد تدويره
+
+    /** توكن الجلسة بعد الدخول — Session::regenerate يدوّره مع كل تسجيل دخول. */
+    private const SESSION_TOKEN = 'token-after-login';
+
+    /** ما بقي في <meta csrf-token> لأن الدخول عبر Inertia لا يُعيد تحميل الصفحة. */
+    private const STALE_TOKEN = 'token-before-login';
+
+    /**
+     * الاختبارات تتخطّى فحص CSRF (runningUnitTests)، والعطل كلّه فيه: نُعيده
+     * هنا كما يعمل في الإنتاج.
+     */
+    private function enforceCsrf(): void
+    {
+        $this->app->bind(VerifyCsrfToken::class, fn ($app) => new class($app, $app['encrypter']) extends VerifyCsrfToken {
+            protected function runningUnitTests()
+            {
+                return false;
+            }
+        });
+    }
+
+    /**
+     * طلب المصادقة كما يرسله pusher-js: نموذج لا JSON، و Accept افتراضي XHR.
+     *
+     * @param  array<string, string>  $headers
+     */
+    private function browserAuth(array $headers, bool $loggedIn = true)
+    {
+        if ($loggedIn) {
+            $this->actingAs($this->user)->withSession(['_token' => self::SESSION_TOKEN]);
+        }
+
+        return $this->withHeaders(['Accept' => '*/*'] + $headers)->post('/broadcasting/auth', [
+            'socket_id' => self::SOCKET,
+            'channel_name' => $this->channel(),
+        ]);
+    }
+
+    /** كوكي XSRF-TOKEN كما يحملها المتصفّح: يضعها الخادم في الردّ مشفّرة. */
+    private function xsrfCookieFromServer(): string
+    {
+        $cookie = $this->browserAuth(['X-CSRF-TOKEN' => self::SESSION_TOKEN])
+            ->assertOk()
+            ->getCookie('XSRF-TOKEN', false);
+
+        $this->assertNotNull($cookie, 'الردّ لم يضع كوكي XSRF-TOKEN — لا مصدر للتوكن الحالي في المتصفّح.');
+
+        return $cookie->getValue();
+    }
+
+    /**
+     * العطل نفسه: التوكن المجمّد عند بناء Echo بعد الدخول يُرفض بـ419،
+     * فيفشل الاشتراك ولا تصل الرسائل لحظياً حتى إعادة التحميل.
+     */
+    public function test_the_token_left_in_the_meta_tag_after_login_is_refused(): void
+    {
+        $this->usePusher();
+        $this->enforceCsrf();
+
+        $this->browserAuth(['X-CSRF-TOKEN' => self::STALE_TOKEN])->assertStatus(419);
+    }
+
+    /** ما يرسله Echo الآن: كوكي XSRF-TOKEN الحالية في X-XSRF-TOKEN. */
+    public function test_the_current_xsrf_cookie_authorizes_the_presence_channel(): void
+    {
+        $this->usePusher();
+        $this->enforceCsrf();
+
+        $response = $this->browserAuth(['X-XSRF-TOKEN' => $this->xsrfCookieFromServer()]);
+
+        $response->assertOk();
+        $this->assertSame(
+            $this->expectedSignature('cloud-key', 'cloud-secret', $this->channel(), $response->json('channel_data')),
+            $response->json('auth')
+        );
+    }
+
+    /**
+     * Laravel يقرأ X-CSRF-TOKEN قبل X-XSRF-TOKEN: إرسال توكن meta القديم بجانب
+     * الكوكي السليمة يُبقي الرفض — لذلك يرسل العميل واحدة لا اثنتين.
+     */
+    public function test_a_stale_csrf_header_beside_a_valid_cookie_is_still_refused(): void
+    {
+        $this->usePusher();
+        $this->enforceCsrf();
+
+        $this->browserAuth([
+            'X-CSRF-TOKEN' => self::STALE_TOKEN,
+            'X-XSRF-TOKEN' => $this->xsrfCookieFromServer(),
+        ])->assertStatus(419);
+    }
+
+    /**
+     * جلسة منتهية: pusher-js لا يرسل X-Requested-With، فكان الردّ تحويلاً إلى
+     * صفحة الدخول يقرؤه «JSON غير صالح». مع الترويسة يصير 401 صريحاً.
+     */
+    public function test_an_ended_session_gets_401_instead_of_the_login_page(): void
+    {
+        $this->usePusher();
+
+        $this->browserAuth([], loggedIn: false)->assertRedirect(route('login'));
+
+        $this->browserAuth(['X-Requested-With' => 'XMLHttpRequest'], loggedIn: false)->assertUnauthorized();
     }
 }

@@ -17,6 +17,13 @@ const body = src.slice(start, end)
 	.replace('window.Pusher = Pusher;', '')
 	.replace(/document\.querySelector\([^)]*\)\?\.content/, "'csrf'")
 
+// ترويسات المصادقة تُبنى مع كل طلب، فتُستخرج دالّتها كما هي وتقرأ document البديل.
+const helperStart = src.indexOf('function currentAuthHeaders')
+const helper = helperStart === -1
+	? ''
+	: src.slice(helperStart, src.indexOf('\n}', helperStart) + 2)
+const endpointConst = (src.match(/const AUTH_ENDPOINT = [^;]+;/) ?? [''])[0]
+
 let captured = null
 const keyStart = src.indexOf('let echoConfigKey')
 const keyEnd = src.indexOf(']);', keyStart) + 3
@@ -30,6 +37,8 @@ globalThis.__built = 0
 globalThis.__disconnected = 0
 class Echo { constructor(o) { captured = o; globalThis.__built++ } disconnect() { globalThis.__disconnected++ } }
 ${configKey}
+${endpointConst}
+${helper}
 ${body}
 export { getEchoInstance }
 export function reset() { echoInstance = null }
@@ -42,7 +51,9 @@ const { getEchoInstance, reset, seen } = await import(
 	'data:text/javascript;base64,' + Buffer.from(mod).toString('base64'))
 
 const failures = []
+let checks = 0
 const check = (name, actual, expected) => {
+	checks++
 	const a = JSON.stringify(actual), e = JSON.stringify(expected)
 	if (a !== e) failures.push(`${name}: توقّعنا ${e} فجاء ${a}`)
 }
@@ -104,5 +115,48 @@ check('مزوّد آخر · يُغلق القديم', globalThis.__disconnected,
 check('مزوّد آخر · المفتاح الجديد', seen().key, 'second')
 check('مزوّد آخر · عنوان Reverb', seen().wsHost, 'ws.example.com')
 
+// (٧) توكن CSRF يُقرأ مع كل طلب مصادقة، لا مرّة عند بناء الاتصال.
+//
+// عطلٌ وقع فعلاً: كل تسجيل دخول يُدوّر التوكن (Session::regenerate)، والدخول
+// عبر Inertia لا يُعيد تحميل الصفحة فيبقى <meta csrf-token> على القديم. التوكن
+// المجمّد عند البناء جعل /broadcasting/auth يردّ 419 حتى إعادة التحميل.
+const page = { cookie: '', meta: 'meta-token' }
+globalThis.document = {
+	get cookie() { return page.cookie },
+	querySelector: (selector) => (selector === 'meta[name="csrf-token"]' && page.meta !== null)
+		? { content: page.meta }
+		: null,
+}
+
+reset()
+getEchoInstance({ provider: 'pusher', key: 'k', cluster: 'us2', host: null, port: 443, force_tls: true })
+o = seen()
+const authorization = o.channelAuthorization ?? {}
+const headersNow = () => (typeof authorization.headersProvider === 'function' ? authorization.headersProvider() : {})
+
+check('المصادقة · المسار', authorization.endpoint, '/broadcasting/auth')
+check('المصادقة · النقل', authorization.transport, 'ajax')
+check('المصادقة · بلا توكن مجمّد في الخيارات', o.auth?.headers?.['X-CSRF-TOKEN'], undefined)
+
+page.cookie = 'locale=ar; XSRF-TOKEN=before%3D%3D; mnjz_session=s'
+check('قبل الدخول · توكن الكوكي مفكوك الترميز', headersNow()['X-XSRF-TOKEN'], 'before==')
+
+// الدخول دوّر التوكن والصفحة لم تُحمَّل: الطلب التالي يحمل الجديد بلا إعادة بناء.
+page.cookie = 'locale=ar; XSRF-TOKEN=after%3D%3D; mnjz_session=s'
+check('بعد الدخول · التوكن الجديد', headersNow()['X-XSRF-TOKEN'], 'after==')
+// Laravel يقرأ X-CSRF-TOKEN قبل X-XSRF-TOKEN: إرسال القديمة بجانب الكوكي يُبقي الرفض.
+check('بعد الدخول · لا meta قديمة بجانبه', 'X-CSRF-TOKEN' in headersNow(), false)
+check('طلب XHR · الجلسة المنتهية 401 لا صفحة الدخول', headersNow()['X-Requested-With'], 'XMLHttpRequest')
+
+page.cookie = 'locale=ar'
+check('بلا كوكي · الـmeta', headersNow()['X-CSRF-TOKEN'], 'meta-token')
+check('بلا كوكي · لا X-XSRF-TOKEN', 'X-XSRF-TOKEN' in headersNow(), false)
+
+page.cookie = 'OLD-XSRF-TOKEN=other'
+check('كوكي باسم مشابه · لا تُخلط', 'X-XSRF-TOKEN' in headersNow(), false)
+
+page.meta = null
+check('بلا كوكي ولا meta · لا ترويسة فارغة', 'X-CSRF-TOKEN' in headersNow(), false)
+
 if (failures.length) { failures.forEach(f => console.error('❌ ' + f)); process.exit(1) }
-console.log('✅ 24 فحصاً — السحابة بلا عنوان، وReverb بعنوان صريح، والاتصال يتبع مزوّد المنشأة')
+console.log(`✅ ${checks} فحصاً — السحابة بلا عنوان، وReverb بعنوان صريح، والاتصال يتبع مزوّد المنشأة، وتوكن المصادقة يُقرأ مع كل طلب`)
