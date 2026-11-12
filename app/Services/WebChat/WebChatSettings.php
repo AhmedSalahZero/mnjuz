@@ -32,6 +32,9 @@ final class WebChatSettings
         ],
         'prechat' => [
             'default_country' => 'SA',
+            // off | optional | required. إجباري افتراضياً: هكذا بدأ كل widget،
+            // وبدونه لا وسيلة لبلوغ زائرٍ غادر ولم يعد إلى الموقع.
+            'phone' => 'required',
             // off | optional | required
             'email' => 'off',
             'name_label' => null,
@@ -47,6 +50,7 @@ final class WebChatSettings
 
     public const POSITIONS = ['right', 'left'];
     public const LANGUAGES = ['auto', 'ar', 'en'];
+    public const PHONE_MODES = ['off', 'optional', 'required'];
     public const EMAIL_MODES = ['off', 'optional', 'required'];
 
     /** الإعدادات كاملةً: المخزَّن فوق الافتراضي. */
@@ -93,6 +97,9 @@ final class WebChatSettings
         unset($appearance);
 
         $prechat = &$settings['prechat'];
+        // القيمة المجهولة تعود إلى الإجباري لا إلى الإخفاء: الخطأ في الإعداد
+        // لا يُسقط الرقم من نموذج تاجرٍ يعتمد عليه.
+        $prechat['phone'] = in_array($prechat['phone'], self::PHONE_MODES, true) ? $prechat['phone'] : 'required';
         $prechat['email'] = in_array($prechat['email'], self::EMAIL_MODES, true) ? $prechat['email'] : 'off';
         $prechat['default_country'] = self::country($prechat['default_country']);
         foreach (['name_label', 'phone_label', 'consent_text'] as $text) {

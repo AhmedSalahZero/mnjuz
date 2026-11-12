@@ -199,9 +199,9 @@ class AutoReplyService
         }
 
         // An automated reply was sent to the customer, so treat the inbound
-        // messages as read — the agent no longer needs to open the thread just
-        // to clear its unread state.
-        if ($response) {
+        // messages as read — unless the organization turned that off in the
+        // ticket settings to keep the conversation in Unread for employees.
+        if ($response && ChatReadService::autoReplyMarksRead($metadataArray)) {
             ChatReadService::markInboundAsRead((int) $chat->contact_id, (int) $organizationId);
         }
 

@@ -4,6 +4,7 @@ import { ApiError, createApi } from '../core/api.ts'
 import { mediaType, pickFiles } from '../core/files.ts'
 import { resolveLanguage, translator } from '../core/i18n.ts'
 import { connectRealtime, type RealtimeState } from '../core/realtime.ts'
+import { sessionFields, type PrechatValues } from '../core/prechat.ts'
 import { isLeader, parseLock, pollInterval, shouldConnectRealtime } from '../core/scheduler.ts'
 import { addPending, lastOutboundSeq, lastSeq, firstSeq, markFailed, mergeMessages, unreadCount } from '../core/store.ts'
 import { createStorage, type Persisted } from '../core/storage.ts'
@@ -12,7 +13,7 @@ import { uuidv4 } from '../core/uuid.ts'
 import { Composer, rememberEmoji } from './Composer.tsx'
 import { Icon } from './Icon.tsx'
 import { MessageList } from './MessageList.tsx'
-import { Prechat, type PrechatValues } from './Prechat.tsx'
+import { Prechat } from './Prechat.tsx'
 
 export interface MountContext {
     base: string
@@ -358,15 +359,8 @@ export function Widget({ ctx }: { ctx: MountContext }) {
 
     const startSession = async (values: PrechatValues): Promise<Record<string, string[]> | null> => {
         try {
-            const prechat = config.widget.prechat
             const result = await api.startSession({
-                name: values.name,
-                phone: values.phone,
-                country: values.country,
-                ...(prechat.email !== 'off' && values.email ? { email: values.email } : {}),
-                ...(prechat.consent_text ? { consent: values.consent } : {}),
-                website: values.website,
-                elapsed_ms: values.elapsed_ms,
+                ...sessionFields(config.widget.prechat, values),
                 page_url: location.href,
                 referrer: document.referrer || undefined,
                 locale: navigator.language,

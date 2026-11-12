@@ -261,6 +261,9 @@ class SettingController extends BaseController
                 'ratingButtonLabelMax' => \App\Services\ConversationRatingService::BUTTON_LABEL_MAX,
                 'ratingLinkValidDays' => \App\Models\ConversationRating::LINK_VALID_DAYS,
                 'ratingMaxCooldownDays' => \App\Services\ConversationRatingService::MAX_COOLDOWN_DAYS,
+                'markReadAfterAutoReply' => \App\Services\Chat\ChatReadService::autoReplyMarksRead(
+                    json_decode((string) ($settings?->metadata ?? ''), true)
+                ),
             ]);
         } else if($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
@@ -289,6 +292,12 @@ class SettingController extends BaseController
             $metadataArray['ratings']['cooldown_days'] = \App\Services\ConversationRatingService::normalizeCooldown(
                 $request->input('rating_survey_cooldown_days')
             );
+
+            // هل يعلّم الردّ الآلي المحادثة مقروءة؟ صفحة فُتحت قبل إضافة الخيار لا
+            // ترسله، فيبقى المحفوظ كما هو بدل أن يعود للافتراضي.
+            if ($request->has('mark_read_after_auto_reply')) {
+                $metadataArray['automation']['mark_read_after_auto_reply'] = $request->boolean('mark_read_after_auto_reply');
+            }
 
             $updatedMetadataJson = json_encode($metadataArray);
 

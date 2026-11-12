@@ -61,6 +61,9 @@ class WebChatSettingsController extends Controller
             'appearance.welcome_message' => ['nullable', 'string', 'max:500'],
             'appearance.language' => ['required', Rule::in(WebChatSettings::LANGUAGES)],
             'prechat.default_country' => ['required', 'string', 'size:2', 'alpha'],
+            // sometimes: صفحة إعدادات مفتوحة من قبل هذا الحقل تحفظ بدونه، فيبقى
+            // الافتراضي (إجباري) بدل خطأ على حقل لا يراه التاجر.
+            'prechat.phone' => ['sometimes', Rule::in(WebChatSettings::PHONE_MODES)],
             'prechat.email' => ['required', Rule::in(WebChatSettings::EMAIL_MODES)],
             'prechat.name_label' => ['nullable', 'string', 'max:60'],
             'prechat.phone_label' => ['nullable', 'string', 'max:60'],

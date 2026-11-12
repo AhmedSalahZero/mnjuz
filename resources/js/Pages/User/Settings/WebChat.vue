@@ -118,13 +118,25 @@
 					<!-- نموذج الزائر -->
 					<section class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
 						<h4 class="text-[15px]">{{ $t('Visitor form') }}</h4>
-						<p class="text-slate-500 mt-1 mb-3">{{ $t('Name and mobile number are always required before the visitor can write.') }}</p>
+						<p class="text-slate-500 mt-1 mb-3">{{ $t('A name is always required before the visitor can write.') }}</p>
 						<div class="grid md:grid-cols-2 gap-4">
 							<label class="block">
 								<span class="text-slate-700">{{ $t('Default country code') }}</span>
 								<input type="text" maxlength="2" dir="ltr" v-model="form.prechat.default_country" placeholder="SA"
 									@input="form.prechat.default_country = form.prechat.default_country.toUpperCase()" :class="inputClass('prechat.default_country')" />
 								<FieldError :message="form.errors['prechat.default_country']" />
+							</label>
+							<label class="block">
+								<span class="text-slate-700">{{ $t('Mobile field') }}</span>
+								<select v-model="form.prechat.phone" :class="inputClass('prechat.phone')">
+									<option value="off">{{ $t('Hidden') }}</option>
+									<option value="optional">{{ $t('Optional') }}</option>
+									<option value="required">{{ $t('Required') }}</option>
+								</select>
+								<FieldError :message="form.errors['prechat.phone']" />
+								<span v-if="form.prechat.phone !== 'required'" class="block text-xs text-amber-700 mt-1">
+									{{ $t('Without a mobile number you can reach the visitor only when they return to your site.') }}
+								</span>
 							</label>
 							<label class="block">
 								<span class="text-slate-700">{{ $t('Email field') }}</span>
@@ -138,7 +150,7 @@
 								<span class="text-slate-700">{{ $t('Name field label') }}</span>
 								<input type="text" maxlength="60" v-model="form.prechat.name_label" :placeholder="$t('Your name')" :class="inputClass('prechat.name_label')" />
 							</label>
-							<label class="block">
+							<label v-if="form.prechat.phone !== 'off'" class="block">
 								<span class="text-slate-700">{{ $t('Mobile field label') }}</span>
 								<input type="text" maxlength="60" v-model="form.prechat.phone_label" :placeholder="$t('Mobile number')" :class="inputClass('prechat.phone_label')" />
 							</label>

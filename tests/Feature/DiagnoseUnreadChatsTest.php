@@ -80,6 +80,14 @@ class DiagnoseUnreadChatsTest extends TestCase
         ));
     }
 
+    /** المنشأة أطفأت «تعليم المحادثة كمقروءة بعد الرد الآلي» (مُفعَّل افتراضياً). */
+    private function turnOffMarkReadAfterAutoReply(): void
+    {
+        $metadata = json_decode((string) $this->organization->metadata, true) ?: [];
+        $metadata['automation']['mark_read_after_auto_reply'] = false;
+        $this->organization->update(['metadata' => json_encode($metadata)]);
+    }
+
     // ------------------------------------------------ الحالة الأولى
 
     /** لا رسائل محفوظة ⇒ الخلل قبل الحفظ. */
@@ -126,6 +134,22 @@ class DiagnoseUnreadChatsTest extends TestCase
             ->assertExitCode(0);
     }
 
+    /**
+     * والمنشأة أطفأت الخيار: الردّ الآلي عندها لا يعلّم شيئاً مقروءاً، فردٌّ آليّ
+     * بعد ثوانٍ لا يُتّهم، والرسالة المقروءة فتحها موظّف أو التطبيق.
+     */
+    public function test_with_the_option_off_a_fast_bot_reply_is_not_blamed(): void
+    {
+        $this->turnOffMarkReadAfterAutoReply();
+        $this->inbound(isRead: 1);
+        $this->outbound(userId: null);
+
+        $this->diagnose()
+            ->doesntExpectOutputToContain('الشكوى صحيحة، والسبب الردّ الآليّ')
+            ->expectsOutputToContain('فتحها موظّف أو علّمها التطبيق')
+            ->assertExitCode(0);
+    }
+
     // ------------------------------------------------ الحالة الثالثة
 
     /** وصلت وبقيت غير مقروءة ⇒ الخلل في التوصيل إلى المتصفّح. */
@@ -155,6 +179,27 @@ class DiagnoseUnreadChatsTest extends TestCase
         $this->inbound(isRead: 0);
 
         $this->diagnose()->expectsOutputToContain('تعليم الرسائل مقروءة وارد')->assertExitCode(0);
+    }
+
+    /** والخيار مُطفأ: الردود الآلية موجودة ولا تعلّم شيئاً مقروءاً. */
+    public function test_it_reports_that_auto_replies_leave_messages_unread_when_the_option_is_off(): void
+    {
+        $this->turnOffMarkReadAfterAutoReply();
+        AutoReply::create([
+            'uuid' => (string) Str::uuid(),
+            'organization_id' => $this->organization->id,
+            'name' => 'ترحيب',
+            'trigger' => 'مرحبا',
+            'match_criteria' => 'contains',
+            'metadata' => json_encode(['type' => 'text', 'text' => ['body' => 'أهلاً']]),
+            'created_by' => $this->owner->id,
+        ]);
+        $this->inbound(isRead: 0);
+
+        $this->diagnose()
+            ->expectsOutputToContain('لا تعلّم الرسائل مقروءة (الخيار مُطفأ)')
+            ->doesntExpectOutputToContain('تعليم الرسائل مقروءة وارد')
+            ->assertExitCode(0);
     }
 
     // ------------------------------------------------------ السلامة

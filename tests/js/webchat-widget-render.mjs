@@ -26,6 +26,7 @@ const { default: puppeteer } = await import(resolve(root, 'node_modules/puppetee
 const harness = `
 import { render } from 'preact'
 import { MessageList } from './resources/widget/src/app/MessageList.tsx'
+import { Prechat } from './resources/widget/src/app/Prechat.tsx'
 import { translator } from './resources/widget/src/core/i18n.ts'
 
 const bot = { kind: 'bot' }
@@ -38,6 +39,19 @@ const scenarios = {
     ctaShort: [out('m1', 'قيّمنا', { kind: 'cta_url', display_text: 'تقييم مستوى الخدمة', url: 'https://example.com/rate/abc' })],
     buttons: [out('m1', 'اختر القسم الذي تريد التواصل معه من فضلك حتى نخدمك بشكل أسرع', { kind: 'buttons', buttons: [{ id: 'b1', title: 'المبيعات' }, { id: 'b2', title: 'الدعم الفني' }, { id: 'b3', title: 'الشكاوى' }] })],
     list: [out('m1', 'اختر من القائمة', { kind: 'list', button: 'القائمة', footer: 'نسعد بخدمتك', sections: [{ title: 'خدمات', rows: [{ id: 'r1', title: 'طلب جديد' }] }] })],
+}
+
+// نموذج الزائر بحسب إعداد الجوال؛ null = خادم أقدم من الإعداد.
+window.renderPrechat = (phone) => {
+    const host = document.getElementById('host')
+    render(null, host)
+    const prechat = { default_country: 'SA', email: 'off', name_label: null, phone_label: null, consent_text: null, ...(phone ? { phone } : {}) }
+    render(
+        <div class="mnjz-root" dir="rtl" style="width:370px">
+            <Prechat config={{ widget: { prechat } }} lang="ar" t={translator('ar')} onSubmit={async () => null} />
+        </div>,
+        host,
+    )
 }
 
 window.renderScenario = (name) => {
@@ -114,6 +128,33 @@ try {
             const prev = layout.blocks[i - 1]
             const cur = layout.blocks[i]
             ok(cur.top >= prev.bottom - 0.5, `${name}: "${cur.cls}" overlaps "${prev.cls}" (${cur.top.toFixed(1)} < ${prev.bottom.toFixed(1)})`)
+        }
+    }
+
+    // حقل الجوال: يختفي هو ودولته حين يُخفى، وبلا required ومعلَّماً «اختياري» حين يكون اختيارياً.
+    for (const [mode, expected] of [
+        [null, { field: true, country: true, required: true, optional: false }],
+        ['required', { field: true, country: true, required: true, optional: false }],
+        ['optional', { field: true, country: true, required: false, optional: true }],
+        ['off', { field: false, country: false, required: null, optional: false }],
+    ]) {
+        await page.evaluate((m) => window.renderPrechat(m), mode)
+        const state = await page.evaluate(() => {
+            const input = document.querySelector('input[name=phone]')
+            const label = input ? input.closest('label').querySelector('span').textContent : ''
+
+            return {
+                field: !!input,
+                country: !!document.querySelector('.mnjz-phone select'),
+                required: input ? input.required : null,
+                optional: label.includes('اختياري'),
+                name: !!document.querySelector('input[name=name]'),
+            }
+        })
+
+        ok(state.name, `prechat ${mode}: the name field is always shown`)
+        for (const key of Object.keys(expected)) {
+            ok(state[key] === expected[key], `prechat ${mode}: ${key} expected ${expected[key]}, got ${state[key]}`)
         }
     }
 

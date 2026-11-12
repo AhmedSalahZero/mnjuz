@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 
 /**
  * الواجهة العامّة للـ widget: من نموذج الزائر حتى صفّ في صندوق المحادثات.
@@ -152,6 +153,100 @@ class WidgetApiTest extends WebChatTestCase
         $this->postJson($this->url('sessions'), $base + ['email' => 'Sara@Example.com', 'consent' => true])->assertCreated();
 
         $this->assertSame('sara@example.com', WebChatVisitor::first()->email);
+    }
+
+    // ───────────────────── حقل الجوال حسب إعداد التاجر ─────────────────────
+
+    /** widget حُفظ قبل وجود الإعداد: لا مفتاح phone في إعداداته، فيبقى الرقم إجبارياً. */
+    public function test_a_widget_saved_before_the_phone_setting_still_requires_the_phone(): void
+    {
+        $this->setSettings(['prechat' => ['default_country' => 'SA', 'email' => 'off']]);
+
+        $this->getJson($this->url('config'))->assertOk()->assertJsonPath('widget.prechat.phone', 'required');
+        $this->postJson($this->url('sessions'), ['name' => 'سارة', 'elapsed_ms' => 4000])
+            ->assertStatus(422)->assertJsonValidationErrors('phone');
+
+        $this->assertSame(0, WebChatVisitor::count());
+    }
+
+    public function test_an_optional_phone_may_be_left_empty_but_not_wrong(): void
+    {
+        $this->setSettings(['prechat' => ['phone' => 'optional']]);
+        $base = ['name' => 'سارة', 'elapsed_ms' => 4000];
+        $phoneOf = fn (TestResponse $response) => WebChatVisitor::where('uuid', $response->json('visitor.id'))->value('phone');
+
+        $this->getJson($this->url('config'))->assertOk()->assertJsonPath('widget.prechat.phone', 'optional');
+
+        // رقمٌ كُتب خطأً يُردّ ليُصحَّح، لا يُسقط بصمت.
+        $this->postJson($this->url('sessions'), ['phone' => '12'] + $base)->assertStatus(422)->assertJsonValidationErrors('phone');
+        $this->assertSame(0, WebChatVisitor::count());
+
+        $this->assertNull($phoneOf($this->postJson($this->url('sessions'), $base)->assertCreated()));
+        $this->assertNull($phoneOf($this->postJson($this->url('sessions'), ['phone' => '   '] + $base)->assertCreated()));
+        $this->assertSame('+966501234567', $phoneOf($this->postJson($this->url('sessions'), ['phone' => '0501234567'] + $base)->assertCreated()));
+    }
+
+    /** المخفيّ لا يُحفظ ولا يُتحقَّق منه — ولو أرسله widget قديم بقي في متصفّح الزائر. */
+    public function test_a_hidden_phone_is_ignored_even_if_an_old_widget_sends_one(): void
+    {
+        $this->setSettings(['prechat' => ['phone' => 'off']]);
+
+        $this->getJson($this->url('config'))->assertOk()->assertJsonPath('widget.prechat.phone', 'off');
+
+        [, $visitor] = $this->openSession();
+        [, $wrong] = $this->openSession(['phone' => '12']);
+
+        $this->assertNull($visitor->phone);
+        $this->assertNull($wrong->phone);
+    }
+
+    /** ما يصل webhook التاجر هو raw كما هو: بلا رقمٍ لا مفتاح phone أصلاً. */
+    public function test_without_a_phone_the_merchant_webhook_gets_no_phone_key(): void
+    {
+        Queue::fake();
+        $this->setSettings(['prechat' => ['phone' => 'off']]);
+        [$token] = $this->openSession();
+
+        $this->send($token, ['text' => 'مرحبا'])->assertStatus(202);
+
+        Queue::assertPushed(ProcessWebChatInboundJob::class, function (ProcessWebChatInboundJob $job) {
+            $payload = (fn () => $this->payload)->call($job);
+
+            return $payload['sender_phone'] === null
+                && $payload['raw']['visitor']['name'] === 'سارة'
+                && !array_key_exists('phone', $payload['raw']['visitor']);
+        });
+    }
+
+    /** الإرسال للزائر بمعرّفه لا برقمه: زائرٌ بلا رقم يصله ردّ الموظّف في الـ widget. */
+    public function test_a_visitor_without_a_phone_is_answered_inside_the_widget(): void
+    {
+        $this->setSettings(['prechat' => ['phone' => 'optional']]);
+        $start = $this->postJson($this->url('sessions'), ['name' => 'سارة', 'elapsed_ms' => 4000])->assertCreated();
+        $token = $start->json('token');
+        $visitor = WebChatVisitor::where('uuid', $start->json('visitor.id'))->first();
+
+        $this->send($token, ['text' => 'هل المنتج متوفّر؟'])->assertStatus(202);
+        $contact = Contact::find($visitor->refresh()->contact_id);
+
+        $this->assertSame($visitor->uuid, $contact->channel_identifier);
+        $this->assertNull($contact->phone);
+        $this->assertNull($contact->formatted_phone);
+        $this->assertTrue(ChatTicket::where('contact_id', $contact->id)->exists());
+
+        Http::fake();
+        $this->actAsOwner();
+
+        $result = (new ChatService($this->organization->id))->sendMessage(
+            Request::create('/chats', 'POST', ['uuid' => $contact->uuid, 'message' => 'نعم، متوفّر'])
+        );
+
+        $this->assertTrue($result->success);
+        Http::assertNothingSent();
+
+        $last = collect($this->getJson($this->url('messages'), ['X-Webchat-Token' => $token])->assertOk()->json('messages'))->last();
+        $this->assertSame('out', $last['direction']);
+        $this->assertSame('نعم، متوفّر', $last['text']);
     }
 
     public function test_no_new_sessions_once_the_subscription_expired(): void

@@ -76,6 +76,26 @@ const billing = read('resources/js/Pages/User/Billing/Index.vue');
 ok(/props\.pusherSettings/.test(billing),
    'Billing/Index.vue يستعمل pusherSettings — وBillingController يمرّرها فعلاً');
 
+// ------------------------------------------------- عمر المعالجات والاتصال
+
+// الـlayout يُركَّب من جديد مع كل تنقّل (الصفحات تلفّ <AppLayout>)، فمعالجٌ لا
+// يُلغى عند الإزالة يتراكم: closure على component ميّت يعمل مع كل رسالة.
+const layout = read('resources/js/Pages/User/Layout/App.vue');
+ok(/(\w+)\s*=\s*subscribe\(/.test(layout),
+   'Layout/App.vue لا يحتفظ بإلغاء الاشتراك — يتراكم معالج مع كل تنقّل');
+const unsubscribeName = (layout.match(/(\w+)\s*=\s*subscribe\(/) ?? [])[1];
+ok(unsubscribeName && new RegExp(`onUnmounted\\([\\s\\S]*?${unsubscribeName}\\s*\\?\\.\\(\\)`).test(layout),
+   'Layout/App.vue لا يُلغي معالجه في onUnmounted');
+
+// تبديل المنشأة من لوحة التحكّم لا يُعيد تركيب الـlayout (router.post يحفظ
+// الحالة)، فيجب أن يتبع الاشتراكُ المنشأةَ لا التركيبَ وحده.
+ok(/watch\(\s*\(\)\s*=>[^,]*organization\.value\?\.id[\s\S]*?subscribeToChatChannel\(\)/.test(layout),
+   'Layout/App.vue لا يعيد الاشتراك حين تتغيّر المنشأة دون إعادة تركيب');
+
+// الخروج رابط Inertia بلا إعادة تحميل: خطّاف التنقّل هو ما يقطع الاتصال.
+ok(/router\.on\(\s*'navigate'[\s\S]*?syncEchoWithPage\(/.test(echo),
+   'echo.js لا يربط syncEchoWithPage بحدث navigate — يبقى التبويب مشتركاً بعد الخروج');
+
 // ----------------------------------------------------------- النتيجة
 
 if (fail.length) {

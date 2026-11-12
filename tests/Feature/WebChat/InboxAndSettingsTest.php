@@ -173,6 +173,44 @@ class InboxAndSettingsTest extends WebChatTestCase
         $this->assertFalse($settings['behavior']['uploads']);
     }
 
+    public function test_the_mobile_field_can_be_made_optional_or_hidden(): void
+    {
+        $this->actAsOwner();
+        $save = fn (array $prechat) => $this->post('/settings/webchat', [
+            'enabled' => true,
+            'allowed_domains' => [],
+            'appearance' => ['color' => '#16a34a', 'position' => 'right', 'offset_x' => 20, 'offset_y' => 20, 'title' => '', 'subtitle' => '', 'welcome_message' => '', 'language' => 'auto'],
+            'prechat' => $prechat + ['default_country' => 'SA', 'email' => 'off', 'name_label' => '', 'phone_label' => '', 'consent_text' => ''],
+            'behavior' => ['show_agent_names' => true, 'sound' => true, 'uploads' => true],
+        ]);
+        $phone = fn () => WebChatSettings::for($this->widget->fresh())['prechat']['phone'];
+
+        $this->assertSame('required', $phone(), 'الافتراضي إجباري.');
+
+        $save(['phone' => 'optional'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('optional', $phone());
+
+        $save(['phone' => 'off'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('off', $phone());
+
+        $save(['phone' => 'maybe'])->assertSessionHasErrors('prechat.phone');
+        $this->assertSame('off', $phone(), 'القيمة المرفوضة لا تُحفظ.');
+
+        // صفحة إعدادات فُتحت قبل هذا الحقل تحفظ بدونه: بلا خطأ، ويعود الإجباري.
+        $save([])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('required', $phone());
+    }
+
+    public function test_an_unknown_or_missing_phone_mode_means_required(): void
+    {
+        $this->assertSame('required', WebChatSettings::merge([])['prechat']['phone']);
+        $this->assertSame('required', WebChatSettings::merge(['prechat' => ['email' => 'optional']])['prechat']['phone']);
+        $this->assertSame('required', WebChatSettings::merge(['prechat' => ['phone' => 'nope']])['prechat']['phone']);
+        $this->assertSame('required', WebChatSettings::merge(['prechat' => ['phone' => null]])['prechat']['phone']);
+        $this->assertSame('optional', WebChatSettings::merge(['prechat' => ['phone' => 'optional']])['prechat']['phone']);
+        $this->assertSame('off', WebChatSettings::merge(['prechat' => ['phone' => 'off']])['prechat']['phone']);
+    }
+
     public function test_an_uploaded_logo_is_served_from_our_media_link(): void
     {
         $this->actAsOwner();

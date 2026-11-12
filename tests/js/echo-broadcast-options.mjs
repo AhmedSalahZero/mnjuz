@@ -23,6 +23,12 @@ const helper = helperStart === -1
 	? ''
 	: src.slice(helperStart, src.indexOf('\n}', helperStart) + 2)
 const endpointConst = (src.match(/const AUTH_ENDPOINT = [^;]+;/) ?? [''])[0]
+// getEchoInstance يقطع الاتصال القديم بـ disconnectEcho، فتُستخرج كما هي.
+// خطّاف التنقّل له اختباره (echo-channel-lifecycle.mjs)؛ هنا بديل صامت.
+const disconnectStart = src.indexOf('export function disconnectEcho')
+const disconnect = disconnectStart === -1
+	? ''
+	: src.slice(disconnectStart, src.indexOf('\n}', disconnectStart) + 2).replace('export function', 'function')
 
 let captured = null
 const keyStart = src.indexOf('let echoConfigKey')
@@ -39,6 +45,8 @@ class Echo { constructor(o) { captured = o; globalThis.__built++ } disconnect() 
 ${configKey}
 ${endpointConst}
 ${helper}
+${disconnect}
+function bindNavigateHook() {}
 ${body}
 export { getEchoInstance }
 export function reset() { echoInstance = null }

@@ -169,6 +169,35 @@
             </div>
           </div>
 
+          <!-- الرد الآلي يعلّم المحادثة مقروءة افتراضياً (كما كان)، ومن أراد إبقاءها في
+               «غير مقروء» يُطفئه. ظاهر دائماً: الردود الآلية تعمل والتذاكر مُطفأة أيضاً. -->
+          <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm px-4 mb-20">
+            <div class="w-full py-2 mb-4 mt-2">
+              <div class="flex w-full">
+                <div class="w-3/4 text-md">
+                  <h4 class="text-[16px]">{{ $t('Mark the conversation as read after an automated reply') }}</h4>
+                  <div class="mb-1 text-slate-500">
+                    {{ $t('When off, the conversation stays in Unread until an employee opens it, even if an auto reply, an automated flow or the AI assistant answered the customer.') }}
+                  </div>
+                </div>
+                <div class="w-1/4">
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="form.mark_read_after_auto_reply"
+                    :aria-label="$t('Mark the conversation as read after an automated reply')"
+                    class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
+                    :class="{ 'bg-primary': form.mark_read_after_auto_reply }"
+                    @click="toggleMarkReadAfterAutoReply()">
+                    <div
+                      class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                      :class="{ 'translate-x-6': form.mark_read_after_auto_reply }"></div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- استبيان رضا العميل بعد إغلاق المحادثة -->
           <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm px-4 mb-20">
             <div class="w-full py-2 mb-4 mt-2">
@@ -247,7 +276,7 @@ import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
-const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays', 'ratingButtonLabelMax'])
+const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays', 'ratingButtonLabelMax', 'markReadAfterAutoReply'])
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 
@@ -291,6 +320,7 @@ const form = useForm({
   rating_survey_message: props.ratingSurvey?.message ?? '',
   rating_survey_button_label: props.ratingSurvey?.button_label ?? '',
   rating_survey_cooldown_days: props.ratingSurvey?.cooldown_days ?? 30,
+  mark_read_after_auto_reply: props.markReadAfterAutoReply ?? true,
 })
 
 const toggleState1 = () => {
@@ -314,6 +344,11 @@ const toggleState4 = () => {
 
 const toggleRatingSurvey = () => {
   form.rating_survey_active = !form.rating_survey_active
+  submitForm()
+}
+
+const toggleMarkReadAfterAutoReply = () => {
+  form.mark_read_after_auto_reply = !form.mark_read_after_auto_reply
   submitForm()
 }
 

@@ -1,17 +1,8 @@
 import { useMemo, useRef, useState } from 'preact/hooks'
 import type { WidgetConfig } from '../core/types.ts'
 import type { Translate } from '../core/i18n.ts'
+import { phoneMode, type PrechatValues } from '../core/prechat.ts'
 import { COUNTRIES } from './data.ts'
-
-export interface PrechatValues {
-    name: string
-    phone: string
-    country: string
-    email: string
-    consent: boolean
-    website: string
-    elapsed_ms: number
-}
 
 interface Props {
     config: WidgetConfig
@@ -21,13 +12,14 @@ interface Props {
 }
 
 /**
- * نموذج الزائر: الاسم والجوال إجباريان، والبريد والموافقة بحسب الإعداد.
+ * نموذج الزائر: الاسم إجباري، والجوال والبريد والموافقة بحسب الإعداد.
  *
  * حقل website مخفيّ عن البشر (الروبوت يملؤه)، والوقت منذ ظهور النموذج
  * يُرسل مع الطلب — من يرسله في أقلّ من ثانية ونصف ليس إنساناً.
  */
 export function Prechat({ config, lang, t, onSubmit }: Props) {
     const prechat = config.widget.prechat
+    const phone = phoneMode(prechat)
     const shownAt = useRef(Date.now())
     const countries = useMemo(() => {
         const list = COUNTRIES.slice()
@@ -81,20 +73,25 @@ export function Prechat({ config, lang, t, onSubmit }: Props) {
                 {error('name')}
             </label>
 
-            <label class="mnjz-field">
-                <span>{prechat.phone_label || t('phone')}</span>
-                <div class="mnjz-phone" dir="ltr">
-                    <select aria-label={t('phone')} value={values.country} onChange={set('country')}>
-                        {countries.map((c) => (
-                            <option value={c.code} key={c.code} title={c.name[lang]}>
-                                {`+${c.dial} ${c.code}`}
-                            </option>
-                        ))}
-                    </select>
-                    <input type="tel" name="phone" autoComplete="tel" inputMode="tel" maxLength={32} required value={values.phone} onInput={set('phone')} />
-                </div>
-                {error('phone')}
-            </label>
+            {phone !== 'off' && (
+                <label class="mnjz-field">
+                    <span>
+                        {prechat.phone_label || t('phone')}
+                        {phone === 'optional' ? ` (${t('optional')})` : ''}
+                    </span>
+                    <div class="mnjz-phone" dir="ltr">
+                        <select aria-label={t('phone')} value={values.country} onChange={set('country')}>
+                            {countries.map((c) => (
+                                <option value={c.code} key={c.code} title={c.name[lang]}>
+                                    {`+${c.dial} ${c.code}`}
+                                </option>
+                            ))}
+                        </select>
+                        <input type="tel" name="phone" autoComplete="tel" inputMode="tel" maxLength={32} required={phone === 'required'} value={values.phone} onInput={set('phone')} />
+                    </div>
+                    {error('phone')}
+                </label>
+            )}
 
             {prechat.email !== 'off' && (
                 <label class="mnjz-field">

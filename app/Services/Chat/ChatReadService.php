@@ -14,6 +14,21 @@ use Illuminate\Support\Facades\DB;
 class ChatReadService
 {
     /**
+     * Whether an automated reply (keyword reply, flow, AI assistant) clears
+     * the conversation's unread state. On by default — the long-standing
+     * behavior. An organization whose employees work from the Unread tab
+     * turns it off from the ticket settings page, so the conversation stays
+     * unread until someone opens it.
+     *
+     * @param  array<string, mixed>|null  $organizationMetadata  Decoded organizations.metadata
+     *                                                         (null when empty or not valid JSON).
+     */
+    public static function autoReplyMarksRead(?array $organizationMetadata): bool
+    {
+        return (bool) ($organizationMetadata['automation']['mark_read_after_auto_reply'] ?? true);
+    }
+
+    /**
      * Mark every unread inbound message of a contact as read.
      *
      * @param  int       $contactId

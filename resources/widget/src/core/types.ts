@@ -1,5 +1,8 @@
 /** أشكال ما يردّه الخادم (WebChatMessagePresenter و WidgetController). */
 
+/** حقل في نموذج الزائر كما ضبطه التاجر. */
+export type FieldMode = 'off' | 'optional' | 'required'
+
 export interface WidgetMedia {
     url: string | null
     name: string | null
@@ -75,7 +78,9 @@ export interface WidgetConfig {
         }
         prechat: {
             default_country: string
-            email: 'off' | 'optional' | 'required'
+            /** غائب عند خادم أقدم من الإعداد: يُعامل إجبارياً (phoneMode). */
+            phone?: FieldMode
+            email: FieldMode
             name_label: string | null
             phone_label: string | null
             consent_text: string | null

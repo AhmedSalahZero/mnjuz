@@ -76,6 +76,22 @@ class AutomationTest extends FlowBuilderTestCase
         Http::assertNothingSent();
     }
 
+    /** التاجر جعل الجوال اختيارياً أو أخفاه: {phone} يصير فارغاً، لا يصل حرفياً. */
+    public function test_a_visitor_without_a_phone_gets_an_empty_phone_placeholder(): void
+    {
+        $this->visitor->update(['phone' => null]);
+        $this->web->update(['formatted_phone' => null]);
+        $this->basicReply('مرحبا', 'أهلاً {first_name}، رقمك {phone}');
+
+        $this->visitorSays('مرحبا');
+
+        $bodies = $this->outboundBodies();
+        $this->assertCount(1, $bodies);
+        $this->assertStringStartsWith('أهلاً سارة، رقمك', (string) $bodies[0]);
+        $this->assertStringNotContainsString('{phone}', (string) $bodies[0]);
+        Http::assertNothingSent();
+    }
+
     /** ردّ الترحيب يصل قناة الزائر لحظياً — وإن سُجّل قبل ربط الزائر بجهته. */
     public function test_the_automatic_reply_is_pushed_to_the_visitors_channel(): void
     {

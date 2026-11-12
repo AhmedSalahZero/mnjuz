@@ -113,10 +113,12 @@ class AgentPresenceFrontendTest extends TestCase
         $this->assertNotFalse($mounted);
 
         $heartbeat = strpos($layout, 'setupActivityHeartbeat()', $mounted);
-        $subscribe = strpos($layout, 'getOrJoinChatChannel(', $mounted);
+        // الاشتراك في دالّة واحدة يستدعيها onMounted ومراقب المنشأة معاً: تبديل
+        // المنشأة من لوحة التحكّم لا يُعيد تركيب الـlayout.
+        $subscribe = strpos($layout, 'subscribeToChatChannel()', $mounted);
 
         $this->assertNotFalse($heartbeat, 'النبضة لا تُستدعى في onMounted.');
-        $this->assertNotFalse($subscribe);
+        $this->assertNotFalse($subscribe, 'onMounted لا يشترك في قناة المحادثات.');
         $this->assertLessThan($subscribe, $heartbeat, 'النبضة بعد الاشتراك في البثّ: اشتراك يرمي يمنعها.');
     }
 
@@ -124,9 +126,11 @@ class AgentPresenceFrontendTest extends TestCase
     {
         $layout = $this->source(self::LAYOUT);
 
-        $mounted = strpos($layout, 'onMounted(() => {');
-        $try = strpos($layout, 'try {', $mounted);
-        $subscribe = strpos($layout, 'getOrJoinChatChannel(', $mounted);
+        $function = strpos($layout, 'const subscribeToChatChannel = () => {');
+        $this->assertNotFalse($function, 'دالّة الاشتراك في قناة المحادثات غير موجودة.');
+
+        $try = strpos($layout, 'try {', $function);
+        $subscribe = strpos($layout, 'getOrJoinChatChannel(', $function);
         $catch = strpos($layout, '} catch (error) {', $subscribe);
 
         $this->assertNotFalse($try);

@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Models\AutoReply;
 use App\Models\Chat;
 use App\Models\Contact;
+use App\Models\Organization;
+use App\Services\Chat\ChatReadService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -15,8 +17,10 @@ use Illuminate\Support\Carbon;
  * يفرّق بينها إلا الأثر في القاعدة:
  *
  *   ١. الرسالة غير محفوظة أصلاً ⇒ عطل في الويب هوك، لا علاقة له بالواجهة.
- *   ٢. محفوظة و is_read = 1 ⇒ شيءٌ علّمها مقروءة. الردّ الآلي يفعل هذا عمداً
- *      (AutoReplyService) — فتصل الرسالة ولا يظهر لها عدّاد أبداً.
+ *   ٢. محفوظة و is_read = 1 ⇒ شيءٌ علّمها مقروءة. الردّ الآلي يفعل هذا ما دام
+ *      خيار «تعليم المحادثة كمقروءة بعد الرد الآلي» مُفعَّلاً في إعدادات التذاكر
+ *      (ChatReadService::autoReplyMarksRead، مُفعَّل افتراضياً) — فتصل الرسالة
+ *      ولا يظهر لها عدّاد أبداً.
  *   ٣. محفوظة و is_read = 0 ⇒ وصلت وبقيت غير مقروءة، فالخلل في التوصيل
  *      اللحظي إلى المتصفّح لا في الحفظ.
  *
@@ -34,6 +38,9 @@ class DiagnoseUnreadChats extends Command
     /** فارق زمني نعتبر ضمنه أن الردّ الصادر جاء آلياً لا بشرياً. */
     private const AUTO_REPLY_WINDOW_SECONDS = 20;
 
+    /** هل خيار المنشأة يجعل الردّ الآلي يعلّم المحادثة مقروءة؟ يُقرأ مرّة في handle. */
+    private bool $autoReplyMarksRead = true;
+
     public function handle(): int
     {
         $contact = $this->findContact();
@@ -43,6 +50,10 @@ class DiagnoseUnreadChats extends Command
 
             return self::FAILURE;
         }
+
+        $this->autoReplyMarksRead = ChatReadService::autoReplyMarksRead(
+            json_decode((string) Organization::whereKey($contact->organization_id)->value('metadata'), true)
+        );
 
         $since = now()->subHours(max(1, (int) $this->option('hours')));
 
@@ -78,9 +89,11 @@ class DiagnoseUnreadChats extends Command
         $this->line('  العميل      : ' . trim((string) $contact->full_name) . ' ' . $contact->phone);
         $this->line('  المنظّمة    : #' . $contact->organization_id);
         $this->line('  المدى       : منذ ' . $since->toDateTimeString());
-        $this->line('  ردود آليّة  : ' . ($autoReplies > 0
-            ? "<options=bold>{$autoReplies}</> — تعليم الرسائل مقروءة وارد"
-            : 'لا يوجد'));
+        $this->line('  ردود آليّة  : ' . match (true) {
+            $autoReplies === 0 => 'لا يوجد',
+            $this->autoReplyMarksRead => "<options=bold>{$autoReplies}</> — تعليم الرسائل مقروءة وارد (الخيار مُفعَّل)",
+            default => "<options=bold>{$autoReplies}</> — لا تعلّم الرسائل مقروءة (الخيار مُطفأ)",
+        });
         $this->newLine();
     }
 
@@ -115,6 +128,11 @@ class DiagnoseUnreadChats extends Command
     {
         if (!$message->is_read) {
             return '';
+        }
+
+        // والخيار مُطفأ لا يعلّم الردّ الآلي شيئاً مقروءاً، فلا نتّهمه.
+        if (!$this->autoReplyMarksRead) {
+            return 'فتحها موظّف أو علّمها التطبيق';
         }
 
         // ردّ صادر بلا موظّف بعد ثوانٍ = ردّ آليّ، وهو يعلّم الوارد كلّه مقروءاً.
@@ -170,8 +188,8 @@ class DiagnoseUnreadChats extends Command
 
         if ($readByAuto->isNotEmpty()) {
             $this->warn('  ⇒ الشكوى صحيحة، والسبب الردّ الآليّ: يعلّم رسائل العميل مقروءة فور ردّه،');
-            $this->line('     فلا يظهر لها عدّاد ولا تنبيه رغم وصولها. سلوكٌ مقصود في');
-            $this->line('     AutoReplyService، وقابل للمراجعة إن لم يكن مرغوباً.');
+            $this->line('     فلا يظهر لها عدّاد ولا تنبيه رغم وصولها، لأن خيار «تعليم المحادثة');
+            $this->line('     كمقروءة بعد الرد الآلي» مُفعَّل في إعدادات التذاكر. إطفاؤه يُبقيها غير مقروءة.');
             $this->newLine();
         }
 

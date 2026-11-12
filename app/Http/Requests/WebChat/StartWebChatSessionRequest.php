@@ -7,7 +7,11 @@ use Illuminate\Validation\Validator;
 use Propaganistas\LaravelPhone\PhoneNumber;
 
 /**
- * نموذج ما قبل المحادثة: الاسم والجوال إجباريان، والبريد حسب إعداد التاجر.
+ * نموذج ما قبل المحادثة: الاسم إجباري دائماً، والجوال والبريد حسب إعداد التاجر
+ * (مخفيّ أو اختياري أو إجباري). الجوال إجباري ما لم يغيّره التاجر.
+ *
+ * الرقم الاختياري إن كُتب يُتحقَّق منه كالإجباري: رقمٌ خاطئ يُردّ للزائر
+ * ليصحّحه، لا يُسقط بصمت. والمخفيّ يُتجاهل ولو أرسله widget قديم في الذاكرة.
  *
  * حماية من الآليّين بلا captcha: حقل مخفيّ (website) لا يملؤه إنسان، وزمن
  * أدنى بين ظهور النموذج وإرساله. السكربت الذي يرسل فوراً أو يملأ كل حقل
@@ -19,19 +23,25 @@ class StartWebChatSessionRequest extends WebChatRequest
 
     private ?string $e164 = null;
 
+    private ?array $prechat = null;
+
     public function rules(): array
     {
-        $settings = WebChatSettings::for($this->widget());
-        $email = $settings['prechat']['email'];
+        $prechat = $this->prechat();
+        $email = $prechat['email'];
 
         return [
             'name' => ['required', 'string', 'max:80'],
-            'phone' => ['required', 'string', 'max:32'],
+            'phone' => match ($prechat['phone']) {
+                'required' => ['required', 'string', 'max:32'],
+                'optional' => ['nullable', 'string', 'max:32'],
+                default => ['nullable'],
+            },
             'country' => ['nullable', 'string', 'size:2'],
             'email' => $email === 'required'
                 ? ['required', 'email', 'max:191']
                 : ['nullable', 'email', 'max:191'],
-            'consent' => $settings['prechat']['consent_text'] ? ['accepted'] : ['nullable'],
+            'consent' => $prechat['consent_text'] ? ['accepted'] : ['nullable'],
             'website' => ['nullable', 'max:0'],
             'elapsed_ms' => ['required', 'integer', 'min:' . self::MIN_FILL_MS],
             'page_url' => ['nullable', 'string', 'max:2048'],
@@ -43,13 +53,20 @@ class StartWebChatSessionRequest extends WebChatRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            if ($validator->errors()->has('phone')) {
+            if ($this->prechat()['phone'] === 'off' || $validator->errors()->has('phone')) {
+                return;
+            }
+
+            $phone = trim((string) $this->input('phone'));
+
+            // الاختياري المتروك فارغاً. والإجباري الفارغ أوقفته قاعدة required.
+            if ($phone === '') {
                 return;
             }
 
             $this->e164 = self::toE164(
-                (string) $this->input('phone'),
-                $this->input('country') ?: WebChatSettings::for($this->widget())['prechat']['default_country']
+                $phone,
+                $this->input('country') ?: $this->prechat()['default_country']
             );
 
             if ($this->e164 === null) {
@@ -63,17 +80,23 @@ class StartWebChatSessionRequest extends WebChatRequest
         return self::cleanText($this->input('name'), 80);
     }
 
-    public function e164(): string
+    /** الرقم بصيغة E.164، أو null حين يكون الحقل مخفيّاً أو تُرك فارغاً. */
+    public function e164(): ?string
     {
-        return (string) $this->e164;
+        return $this->e164;
     }
 
     public function emailOrNull(): ?string
     {
-        $settings = WebChatSettings::for($this->widget());
         $email = trim((string) $this->input('email'));
 
-        return $settings['prechat']['email'] === 'off' || $email === '' ? null : mb_strtolower($email);
+        return $this->prechat()['email'] === 'off' || $email === '' ? null : mb_strtolower($email);
+    }
+
+    /** إعداد النموذج مرّة واحدة لكل طلب: القواعد والتحقّق والقراءة تسأل عنه. */
+    private function prechat(): array
+    {
+        return $this->prechat ??= WebChatSettings::for($this->widget())['prechat'];
     }
 
     /**

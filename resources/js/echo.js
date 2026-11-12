@@ -1,7 +1,11 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import { router } from '@inertiajs/vue3';
 
 let echoInstance = null;
+
+/** خطّاف التنقّل يُسجَّل مرّة مع أوّل اتصال ويبقى (انظر syncEchoWithPage). */
+let navigateHookBound = false;
 
 /**
  * بصمة الإعداد الذي بُني به الاتصال. الأدمن يختار لكل منشأة Pusher أو Reverb،
@@ -56,6 +60,51 @@ const sharedChannelEntries = new Map();
 /** قنوات حالة الموظفين: اسم القناة → { channel, handlers } */
 const presenceChannelEntries = new Map();
 
+/** قطع الاتصال ونسيان قنواته كلّها. الاشتراك التالي يبني اتصالاً جديداً. */
+export function disconnectEcho() {
+    if (!echoInstance) {
+        return;
+    }
+
+    try {
+        echoInstance.disconnect();
+    } catch (error) {
+        console.warn('[Echo] تعذّر إغلاق الاتصال السابق', error);
+    }
+    echoInstance = null;
+    echoConfigKey = null;
+    sharedChannelEntries.clear();
+    presenceChannelEntries.clear();
+}
+
+/**
+ * الاتصال يعيش ما دامت الصفحة لوحة مستخدمٍ في منشأة — الشرط نفسه الذي يشترك
+ * به Layout/App.vue.
+ *
+ * الخروج رابط Inertia لا يُعيد تحميل الصفحة، والاتصال محفوظ في هذا الموديول.
+ * فكان التبويب بعد الخروج يبقى مشتركاً في قناة المستخدم ويستقبل محادثاته، ومن
+ * يدخل بعده في التبويب نفسه يستقبل محادثات السابق. فصفحةٌ بلا مستخدم أو بلا
+ * منشأة تقطعه: الدخول بعد خروج أو انتهاء جلسة أو خروج قسري، واختيار المنشأة،
+ * وصفحات الأدمن. هنا القطع وحده؛ الاشتراك يبقى على الـlayout فلا سباق مع تركيبه.
+ */
+export function syncEchoWithPage(props) {
+    if (!props?.auth?.user?.id || !props?.organization?.id) {
+        disconnectEcho();
+    }
+}
+
+/**
+ * يُسجَّل مع أوّل اتصال لا عند تحميل التطبيق: استيراد هذا الموديول في app.js
+ * كان سيحمّل Echo و Pusher في صفحات الضيوف كلها، ومنها صفحة الدخول.
+ */
+function bindNavigateHook() {
+    if (navigateHookBound) {
+        return;
+    }
+    navigateHookBound = true;
+    router.on('navigate', (event) => syncEchoWithPage(event.detail.page.props));
+}
+
 /**
  * اتصال البثّ. يقبل إعداد المزوّد كما يبنيه الخادم بدل مفتاح وتجميعة.
  *
@@ -69,14 +118,7 @@ export function getEchoInstance(broadcast) {
     // إعدادٌ مختلف: يُغلق الاتصال القديم وتُنسى قنواته، فيُبنى اتصالٌ بالمزوّد
     // الجديد وتشترك الصفحة من جديد عند تركيبها.
     if (echoInstance && broadcast && configKeyOf(broadcast) !== echoConfigKey) {
-        try {
-            echoInstance.disconnect();
-        } catch (error) {
-            console.warn('[Echo] تعذّر إغلاق الاتصال السابق', error);
-        }
-        echoInstance = null;
-        sharedChannelEntries.clear();
-        presenceChannelEntries.clear();
+        disconnectEcho();
     }
 
     if (!echoInstance) {
@@ -124,6 +166,7 @@ export function getEchoInstance(broadcast) {
 
         echoInstance = new Echo(options);
         echoConfigKey = configKeyOf(broadcast);
+        bindNavigateHook();
     }
     return echoInstance;
 }
@@ -142,6 +185,15 @@ export function getOrJoinChatChannel(organizationId, userId, broadcast) {
     }
 
     const echo = getEchoInstance(broadcast);
+
+    // قناة هويةٍ سابقة في التبويب نفسه (تبديل المنشأة، أو دخول مستخدم آخر):
+    // تُترك قبل الانضمام، وإلا ظلّت محادثاتها تصل ورُفضت بـ403 عند عودة الاتصال.
+    // في التبويب قناة محادثات واحدة: الـlayout وصفحة المحادثات بالاسم نفسه.
+    for (const staleName of [...sharedChannelEntries.keys()]) {
+        echo.leave(staleName);
+        sharedChannelEntries.delete(staleName);
+    }
+
     const channel = echo
         .join(name)
         .here(() => {})

@@ -42,7 +42,7 @@
 import { useRtl } from '@/Composables/useRtl'
 import { useForm, usePage } from "@inertiajs/vue3"
 import { default as axios } from 'axios'
-import { computed, onMounted, provide, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { toast } from 'vue3-toastify'
 import 'vue3-toastify/dist/index.css'
 import { shouldCountAsUnread, shouldPlaySound } from '@/Composables/unreadBadge'
@@ -132,17 +132,17 @@ const setupActivityHeartbeat = () => {
 	startAgentHeartbeat(organization.value.id)
 }
 
-onMounted(() => {
-	setupSound()
+// هذا الـlayout يُركَّب من جديد مع كل تنقّل، والقناة مشتركة تبقى بين الصفحات.
+// معالجٌ لا يُلغى عند الإزالة كان يتراكم: closure على نسخة ميّتة مع كل رسالة.
+let unsubscribeChatChannel = null
+
+const subscribeToChatChannel = () => {
+	unsubscribeChatChannel?.()
+	unsubscribeChatChannel = null
 
 	if (!organization.value?.id || !user.value?.id) {
 		return
 	}
-
-	// النبضة أولاً ومستقلّة عن البثّ: كانت تأتي بعد الاشتراك في القناة، فإن رمى
-	// الاشتراك (مفتاح بثّ غير صالح مثلاً) لم تنطلق النبضة قطّ ولا يظهر الموظف
-	// متصلاً — وهما أمران لا علاقة لأحدهما بالآخر.
-	setupActivityHeartbeat()
 
 	try {
 		const { subscribe } = getOrJoinChatChannel(
@@ -150,7 +150,7 @@ onMounted(() => {
 			user.value.id,
 			broadcast.value,
 		)
-		subscribe((event) => {
+		unsubscribeChatChannel = subscribe((event) => {
 			const chat = event.chat
 
 			if (shouldPlaySound(chat)) {
@@ -164,6 +164,33 @@ onMounted(() => {
 	} catch (error) {
 		console.warn('Chat channel subscription failed', error)
 	}
+}
+
+// تبديل المنشأة POST، و router.post في Inertia يحفظ الحالة افتراضياً: من لوحة
+// التحكّم يعود التحويل إلى المكوّن نفسه فلا يُعاد تركيب الـlayout ولا يعمل
+// onMounted. فكانت قناة المنشأة السابقة تبقى ولا يُنضمّ إلى الجديدة.
+watch(
+	() => `${organization.value?.id ?? ''}.${user.value?.id ?? ''}`,
+	() => subscribeToChatChannel(),
+)
+
+onUnmounted(() => {
+	unsubscribeChatChannel?.()
+})
+
+onMounted(() => {
+	setupSound()
+
+	if (!organization.value?.id || !user.value?.id) {
+		return
+	}
+
+	// النبضة أولاً ومستقلّة عن البثّ: كانت تأتي بعد الاشتراك في القناة، فإن رمى
+	// الاشتراك (مفتاح بثّ غير صالح مثلاً) لم تنطلق النبضة قطّ ولا يظهر الموظف
+	// متصلاً — وهما أمران لا علاقة لأحدهما بالآخر.
+	setupActivityHeartbeat()
+
+	subscribeToChatChannel()
 
 	// const SB_BASE = 'https://business.waz.com.sa/support'
 	// const loadExternalScript = (src, id) =>

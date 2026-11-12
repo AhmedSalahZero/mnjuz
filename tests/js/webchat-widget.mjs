@@ -13,6 +13,7 @@ import { ApiError, apiRoot } from '../../resources/widget/src/core/api.ts'
 import { resolveLanguage, translator } from '../../resources/widget/src/core/i18n.ts'
 import { pickFiles, filesPerSend, mediaType } from '../../resources/widget/src/core/files.ts'
 import { BRAND_URL } from '../../resources/widget/src/core/brand.ts'
+import { phoneMode, sessionFields } from '../../resources/widget/src/core/prechat.ts'
 
 let checks = 0
 const fail = []
@@ -168,6 +169,27 @@ const msg = (id, seq, extra = {}) => ({ id, seq, client_id: null, direction: 'ou
     is(ar('too_many_files').replace('{n}', '3'), 'يمكنك إرسال 3 ملفات كحدّ أقصى في المرة الواحدة.', 'رسالة الحدّ')
     is([ar('powered_by'), ar('brand'), translator('en')('brand')], ['بواسطة', 'منجز شات', 'Mnjz Chat'], 'سطر بواسطة منجز شات')
     is(BRAND_URL, 'https://app.mnjz.net/', 'رابط منجز شات')
+}
+
+// ── نموذج الزائر: الجوال بحسب إعداد التاجر ──
+{
+    const values = { name: 'سارة', phone: '0501234567', country: 'SA', email: 'sara@example.com', consent: true, website: '', elapsed_ms: 4000 }
+    const base = { default_country: 'SA', email: 'off', name_label: null, phone_label: null, consent_text: null }
+    const withPhone = { name: 'سارة', phone: '0501234567', country: 'SA', website: '', elapsed_ms: 4000 }
+    const withoutPhone = { name: 'سارة', website: '', elapsed_ms: 4000 }
+
+    is(phoneMode(base), 'required', 'خادم أقدم من الإعداد: الجوال إجباري')
+    is(phoneMode({ ...base, phone: 'nonsense' }), 'required', 'قيمة مجهولة: إجباري')
+    is(phoneMode({ ...base, phone: 'optional' }), 'optional', 'اختياري')
+    is(phoneMode({ ...base, phone: 'off' }), 'off', 'مخفيّ')
+
+    is(sessionFields({ ...base, phone: 'required' }, values), withPhone, 'الإجباري يُرسل الرقم ودولته')
+    is(sessionFields(base, values), withPhone, 'وكذلك الإعداد الغائب')
+    is(sessionFields({ ...base, phone: 'optional' }, values), withPhone, 'الاختياري المكتوب يُرسل')
+    is(sessionFields({ ...base, phone: 'optional' }, { ...values, phone: '   ' }), withoutPhone, 'الاختياري الفارغ لا يُرسل')
+    is(sessionFields({ ...base, phone: 'off' }, values), withoutPhone, 'المخفيّ لا يُرسل ولو بقي رقمٌ في الحالة')
+    is(sessionFields({ ...base, email: 'optional', consent_text: 'أوافق' }, values), { name: 'سارة', phone: '0501234567', country: 'SA', email: 'sara@example.com', consent: true, website: '', elapsed_ms: 4000 }, 'البريد والموافقة كما كانا')
+    is(sessionFields({ ...base, email: 'optional' }, { ...values, email: '' }), withPhone, 'البريد الفارغ لا يُرسل')
 }
 
 if (fail.length) {
