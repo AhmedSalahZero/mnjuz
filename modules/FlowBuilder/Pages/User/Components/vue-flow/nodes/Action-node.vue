@@ -17,6 +17,7 @@ import DelayNode from './actions/Delay-node.vue'
 import WebhookNode from './actions/Webhook-node.vue'
 import AIResponseNode from './actions/AIResponse-node.vue'
 import ConditionalNode from './actions/Conditional-node.vue'
+import AssignAgentNode from './actions/AssignAgent-node.vue'
 
 const props = defineProps({
   id: String,
@@ -48,6 +49,8 @@ const actionComponent = computed(() => {
       return AIResponseNode
     case 'conditional':
       return ConditionalNode
+    case 'assign_agent':
+      return AssignAgentNode
     default:
       return AddToGroupNode // Default fallback
   }

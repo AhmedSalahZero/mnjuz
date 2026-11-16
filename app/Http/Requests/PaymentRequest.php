@@ -28,9 +28,12 @@ class PaymentRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'amount' => [ 'required', 'numeric' ],
+            // موجب: السالب والصفر كانا يصلان البوّابة.
+            'amount' => [ 'required', 'numeric', 'gt:0' ],
             'method' => [ 'required' ],
             'redirect_json' => [ 'nullable', 'boolean' ],
+            // كوبون «إضافة دفعة» (اختياري): يُفحص في المتحكّم بقواعد الكوبونات.
+            'coupon' => [ 'nullable', 'string', 'max:64' ],
         ];
 
         return $rules;

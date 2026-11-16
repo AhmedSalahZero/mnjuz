@@ -215,6 +215,30 @@ Route::middleware(['auth:sanctum','has.mobile.app','check.active.organization','
 	Route::get('/referral', [App\Http\Controllers\Api\MobileReferralController::class, 'show']);
 	Route::get('/referral/referrals', [App\Http\Controllers\Api\MobileReferralController::class, 'referrals']);
 
+	// القنوات — قنوات المحادثة المربوطة وقدراتها لكل الأدوار (فلتر المحادثات).
+	Route::get('/channels', [App\Http\Controllers\Api\MobileChannelController::class, 'catalog']);
+
+	// إعدادات القنوات — للمالك والمدير. المسارات الثابتة قبل {uuid}.
+	// انظر MOBILE_CHANNELS_IMPLEMENTATION.md.
+	Route::get('/settings/channels', [App\Http\Controllers\Api\MobileChannelController::class, 'index']);
+	Route::post('/settings/channels', [App\Http\Controllers\Api\MobileChannelController::class, 'connect'])->middleware('throttle:10,1');
+	Route::get('/settings/channels/email', [App\Http\Controllers\Api\MobileEmailChannelController::class, 'show']);
+	Route::post('/settings/channels/email', [App\Http\Controllers\Api\MobileEmailChannelController::class, 'save'])->middleware('throttle:10,1');
+	Route::post('/settings/channels/email/test', [App\Http\Controllers\Api\MobileEmailChannelController::class, 'test'])->middleware('throttle:5,1');
+	Route::delete('/settings/channels/whatsapp', [App\Http\Controllers\Api\MobileChannelController::class, 'disconnectWhatsapp']);
+	Route::delete('/settings/channels/{uuid}', [App\Http\Controllers\Api\MobileChannelController::class, 'disconnect']);
+
+	// المحادثة المباشرة — الإضافة في الباقة، والمالك والمدير.
+	Route::get('/settings/webchat', [App\Http\Controllers\Api\MobileWebChatController::class, 'show']);
+	Route::post('/settings/webchat', [App\Http\Controllers\Api\MobileWebChatController::class, 'update']);
+	Route::post('/settings/webchat/logo', [App\Http\Controllers\Api\MobileWebChatController::class, 'uploadLogo']);
+	Route::delete('/settings/webchat/logo', [App\Http\Controllers\Api\MobileWebChatController::class, 'removeLogo']);
+	Route::post('/settings/webchat/rotate-key', [App\Http\Controllers\Api\MobileWebChatController::class, 'rotateKey']);
+	Route::post('/settings/webchat/faqs', [App\Http\Controllers\Api\MobileWebChatController::class, 'faqStore']);
+	Route::post('/settings/webchat/faqs/reorder', [App\Http\Controllers\Api\MobileWebChatController::class, 'faqReorder']);
+	Route::post('/settings/webchat/faqs/{id}', [App\Http\Controllers\Api\MobileWebChatController::class, 'faqUpdate'])->whereNumber('id');
+	Route::delete('/settings/webchat/faqs/{id}', [App\Http\Controllers\Api\MobileWebChatController::class, 'faqDestroy'])->whereNumber('id');
+
 	// إعداد البثّ: يسأله التطبيق عند كل فتح فيتبع تبديل المزوّد بلا إصدار جديد.
 	Route::get('/broadcast-config', [App\Http\Controllers\Api\BroadcastConfigController::class, 'show']);
 

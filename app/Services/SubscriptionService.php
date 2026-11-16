@@ -252,6 +252,18 @@ class SubscriptionService
                 ]);
             }
 
+            // استخدام الكوبون يُسجَّل ويُعدّ مع الفاتورة نفسها: مرّة لكل منشأة،
+            // وquantity_redeemed يزيد فعلاً (كان لا يزيد في أيّ مسار حيّ).
+            if (!empty($billingDetails['coupon']['id']) && $discount > 0) {
+                app(\App\Services\Billing\CouponRedemptionService::class)->recordPlanRedemption(
+                    (int) $billingDetails['coupon']['id'],
+                    (int) $organizationId,
+                    $userId !== null ? (int) $userId : null,
+                    $invoice,
+                    $discount
+                );
+            }
+
             // الحركة بالمبلغ المُحصَّل لا بقيمة الفاتورة قبل الخصم، وإلا بقي
             // رصيد العميل مديناً بفارق الكوبون فارتفع استحقاق التجديد التالي.
             $invoiceBillingTransaction = BillingTransaction::create([
@@ -379,9 +391,18 @@ class SubscriptionService
                 ->whereNull('deleted_at')
                 ->first();
 
+            // كوبون «إضافة دفعة» وحدها لا يخصم الباقة، وكوبونٌ استعملته المنشأة
+            // مرّة لا يُعاد (مرّة لكل منشأة). الأقدم يبقى «plans» فيعمل كما كان.
+            if ($couponData && (
+                !\App\Services\Billing\CouponRedemptionService::appliesTo($couponData, \App\Models\CouponRedemption::CONTEXT_PLAN)
+                || app(\App\Services\Billing\CouponRedemptionService::class)->usedBy($couponData, (int) $organizationId)
+            )) {
+                $couponData = null;
+            }
+
             if ($couponData) {
-                if ($couponData->quantity_redeemed < $couponData->quantity) {
-                    $discount = ($chargeableAmount * $couponData->percentage) / 100;
+                if (!\App\Services\Billing\CouponRedemptionService::isExhausted($couponData)) {
+                    $discount = ($chargeableAmount * \App\Services\Billing\CouponRedemptionService::percentage($couponData)) / 100;
                     $discount = min($discount, $chargeableAmount);
 
                     $coupon = [

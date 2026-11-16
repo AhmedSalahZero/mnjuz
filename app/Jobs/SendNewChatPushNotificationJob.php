@@ -75,6 +75,9 @@ class SendNewChatPushNotificationJob implements ShouldQueue
                 'chatId'          => (string) ($this->contactId ?? ''),
                 'organizationId'  => (string) $this->organizationId,
                 'createdAt'       => now()->format('Y-m-d H:i:s'),
+                // إضافيان: جهة بلا رقم تُفتح بمعرّفها، والقناة لأيقونتها.
+                'contactUuid'     => (string) ($this->chatValueSnapshot['contact_uuid'] ?? ''),
+                'channel'         => (string) ($this->chatValueSnapshot['channel'] ?? ''),
             ];
 
             // Single FCM client serves every recipient. Auth is lazy so a

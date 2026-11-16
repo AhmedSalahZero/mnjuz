@@ -22,6 +22,10 @@ Route::prefix('w/{key}')
         Route::get('config', [WidgetController::class, 'config'])
             ->middleware('throttle:webchat-config');
 
+        // الأسئلة الشائعة: قراءة عامّة مخبّأة كـ config، بلا جلسة.
+        Route::get('faqs', [WidgetController::class, 'faqs'])
+            ->middleware('throttle:webchat-config');
+
         Route::post('sessions', [WidgetController::class, 'startSession'])
             ->middleware(['throttle:webchat-session', 'webchat.inbound']);
 

@@ -9,6 +9,7 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Modules\IntelliReply\Models\Document;
 use Modules\IntelliReply\Resources\DocumentResource;
@@ -38,6 +39,7 @@ class MainController extends BaseController
         $data['fbmodule'] = CustomHelper::isModuleEnabled('Flow builder');
         $keys = ['enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model'];
         $data['appSettings'] = Setting::whereIn('key', $keys)->get();
+        $data['lastAiError'] = AIResponseService::lastError((int) $organizationId);
 
         return Inertia::render('IntelliReply::User/Index', $data);
     }
@@ -126,6 +128,42 @@ class MainController extends BaseController
         $organizationConfig = Organization::where('id', $organizationId)->first();
 
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+
+        $settings = Setting::whereIn('key', [
+            'enable_api_key_input', 'enable_model_selection', 'default_open_ai_key', 'default_open_ai_model',
+        ])->pluck('value', 'key');
+        $keyEditable = $settings->get('enable_api_key_input', 1) == 1;
+        $modelSelectable = $settings->get('enable_model_selection', 1) == 1;
+
+        // موديل أوقفته OpenAI (o1-mini مثلاً) لا يُحفظ: كان يُسكت المساعد على
+        // كل القنوات بلا أي أثر.
+        if ($modelSelectable) {
+            $request->validate([
+                'model' => ['required', Rule::in(array_column(config('models'), 'value'))],
+            ], [
+                'model.required' => __('Choose a model.'),
+                'model.in' => __('This model is no longer available from OpenAI. Choose another one.'),
+            ]);
+        }
+
+        // نجرّب ما سيُستعمل فعلاً: المفتاح الجديد أو المحفوظ، أو مفتاح المنصّة.
+        $apiKey = $keyEditable
+            ? (filled($request->api_key) ? (string) $request->api_key : (string) ($metadataArray['ai']['api_key'] ?? ''))
+            : (string) $settings->get('default_open_ai_key', '');
+        $model = $modelSelectable ? (string) $request->model : (string) $settings->get('default_open_ai_model', '');
+
+        $check = app(AIResponseService::class)->checkConnection($apiKey, $model);
+
+        if ($check['blocking']) {
+            $fieldShown = ($check['field'] === 'api_key' && $keyEditable)
+                || ($check['field'] === 'model' && $modelSelectable);
+
+            // حقلٌ لا يراه التاجر (مفتاح المنصّة أو موديلها) لا يحمل الخطأ.
+            return $fieldShown
+                ? back()->withErrors([$check['field'] => $check['message']])
+                : back()->with('status', ['type' => 'error', 'message' => $check['message']]);
+        }
+
         $metadataArray['ai']['active'] = $request->active;
         $metadataArray['ai']['platform'] = "OpenAI";
         $metadataArray['ai']['model'] = $request->model;
@@ -146,8 +184,8 @@ class MainController extends BaseController
         if($organizationConfig->save()){
             return back()->with(
                 'status', [
-                    'type' => 'success', 
-                    'message' => __('Open AI settings updated successfully')
+                    'type' => $check['ok'] ? 'success' : 'warning',
+                    'message' => $check['ok'] ? __('Open AI settings updated successfully') : $check['message'],
                 ]
             );
         } else {

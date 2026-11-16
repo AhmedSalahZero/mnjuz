@@ -64,6 +64,10 @@ abstract class WebChatTestCase extends TestCase
         $this->organization->update(['metadata' => json_encode(['tickets' => ['active' => true, 'assignment_mode' => 'manual']])]);
 
         $this->widget = app(WebChatWidgetService::class)->ensureForOrganization($this->organization->id, 'متجر الاختبار');
+        // widget ما قبل أسئلة البداية (تُشتقّ من prechat: الاسم والجوال): هكذا
+        // كُتبت هذه الاختبارات، وهكذا يعمل كل widget قائم على الإنتاج. أسئلة
+        // الـ widget الجديد (الاسم والبريد والجوال) في IntakeTest.
+        $this->widget->forceFill(['settings' => ['enabled' => true]])->save();
     }
 
     protected function url(string $path, ?ChannelAccount $widget = null): string

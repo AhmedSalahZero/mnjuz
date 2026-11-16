@@ -44,6 +44,12 @@ class ChatNotificationContentBuilder
             return $this->payloadBuilder->truncateToBytes($phone, self::MAX_TITLE_PHONE_BYTES);
         }
 
+        // عميل تيليجرام بلا اسم ولا رقم: معرّفه على المنصّة أوضح من «مجهول».
+        $username = trim((string) ($value['channel_username'] ?? ''));
+        if ($username !== '') {
+            return $this->payloadBuilder->truncateToBytes('@' . ltrim($username, '@'), self::MAX_TITLE_NAME_BYTES);
+        }
+
         return $this->translate('Unknown', $this->fallbackLocale());
     }
 

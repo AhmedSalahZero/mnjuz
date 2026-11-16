@@ -134,6 +134,8 @@ class ChannelWebhookController extends Controller
                 'object' => $payload['object'] ?? null,
                 'entry_ids' => array_values(array_filter(array_map(fn ($e) => $e['id'] ?? null, $entries))),
                 'events' => $events,
+                // تيك توك يرسل الحدث في أعلى الحمولة (im_receive_msg…)، لا في entry.
+                'event' => is_string($payload['event'] ?? null) ? mb_substr($payload['event'], 0, 64) : null,
                 'has_signature' => $request->headers->has('X-Hub-Signature-256')
                     || $request->headers->has('Tiktok-Signature')
                     || $request->headers->has('X-Telegram-Bot-Api-Secret-Token'),

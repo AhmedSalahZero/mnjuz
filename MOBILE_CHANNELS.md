@@ -1,6 +1,8 @@
 # تعدّد القنوات — ما يخصّ تطبيق الجوال
 
-آخر تحديث: ٢٣ سبتمبر ٢٠٢٦
+آخر تحديث: ١٦ نوفمبر ٢٠٢٦ (تصحيحات — انظر [MOBILE_CHANNELS_IMPLEMENTATION.md](MOBILE_CHANNELS_IMPLEMENTATION.md))
+
+> **للتنفيذ ابدأ من [MOBILE_CHANNELS_IMPLEMENTATION.md](MOBILE_CHANNELS_IMPLEMENTATION.md):** فيه الإرسال بـ `contact_uuid`، وفلتر القنوات الفعلي، و`GET /api/v1/channels`، وإعدادات القنوات. هذا الملف يبقى مرجع الأساسيات.
 
 صارت المنصّة تستقبل رسائل من **تيليجرام وفيسبوك ماسنجر وإنستغرام دايركت وتيك توك** بجانب واتساب. هذا الملفّ يُلخّص ما يتغيّر في الـ API وما لا يتغيّر.
 
@@ -54,13 +56,17 @@
 
 ```json
 {
-  "channel": "whatsapp | telegram | messenger | instagram | tiktok"
+  "channel": "whatsapp | telegram | messenger | instagram | tiktok | webchat"
 }
 ```
 
 الرسالة القديمة بلا قناة مخزَّنة تصل `"whatsapp"` — لا `null`.
 
+> **تصحيح (١٦ نوفمبر):** قبل هذا التاريخ كانت المزامنة v2 تُرجع `"whatsapp"` لكل رسالة مهما كانت قناتها. صارت قناة الرسالة الفعلية.
+
 ### على نافذة الردّ (`payloadForContact`)
+
+> **تصحيح:** هذان المفتاحان لم يكونا يصلان التطبيق. صار `messaging_window_hours` يصل على جهة الاتصال في المزامنة و`/contacts` و`/contacts/{id}` — انظر MOBILE_CHANNELS_IMPLEMENTATION.md القسم ٢-٢.
 
 ```json
 {
@@ -123,27 +129,31 @@
 
 ## ٥. فلتر القناة في قائمة المحادثات
 
-معامل استعلام اختياري على نفس نقطة قائمة المحادثات:
+> **تصحيح (١٦ نوفمبر):** النسخة السابقة من هذا القسم ذكرت `GET /api/v1/chats?channel=` و`connectedChannels`. **كلاهما للويب وحده ولا وجود لهما في الـ API.**
+
+الفلتر الفعلي معامل `channel` اختياري على:
 
 ```
-GET /api/v1/chats?channel=telegram
+GET /api/v1/list-messages-from-uuid-to-end-v2?channel=telegram   (و v1)
+GET /api/v1/contacts?channel=telegram
+GET /api/v1/tickets?channel=telegram
 ```
 
 | القيمة | النتيجة |
 |---|---|
 | غائب | كل القنوات |
-| `whatsapp` \| `telegram` \| `messenger` \| `instagram` \| `tiktok` | تلك القناة فقط |
+| `whatsapp` \| `telegram` \| `messenger` \| `instagram` \| `tiktok` \| `webchat` | تلك القناة فقط |
 | قيمة مجهولة | كل القنوات (لا خطأ) |
 
-التصفية تجري في قاعدة البيانات، فالصفحات والعدّادات تعكس المصفّى.
-
-> القنوات المربوطة فعلاً في المنشأة تأتي في `connectedChannels`. **أظهر الفلتر فقط حين يتجاوز طولها واحداً** — فلترٌ بخيار واحد لا يفعل شيئاً.
+القنوات المربوطة فعلاً تأتي من **`GET /api/v1/channels`** في `data.connected`. **أظهر الفلتر فقط حين يتجاوز طولها واحداً** — فلترٌ بخيار واحد لا يفعل شيئاً.
 
 ---
 
 ## ٦. ما لا تدعمه كل قناة
 
-`channel_capabilities` يصل مع جهة الاتصال في شاشة المحادثة:
+> **تصحيح:** `channel_capabilities` يصل على `GET /api/v1/contacts` و`GET /api/v1/contacts/{id}` وحدهما. لا يتكرّر في المزامنة: خذ قدرات كل قناة مرّة من **`GET /api/v1/channels`** (`data.channels[].capabilities`). المفاتيح الكاملة اليوم: `window_hours`، `templates`، `interactive`، `location`، `location_request`، `media_caption`، `text_with_media`، `multiple_attachments`، `delivery_receipts`، `read_receipts`، `block_contact`، `reactions`، `reply_to`، `media_limits`، `campaigns`.
+
+مثال مختصر:
 
 ```json
 {
@@ -173,6 +183,8 @@ GET /api/v1/chats?channel=telegram
 
 الخادم يرفض أي عملية غير مدعومة بـ **422 ورسالة جاهزة للعرض** — لكن إخفاء الزرّ أفضل من رسالة خطأ بعد الضغط.
 
+> **تصحيح:** حتى ١٦ نوفمبر لم يكن `send-template` يرفض شيئاً: يأخذ الرقم ويُرسل قالب واتساب. صار يقبل `contact_uuid` ويرفض القنوات بلا قوالب بـ 422. وصار رفض الموقع يحمل `statusCode`.
+
 ### حالات تستحقّ الانتباه
 
 - **تيليجرام**: لا إشعارات تسليم ولا قراءة. الحالة تقف عند `sent` ولا تصل `delivered` أبداً. لا تعرض «لم تُسلَّم» — هذا طبيعي.
@@ -183,6 +195,8 @@ GET /api/v1/chats?channel=telegram
 ---
 
 ## ٧. رسالة «النافذة مغلقة» تغيّرت للقنوات الجديدة
+
+> **تصحيح:** كان التطبيق يأخذ نصّ واتساب دائماً عدا إرسال النصّ بـ `contact_uuid`. صار النصّ بحسب القناة في الملفات والقطع والموقع أيضاً.
 
 نصّ واتساب **لم يتغيّر حرفياً** (ما زال يذكر القوالب).
 
@@ -214,7 +228,7 @@ GET /api/v1/chats?channel=telegram
 لا. `metadata` بنفس الشكل تماماً.
 
 **هل تتغيّر نقاط الـ API أو عناوينها؟**
-لا. نفس النقاط ونفس الطرق.
+القديمة باقية بعناوينها. والجديد: `contact_uuid` بدل `phone` في الإرسال والقوالب، و`GET /api/v1/channels`، وإعدادات القنوات تحت `/api/v1/settings/...` — كلّها في MOBILE_CHANNELS_IMPLEMENTATION.md.
 
 **من يراسلنا من واتساب ومن تيليجرام — جهة اتصال واحدة أم اثنتان؟**
 **اثنتان منفصلتان.** قرار مُتَّخذ من صاحب المنتج. لكل منهما `contact_uuid` ومحادثة وسجلّ مستقلّ.

@@ -93,6 +93,29 @@
                 <h2 class="text-2xl mb-4">{{ $t('Add payment') }}</h2>
                 <p class="text-sm">{{ $t('Add your own custom amount') }}</p>
                 <FormInput v-model="form.amount" :error="form.errors.amount" :name="''" :type="'number'" :class="'w-100'"/>
+
+                <!-- كوبون الخصم: يُدفع أقل، ويزيد الرصيد بالمبلغ كاملاً -->
+                <div class="mt-4">
+                    <h2 class="text-sm mb-2">{{ $t('Coupon code') }}</h2>
+                    <div v-if="!appliedCoupon" class="flex gap-2">
+                        <input v-model="couponCode" type="text" dir="ltr" autocomplete="off"
+                            class="flex-1 min-w-0 rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 text-sm" />
+                        <button type="button" @click="applyCoupon" :disabled="couponLoading || !couponCode || !form.amount"
+                            class="rounded-md bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+                            {{ $t('Apply') }}
+                        </button>
+                    </div>
+                    <div v-else class="rounded-md bg-green-50 border border-green-200 px-3 py-2 text-sm">
+                        <div class="flex items-center justify-between gap-2">
+                            <span dir="ltr" class="font-medium">{{ appliedCoupon.code }} · {{ appliedCoupon.percentage }}%</span>
+                            <button type="button" class="text-xs underline text-slate-600" @click="removeCoupon">{{ $t('Remove') }}</button>
+                        </div>
+                        <p class="text-xs text-green-800 mt-1">
+                            {{ $t('You pay {charge} · {amount} will be added to your balance', { charge: formatMoney(appliedCoupon.charge), amount: formatMoney(appliedCoupon.amount) }) }}
+                        </p>
+                    </div>
+                    <p v-if="couponError" class="text-[#b91c1c] text-xs mt-1">{{ couponError }}</p>
+                </div>
                 <h2 class="text-sm mt-4 mb-2">{{ $t('Pay via') }}</h2>
                 <PaymentMethodSelector v-model="form.method" :methods="props.methods" />
                 <div class="form-error text-[#b91c1c] text-xs mt-2">{{ form.errors.method }}</div>
@@ -126,7 +149,9 @@ import { getEchoInstance } from '../../../echo';
     import FormInput from '@/Components/FormInput.vue';
     import PaymentMethodSelector from '@/Components/Payment/PaymentMethodSelector.vue';
     import { redirectToPaymentGateway } from '@/Composables/usePaymentGatewayRedirect';
-    import { ref, onMounted } from 'vue';
+    import { ref, onMounted, watch } from 'vue';
+    import axios from 'axios';
+    import { formatMoney, paymentPayload, quoteMatchesAmount } from '@/Composables/topupCoupon.js';
     import Echo from 'laravel-echo';
 
     const props = defineProps([
@@ -153,6 +178,41 @@ import { getEchoInstance } from '../../../echo';
         'method' : null
     });
 
+    // كوبون «إضافة دفعة»: يُطبَّق على مبلغ بعينه؛ تغيير المبلغ يُلغيه حتى يُطبَّق من جديد.
+    const couponCode = ref('');
+    const appliedCoupon = ref(null);
+    const couponError = ref(null);
+    const couponLoading = ref(false);
+
+    const applyCoupon = async () => {
+        couponLoading.value = true;
+        couponError.value = null;
+
+        try {
+            const { data } = await axios.post('/billing/coupon/quote', { amount: form.amount, coupon: couponCode.value });
+            appliedCoupon.value = data;
+        } catch (error) {
+            appliedCoupon.value = null;
+            couponError.value = error.response?.data?.errors?.coupon?.[0]
+                || error.response?.data?.errors?.amount?.[0]
+                || error.response?.data?.message
+                || error.message;
+        } finally {
+            couponLoading.value = false;
+        }
+    };
+
+    const removeCoupon = () => {
+        appliedCoupon.value = null;
+        couponError.value = null;
+    };
+
+    watch(() => form.amount, (amount) => {
+        if (appliedCoupon.value && !quoteMatchesAmount(appliedCoupon.value, amount)) {
+            appliedCoupon.value = null;
+        }
+    });
+
     function openModal(){
         isOpenModal.value = true;
     }
@@ -166,10 +226,7 @@ import { getEchoInstance } from '../../../echo';
         paymentError.value = null;
 
         try {
-            await redirectToPaymentGateway('/pay', {
-                amount: form.amount,
-                method: form.method,
-            });
+            await redirectToPaymentGateway('/pay', paymentPayload(form.amount, form.method, appliedCoupon.value));
         } catch (error) {
             paymentError.value = error.message;
             isLoading.value = false;

@@ -95,6 +95,27 @@ class FlowController extends BaseController
         // ما تختار منه عقدة البداية قنوات الـ flow.
         $data['automationChannels'] = \App\Services\Messaging\AutomationChannels::options();
 
+        // خطوة «تحويل إلى موظف»: الأعضاء النشطون بالمعرّف والاسم فقط — لا
+        // نقطة /team التي تُرجع صفوف users كاملة. الأتمتة نفسها تُعيد الفحص
+        // عند كل تشغيل، فمن يغادر بعد الحفظ لا يُسند إليه.
+        $data['teamMembers'] = \App\Models\Team::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->whereHas('user')
+            ->with('user:id,first_name,last_name')
+            ->get()
+            ->map(fn ($member) => [
+                'value' => (int) $member->user_id,
+                'label' => trim(($member->user->first_name ?? '') . ' ' . ($member->user->last_name ?? ''))
+                    ?: __('Team member') . ' #' . $member->user_id,
+            ])
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        // بلا تذاكر لا إسناد: الخطوة تنبّه التاجر في المحرّر.
+        $data['ticketingActive'] = (bool) \App\Models\Organization::find($organizationId)?->getTicketingActive();
+
         return Inertia::render('FlowBuilder::User/View', $data);
     }
 

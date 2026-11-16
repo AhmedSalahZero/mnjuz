@@ -90,7 +90,11 @@ class PayPalService
         }
     }
 
-    public function handlePayment($amount, $planId = NULL)
+    /**
+     * @param  array{coupon_ref?: string}  $context  مرجع حجز كوبون «إضافة دفعة»:
+     *   مقطع رابع في custom (القيم القديمة بثلاثة مقاطع تُقرأ كما كانت).
+     */
+    public function handlePayment($amount, $planId = NULL, array $context = [])
     {
         $currency = Setting::where('key', 'currency')->first()->value;
         $returnUrl = url('billing');
@@ -116,7 +120,8 @@ class PayPalService
                                 'currency' => $currency,
                             ],
                             'description' => 'Subscription Payment',
-                            'custom' => session()->get('current_organization') . '_' . auth()->user()->id . '_' . $planId,
+                            'custom' => session()->get('current_organization') . '_' . auth()->user()->id . '_' . $planId
+                                . (!empty($context['coupon_ref']) ? '_' . $context['coupon_ref'] : ''),
                         ],
                     ],
                     'application_context' => [
@@ -204,6 +209,7 @@ class PayPalService
 						$organizationId = $metadata[0] ?? null;
 						$userId = $metadata[1] ?? null;
 						$planId = ($metadata[2] !== '') ? $metadata[2] : null;
+						$couponRef = $metadata[3] ?? null;
 						$amount = $transactionData['amount']['total'];
 
 						$payment = BillingPayment::create([
@@ -223,6 +229,11 @@ class PayPalService
 						]);
 
 						if($planId == null){
+							// خصم كوبون الشحن إلى الرصيد قبل التفعيل منه، مرّة واحدة.
+							if ($couponRef) {
+								app(\App\Services\Billing\CouponRedemptionService::class)->settleTopup($couponRef, (int) $organizationId, $payment->id, (float) $amount, (int) $userId);
+							}
+
 							$this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId);
 						} else {
 							$this->subscriptionService->updateSubscriptionPlan($organizationId, $planId, $userId);

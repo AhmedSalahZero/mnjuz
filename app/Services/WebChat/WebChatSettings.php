@@ -28,7 +28,13 @@ final class WebChatSettings
             'title' => '',
             'subtitle' => '',
             'welcome_message' => '',
-            'language' => 'auto',
+            // النسخ الإنجليزية اختيارية: الزائر يبدّل اللغة من الـ widget،
+            // والفارغة تعني أن يرى النصّ العربي.
+            'title_en' => '',
+            'subtitle_en' => '',
+            'welcome_message_en' => '',
+            // العربية افتراضياً، والزائر يبدّل. «auto» تتبع لغة صفحة الموقع.
+            'language' => 'ar',
         ],
         'prechat' => [
             'default_country' => 'SA',
@@ -40,6 +46,10 @@ final class WebChatSettings
             'name_label' => null,
             'phone_label' => null,
             'consent_text' => null,
+            'consent_text_en' => null,
+            // أسئلة البداية (WebChatQuestions). null = لم يحدّدها التاجر بعد،
+            // فتُشتقّ من المفاتيح أعلاه كما كان النموذج يسأل.
+            'questions' => null,
         ],
         'behavior' => [
             'show_agent_names' => true,
@@ -83,7 +93,7 @@ final class WebChatSettings
         $appearance = &$settings['appearance'];
         $appearance['color'] = self::color($appearance['color']);
         $appearance['position'] = in_array($appearance['position'], self::POSITIONS, true) ? $appearance['position'] : 'right';
-        $appearance['language'] = in_array($appearance['language'], self::LANGUAGES, true) ? $appearance['language'] : 'auto';
+        $appearance['language'] = in_array($appearance['language'], self::LANGUAGES, true) ? $appearance['language'] : 'ar';
         $appearance['offset_x'] = max(0, min(200, (int) $appearance['offset_x']));
         $appearance['offset_y'] = max(0, min(200, (int) $appearance['offset_y']));
         $appearance['logo_url'] = self::httpsUrl($appearance['logo_url']);
@@ -91,8 +101,8 @@ final class WebChatSettings
             && preg_match('#^public/webchat-logos/\d+/[a-z0-9]+\.(png|jpe?g|webp)$#', $appearance['logo_path'])
             ? $appearance['logo_path']
             : null;
-        foreach (['title', 'subtitle', 'welcome_message'] as $text) {
-            $appearance[$text] = mb_substr(trim((string) $appearance[$text]), 0, $text === 'welcome_message' ? 500 : 80);
+        foreach (['title', 'subtitle', 'welcome_message', 'title_en', 'subtitle_en', 'welcome_message_en'] as $text) {
+            $appearance[$text] = mb_substr(trim((string) $appearance[$text]), 0, str_starts_with($text, 'welcome_message') ? 500 : 80);
         }
         unset($appearance);
 
@@ -102,9 +112,21 @@ final class WebChatSettings
         $prechat['phone'] = in_array($prechat['phone'], self::PHONE_MODES, true) ? $prechat['phone'] : 'required';
         $prechat['email'] = in_array($prechat['email'], self::EMAIL_MODES, true) ? $prechat['email'] : 'off';
         $prechat['default_country'] = self::country($prechat['default_country']);
-        foreach (['name_label', 'phone_label', 'consent_text'] as $text) {
+        foreach (['name_label', 'phone_label', 'consent_text', 'consent_text_en'] as $text) {
             $value = trim((string) $prechat[$text]);
-            $prechat[$text] = $value === '' ? null : mb_substr($value, 0, $text === 'consent_text' ? 500 : 60);
+            $prechat[$text] = $value === '' ? null : mb_substr($value, 0, str_starts_with($text, 'consent_text') ? 500 : 60);
+        }
+        $prechat['questions'] = WebChatQuestions::normalize($prechat['questions']);
+
+        // الأسئلة المحدّدة تكتب مفاتيح النموذج القديم أيضاً: app.js قديم في
+        // ذاكرة متصفّحٍ أثناء النشر يقرؤها، فيسأل ما تسأله الأسئلة.
+        if ($prechat['questions'] !== null) {
+            $byId = array_column($prechat['questions'], null, 'id');
+            $mode = fn (string $id) => isset($byId[$id]) ? ($byId[$id]['required'] ? 'required' : 'optional') : 'off';
+            $prechat['phone'] = $mode('phone');
+            $prechat['email'] = $mode('email');
+            $prechat['name_label'] = isset($byId['name']['label_ar']) ? mb_substr($byId['name']['label_ar'], 0, 60) : null;
+            $prechat['phone_label'] = isset($byId['phone']['label_ar']) ? mb_substr($byId['phone']['label_ar'], 0, 60) : null;
         }
         unset($prechat);
 
@@ -132,10 +154,14 @@ final class WebChatSettings
 
         unset($appearance['logo_path']);
 
+        // الأسئلة الفعلية دائماً (المحفوظة أو المشتقّة)، بخيارات الحقول المخصّصة.
+        $prechat = $settings['prechat'];
+        $prechat['questions'] = WebChatQuestions::publicView(WebChatQuestions::forAccount($account, $settings));
+
         return [
             'name' => (string) ($account->name ?? ''),
             'appearance' => $appearance,
-            'prechat' => $settings['prechat'],
+            'prechat' => $prechat,
             'behavior' => $settings['behavior'],
         ];
     }

@@ -9,18 +9,23 @@ use Illuminate\Support\Facades\App;
 
 class SetApiLanguage
 {
+    private const SUPPORTED = ['en', 'ar'];
+
     public function handle($request, Closure $next)
     {
 		
-        $locale =
-            $request->header('Accept-Language')
-            ?? $request->query('lang')
-            ?? config('app.locale');
+        // ?lang= أوّلاً: المتصفّح يرسل Accept-Language دائماً («en-US,en;q=0.9»)
+        // فكان ?lang= لا يُقرأ أبداً، وأخطاء widget المحادثة المباشرة تعود
+        // بالإنجليزية لزائرٍ يقرأ بالعربية. بلا ?lang= لا يتغيّر شيء.
+        $query = $request->query('lang');
+        $header = $request->header('Accept-Language');
 
-        // Optional: allow only supported languages
-        if (! in_array($locale, ['en', 'ar'])) {
-            $locale = config('app.locale');
-        }
+        $locale = match (true) {
+            in_array($query, self::SUPPORTED, true) => $query,
+            in_array($header, self::SUPPORTED, true) => $header,
+            default => config('app.locale'),
+        };
+
         App::setLocale($locale);
 
         return $next($request);

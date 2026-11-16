@@ -195,8 +195,9 @@ GET /api/v1/campaigns?page=1&per_page=10&search=&status=
   "uuid": "…",
   "name": "حملة الشتاء",
   "status": "scheduled",
+  "channel": "whatsapp",           // جديد (إضافة): whatsapp | telegram | email — حملات الويب على تيليجرام والبريد تظهر هنا بلا قالب
   "failure_reason": null,          // "no_contacts" حين تفشل الحملة لأن جمهورها فارغ
-  "template": { "uuid": "…", "name": "welcome_offer", "language": "ar" },
+  "template": { "uuid": "…", "name": "welcome_offer", "language": "ar" },   // null لحملة تيليجرام أو بريد
   "audience": { "type": "group", "group": { "uuid": "…", "name": "VIP" } },   // أو { "type": "all", "group": null }
   "stats": { "total": 120, "sent": 118, "delivered": 110, "read": 75, "failed": 2 },
   "scheduled_at": "2026-12-01T10:30:00+03:00",
@@ -210,6 +211,8 @@ GET /api/v1/campaigns?page=1&per_page=10&search=&status=
 - `resendable_count`: عدد الرسائل التي ستُعاد فعلاً لو ضُغط زرّ إعادة الإرسال.
 
 التواريخ كلها بتوقيت المنشأة بصيغة ISO 8601. والحملة المجدولة ليس لها سجلّات بعد: إحصاءاتها أصفار حتى يحين وقتها.
+
+حملة البريد (`channel: "email"`) لا تتتبّع التسليم ولا القراءة: `delivered` و`read` صفر دائماً، و`sent` ما قبله خادم بريد التاجر. وتيليجرام لا يُبلغ البوت بالتسليم ولا القراءة كذلك. إنشاء الحملة من التطبيق يبقى واتساب كما هو (بلا `channel` = واتساب).
 
 ### المستلمون — `GET /campaigns/{uuid}/logs`
 

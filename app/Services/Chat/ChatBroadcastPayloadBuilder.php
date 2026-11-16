@@ -135,6 +135,10 @@ class ChatBroadcastPayloadBuilder
             'unread_messages_count'   => $contactInfo['unread_messages_count'],
             // مفتاح جديد لا يمسّ القائم: الصفّ الجديد في القائمة يرسم أيقونة قناته.
             'channel'                 => $contactInfo['channel'],
+            // كما في ردّ المزامنة v1، ومعه @username لجهة بلا رقم: الصفّ الجديد
+            // في القائمة يعرضه مكان الرقم قبل أن يزامن التطبيق.
+            'channel_identifier'      => $contactInfo['channel_identifier'],
+            'channel_username'        => $contactInfo['channel_username'],
             'created_at'              => $arr['created_at'] ?? null,
             'deleted_at'              => $arr['deleted_at'] ?? null,
             'metadata'                => $metadata,
@@ -335,6 +339,8 @@ class ChatBroadcastPayloadBuilder
             'is_favorite'            => null,
             'unread_messages_count'  => 0,
             'channel'                => null,
+            'channel_identifier'     => null,
+            'channel_username'       => null,
         ];
 
         if (!$contactId) {
@@ -350,6 +356,7 @@ class ChatBroadcastPayloadBuilder
                 // قنوات بلا رقم هويّة (المحادثة المباشرة) تحفظ رقم العرض هنا،
                 // والقناة يحتاجها الصفّ الجديد في القائمة ليرسم أيقونته.
                 'formatted_phone', 'channel',
+                'channel_identifier', 'metadata',
             ]);
 
         if (!$contact) {
@@ -380,6 +387,8 @@ class ChatBroadcastPayloadBuilder
             'is_favorite'            => $contact->is_favorite,
             'unread_messages_count'  => $unread,
             'channel'                => $contact->channel,
+            'channel_identifier'     => $contact->channel_identifier,
+            'channel_username'       => $this->truncateToBytes((string) $contact->channelUsername(), self::MAX_FULL_NAME_BYTES) ?: null,
         ];
     }
 }

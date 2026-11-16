@@ -255,19 +255,7 @@ class ProcessTicketAssignmentJob implements ShouldQueue, ShouldBeUnique
         }
 
         // Always recompute so each new ticket is assigned to the currently least-busy agent.
-        $agent = Team::where('organization_id', $this->organizationId)
-            ->whereNull('deleted_at')
-            ->where('status', 'active')
-            ->when($eligible !== null, fn ($query) => $query->whereIn('user_id', $eligible))
-            ->withCount(['tickets' => function ($query) {
-                $query->where('status', 'open')
-                    ->where('is_latest', true);
-            }])
-            ->orderBy('tickets_count', 'asc')
-            ->orderBy('id', 'asc')
-            ->first();
-
-        return $agent->user_id ?? null;
+        return Team::leastBusyUserId((int) $this->organizationId, $eligible);
     }
 
     /**

@@ -10,5 +10,7 @@ return [
     'webhook'           => true,
     'ai_response'       => false, // Disabled
     'conditional'       => false,
+    // تحويل المحادثة إلى موظف، بمخرجين: متاح / غير متاح.
+    'assign_agent'      => true,
     // Add more actions as needed
 ]; 

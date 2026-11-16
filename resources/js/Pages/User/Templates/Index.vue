@@ -18,6 +18,8 @@
                 </div>
             </div>
 
+            <TemplateChannelTabs active="whatsapp" />
+
             <!-- Table Component-->
             <TemplateTable :rows="props.rows"/>
         </div>
@@ -28,6 +30,7 @@
     import { router } from '@inertiajs/vue3';
     import { Link } from "@inertiajs/vue3";
     import TemplateTable from '@/Components/Tables/TemplateTable.vue';
+    import TemplateChannelTabs from '@/Components/Template/TemplateChannelTabs.vue';
     import axios from 'axios';
     import { ref } from 'vue';
 

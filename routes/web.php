@@ -70,7 +70,6 @@ Route::match(['get', 'post'], '/', [App\Http\Controllers\FrontendController::cla
 Route::match(['get', 'post'], '/pages/{slug}', [App\Http\Controllers\FrontendController::class, 'pages']);
 Route::match(['get', 'post'], '/privacy', [App\Http\Controllers\FrontendController::class, 'privacy']);
 Route::match(['get', 'post'], '/terms-of-service', [App\Http\Controllers\FrontendController::class, 'termsOfService']);
-Route::match(['get', 'post'], '/process-campaign', [App\Http\Controllers\FrontendController::class, 'buildTemplateChatMessage']);
 Route::get('/language/{locale}', [App\Http\Controllers\FrontendController::class, 'changeLanguage']);
 
 //File Route
@@ -79,6 +78,11 @@ Route::get('media/{filename}', [App\Http\Controllers\FileController::class, 'sho
 //Invite Routes
 Route::get('/invite/{identifier}', [App\Http\Controllers\AuthController::class, 'viewInvite']);
 Route::post('/invite/{identifier}', [App\Http\Controllers\AuthController::class, 'invite']);
+
+// إلغاء الاشتراك في بريد حملات منشأة: رابط موقَّع بلا جلسة (يُنظر المتحكّم).
+Route::get('/email/unsubscribe/{organization}', [App\Http\Controllers\EmailUnsubscribeController::class, 'show'])
+    ->name('email.unsubscribe');
+Route::post('/email/unsubscribe/{organization}', [App\Http\Controllers\EmailUnsubscribeController::class, 'store']);
 
 // صفحة تقييم الخدمة — عامة بلا مصادقة؛ الرمز في الرابط هو التصريح الوحيد
 Route::get('/rate/{token}', [App\Http\Controllers\RatingController::class, 'show']);
@@ -185,6 +189,9 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('dismiss-notification/{type}', [App\Http\Controllers\User\DashboardController::class, 'dismissNotification'])->name('dashboard.team.notification.dismiss');
                 Route::match(['get', 'post'], '/billing', [App\Http\Controllers\User\BillingController::class, 'index'])->name('user.billing.index');
                 Route::post('/pay', [App\Http\Controllers\User\BillingController::class, 'pay'])->name('user.billing.pay');
+                // معاينة كوبون «إضافة دفعة». محدودة: لا تُخمَّن الأكواد بها.
+                Route::post('/billing/coupon/quote', [App\Http\Controllers\User\BillingController::class, 'quoteCoupon'])
+                    ->middleware('throttle:20,1');
                 Route::resource('subscription', App\Http\Controllers\User\SubscriptionController::class);
                 Route::post('/subscription/coupon/apply/{id}', [App\Http\Controllers\User\SubscriptionController::class, 'applyCoupon']);
                 Route::get('/subscription/coupon/remove/{id}', [App\Http\Controllers\User\SubscriptionController::class, 'removeCoupon']);
@@ -258,6 +265,21 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/campaigns/{uuid}/resend-failed', [App\Http\Controllers\User\CampaignController::class, 'resendFailed'])->name('campaigns.resendFailed');
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
 
+                // قوالب محفوظة لقنوات بلا موافقة (تيليجرام، البريد). قبل
+                // /templates/{uuid?}، والقناة مقيّدة بما له قوالب.
+                Route::get('/templates/channel/{channel}', [App\Http\Controllers\User\ChannelTemplateController::class, 'index'])
+                    ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+                Route::get('/templates/channel/{channel}/create', [App\Http\Controllers\User\ChannelTemplateController::class, 'create'])
+                    ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+                Route::post('/templates/channel/{channel}', [App\Http\Controllers\User\ChannelTemplateController::class, 'store'])
+                    ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+                Route::get('/templates/channel/{channel}/{uuid}', [App\Http\Controllers\User\ChannelTemplateController::class, 'edit'])
+                    ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+                Route::post('/templates/channel/{channel}/{uuid}', [App\Http\Controllers\User\ChannelTemplateController::class, 'update'])
+                    ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+                Route::delete('/templates/channel/{channel}/{uuid}', [App\Http\Controllers\User\ChannelTemplateController::class, 'destroy'])
+                    ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
                 Route::get('/templates/{uuid?}', [App\Http\Controllers\User\TemplateController::class, 'index']);
                 Route::post('/templates', [App\Http\Controllers\User\TemplateController::class, 'store']);
@@ -313,6 +335,17 @@ Route::middleware(['auth:user'])->group(function () {
                         ->name('channels.oauth.select');
                     Route::delete('/settings/channels/select', [App\Http\Controllers\User\ChannelOAuthController::class, 'cancelSelection']);
                     Route::delete('/settings/channels/{uuid}', [App\Http\Controllers\User\ChannelAccountController::class, 'destroy']);
+                    // بريد التاجر (SMTP) لحملات البريد: صفحة مستقلّة قبل صفحة
+                    // القناة العامّة. الحفظ والتجربة يتّصلان بخادم خارجي فيُحدّان.
+                    Route::get('/settings/channels/email', [App\Http\Controllers\User\EmailChannelController::class, 'show']);
+                    Route::post('/settings/channels/email', [App\Http\Controllers\User\EmailChannelController::class, 'save'])
+                        ->middleware('throttle:10,1');
+                    Route::post('/settings/channels/email/test', [App\Http\Controllers\User\EmailChannelController::class, 'sendTest'])
+                        ->middleware('throttle:5,1');
+                    // صفحة إدارة القناة: مقيّدة بالقنوات التي تُربط من هنا، فلا
+                    // تلتقط مساراً ثابتاً (email أو غيره) يُعرَّف قبلها.
+                    Route::get('/settings/channels/{channel}', [App\Http\Controllers\User\ChannelAccountController::class, 'show'])
+                        ->whereIn('channel', \App\Services\Messaging\Channel::connectable());
                     Route::match(['get', 'post'], '/settings/working-hours', [App\Http\Controllers\User\SettingController::class, 'workingHours']);
                     // المحادثة المباشرة: الكود الذي يُلصق في الموقع وإعدادات الـ widget.
                     Route::get('/settings/webchat', [App\Http\Controllers\User\WebChatSettingsController::class, 'show']);
@@ -321,6 +354,11 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/webchat/logo', [App\Http\Controllers\User\WebChatSettingsController::class, 'removeLogo']);
                     Route::post('/settings/webchat/rotate-key', [App\Http\Controllers\User\WebChatSettingsController::class, 'rotateKey']);
                     Route::get('/settings/webchat/preview', [App\Http\Controllers\User\WebChatSettingsController::class, 'preview']);
+                    // الأسئلة الشائعة في صفحة الإعدادات (WebChatFaqController).
+                    Route::post('/settings/webchat/faqs', [App\Http\Controllers\User\WebChatFaqController::class, 'store']);
+                    Route::post('/settings/webchat/faqs/reorder', [App\Http\Controllers\User\WebChatFaqController::class, 'reorder']);
+                    Route::post('/settings/webchat/faqs/{id}', [App\Http\Controllers\User\WebChatFaqController::class, 'update'])->whereNumber('id');
+                    Route::delete('/settings/webchat/faqs/{id}', [App\Http\Controllers\User\WebChatFaqController::class, 'destroy'])->whereNumber('id');
                     Route::get('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'index']);
                     Route::post('/settings/shortcuts', [App\Http\Controllers\User\ShortcutController::class, 'sync']);
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');

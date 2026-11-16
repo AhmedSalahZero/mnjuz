@@ -23,8 +23,11 @@ class StoreCoupon extends FormRequest
     {
         $rules = [
             'name' => 'required',
-            'percentage' => 'required|numeric',
+            // بين 0.01 و100: السالبة كانت ترفع السعر بدل أن تخفضه.
+            'percentage' => 'required|numeric|min:0.01|max:100',
             'quantity' => 'required|numeric',
+            // أين ينطبق: الباقات، «إضافة دفعة»، أو الاثنان. غيابه = الباقات.
+            'applies_to' => 'nullable|in:' . implode(',', \App\Services\Billing\CouponRedemptionService::APPLIES_TO),
         ];
 
         if ($this->isMethod('post')) {

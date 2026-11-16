@@ -54,20 +54,25 @@ class ProcessCampaignMessagesJob implements ShouldQueue
             }
 
             $batchSize = max(1, (int) config('campaigns.send_batch_size', 10));
-            $organizationIds = $this->organizationIdsWithPendingLogs();
+            $organizationChannels = $this->channelsWithPendingLogs();
 
-            if ($organizationIds->isEmpty()) {
+            if ($organizationChannels->isEmpty()) {
                 return;
             }
 
             $campaignsTouched = [];
 
-            foreach ($organizationIds as $organizationId) {
-                $logs = $this->pendingLogsForOrganization((int) $organizationId, $batchSize);
+            foreach ($organizationChannels as $organizationChannel) {
+                $channel = (string) $organizationChannel->channel;
+                $logs = $this->pendingLogsForChannel(
+                    (int) $organizationChannel->organization_id,
+                    $channel,
+                    max(1, (int) config("campaigns.channel_batch_sizes.{$channel}", $batchSize))
+                );
 
                 foreach ($logs as $log) {
                     ProcessSingleCampaignLogJob::dispatch($log)
-                        ->onQueue('campaign-messages');
+                        ->onQueue(CampaignRetryService::queueFor($channel));
 
                     $campaignsTouched[$log->campaign_id] = true;
                 }
@@ -128,13 +133,26 @@ class ProcessCampaignMessagesJob implements ShouldQueue
         }
 
         $campaignIds = [];
-        $reset = CampaignLog::whereIn('id', $stuckIds->all())
+        $reset = CampaignLog::with('campaign:id,channel')
+            ->whereIn('id', $stuckIds->all())
             ->where('status', 'failed')
             ->where('updated_at', $resetAt)
             ->get();
 
         foreach ($reset as $log) {
             $campaignIds[$log->campaign_id] = true;
+
+            // بريدٌ علق: ربما قبله الخادم قبل أن يسقط العامل، ولا رسالة محادثة
+            // تشهد بذلك. فشلٌ نهائيّ بلا إعادة — أهون من رسالة تصل مرّتين.
+            if (($log->campaign?->channel) === \App\Services\Messaging\Channel::EMAIL) {
+                CampaignLog::where('id', $log->id)->where('status', 'failed')->update([
+                    'metadata' => json_encode(\App\Services\Messaging\ChannelOutboundSender::failure(
+                        __('The send was interrupted and its result is unknown, so it was not repeated.'),
+                        \App\Services\Email\EmailCampaignSender::UNKNOWN
+                    )),
+                ]);
+                continue;
+            }
 
             // عاملٌ سقط بعد أن قبل Meta الرسالة وقبل أن يحفظ النتيجة: إعادتها
             // تصل العميلَ مرّتين. sendTemplateMessage ينشئ رسالة المحادثة فور
@@ -213,26 +231,39 @@ class ProcessCampaignMessagesJob implements ShouldQueue
         }
     }
 
-    private function organizationIdsWithPendingLogs()
+    /**
+     * كل (منشأة، قناة) فيها ما ينتظر الإرسال، ولكلٍّ دفعتها في الدورة.
+     *
+     * حدود الإرسال عند المنصّة على الحساب المُرسِل (رقم واتساب، بوت تيليجرام،
+     * صفحة)، والمنشأة تُرسل حملات كل قناة من حساب واحد
+     * (ChannelManager::activeAccount). كانت الدفعة للمنشأة كلّها بالأقدم
+     * أولاً، فحملة واتساب كبيرة توقف حملة تيليجرام بعدها حتى تنتهي.
+     *
+     * @return \Illuminate\Support\Collection<int, object{organization_id: int, channel: string}>
+     */
+    private function channelsWithPendingLogs()
     {
         return CampaignLog::query()
-            ->select('campaigns.organization_id')
+            ->select('campaigns.organization_id', 'campaigns.channel')
             ->join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
             ->where('campaign_logs.status', 'pending')
             ->where('campaigns.status', 'ongoing')
             ->whereNull('campaigns.deleted_at')
             ->distinct()
             ->orderBy('campaigns.organization_id')
-            ->pluck('organization_id');
+            ->orderBy('campaigns.channel')
+            ->toBase()
+            ->get();
     }
 
-    private function pendingLogsForOrganization(int $organizationId, int $batchSize)
+    private function pendingLogsForChannel(int $organizationId, string $channel, int $batchSize)
     {
         return CampaignLog::with(['campaign.organization', 'contact'])
             ->where('status', 'pending')
-            ->whereHas('campaign', function ($query) use ($organizationId) {
+            ->whereHas('campaign', function ($query) use ($organizationId, $channel) {
                 $query->where('status', 'ongoing')
                     ->where('organization_id', $organizationId)
+                    ->where('channel', $channel)
                     ->whereNull('deleted_at');
             })
             ->orderBy('created_at')

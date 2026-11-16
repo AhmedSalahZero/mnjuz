@@ -25,6 +25,8 @@ class WebChatVisitor extends Model
 
     protected $casts = [
         'last_seen_at' => 'datetime',
+        // ما فعله قبل أن يكتب (القائمة والأسئلة الشائعة): WebChatLeads::recordJourney.
+        'journey' => 'array',
     ];
 
     /** طول التوكن بالبايت قبل الترميز: ٢٥٦ بت. */
@@ -53,10 +55,11 @@ class WebChatVisitor extends Model
      * ما يراه الموظّف عن الزائر (كارت «الزائر» في الـ inbox والجوال): من أين
      * جاء وبماذا يتصفّح. لا توكن ولا IP.
      */
-    public function agentView(): array
+    public function agentView(bool $maskPhone = false): array
     {
         return [
-            'phone' => $this->phone,
+            // نسخة الجوال هنا تُخفى كما يُخفى رقم جهة الاتصال عن الموظف.
+            'phone' => $maskPhone && $this->phone ? \Illuminate\Support\Str::mask($this->phone, '*', 4) : $this->phone,
             'email' => $this->email,
             'first_page_url' => $this->first_page_url,
             'last_page_url' => $this->last_page_url,
@@ -64,6 +67,7 @@ class WebChatVisitor extends Model
             'country' => $this->country,
             'browser' => self::describeBrowser($this->user_agent),
             'locale' => $this->locale,
+            'journey' => $this->journey,
             'created_at' => $this->created_at?->toIso8601String(),
             'last_seen_at' => $this->last_seen_at ? \Illuminate\Support\Carbon::parse($this->last_seen_at)->toIso8601String() : null,
         ];

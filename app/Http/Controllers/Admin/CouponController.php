@@ -32,6 +32,7 @@ class CouponController extends BaseController
         $coupon->code = $request->code;
         $coupon->percentage = $request->percentage;
         $coupon->quantity = $request->quantity;
+        $coupon->applies_to = $request->input('applies_to') ?: \App\Services\Billing\CouponRedemptionService::APPLIES_PLANS;
         $coupon->created_at = date('Y-m-d H:i:s');
         $coupon->updated_at = date('Y-m-d H:i:s');
         $coupon->save();
@@ -57,6 +58,9 @@ class CouponController extends BaseController
         $coupon->code = $request->code;
         $coupon->percentage = $request->percentage;
         $coupon->quantity = $request->quantity;
+        if ($request->filled('applies_to')) {
+            $coupon->applies_to = $request->input('applies_to');
+        }
         $coupon->updated_at = date('Y-m-d H:i:s');
         $coupon->save();
 

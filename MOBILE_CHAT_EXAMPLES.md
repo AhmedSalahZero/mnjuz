@@ -2,6 +2,8 @@
 
 المصدر: `GET /api/v1/list-messages-from-uuid-to-end`. كل الأمثلة أدناه **ردود حقيقية** من الـ endpoint، منسوخة كما هي.
 
+> **إضافات بعد هذه الأمثلة (١٦ نوفمبر):** كل رسالة تحمل `channel` و`channel_identifier`، وكل جهة في `data[]` تحمل `channel` و`channel_identifier` و`channel_username` و`messaging_window_hours`، والردّ يحمل `assigned_only`. و`phone` قد يكون `null` لجهات القنوات الأخرى. التفاصيل في [MOBILE_CHANNELS_IMPLEMENTATION.md](MOBILE_CHANNELS_IMPLEMENTATION.md).
+
 ## شكل الرد
 
 ```
@@ -35,7 +37,7 @@
 | `uuid` | string | لا |
 | `contact_id` | int | لا |
 | `contact_uuid` | string | لا |
-| `phone` | string | لا |
+| `phone` | string | **نعم** — `null` لجهات Telegram وMessenger وInstagram وTikTok والمحادثة المباشرة |
 | `metadata` | string (JSON) | لا |
 | `type` | string: `inbound` \| `outbound` | لا |
 | `wam_id` | string | **نعم** |

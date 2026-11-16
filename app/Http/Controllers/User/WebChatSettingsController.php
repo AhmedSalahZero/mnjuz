@@ -3,19 +3,12 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\User\Concerns\AuthorizesWebChatSettings;
 use App\Models\Addon;
 use App\Models\ChannelAccount;
-use App\Models\Organization;
-use App\Models\Setting;
-use App\Models\Team;
-use App\Services\WebChat\WebChatAssets;
-use App\Services\WebChat\WebChatSettings;
+use App\Services\WebChat\WebChatSettingsForm;
 use App\Services\WebChat\WebChatWidgetService;
-use App\Support\OrganizationRole;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 /**
@@ -24,13 +17,17 @@ use Inertia\Inertia;
  *
  * محروسة كساعات العمل: الإضافة «Web Chat» في الباقة، والموظّف (agent) لا
  * يدخلها. الـ widget يُنشأ عند أول زيارة: لا شيء يُلصق قبلها، فلا ضرر.
+ *
+ * القواعد والحفظ والشعار في WebChatSettingsForm — التطبيق يمرّ منها كذلك.
  */
 class WebChatSettingsController extends Controller
 {
-    private const LOGO_DIRECTORY = 'webchat-logos';
+    use AuthorizesWebChatSettings;
 
-    public function __construct(private readonly WebChatWidgetService $widgets)
-    {
+    public function __construct(
+        private readonly WebChatWidgetService $widgets,
+        private readonly WebChatSettingsForm $form,
+    ) {
     }
 
     public function show(Request $request)
@@ -40,7 +37,7 @@ class WebChatSettingsController extends Controller
         return Inertia::render('User/Settings/WebChat', [
             'title' => __('Web Chat'),
             'modules' => Addon::get(),
-            'widget' => $this->view($account),
+            'widget' => $this->form->view($account),
         ]);
     }
 
@@ -48,44 +45,7 @@ class WebChatSettingsController extends Controller
     {
         $account = $this->widget();
 
-        $validated = $request->validate([
-            'enabled' => ['required', 'boolean'],
-            'allowed_domains' => ['nullable', 'array', 'max:50'],
-            'allowed_domains.*' => ['string', 'max:255'],
-            'appearance.color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'appearance.position' => ['required', Rule::in(WebChatSettings::POSITIONS)],
-            'appearance.offset_x' => ['required', 'integer', 'between:0,200'],
-            'appearance.offset_y' => ['required', 'integer', 'between:0,200'],
-            'appearance.title' => ['nullable', 'string', 'max:80'],
-            'appearance.subtitle' => ['nullable', 'string', 'max:80'],
-            'appearance.welcome_message' => ['nullable', 'string', 'max:500'],
-            'appearance.language' => ['required', Rule::in(WebChatSettings::LANGUAGES)],
-            'prechat.default_country' => ['required', 'string', 'size:2', 'alpha'],
-            // sometimes: صفحة إعدادات مفتوحة من قبل هذا الحقل تحفظ بدونه، فيبقى
-            // الافتراضي (إجباري) بدل خطأ على حقل لا يراه التاجر.
-            'prechat.phone' => ['sometimes', Rule::in(WebChatSettings::PHONE_MODES)],
-            'prechat.email' => ['required', Rule::in(WebChatSettings::EMAIL_MODES)],
-            'prechat.name_label' => ['nullable', 'string', 'max:60'],
-            'prechat.phone_label' => ['nullable', 'string', 'max:60'],
-            'prechat.consent_text' => ['nullable', 'string', 'max:500'],
-            'behavior.show_agent_names' => ['required', 'boolean'],
-            'behavior.sound' => ['required', 'boolean'],
-            'behavior.uploads' => ['required', 'boolean'],
-        ]);
-
-        $current = WebChatSettings::for($account);
-
-        $account->forceFill(['settings' => WebChatSettings::merge([
-            'enabled' => (bool) $validated['enabled'],
-            'allowed_domains' => array_values((array) ($validated['allowed_domains'] ?? [])),
-            // الشعار له مساره الخاص (uploadLogo)، فلا يمحوه حفظ النموذج.
-            'appearance' => array_replace($validated['appearance'], [
-                'logo_url' => $current['appearance']['logo_url'],
-                'logo_path' => $current['appearance']['logo_path'],
-            ]),
-            'prechat' => $validated['prechat'],
-            'behavior' => $validated['behavior'],
-        ])])->save();
+        $this->form->apply($account, $this->form->validator($request->all(), $account)->validate());
 
         return back()->with('status', ['type' => 'success', 'message' => __('Settings updated successfully')]);
     }
@@ -95,41 +55,16 @@ class WebChatSettingsController extends Controller
     {
         $account = $this->widget();
 
-        $request->validate([
-            // لا SVG: يُخدم من نطاقنا ويحمل سكربتاً.
-            'logo' => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:1024'],
-        ]);
+        $request->validate($this->form->logoRules());
 
-        $file = $request->file('logo');
-        $name = strtolower((string) Str::ulid()) . '.' . $file->extension();
-        $settings = WebChatSettings::for($account);
-
-        if (Setting::where('key', 'storage_system')->value('value') === 'aws') {
-            $path = $file->storeAs(self::LOGO_DIRECTORY . '/' . $account->organization_id, $name, 's3');
-            $settings['appearance']['logo_url'] = $path ? Storage::disk('s3')->url($path) : null;
-            $settings['appearance']['logo_path'] = null;
-        } else {
-            $path = $file->storeAs('public/' . self::LOGO_DIRECTORY . '/' . $account->organization_id, $name, 'local');
-            $settings['appearance']['logo_path'] = $path ?: null;
-            $settings['appearance']['logo_url'] = null;
-        }
-
-        $this->deleteLocalLogo(WebChatSettings::for($account)['appearance']['logo_path']);
-        $account->forceFill(['settings' => WebChatSettings::merge($settings)])->save();
+        $this->form->storeLogo($account, $request->file('logo'));
 
         return back()->with('status', ['type' => 'success', 'message' => __('Settings updated successfully')]);
     }
 
     public function removeLogo()
     {
-        $account = $this->widget();
-        $settings = WebChatSettings::for($account);
-
-        $this->deleteLocalLogo($settings['appearance']['logo_path']);
-        $settings['appearance']['logo_path'] = null;
-        $settings['appearance']['logo_url'] = null;
-
-        $account->forceFill(['settings' => WebChatSettings::merge($settings)])->save();
+        $this->form->removeLogo($this->widget());
 
         return back()->with('status', ['type' => 'success', 'message' => __('Settings updated successfully')]);
     }
@@ -173,51 +108,11 @@ class WebChatSettingsController extends Controller
 
     private function widget(): ChannelAccount
     {
-        $organizationId = (int) session()->get('current_organization');
-
-        if (!$organizationId || !WebChatWidgetService::moduleEnabled($organizationId)) {
-            abort(403);
-        }
-
-        $role = Team::where('organization_id', $organizationId)->where('user_id', auth()->id())->value('role');
-
-        if (OrganizationRole::isAgent($role)) {
-            abort(403);
-        }
-
-        return $this->widgets->forOrganization($organizationId)
-            ?? $this->widgets->ensureForOrganization(
-                $organizationId,
-                (string) (Organization::where('id', $organizationId)->value('name') ?? ''),
-                (int) auth()->id()
-            );
-    }
-
-    private function view(ChannelAccount $account): array
-    {
-        $settings = WebChatSettings::for($account);
-        $key = (string) $account->external_id;
-
-        return [
-            'key' => $key,
-            'snippet' => self::snippet($key),
-            'settings' => $settings,
-            'logo' => WebChatSettings::publicView($account)['appearance']['logo_url'],
-            'preview_url' => url('/settings/webchat/preview'),
-        ];
+        return $this->form->widget($this->webChatOrganizationId(), (int) auth()->id());
     }
 
     public static function snippet(string $key, bool $preview = false): string
     {
-        return '<script async src="' . e(WebChatAssets::loaderUrl()) . '" data-mnjz-key="' . e($key) . '"'
-            . ($preview ? ' data-mnjz-preview="1"' : '')
-            . '></script>';
-    }
-
-    private function deleteLocalLogo(?string $path): void
-    {
-        if ($path && str_starts_with($path, 'public/' . self::LOGO_DIRECTORY . '/')) {
-            Storage::disk('local')->delete($path);
-        }
+        return WebChatSettingsForm::snippet($key, $preview);
     }
 }

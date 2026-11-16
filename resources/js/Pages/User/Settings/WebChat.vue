@@ -92,13 +92,28 @@
 								<textarea rows="2" maxlength="500" v-model="form.appearance.welcome_message" :class="inputClass('appearance.welcome_message')"></textarea>
 								<span class="text-xs text-slate-500">{{ $t('Shown to the visitor before they write. It is not sent as a message.') }}</span>
 							</label>
+							<!-- النسخ الإنجليزية: لزائرٍ بدّل لغة الـ widget إلى الإنجليزية. -->
+							<label class="block">
+								<span class="text-slate-700">{{ $t('Title in English (optional)') }}</span>
+								<input type="text" maxlength="80" dir="ltr" v-model="form.appearance.title_en" placeholder="Chat with us" :class="inputClass('appearance.title_en')" />
+							</label>
+							<label class="block">
+								<span class="text-slate-700">{{ $t('Subtitle in English (optional)') }}</span>
+								<input type="text" maxlength="80" dir="ltr" v-model="form.appearance.subtitle_en" placeholder="We usually reply in a few minutes" :class="inputClass('appearance.subtitle_en')" />
+							</label>
+							<label class="block md:col-span-2">
+								<span class="text-slate-700">{{ $t('Welcome message in English (optional)') }}</span>
+								<textarea rows="2" maxlength="500" dir="ltr" v-model="form.appearance.welcome_message_en" :class="inputClass('appearance.welcome_message_en')"></textarea>
+								<span class="text-xs text-slate-500">{{ $t('Shown when the visitor switches the chat to English. Left empty, the Arabic text is shown.') }}</span>
+							</label>
 							<label class="block">
 								<span class="text-slate-700">{{ $t('Language') }}</span>
 								<select v-model="form.appearance.language" :class="inputClass('appearance.language')">
-									<option value="auto">{{ $t('Same as the website') }}</option>
 									<option value="ar">العربية</option>
 									<option value="en">English</option>
+									<option value="auto">{{ $t('Same as the website') }}</option>
 								</select>
+								<span class="text-xs text-slate-500">{{ $t('The language the chat opens in. Visitors can switch between Arabic and English.') }}</span>
 							</label>
 							<div class="block">
 								<span class="text-slate-700">{{ $t('Logo') }}</span>
@@ -115,52 +130,81 @@
 						</div>
 					</section>
 
-					<!-- نموذج الزائر -->
+					<!-- أسئلة البداية: تُسأل سؤالاً سؤالاً في المحادثة، وكل إجابة في حقلها من جهة الاتصال -->
 					<section class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
-						<h4 class="text-[15px]">{{ $t('Visitor form') }}</h4>
-						<p class="text-slate-500 mt-1 mb-3">{{ $t('A name is always required before the visitor can write.') }}</p>
-						<div class="grid md:grid-cols-2 gap-4">
+						<h4 class="text-[15px]">{{ $t('Visitor questions') }}</h4>
+						<p class="text-slate-500 mt-1 mb-3">{{ $t('Asked one by one in the chat before the conversation starts. Each answer is saved to the chosen contact field.') }}</p>
+
+						<draggable tag="div" :list="form.prechat.questions" handle=".handle" :item-key="(q) => q._key" class="space-y-3">
+							<template #item="{ element, index }">
+								<div class="rounded-md border border-slate-200 p-3">
+									<div class="flex flex-wrap items-center gap-2">
+										<span class="handle cursor-move text-slate-400" :title="$t('Drag to reorder')" aria-hidden="true">⠿</span>
+										<span class="text-slate-500">{{ index + 1 }}.</span>
+										<label class="flex items-center gap-1">
+											<span class="text-slate-600">{{ $t('Saves to') }}</span>
+											<select :value="targetValue(element)" @change="setTarget(index, $event.target.value)" class="rounded-md border border-slate-300 py-1 px-2 text-sm">
+												<option v-for="option in targetOptions(props.widget.contact_fields, form.prechat.questions, element)"
+													:key="option.value" :value="option.value" :disabled="option.disabled">
+													{{ option.name ?? $t(TARGET_LABELS[option.target]) }}
+												</option>
+											</select>
+										</label>
+										<label v-if="element.target === 'field' && element.validation !== 'select'" class="flex items-center gap-1">
+											<span class="text-slate-600">{{ $t('Answer type') }}</span>
+											<select v-model="element.validation" class="rounded-md border border-slate-300 py-1 px-2 text-sm">
+												<option v-for="type in FIELD_VALIDATIONS" :key="type" :value="type">{{ $t(VALIDATION_LABELS[type]) }}</option>
+											</select>
+										</label>
+										<span v-else-if="element.validation === 'select'" class="text-xs text-slate-500">{{ $t('Options from the field') }}</span>
+										<label class="ms-auto flex items-center gap-1">
+											<input type="checkbox" v-model="element.required" class="rounded border-slate-300" />
+											<span>{{ $t('Required') }}</span>
+										</label>
+										<button type="button" class="text-xs text-red-700" @click="form.prechat.questions.splice(index, 1)">{{ $t('Remove') }}</button>
+									</div>
+									<div class="mt-2 grid md:grid-cols-2 gap-2">
+										<input type="text" maxlength="200" v-model="element.label_ar" :placeholder="placeholderAr(element)"
+											:aria-label="$t('Question in Arabic (empty: the default question)')" :class="inputClass(`prechat.questions.${index}.label_ar`)" />
+										<input type="text" maxlength="200" dir="ltr" v-model="element.label_en" :placeholder="placeholderEn(element)"
+											:aria-label="$t('Question in English (optional)')" :class="inputClass(`prechat.questions.${index}.label_en`)" />
+									</div>
+									<FieldError :message="questionError(index)" />
+								</div>
+							</template>
+						</draggable>
+						<FieldError :message="form.errors['prechat.questions']" />
+
+						<div class="mt-3 flex flex-wrap gap-3">
+							<button type="button" class="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50 disabled:opacity-50"
+								:disabled="!canAddQuestion" @click="addQuestion">+ {{ $t('Add question') }}</button>
+							<button type="button" class="text-xs text-slate-600 underline" @click="restoreDefaultQuestions">{{ $t('Restore default questions') }}</button>
+						</div>
+						<span v-if="!asksRequiredPhone" class="block text-xs text-amber-700 mt-2">
+							{{ $t('Without a mobile number you can reach the visitor only when they return to your site.') }}
+						</span>
+
+						<div class="mt-4 grid md:grid-cols-2 gap-4">
 							<label class="block">
 								<span class="text-slate-700">{{ $t('Default country code') }}</span>
 								<input type="text" maxlength="2" dir="ltr" v-model="form.prechat.default_country" placeholder="SA"
 									@input="form.prechat.default_country = form.prechat.default_country.toUpperCase()" :class="inputClass('prechat.default_country')" />
 								<FieldError :message="form.errors['prechat.default_country']" />
 							</label>
-							<label class="block">
-								<span class="text-slate-700">{{ $t('Mobile field') }}</span>
-								<select v-model="form.prechat.phone" :class="inputClass('prechat.phone')">
-									<option value="off">{{ $t('Hidden') }}</option>
-									<option value="optional">{{ $t('Optional') }}</option>
-									<option value="required">{{ $t('Required') }}</option>
-								</select>
-								<FieldError :message="form.errors['prechat.phone']" />
-								<span v-if="form.prechat.phone !== 'required'" class="block text-xs text-amber-700 mt-1">
-									{{ $t('Without a mobile number you can reach the visitor only when they return to your site.') }}
-								</span>
-							</label>
-							<label class="block">
-								<span class="text-slate-700">{{ $t('Email field') }}</span>
-								<select v-model="form.prechat.email" :class="inputClass('prechat.email')">
-									<option value="off">{{ $t('Hidden') }}</option>
-									<option value="optional">{{ $t('Optional') }}</option>
-									<option value="required">{{ $t('Required') }}</option>
-								</select>
-							</label>
-							<label class="block">
-								<span class="text-slate-700">{{ $t('Name field label') }}</span>
-								<input type="text" maxlength="60" v-model="form.prechat.name_label" :placeholder="$t('Your name')" :class="inputClass('prechat.name_label')" />
-							</label>
-							<label v-if="form.prechat.phone !== 'off'" class="block">
-								<span class="text-slate-700">{{ $t('Mobile field label') }}</span>
-								<input type="text" maxlength="60" v-model="form.prechat.phone_label" :placeholder="$t('Mobile number')" :class="inputClass('prechat.phone_label')" />
-							</label>
 							<label class="block md:col-span-2">
 								<span class="text-slate-700">{{ $t('Consent text (optional)') }}</span>
 								<textarea rows="2" maxlength="500" v-model="form.prechat.consent_text" :class="inputClass('prechat.consent_text')"></textarea>
 								<span class="text-xs text-slate-500">{{ $t('When filled, the visitor must tick it before starting the chat.') }}</span>
 							</label>
+							<label v-if="form.prechat.consent_text" class="block md:col-span-2">
+								<span class="text-slate-700">{{ $t('Consent text in English (optional)') }}</span>
+								<textarea rows="2" maxlength="500" dir="ltr" v-model="form.prechat.consent_text_en" :class="inputClass('prechat.consent_text_en')"></textarea>
+							</label>
 						</div>
 					</section>
+
+					<!-- الأسئلة الشائعة: تُحفظ كل واحدة وحدها، لا مع زرّ «حفظ» -->
+					<FaqManager :faqs="props.widget.faqs || []" :max="props.widget.faqs_max || 30" />
 
 					<!-- السلوك والمواقع -->
 					<section class="bg-white border border-slate-200 rounded-lg p-4 text-sm">
@@ -225,8 +269,20 @@
 import SettingLayout from './Layout.vue'
 import Modal from '@/Components/Modal.vue'
 import FormToggleSwitch from '@/Components/FormToggleSwitch.vue'
+import FaqManager from '@/Components/WebChat/FaqManager.vue'
 import { computed, defineComponent, h, ref } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
+import draggable from 'vuedraggable'
+import {
+	FIELD_VALIDATIONS,
+	defaultQuestions,
+	newQuestion,
+	retarget,
+	targetOptions,
+	targetValue,
+	toPayload,
+	withKey,
+} from './webchatQuestions.js'
 
 const props = defineProps({
 	modules: Array,
@@ -246,9 +302,13 @@ const form = useForm({
 		title: settings.appearance.title,
 		subtitle: settings.appearance.subtitle,
 		welcome_message: settings.appearance.welcome_message,
+		title_en: settings.appearance.title_en ?? '',
+		subtitle_en: settings.appearance.subtitle_en ?? '',
+		welcome_message_en: settings.appearance.welcome_message_en ?? '',
 		language: settings.appearance.language,
 	},
-	prechat: { ...settings.prechat },
+	// الأسئلة الفعلية (المحفوظة أو المشتقّة من النموذج القديم) بمفتاح صفحة للسحب.
+	prechat: { ...settings.prechat, questions: (props.widget.questions || []).map(withKey) },
 	behavior: { ...settings.behavior },
 })
 
@@ -270,9 +330,60 @@ const FieldError = defineComponent({
 	setup: (p) => () => (p.message ? h('span', { class: 'block text-[#b91c1c] text-xs mt-1' }, p.message) : null),
 })
 
+/* ───────── منشئ الأسئلة (المنطق في webchatQuestions.js) ───────── */
+
+const TARGET_LABELS = { name: 'Name', email: 'Email', phone: 'Mobile number' }
+const VALIDATION_LABELS = {
+	text: 'Text',
+	number: 'Number',
+	email: 'Email',
+	phone: 'Mobile number',
+	date: 'Date',
+	saudi_id: 'Saudi national ID or Iqama',
+}
+// نصّ السؤال الأساسي في الـ widget حين يُترك فارغاً (core/i18n.ts).
+const DEFAULT_ASK = {
+	name: { ar: 'ما اسمك؟', en: "What's your name?" },
+	email: { ar: 'ما بريدك الإلكتروني؟', en: "What's your email address?" },
+	phone: { ar: 'ما رقم جوالك؟', en: "What's your mobile number?" },
+}
+
+const fieldOf = (question) => (props.widget.contact_fields || []).find((field) => field.uuid === question.field)
+const placeholderAr = (question) => DEFAULT_ASK[question.target]?.ar ?? fieldOf(question)?.name ?? ''
+const placeholderEn = (question) => DEFAULT_ASK[question.target]?.en ?? ''
+
+const setTarget = (index, value) => {
+	form.prechat.questions[index] = retarget(form.prechat.questions[index], value, props.widget.contact_fields)
+}
+
+const canAddQuestion = computed(() => newQuestion(props.widget.contact_fields, form.prechat.questions) !== null)
+
+const addQuestion = () => {
+	const question = newQuestion(props.widget.contact_fields, form.prechat.questions)
+
+	if (question) {
+		form.prechat.questions.push(question)
+	}
+}
+
+const restoreDefaultQuestions = () => {
+	form.prechat.questions = defaultQuestions()
+}
+
+const asksRequiredPhone = computed(() => form.prechat.questions.some((q) => q.target === 'phone' && q.required))
+
+/** أوّل خطأ لسؤال من الخادم، أيّاً كان حقله. */
+const questionError = (index) => {
+	const prefix = `prechat.questions.${index}.`
+	const key = Object.keys(form.errors).find((k) => k.startsWith(prefix))
+
+	return key ? form.errors[key] : null
+}
+
 const previewKey = ref(0)
 
 const save = () => {
+	form.transform((data) => ({ ...data, prechat: { ...data.prechat, questions: toPayload(data.prechat.questions) } }))
 	form.post('/settings/webchat', {
 		preserveScroll: true,
 		// المعاينة تُعاد بعد الحفظ لترى الشكل الجديد.

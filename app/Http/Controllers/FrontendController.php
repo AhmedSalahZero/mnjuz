@@ -58,6 +58,18 @@ class FrontendController extends BaseController
         return Inertia::render('Frontend/Dynamic', $data);
     }
 
+    /**
+     * الرابطان القصيران مسجّلان في routes/web.php منذ البداية بلا دالّة خلفهما،
+     * فكانا يردّان 500. والمحتوى صفحتان في جدول pages يعرضهما pages().
+     */
+    public function privacy(Request $request){
+        return $this->pages($request, 'privacy-policy');
+    }
+
+    public function termsOfService(Request $request){
+        return $this->pages($request, 'terms-of-service');
+    }
+
     public function changeLanguage($locale){
         app()->setLocale($locale);
         

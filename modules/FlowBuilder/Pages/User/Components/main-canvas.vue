@@ -215,6 +215,8 @@ const getDefaultConfig = (actionType: string) => {
 				confidence_threshold: 0.8,
 				low_confidence_message: '',
 			}
+		case 'assign_agent':
+			return { user_ids: [] }
 		case 'conditional':
 			return {
 				condition_type: 'message_contains',

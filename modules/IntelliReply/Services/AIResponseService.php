@@ -14,6 +14,8 @@ use App\Services\Messaging\AutomationTransport;
 use App\Services\Messaging\Contracts\AutomationSender;
 use FFMpeg\FFMpeg;
 use FFMpeg\Format\Audio\Mp3;
+use Illuminate\Http\Client\Response as HttpResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\IntelliReply\Models\Document;
 use OpenAI;
@@ -23,7 +25,18 @@ class AIResponseService
     private const MODULE_NAME = 'AI Assistant';
     private const CONVERSATION_HISTORY_LIMIT = 10;
     private const INBOUND_MESSAGE_CHECK_HOURS = 24;
-    
+
+    /**
+     * آخر فشلٍ من OpenAI لكل منشأة، تعرضه صفحة الإعدادات.
+     *
+     * كان ردّ 4xx يُرمى بلا أثر: موديل أوقفته OpenAI (o1-mini) يُسكت المساعد
+     * على كل القنوات ولا يعرف التاجر ولا نحن السبب. في الكاش لا في
+     * organizations.metadata: الكتابة هنا من عامل الطابور، وكتابة الـ JSON
+     * كلّه من هناك قد تمحو إعداداً حُفظ في اللحظة نفسها من الصفحة.
+     */
+    public const LAST_ERROR_CACHE_PREFIX = 'ai:last_error:';
+    private const LAST_ERROR_TTL_DAYS = 7;
+
     private ?WhatsappService $whatsappService = null;
 
     public function handleAIResponse($chat, $receivedMessage): bool
@@ -186,6 +199,10 @@ class AIResponseService
 
             return $this->isSuccessfulResponse($result);
         }
+
+        // فشل التحويل إلى صوت سُجّل في convertTextToSpeech. بلا هذا السطر تنتهي
+        // الدالة بلا قيمة، فيرمي PHP خطأ نوعٍ (الدالة تُعلن bool).
+        return false;
     }
 
     private function isSuccessfulResponse($result): bool
@@ -452,11 +469,148 @@ EOT;
             }
 
             $response = $this->makeOpenAIRequest($organizationConfig, $context);
-            return $this->parseOpenAIResponse($response->json());
+
+            if (!$response->successful()) {
+                $this->rememberFailure($organizationId, $this->describeFailure($response));
+
+                return null;
+            }
+
+            Cache::forget(self::LAST_ERROR_CACHE_PREFIX . $organizationId);
+
+            return $this->parseOpenAIResponse($response->json() ?? []);
         } catch (\Throwable $e) {
             Log::error('OpenAI Chat Error: ' . $e->getMessage());
+            $this->rememberFailure($organizationId, [
+                'status' => null,
+                'code' => 'connection',
+                'message' => self::redactKeys($e->getMessage()),
+            ]);
             return null;
         }
+    }
+
+    /**
+     * طلب Chat Completions واحد. يستعمله الردّ الآلي واختبار الإعدادات عند
+     * الحفظ، فما نختبره هو ما نرسله فعلاً.
+     */
+    public function requestChatCompletion(string $apiKey, string $model, array $messages, int $timeoutSeconds = 30): HttpResponse
+    {
+        return \Http::timeout($timeoutSeconds)->withHeaders([
+            'Content-Type' => 'application/json',
+            'Authorization' => 'Bearer ' . $apiKey
+        ])->post('https://api.openai.com/v1/chat/completions', [
+            'model' => $model,
+            'messages' => $messages,
+        ]);
+    }
+
+    /**
+     * يجرّب المفتاح والموديل بطلب صغير حقيقي قبل حفظ الإعدادات.
+     *
+     * blocking: OpenAI رفضت صراحةً (مفتاح أو موديل)، فالحفظ لن يجعل المساعد
+     * يعمل. وما سواه — انقطاع، أو ضغط مؤقّت، أو رصيد نفد — يُحفظ مع تنبيه: الإعداد
+     * صحيح والعطل خارجه.
+     *
+     * @return array{ok: bool, blocking: bool, field: ?string, message: ?string}
+     */
+    public function checkConnection(string $apiKey, string $model): array
+    {
+        if (!$this->hasUsableOpenAiKey($apiKey)) {
+            return [
+                'ok' => false,
+                'blocking' => true,
+                'field' => 'api_key',
+                'message' => __('Enter a valid OpenAI API key. It starts with sk-'),
+            ];
+        }
+
+        try {
+            $response = $this->requestChatCompletion($apiKey, $model, [
+                ['role' => 'user', 'content' => 'Reply with OK.'],
+            ], 20);
+        } catch (\Throwable $e) {
+            Log::warning('OpenAI settings check could not reach OpenAI', ['error' => self::redactKeys($e->getMessage())]);
+
+            return [
+                'ok' => false,
+                'blocking' => false,
+                'field' => null,
+                'message' => __('Settings saved, but OpenAI could not be reached to check them. Send a test message to make sure the assistant replies.'),
+            ];
+        }
+
+        if ($response->successful()) {
+            return ['ok' => true, 'blocking' => false, 'field' => null, 'message' => null];
+        }
+
+        $failure = $this->describeFailure($response);
+        $status = (int) $failure['status'];
+        $detail = $failure['message'] !== '' ? $failure['message'] : (string) $failure['code'];
+
+        if ($status === 401 || $status === 403) {
+            return [
+                'ok' => false,
+                'blocking' => true,
+                'field' => 'api_key',
+                'message' => __('OpenAI rejected this API key: :message', ['message' => $detail]),
+            ];
+        }
+
+        if ($status === 429 || $status >= 500) {
+            return [
+                'ok' => false,
+                'blocking' => false,
+                'field' => null,
+                'message' => __('Settings saved, but OpenAI could not answer right now: :message', ['message' => $detail]),
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'blocking' => true,
+            'field' => 'model',
+            'message' => __('This model does not work with your OpenAI account: :message', ['message' => $detail]),
+        ];
+    }
+
+    /** آخر فشل مسجَّل لمنشأة، أو null. */
+    public static function lastError(int $organizationId): ?array
+    {
+        $error = Cache::get(self::LAST_ERROR_CACHE_PREFIX . $organizationId);
+
+        return is_array($error) ? $error : null;
+    }
+
+    /** @return array{status: ?int, code: ?string, message: string} */
+    private function describeFailure(HttpResponse $response): array
+    {
+        $error = $response->json('error');
+        $error = is_array($error) ? $error : [];
+        $code = $error['code'] ?? $error['type'] ?? null;
+
+        return [
+            'status' => $response->status(),
+            'code' => is_scalar($code) ? (string) $code : null,
+            'message' => self::redactKeys(mb_substr((string) ($error['message'] ?? ''), 0, 300)),
+        ];
+    }
+
+    private function rememberFailure(int $organizationId, array $failure): void
+    {
+        Log::warning('OpenAI chat request failed', ['organization_id' => $organizationId] + $failure);
+
+        Cache::put(
+            self::LAST_ERROR_CACHE_PREFIX . $organizationId,
+            $failure + ['at' => now()->toIso8601String()],
+            now()->addDays(self::LAST_ERROR_TTL_DAYS)
+        );
+    }
+
+    /** رسائل OpenAI قد تحمل جزءاً من المفتاح ("Incorrect API key provided: sk-…"). */
+    private static function redactKeys(string $text): string
+    {
+        return (string) preg_replace('/sk-[A-Za-z0-9_\-*.]+/', 'sk-***', $text);
     }
 
     private function makeOpenAIRequest(array $config, array $context)
@@ -475,22 +629,7 @@ EOT;
         $api_key = $enableApiKeyInput == 1 ? $config['api_key'] : $defaultOpenAiKey;
         $model = $enableModelSelection == 1 ? $config['model'] : $defaultOpenAiModel;
 
-        $payload = [
-            'model' => $model,
-            'messages' => $context
-        ];
-        /*if ($config['model'] === 'gpt-4o-audio-preview') {
-            $payload['modalities'] = ["text", "audio"];
-            $payload['audio'] = [
-                "voice" => $config['voice'],
-                "format" => "mp3"
-            ];
-        }*/
-
-        return \Http::withHeaders([
-            'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . $api_key
-        ])->post('https://api.openai.com/v1/chat/completions', $payload);
+        return $this->requestChatCompletion((string) $api_key, (string) $model, $context);
     }
 
     private function parseOpenAIResponse(array $responseArray): ?array
@@ -680,8 +819,9 @@ EOT;
                 file_get_contents($audioPath), 
                 'audio.mp3'
             )->post('https://api.openai.com/v1/audio/transcriptions', [
+                // بلا language: Whisper يكتشف اللغة. فرض 'en' كان يُفسد تفريغ
+                // رسائل العملاء الصوتية بالعربية.
                 'model' => 'whisper-1',
-                'language' => 'en'
             ]);
 
             $result = $response->json();

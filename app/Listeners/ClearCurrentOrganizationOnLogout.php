@@ -16,7 +16,10 @@ use Illuminate\Auth\Events\Logout;
  * `current_mobile_organization_id`.
  *
  * Logging out of one platform must NOT touch the other platform's
- * column — that's why detectPlatform() is consulted.
+ * column. So the web column is cleared explicitly: detectPlatform() reads
+ * any JSON/XHR request as "mobile", and a dashboard evicted on its axios
+ * heartbeat (EnsureDeviceIsCurrent) used to wipe the app's organization
+ * instead — multi-organization users then got 403 on every v1 call.
  */
 class ClearCurrentOrganizationOnLogout
 {
@@ -39,6 +42,6 @@ class ClearCurrentOrganizationOnLogout
             return;
         }
 
-        $this->context->clear($user);
+        $this->context->clear($user, OrganizationContextService::PLATFORM_WEB);
     }
 }

@@ -84,6 +84,9 @@ abstract class ConversationCycleTestCase extends FlowBuilderTestCase
         ]);
 
         $this->widget = app(WebChatWidgetService::class)->ensureForOrganization($this->organization->id, 'متجر الاختبار');
+        // widget ما قبل أسئلة البداية (الاسم والجوال)، كما يعمل كل widget قائم.
+        // أسئلة الـ widget الجديد في tests/Feature/WebChat/IntakeTest.
+        $this->widget->forceFill(['settings' => ['enabled' => true]])->save();
         $this->bot = ChannelAccount::create([
             'organization_id' => $this->organization->id,
             'channel' => Channel::TELEGRAM,

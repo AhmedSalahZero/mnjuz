@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\User;
 
+use App\Services\Billing\CouponRedemptionService;
+
 use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\PaymentRequest;
@@ -89,10 +91,35 @@ class BillingController extends BaseController
     }
 
     public function pay(PaymentRequest $request){
+        $amount = (float) $request->amount;
+        $context = [];
+
+        // البوّابة أوّلاً: طريقة غير مدعومة لا تترك حجز كوبون معلّقاً.
         $paymentPlatform = $this->paymentPlatformResolver->resolveService($request->method);
+
+        // كوبون «إضافة دفعة»: يُدفع المبلغ ناقصاً الخصم، والخصم يُضاف إلى الرصيد
+        // سطراً منفصلاً بعد تأكيد الدفع (يُسوّى من البوّابة بمرجع الحجز).
+        if ($request->filled('coupon')) {
+            $quote = $this->topupQuote((string) $request->coupon, $amount);
+
+            if (isset($quote['error'])) {
+                return $this->couponError($request, $quote['error']);
+            }
+
+            $redemption = app(CouponRedemptionService::class)->reserveTopup(
+                $quote['coupon'],
+                (int) session()->get('current_organization'),
+                (int) auth()->id(),
+                $quote
+            );
+
+            $amount = $quote['charge'];
+            $context['coupon_ref'] = (string) $redemption->uuid;
+        }
+
         session()->put('paymentPlatform', $request->method);
 
-        $response = $paymentPlatform->handlePayment($request->amount);
+        $response = $paymentPlatform->handlePayment($amount, null, $context);
 
         if ($response->success === true) {
             if ($request->boolean('redirect_json') || $request->ajax()) {
@@ -118,6 +145,62 @@ class BillingController extends BaseController
                 'message' => $response->error ?? __('Could not process your payment successfully!'),
             ]
         );
+    }
+
+    /**
+     * معاينة كوبون «إضافة دفعة»: كم يُدفع وكم يُضاف. الخادم يُعيد الحساب عند
+     * الدفع — هذه للعرض فقط.
+     */
+    public function quoteCoupon(Request $request)
+    {
+        $validated = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'coupon' => ['required', 'string', 'max:64'],
+        ]);
+
+        $quote = $this->topupQuote($validated['coupon'], (float) $validated['amount']);
+
+        if (isset($quote['error'])) {
+            return response()->json(['message' => $quote['error'], 'errors' => ['coupon' => [$quote['error']]]], 422);
+        }
+
+        return response()->json([
+            'code' => $quote['coupon']->code,
+            'percentage' => CouponRedemptionService::percentage($quote['coupon']),
+            'amount' => $quote['amount'],
+            'discount' => $quote['discount'],
+            'charge' => $quote['charge'],
+        ]);
+    }
+
+    /** @return array{coupon?: \App\Models\Coupon, amount?: float, discount?: float, charge?: float, error?: string} */
+    private function topupQuote(string $code, float $amount): array
+    {
+        $service = app(CouponRedemptionService::class);
+        $result = $service->findUsable($code, (int) session()->get('current_organization'), \App\Models\CouponRedemption::CONTEXT_TOPUP);
+
+        if ($result['error'] !== null) {
+            return ['error' => $result['error']];
+        }
+
+        $quote = $service->quoteTopup($result['coupon'], $amount);
+
+        // كوبون 100% يجعل المبلغ صفراً، والبوّابات ترفضه. الرصيد المجاني يضيفه
+        // الأدمن يدوياً.
+        if ($quote['charge'] <= 0) {
+            return ['error' => __('This coupon cannot cover the whole amount.')];
+        }
+
+        return $quote + ['coupon' => $result['coupon']];
+    }
+
+    private function couponError(PaymentRequest $request, string $message)
+    {
+        if ($request->boolean('redirect_json') || $request->ajax()) {
+            return response()->json(['message' => $message, 'errors' => ['coupon' => [$message]]], 422);
+        }
+
+        return redirect('/billing')->withErrors(['coupon' => $message]);
     }
 
     private function paymentMethods(){

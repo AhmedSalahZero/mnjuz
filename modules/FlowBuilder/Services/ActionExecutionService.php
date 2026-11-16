@@ -80,6 +80,9 @@ class ActionExecutionService
                 
                 case 'conditional':
                     return $this->executeConditional($config, $contact, $userMessage);
+
+                case 'assign_agent':
+                    return $this->executeAssignAgent($config, $contact);
                 
                 default:
                     Log::warning("Unknown action type: {$actionType}");
@@ -89,6 +92,20 @@ class ActionExecutionService
             Log::error("Error executing action {$actionType}: " . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * تحويل المحادثة إلى موظف من قائمة التاجر.
+     *
+     * تُرجع المخرج الذي يسلكه التدفّق: available أو unavailable — لا false
+     * أبداً: false تحذف جلسة التدفّق فلا يصل العميلَ ردّ «غير متاح».
+     */
+    private function executeAssignAgent($config, $contact): string
+    {
+        $result = app(\App\Services\Chat\ConversationHandoff::class)
+            ->transfer($contact, (array) ($config['user_ids'] ?? []));
+
+        return $result['branch'];
     }
 
     /**

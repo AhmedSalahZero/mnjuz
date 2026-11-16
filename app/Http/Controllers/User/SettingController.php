@@ -403,56 +403,11 @@ class SettingController extends BaseController
             return $response;
         }
 
-        $embeddedSignupActive = Setting::where('key', 'is_embedded_signup_active')->value('value');
-        $organizationId = session()->get('current_organization');
-        $organizationConfig = Organization::where('id', $organizationId)->first();
-        $config = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+        // الفصل نفسه في ChannelAccountConnector — التطبيق يمرّ منه كذلك.
+        $result = app(\App\Services\Messaging\ChannelAccountConnector::class)
+            ->disconnectWhatsapp((int) session()->get('current_organization'));
 
-        if(isset($config['whatsapp'])){
-            if($embeddedSignupActive == 1){
-                //Unsubscribe webhook
-                $organizationId = session()->get('current_organization');
-                $apiVersion = config('graph.api_version');
-
-                $accessToken = $config['whatsapp']['access_token'] ?? null;
-                $appId = $config['whatsapp']['app_id'] ?? null;
-                $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
-                $wabaId = $config['whatsapp']['waba_id'] ?? null;
-            
-                $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
-                $unsubscribe = $whatsappService->unSubscribeToWaba();
-            }
-            
-            //Delete whatsapp settings
-            if (isset($config['whatsapp'])) {
-                unset($config['whatsapp']);
-            }
-
-            $updatedMetadataJson = json_encode($config);
-            $organizationConfig->metadata = $updatedMetadataJson;
-            $organizationConfig->save();
-
-            //Delete templates
-            $templates = Template::where('organization_id', $organizationId)->get();
-            foreach ($templates as $template) {
-                $template->deleted_at = now();
-                $template->save();
-            }
-
-            return back()->with(
-                'status', [
-                    'type' => 'success', 
-                    'message' => __('Your integration has been removed successfully!')
-                ]
-            );
-        }
-
-        return back()->with(
-            'status', [
-                'type' => 'error', 
-                'message' => __('Setup your whatsapp integration first!')
-            ]
-        );
+        return back()->with('status', $result->toFlash());
     }
 
     private function saveWhatsappSettings($accessToken, $appId, $phoneNumberId, $wabaId, $subscribeToWebhook = false) {

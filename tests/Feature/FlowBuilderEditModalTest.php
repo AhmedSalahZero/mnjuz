@@ -24,7 +24,7 @@ class FlowBuilderEditModalTest extends TestCase
 
     private const ACTIONS = [
         'AddToGroup', 'RemoveFromGroup', 'UpdateContact', 'SendEmail',
-        'Delay', 'Webhook', 'Conditional', 'AIResponse',
+        'Delay', 'Webhook', 'Conditional', 'AIResponse', 'AssignAgent',
     ];
 
     /** بلا نافذة: لا إعداد لها، وحالة التفعيل تُبدَّل من شارة البطاقة. */

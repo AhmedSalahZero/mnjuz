@@ -9,12 +9,16 @@ use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Models\CampaignLogRetry;
 use App\Models\CampaignMessageAttempt;
+use App\Models\ChannelAccount;
 use App\Models\Chat;
+use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Template;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * ما يحدث حين لا يسير الإرسال كما يجب: أخطاء Meta، انقطاع الشبكة، بلاغ فشلٍ
@@ -69,6 +73,56 @@ class CampaignFailureAndRetryTest extends CampaignTestCase
         sort($phones);
         $this->assertSame(['+966500000011', '+966500000012', '+966500000021', '+966500000022'], $phones);
         $this->assertSame('ongoing', $mine->fresh()->status);
+    }
+
+    /**
+     * قناتان في المنشأة نفسها: لكلٍّ دفعتها في الدورة، فحملة واتساب كبيرة
+     * بدأت أولاً لا تُوقف حملة تيليجرام بعدها حتى تنتهي.
+     */
+    public function test_each_channel_gets_its_own_batch_per_tick(): void
+    {
+        config(['campaigns.send_batch_size' => 2]);
+        $whatsapp = $this->ongoingCampaign($this->template(), [
+            $this->customer('+966500000011', 'أ'), $this->customer('+966500000012', 'ب'), $this->customer('+966500000013', 'ج'),
+        ]);
+        $bot = $this->telegramBot();
+        $telegram = $this->ongoingTelegramCampaign($bot, [
+            $this->telegramCustomer($bot, '701', 'د'), $this->telegramCustomer($bot, '702', 'هـ'),
+        ]);
+
+        $this->dispatcherTick();
+
+        $this->assertSame(['+966500000011', '+966500000012'], array_column($this->templatesSent(), 'to'));
+        $this->assertSame(['701', '702'], $this->telegramRecipients());
+        $this->assertSame('completed', $telegram->fresh()->status);
+        $this->assertSame('ongoing', $whatsapp->fresh()->status);
+
+        $this->dispatcherTick();
+
+        $this->assertSame('+966500000013', $this->templatesSent()[2]['to'] ?? null);
+        $this->assertCount(2, $this->telegramRecipients(), 'nothing is sent twice');
+        $this->assertSame('completed', $whatsapp->fresh()->status);
+    }
+
+    /** حملتان على القناة نفسها تتقاسمان دفعتها، والأقدم أولاً: الحصّة للقناة لا للحملة. */
+    public function test_campaigns_on_the_same_channel_share_its_batch_oldest_first(): void
+    {
+        config(['campaigns.send_batch_size' => 2]);
+        $older = $this->ongoingCampaign($this->template(), [
+            $this->customer('+966500000011', 'أ'), $this->customer('+966500000012', 'ب'),
+        ]);
+        $newer = $this->ongoingCampaign($this->template('flash_sale'), [$this->customer('+966500000021', 'ج')]);
+
+        $this->dispatcherTick();
+
+        $this->assertSame(['+966500000011', '+966500000012'], array_column($this->templatesSent(), 'to'));
+        $this->assertSame('completed', $older->fresh()->status);
+        $this->assertSame('ongoing', $newer->fresh()->status);
+
+        $this->dispatcherTick();
+
+        $this->assertSame('+966500000021', $this->templatesSent()[2]['to'] ?? null);
+        $this->assertSame('completed', $newer->fresh()->status);
     }
 
     /** المهمّة نفسها مرّتين (إعادة تشغيل من الطابور): رسالة واحدة. */
@@ -396,5 +450,52 @@ class CampaignFailureAndRetryTest extends CampaignTestCase
             'executed_at' => now()->subMinutes($minutes),
         ]);
         DB::table('campaign_logs')->where('id', $log->id)->update(['status' => 'ongoing', 'updated_at' => now()->subMinutes($minutes)]);
+    }
+
+    /** بوت تيليجرام مربوط بالمنشأة، وBot API وهمية تقبل كل رسالة. */
+    private function telegramBot(): ChannelAccount
+    {
+        Http::fake([
+            'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 901]], 200),
+        ]);
+
+        return ChannelAccount::create([
+            'organization_id' => $this->organization->id, 'channel' => 'telegram', 'external_id' => 'bot-1',
+            'credentials' => ['bot_token' => 'tok', 'webhook_updates' => 'callback_query'],
+            'status' => ChannelAccount::STATUS_ACTIVE, 'created_by' => 0,
+        ]);
+    }
+
+    private function telegramCustomer(ChannelAccount $bot, string $chatId, string $firstName): Contact
+    {
+        return $this->customer('', $firstName, [
+            'channel' => 'telegram', 'channel_identifier' => $chatId, 'channel_account_id' => $bot->id, 'phone' => null,
+        ]);
+    }
+
+    /** حملة تيليجرام جارية مع سجلّاتها: نظير ongoingCampaign لقناة بلا قوالب. */
+    private function ongoingTelegramCampaign(ChannelAccount $bot, array $contacts): Campaign
+    {
+        $campaign = Campaign::create([
+            'uuid' => (string) Str::uuid(), 'organization_id' => $this->organization->id, 'name' => 'تيليجرام',
+            'channel' => 'telegram', 'channel_account_id' => $bot->id, 'template_id' => null, 'contact_group_id' => 0,
+            'metadata' => '{}', 'message_payload' => json_encode(['text' => 'عرض اليوم يا {first_name}', 'media' => null], JSON_UNESCAPED_UNICODE),
+            'created_by' => $this->owner->id, 'status' => 'ongoing', 'scheduled_at' => now(),
+        ]);
+
+        foreach ($contacts as $contact) {
+            CampaignLog::create(['campaign_id' => $campaign->id, 'contact_id' => $contact->id, 'status' => 'pending']);
+        }
+
+        return $campaign;
+    }
+
+    /** @return array<int, string> محادثات تيليجرام التي وصلتها رسالة، بالترتيب. */
+    private function telegramRecipients(): array
+    {
+        return Http::recorded(fn ($request) => str_contains($request->url(), '/sendMessage'))
+            ->map(fn (array $pair) => (string) $pair[0]['chat_id'])
+            ->values()
+            ->all();
     }
 }

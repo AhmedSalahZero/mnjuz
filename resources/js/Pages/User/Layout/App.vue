@@ -120,12 +120,18 @@ provide('updateTotalUnreadMessages', (val) => {
 	unreadMessages.value -= val
 })
 
-// نبضة حضور التبويب لصفحة أداء الموظفين (مفعّلة فقط عند اشتراك المنظمة في
-// الميزة). مؤقّتها على مستوى التبويب لا هذا الـ layout الذي يُركَّب من جديد
-// مع كل تنقّل — انظر agentHeartbeat.js.
+// نبضة حضور التبويب: «متصل الآن» لكل الباقات — خطوة «تحويل إلى موظف» في
+// الأتمتة تسأل عنه — ووقت النشاط لصفحة الأداء (يحسبه الخادم لمن في باقته
+// الميزة فقط). presenceAllPlans مفتاح أمان من الخادم: إطفاؤه يعيد النبض لمن
+// في باقته الميزة وحده. مؤقّتها على مستوى التبويب لا هذا الـ layout الذي
+// يُركَّب من جديد مع كل تنقّل — انظر agentHeartbeat.js.
 const setupActivityHeartbeat = () => {
-	// شركة بلا الميزة (بعد التبديل): يتوقّف ما كان ينبض للسابقة.
-	if (!organization.value?.plan?.features?.agent_performance) {
+	const beats = usePage().props.presenceAllPlans
+		|| organization.value?.plan?.features?.agent_performance
+
+	// بلا منشأة، أو المفتاح مطفأ وشركة بلا الميزة (بعد التبديل): يتوقّف ما
+	// كان ينبض للسابقة.
+	if (!organization.value?.id || !beats) {
 		stopAgentHeartbeat()
 		return
 	}

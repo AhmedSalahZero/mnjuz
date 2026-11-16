@@ -476,6 +476,33 @@
                   </div>
                 </div>
                 
+                <!-- تحويل المحادثة إلى موظف: مخرجان متاح / غير متاح -->
+                <div
+                  v-if="availableActions.includes('assign_agent')"
+                  class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                  :draggable="true"
+                  @dragstart="handleOnDragStart($event, 'action-assign-agent')"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-2 text-sm">
+                      <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                          <circle cx="9" cy="7" r="4"/>
+                          <path d="m16 11 2 2 4-4"/>
+                        </svg>
+                      </span>
+                      {{ $t('Transfer to agent') }}
+                    </div>
+                    <span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14"/>
+                        <path d="M12 5v14"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+
                 <!-- AI Response action temporarily disabled-->
                 <div
                   v-if="availableActions.includes('ai_response')"

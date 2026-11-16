@@ -42,7 +42,7 @@ class CampaignService
         $organizationMetadata = json_decode($organization->metadata ?? '{}', true);
         $timezone = $organizationMetadata['timezone'] ?? $timezone;
 
-        $channel = \App\Services\Messaging\Channel::normalize($request->channel ?? null)
+        $channel = \App\Services\Messaging\CampaignChannels::normalize($request->channel ?? null)
             ?? \App\Services\Messaging\Channel::DEFAULT;
 
         // بنطاق المنشأة: معرّف قالب أو مجموعة من منشأة أخرى كان يُقبل فتُرسل
@@ -285,15 +285,26 @@ class CampaignService
     private function storeChannelCampaign(object $request, int $organizationId, string $channel, $contactGroup, $timezone)
     {
         $manager = app(\App\Services\Messaging\ChannelManager::class);
-        $account = $manager->activeAccount($organizationId, $channel);
+        $isEmail = $channel === \App\Services\Messaging\Channel::EMAIL;
+
+        // حساب البريد صفّ SMTP التاجر، لا driver: لا يمرّ بـ activeAccount.
+        $account = $isEmail
+            ? \App\Services\Messaging\CampaignChannels::emailAccount($organizationId)
+            : $manager->activeAccount($organizationId, $channel);
 
         if (!$account) {
             throw ValidationException::withMessages([
-                'channel' => $manager->connectionError($organizationId, $channel),
+                'channel' => $isEmail
+                    ? __('Email is not connected. Connect your email (SMTP) from Settings → Channels.')
+                    : $manager->connectionError($organizationId, $channel),
             ]);
         }
 
-        $text = trim((string) ($request->message_text ?? ''));
+        // القالب المحفوظ يُنسخ الآن: تعديله أو حذفه لاحقاً لا يغيّر حملةً
+        // مجدولة، والمُرسِل وإعادة المحاولة يقرآن الحمولة نفسها كما كانت.
+        $template = $this->savedTemplateFor($request, $organizationId, $channel);
+
+        $text = trim((string) ($template ? $template->body : ($request->message_text ?? '')));
 
         if ($text === '') {
             throw ValidationException::withMessages([
@@ -301,39 +312,49 @@ class CampaignService
             ]);
         }
 
+        $subject = null;
+
+        if ($isEmail) {
+            $subject = trim((string) ($template ? $template->subject : ($request->subject ?? '')));
+
+            if ($subject === '') {
+                throw ValidationException::withMessages([
+                    'subject' => __('The subject field is required.'),
+                ]);
+            }
+        }
+
         $media = null;
-        $file = method_exists($request, 'file') ? $request->file('message_media') : null;
 
-        if ($file) {
-            $capabilities = $manager->capabilities($channel);
-            $type = $this->mediaTypeFor($file->getMimeType());
+        if ($template) {
+            $media = $template->campaignPayload()['media'];
+        } elseif (!$isEmail) {
+            $file = method_exists($request, 'file') ? $request->file('message_media') : null;
 
-            if (!$capabilities->supportsMedia($type)) {
-                throw ValidationException::withMessages([
-                    'message_media' => __(':feature is not available on :channel.', [
-                        'feature' => __(':type attachments', ['type' => $type]),
-                        'channel' => \App\Services\Messaging\Channel::label($channel),
-                    ]),
-                ]);
+            if ($file) {
+                $media = $this->storeValidatedChannelMedia($file, $organizationId, $channel);
             }
-
-            $limit = $capabilities->mediaLimit($type);
-
-            if ($limit !== null && $file->getSize() > $limit) {
-                throw ValidationException::withMessages([
-                    'message_media' => __('This file is larger than :channel allows (:limit MB).', [
-                        'channel' => \App\Services\Messaging\Channel::label($channel),
-                        'limit' => round($limit / 1024 / 1024, 1),
-                    ]),
-                ]);
-            }
-
-            $media = $this->storeCampaignMedia($file, $organizationId, $type);
         }
 
         $scheduledAt = $request->skip_schedule
             ? Carbon::now('UTC')
             : Carbon::parse($request->time, $timezone)->setTimezone('UTC');
+
+        $payload = [
+            'text' => $text,
+            'media' => $media,
+        ];
+
+        if ($subject !== null) {
+            $payload['subject'] = $subject;
+            // التذييل (رابط إلغاء الاشتراك) يُكتب بلغة من أنشأ الحملة، والإرسال
+            // في مهمّة بلا جلسة.
+            $payload['locale'] = app()->getLocale();
+        }
+
+        if ($template) {
+            $payload['template'] = ['uuid' => (string) $template->uuid, 'name' => $template->name];
+        }
 
         $campaign = new Campaign;
         $campaign['organization_id'] = $organizationId;
@@ -343,16 +364,72 @@ class CampaignService
         $campaign['template_id'] = null;
         $campaign['contact_group_id'] = $request->contacts === 'all' ? 0 : $contactGroup->id;
         $campaign['metadata'] = json_encode([]);
-        $campaign['message_payload'] = \App\Support\JsonText::encode([
-            'text' => $text,
-            'media' => $media,
-        ]);
+        $campaign['message_payload'] = \App\Support\JsonText::encode($payload);
         $campaign['created_by'] = auth()->user()->id;
         $campaign['status'] = 'scheduled';
         $campaign['scheduled_at'] = $scheduledAt;
         $campaign->save();
 
         return $campaign;
+    }
+
+    /**
+     * القالب المحفوظ المختار، من هذه المنشأة وهذه القناة وحدهما. معرّف
+     * أُرسل ولا يُطابق (حُذف، أو من قناة أو منشأة أخرى) يُرفض صراحةً — لا
+     * تُنشأ حملة برسالة فارغة.
+     */
+    private function savedTemplateFor(object $request, int $organizationId, string $channel): ?\App\Models\ChannelTemplate
+    {
+        $uuid = trim((string) ($request->channel_template ?? ''));
+
+        if ($uuid === '') {
+            return null;
+        }
+
+        $template = \App\Models\ChannelTemplate::forOrganization($organizationId)
+            ->forChannel($channel)
+            ->where('uuid', $uuid)
+            ->first();
+
+        if (!$template) {
+            throw ValidationException::withMessages([
+                'channel_template' => __('The selected template is no longer available.'),
+            ]);
+        }
+
+        return $template;
+    }
+
+    /**
+     * مرفق حملة أو قالب على القناة: نوعه وحجمه بحدود القناة (تيليجرام يجلبه
+     * من رابطنا فحدّ الرابط هو الحدّ)، ثم يُرفع مرّة واحدة.
+     *
+     * @return array{url: string, name: string, type: string, mime_type: string, size: int, location: string}
+     */
+    public function storeValidatedChannelMedia($file, int $organizationId, string $channel, string $field = 'message_media'): array
+    {
+        $type = $this->mediaTypeFor($file->getMimeType());
+        $limits = \App\Services\Messaging\CampaignChannels::mediaLimits($channel);
+
+        if (!array_key_exists($type, $limits)) {
+            throw ValidationException::withMessages([
+                $field => __(':feature is not available on :channel.', [
+                    'feature' => __(':type attachments', ['type' => $type]),
+                    'channel' => \App\Services\Messaging\Channel::label($channel),
+                ]),
+            ]);
+        }
+
+        if ($limits[$type] !== null && $file->getSize() > $limits[$type]) {
+            throw ValidationException::withMessages([
+                $field => __('This file is larger than :channel allows (:limit MB).', [
+                    'channel' => \App\Services\Messaging\Channel::label($channel),
+                    'limit' => round($limits[$type] / 1024 / 1024, 1),
+                ]),
+            ]);
+        }
+
+        return $this->storeCampaignMedia($file, $organizationId, $type);
     }
 
     /** نوع الوسائط كما يفهمه النظام من نوع MIME. */
@@ -384,8 +461,11 @@ class CampaignService
             $url = Storage::disk('s3')->url($path);
             $location = 'amazon';
         } else {
-            $stored = Storage::disk('local')->put('public/' . $safeName, $contents);
-            $url = rtrim(config('app.url'), '/') . '/media/' . ltrim($stored, '/');
+            // put() بمحتوى نصّي يُرجع true لا المسار — فكان الرابط /media/1
+            // ويفشل إرسال كل مرفق على التخزين المحلّي.
+            $path = 'public/' . $safeName;
+            Storage::disk('local')->put($path, $contents);
+            $url = rtrim(config('app.url'), '/') . '/media/' . $path;
             $location = 'local';
         }
 
@@ -415,9 +495,11 @@ class CampaignService
         SendCampaignJob::dispatch();
     }
 
-    public function destroy($uuid)
+    public function destroy($uuid, ?int $organizationId = null)
     {
-        Campaign::where('uuid', $uuid)->update([
+        Campaign::where('uuid', $uuid)
+            ->when($organizationId !== null, fn ($query) => $query->where('organization_id', $organizationId))
+            ->update([
             'deleted_by' => auth()->user()->id,
             'deleted_at' => now()
         ]);

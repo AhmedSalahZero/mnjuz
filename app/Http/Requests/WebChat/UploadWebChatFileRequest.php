@@ -20,7 +20,7 @@ class UploadWebChatFileRequest extends WebChatRequest
             'client_message_id' => ['required', 'uuid'],
             'file' => ['required', 'file', 'max:' . (int) ceil(WebChatUploads::maxBytes() / 1024)],
             'caption' => ['nullable', 'string', 'max:1024'],
-        ];
+        ] + self::journeyRules();
     }
 
     public function withValidator(Validator $validator): void

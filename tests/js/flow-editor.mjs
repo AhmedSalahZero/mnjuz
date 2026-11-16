@@ -135,6 +135,7 @@ const files = [
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/Webhook-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/Conditional-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/AIResponse-node.vue',
+    'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/AssignAgent-node.vue',
     'resources/js/Components/FormInput.vue',
     'resources/js/Components/FormSelect.vue',
     'resources/js/Components/FormTextArea.vue',

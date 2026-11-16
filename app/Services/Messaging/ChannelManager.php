@@ -119,6 +119,9 @@ class ChannelManager
 
         $others = ChannelAccount::query()
             ->where('organization_id', $organizationId)
+            // قنوات المحادثة وحدها: حساب SMTP للبريد صفّ في الجدول نفسه، ولا
+            // مكان له في فلتر صندوق الوارد ولا في driver().
+            ->whereIn('channel', Channel::all())
             ->active()
             ->pluck('channel')
             ->unique()

@@ -41,4 +41,22 @@ return [
 
     'webchat_upload_max_mb' => env('WEBCHAT_UPLOAD_MAX_MB'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | البريد عبر SMTP التاجر (حملات البريد)
+    |--------------------------------------------------------------------------
+    |
+    | timeout: ثوانٍ لكل قراءة من خادم التاجر — عامل واحد يخدم كل الطوابير،
+    | فخادمٌ بطيء لا يحجزه طويلاً.
+    | allow_private_hosts: للتطوير المحلّي فقط (خادم SMTP في الشبكة الداخلية).
+    | queue: طابور إرسال البريد — الأخير في ترتيب العامل، فواتساب والوارد قبله.
+    |
+    */
+
+    'email' => [
+        'timeout' => (int) env('EMAIL_CHANNEL_SMTP_TIMEOUT', 10),
+        'allow_private_hosts' => (bool) env('EMAIL_CHANNEL_ALLOW_PRIVATE_HOSTS', false),
+        'queue' => env('EMAIL_CAMPAIGN_QUEUE', 'low'),
+    ],
+
 ];

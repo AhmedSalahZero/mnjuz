@@ -49,7 +49,9 @@ class WebChatWidgetService
                 'external_id' => self::newKey(),
                 'name' => $name !== null ? mb_substr($name, 0, 191) : null,
                 'credentials' => [],
-                'settings' => ['enabled' => true],
+                // الـ widget الجديد يسأل الاسم والبريد والجوال (إجبارية).
+                // القائم قبل الأسئلة لا يمرّ من هنا: يُشتقّ من إعداد نموذجه.
+                'settings' => ['enabled' => true, 'prechat' => ['questions' => WebChatQuestions::defaults()]],
                 // يبقى active دائماً: الإيقاف بـ settings.enabled، لأن الحالة
                 // غير الفعّالة تمنع الموظّف من الردّ على محادثات قائمة.
                 'status' => ChannelAccount::STATUS_ACTIVE,

@@ -50,7 +50,11 @@ class ContactResource extends JsonResource
             // ويرسل لجهات بلا رقم بـ contact_uuid. انظر MOBILE_WEBCHAT.md.
             'channel' => $this->channel ?: \App\Services\Messaging\Channel::DEFAULT,
             'channel_capabilities' => self::capabilitiesFor($this->channel ?: \App\Services\Messaging\Channel::DEFAULT),
-            'webchat_visitor' => $this->whenLoaded('webchatVisitor', fn () => $this->webchatVisitor?->agentView()),
+            // إضافية: معرّف العميل لدى المنصّة، واسمه الظاهر عليها (@username)
+            // ليعرضه التطبيق مكان الرقم لجهات بلا رقم.
+            'channel_identifier' => $this->channel_identifier,
+            'channel_username' => $this->resource->channelUsername(),
+            'webchat_visitor' => $this->whenLoaded('webchatVisitor', fn () => $this->webchatVisitor?->agentView($shouldBeEncrypted)),
             
             'last_chat' => $this->whenLoaded('lastChat', function() {
 			
@@ -77,6 +81,8 @@ class ContactResource extends JsonResource
             'last_inbound_chat_created_at_iso' => $messagingWindow['last_inbound_chat_created_at_iso'],
             'last_inbound_chat' => $messagingWindow['last_inbound_chat'],
             'is_messaging_window_open' => $messagingWindow['is_messaging_window_open'],
+            // null = بلا نافذة (تيليجرام والمحادثة المباشرة): لا شريط «٢٤ ساعة».
+            'messaging_window_hours' => $messagingWindow['messaging_window_hours'],
        
             'unread_messages' => $this->unread_messages_count ?? 0,
 

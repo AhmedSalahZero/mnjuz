@@ -87,6 +87,22 @@ The `FlowExecutionService` has been extended to:
   - Condition index (0, 1, 2, etc.) if condition matches
   - 'default' if no conditions match
 
+### 9. Transfer to agent (`assign_agent`)
+- **Purpose**: Hands the conversation to a named person or people (e.g. Support → Ahmed, Sales → Fawaz and Ali, Mobile app → Hossam). Usually placed after a Buttons/List node "choose a department".
+- **Configuration**:
+  - `user_ids` (required): 1–50 team member ids. Membership is re-checked on every run: suspended or removed members are skipped.
+- **Outputs** (two source handles, matched with the node id):
+  - `available`: at least one chosen member is online now (same 90-second presence the Performance page shows; recorded for every plan). The least busy online member gets the conversation.
+  - `unavailable`: nobody chosen is online. The conversation is still assigned to the least busy of them (they find it when they're back), and the flow continues on this output — connect it to a Text, Buttons, List or Media node (or another transfer node as a fallback department).
+- **Rules**:
+  - "Least busy" = fewest open latest tickets, the same definition as automatic assignment (`Team::leastBusyUserId`).
+  - A conversation already held by one of the chosen members stays with them.
+  - Needs tickets enabled: with ticketing off nothing is assigned (no "assigned to" line), the output still follows presence, and the editor shows a warning.
+  - An output with no edge ends the flow; the assignment stays.
+  - An inactive node, or an error during the action, takes `unavailable` without assigning — it never ends the session silently.
+  - Outside working hours automation doesn't run at all (existing behaviour).
+- **Service**: `App\Services\Chat\ConversationHandoff`.
+
 ## Flow Execution Process
 
 1. **Flow Detection**: FlowExecutionService detects when a user triggers a flow

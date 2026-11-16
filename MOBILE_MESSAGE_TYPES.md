@@ -9,7 +9,7 @@
 | **Firebase (FCM)** — إشعار الجوال | عنوان + نصّ + معرّفات فقط | ❌ (انظر آخر التقرير، القسم 8) |
 
 كل الأمثلة في هذا التقرير هي **`value` الرسالة** كما تصل من REST ومن Pusher.
-تحقّقنا من تطابق المسارين: `ApiController::formatChatValue` (REST) و`ChatBroadcastPayloadBuilder::buildMinimalValue` (Pusher) يُخرجان **نفس المفاتيح ونفس القيم** بايتاً ببايت. الفارق الوحيد أن حمولة Pusher قد **تُقلَّص** إن تجاوزت 10KB (تُحذف `contact_full_name` ثم `phone` ثم تُقصّ `logs` ثم `metadata`)، بينما REST لا تُقلَّص أبداً.
+تحقّقنا من تطابق المسارين: `ApiController::formatChatValue` (REST) و`ChatBroadcastPayloadBuilder::buildMinimalValue` (Pusher) يُخرجان **نفس المفاتيح ونفس القيم** بايتاً ببايت — عدا مفاتيح القناة: كلاهما يحمل `channel` و`channel_identifier`، وPusher وحده يحمل `channel_username` (انظر [MOBILE_CHANNELS_IMPLEMENTATION.md](MOBILE_CHANNELS_IMPLEMENTATION.md)). الفارق الوحيد أن حمولة Pusher قد **تُقلَّص** إن تجاوزت 10KB (تُحذف `contact_full_name` ثم `phone` ثم تُقصّ `logs` ثم `metadata`)، بينما REST لا تُقلَّص أبداً.
 
 **إشعار Firebase ليس رسالة** — لا يحمل `metadata` ولا `media` ولا `id` الرسالة. لا تبنِ عليه فقاعة؛ استخدمه لإيقاظ التطبيق ثم اقرأ الرسالة من REST أو Pusher.
 
@@ -47,7 +47,7 @@
 | `contact_uuid` | string | نعم |
 | `contact_id` | int | نعم |
 | `is_new_contact` | bool — دائماً `false` في REST | لا |
-| `phone` | `"9665XXXXXXX"` | **نعم** (يُحذف عند ضغط حجم Pusher) |
+| `phone` | `"9665XXXXXXX"` | **نعم** (يُحذف عند ضغط حجم Pusher، و`null` دائماً لجهات القنوات الأخرى) |
 | `formatted_phone_number` | `"+966 5X XXX XXXX"` | **نعم** (نفس السبب) |
 | `contact_full_name` | string ≤120 بايت | **نعم** |
 | `organization_id` | int | نادراً |
@@ -59,6 +59,8 @@
 | `metadata` | **string JSON** (محتوى الرسالة) | **نعم** (قد يصل `"{}"` أو `null` عند الضغط) |
 | `type` | `inbound` / `outbound` — **اتجاه لا نوع** | لا |
 | `wam_id` | `"wamid.…"` | نعم |
+| `channel` | `whatsapp` · `telegram` · `messenger` · `instagram` · `tiktok` · `webchat` | لا (القديم `whatsapp`). في v2 قناة الرسالة — كانت `whatsapp` دائماً قبل ١٦ نوفمبر |
+| `channel_identifier` | معرّف العميل لدى المنصّة — v1 وPusher فقط | **نعم** (`null` لواتساب) |
 | `status` | `accepted` · `sent` · `delivered` · `read` · `failed` فقط | **نعم** (أي قيمة أخرى تُحوَّل null، و`played` ⇒ `delivered`) |
 | `media` | object (جدول 3) | **نعم** |
 | `logs` | array (جدول 4) | لا (قد تكون `[]`) |
@@ -66,7 +68,7 @@
 
 > `user.full_name` هو الحقل الوحيد. `first_name` / `last_name` لم يعودا يخرجان، وقد يصل `""`.
 
-في **v2** حقول جهة الاتصال (`contact_uuid`, `contact_id`, `phone`, `formatted_phone_number`, `contact_full_name`, `is_blocked`, `is_favorite`, `unread_messages_count`, `latest_chat_created_at`, `is_new_contact`, `organization_id`) لا تتكرّر داخل الرسالة — تأتي مرة واحدة في كائن `contact`.
+في **v2** حقول جهة الاتصال (`contact_uuid`, `contact_id`, `phone`, `formatted_phone_number`, `contact_full_name`, `is_blocked`, `is_favorite`, `unread_messages_count`, `latest_chat_created_at`, `is_new_contact`, `organization_id`) لا تتكرّر داخل الرسالة — تأتي مرة واحدة في كائن `contact`، ومعها منذ ١٦ نوفمبر `channel` و`channel_identifier` و`channel_username` و`messaging_window_hours`.
 
 ---
 
@@ -1067,7 +1069,8 @@ endpoint واحد للنص والملفات معًا.
 
 | الحقل | النوع | مطلوب؟ | ملاحظات |
 |---|---|---|---|
-| `phone` | string | نعم | رقم العميل بصيغة دولية `+9665…`. لو مش موجود هننشئ الـ contact |
+| `phone` | string | نعم، **أو** `contact_uuid` | رقم العميل بصيغة دولية `+9665…`. لو مش موجود هننشئ الـ contact |
+| `contact_uuid` | uuid | بدل `phone` | **إجباري** لجهات القنوات التانية (مالهاش رقم)، والأفضل لكل الجهات — انظر MOBILE_CHANNELS_IMPLEMENTATION.md |
 | `file[]` أو `files[]` | file (متعدد) | للملفات | الاسمين شغالين. كرّر نفس المفتاح لكل ملف. والمفرد بدون أقواس شغال برضو |
 | `msg_uuid[]` | string (متعدد) | لا | **UUID لكل ملف** — مش UUID واحد للمجموعة كلها |
 | `caption` أو `message` | string | لا | بيتحط على **أول ملف بس**. لو بعت الاتنين، `caption` هو اللي بيتنفذ |
@@ -1205,7 +1208,8 @@ Authorization: Bearer <sanctum token>
 | `index` | int ≥ 0 | نعم | رقم الـ chunk، بيبدأ من صفر |
 | `total` | int ≥ 1 | نعم | عدد chunks الملف ده (≤ 4000) |
 | `chunk` | file | نعم | البايتات نفسها، 5MB |
-| `phone` | string | نعم | نفس رقم `/send-msg` |
+| `phone` | string | نعم، **أو** `contact_uuid` | نفس رقم `/send-msg` |
+| `contact_uuid` | uuid | بدل `phone` | زي `/send-msg`. لو قناة الجهة مفصولة بيرجع `403` قبل ما أي chunk يتخزن |
 | `file_name` | string ≤ 255 | نعم | الاسم كامل بامتداده — منه بنعرف النوع |
 | `file_type` | string | لا | `image\|video\|audio\|document` — لو مبعتوش بنستنتجه من الامتداد |
 | `caption` | string | لا | مع **أول ملف بس** |

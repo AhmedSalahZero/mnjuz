@@ -67,6 +67,17 @@ class CampaignRetryService
         return $campaign->status === 'ongoing';
     }
 
+    /**
+     * طابور إرسال القناة: البريد على طابور يأتي بعد الجميع في ترتيب العامل
+     * (خادم SMTP بطيء لا يؤخّر واتساب ولا الوارد)، والباقي كما كان.
+     */
+    public static function queueFor(?string $channel): string
+    {
+        return $channel === \App\Services\Messaging\Channel::EMAIL
+            ? (string) config('messaging.email.queue', 'low')
+            : 'campaign-messages';
+    }
+
     public function hasRetryableFailures(Campaign $campaign): bool
     {
         $settings = $this->getCampaignRetrySettings($campaign);
@@ -80,6 +91,14 @@ class CampaignRetryService
                 '(SELECT COUNT(*) FROM campaign_log_retries WHERE campaign_log_retries.campaign_log_id = campaign_logs.id) < ?',
                 [$settings['max_retries']]
             )
+            // فشل البريد النهائي (عنوان مرفوض، ملغى الاشتراك…) لا يُعاد، فلا
+            // يُبقي الحملة «جارية» إلى الأبد. الرمز يكتبه json_encode عندنا.
+            ->when($campaign->channel === \App\Services\Messaging\Channel::EMAIL, function ($query) {
+                foreach (\App\Services\Email\EmailCampaignSender::PERMANENT_FAILURES as $code) {
+                    $query->where(fn ($q) => $q->whereNull('metadata')
+                        ->orWhere('metadata', 'not like', '%"code":"' . $code . '"%'));
+                }
+            })
             ->exists();
     }
 
@@ -207,6 +226,12 @@ class CampaignRetryService
             return false;
         }
 
+        // فشل بريد نهائي: إعادته لن تنجح.
+        if ($log->campaign->channel === \App\Services\Messaging\Channel::EMAIL
+            && \App\Services\Email\EmailCampaignSender::isPermanentFailure($log->getRawOriginal('metadata'))) {
+            return false;
+        }
+
         $retryCount = $log->retries->count();
         if ($retryCount >= $settings['max_retries']) {
             return false;
@@ -223,7 +248,7 @@ class CampaignRetryService
         $spreadSeconds = $log->id % self::RETRY_SPREAD_SECONDS;
 
         RetryCampaignLogJob::dispatch($log->campaign->organization_id, $log->id, $retryCount)
-            ->onQueue('campaign-messages')
+            ->onQueue(self::queueFor($log->campaign->channel))
             ->delay(now()->addHours($delayHours)->addSeconds($spreadSeconds))
             ->afterCommit();
 
@@ -353,6 +378,12 @@ class CampaignRetryService
     {
         $log = CampaignLog::with('campaign.organization')->find($log->id);
         if (!$log || !$log->campaign) {
+            return;
+        }
+
+        // صفّ البريد قد يكون جهة واتساب أو تيليجرام: فشل SMTP لا يقول شيئاً
+        // عن قنواته، ونقله يُخرجه من مجموعاته الأخرى.
+        if ($log->campaign->channel === \App\Services\Messaging\Channel::EMAIL) {
             return;
         }
 

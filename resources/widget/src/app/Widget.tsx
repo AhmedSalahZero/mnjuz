@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { faCommentDots, faXmark } from '@fortawesome/free-solid-svg-icons'
 import { ApiError, createApi } from '../core/api.ts'
+import { checkAnswer, type Reason } from '../core/answers.ts'
+import { chooseJourney, faqTranscript, journeyContext, journeyStage, newJourney, parseJourney, type Faq, type Journey, type JourneyContext } from '../core/faq.ts'
 import { mediaType, pickFiles } from '../core/files.ts'
-import { resolveLanguage, translator } from '../core/i18n.ts'
+import { translator, type TextKey } from '../core/i18n.ts'
+import { answer, newProgress, nextStep, parseProgress, payload, questionsOf, rewind, skip, transcript, type Progress } from '../core/intake.ts'
+import { LANG_KEY, pick, resolveLanguage, type Lang } from '../core/lang.ts'
 import { connectRealtime, type RealtimeState } from '../core/realtime.ts'
-import { sessionFields, type PrechatValues } from '../core/prechat.ts'
 import { isLeader, parseLock, pollInterval, shouldConnectRealtime } from '../core/scheduler.ts'
 import { addPending, lastOutboundSeq, lastSeq, firstSeq, markFailed, mergeMessages, unreadCount } from '../core/store.ts'
 import { createStorage, type Persisted } from '../core/storage.ts'
-import type { WidgetConfig, WidgetMessage } from '../core/types.ts'
+import type { IntakeQuestion, WidgetConfig, WidgetMessage } from '../core/types.ts'
 import { uuidv4 } from '../core/uuid.ts'
 import { Composer, rememberEmoji } from './Composer.tsx'
 import { Icon } from './Icon.tsx'
+import { IntakeInput } from './IntakeInput.tsx'
 import { MessageList } from './MessageList.tsx'
-import { Prechat } from './Prechat.tsx'
 
 export interface MountContext {
     base: string
@@ -25,6 +28,27 @@ export interface MountContext {
 
 const PAGE_SIZE = 30
 const EMOJI_KEY = 'mnjz:emoji'
+/** أسئلة البداية في التخزين (core/intake.ts): يكمل الزائر من حيث توقّف. */
+const INTAKE_KEY = 'intake'
+/** القائمة والأسئلة الشائعة (core/faq.ts): ما ضغطه الزائر قبل أن يكتب. */
+const JOURNEY_KEY = 'journey'
+
+/** سبب رفض الإجابة ⇐ نصّه بلغة الزائر. */
+const REASON_TEXT: Record<Reason, TextKey> = {
+    required: 'err_required',
+    too_long: 'err_too_long',
+    email: 'err_email',
+    number: 'err_number',
+    date: 'err_date',
+    select: 'err_select',
+    saudi_id: 'err_saudi_id',
+    phone_letters: 'err_phone_letters',
+    phone_invalid: 'err_phone',
+    phone_landline: 'err_phone_landline',
+}
+
+/** نصّ السؤال الأساسي حين لا يكتبه التاجر. */
+const ASK_TEXT: Record<string, TextKey> = { name: 'ask_name', email: 'ask_email', phone: 'ask_phone' }
 
 function readRecentEmoji(): string[] {
     try {
@@ -63,14 +87,21 @@ function draft(clientId: string, fields: Partial<WidgetMessage>): WidgetMessage 
 export function Widget({ ctx }: { ctx: MountContext }) {
     const { config } = ctx
     const appearance = config.widget.appearance
-    const lang = resolveLanguage(appearance.language, document.documentElement.lang, navigator.language)
-    const t = useMemo(() => translator(lang), [lang])
     const storage = useMemo(() => createStorage(ctx.key), [ctx.key])
+    // اختيار الزائر من زرّ اللغة يغلب إعداد التاجر، ويبقى بين الزيارات.
+    const [langChoice, setLangChoice] = useState<string | null>(() => storage.raw(LANG_KEY).get())
+    const lang = resolveLanguage(langChoice, appearance.language, document.documentElement.lang, navigator.language)
+    const langRef = useRef<Lang>(lang)
+    langRef.current = lang
+    const t = useMemo(() => translator(lang), [lang])
 
     const [persisted, setPersisted] = useState<Persisted>(() => storage.read())
     const tokenRef = useRef<string | null>(persisted.token ?? null)
     tokenRef.current = persisted.token ?? null
-    const api = useMemo(() => createApi(ctx.base, ctx.key, () => tokenRef.current, ctx.preview), [ctx.base, ctx.key, ctx.preview])
+    const api = useMemo(
+        () => createApi(ctx.base, ctx.key, () => tokenRef.current, ctx.preview, () => langRef.current),
+        [ctx.base, ctx.key, ctx.preview],
+    )
 
     const [open, setOpen] = useState(ctx.open)
     const [messages, setMessages] = useState<WidgetMessage[]>([])
@@ -91,17 +122,139 @@ export function Widget({ ctx }: { ctx: MountContext }) {
     const token = persisted.token ?? null
     const hasConversation = Boolean(token)
     const idleMs = clock - lastActivity.current
-    const title = appearance.title || t('title')
-    const subtitle = appearance.subtitle || t('subtitle')
+    // نصوص التاجر بلغة الزائر: الإنجليزية إن كتبها التاجر، وإلّا العربية.
+    const title = pick(lang, appearance.title, appearance.title_en) || t('title')
+    const subtitle = pick(lang, appearance.subtitle, appearance.subtitle_en) || t('subtitle')
+    const welcome = pick(lang, appearance.welcome_message, appearance.welcome_message_en)
+
+    const switchLanguage = () => {
+        const next: Lang = lang === 'ar' ? 'en' : 'ar'
+        storage.raw(LANG_KEY).set(next)
+        setLangChoice(next)
+    }
 
     const persist = (patch: Persisted) => setPersisted(storage.write(patch))
     const touch = () => {
         lastActivity.current = Date.now()
     }
 
+    /* ───────────── أسئلة البداية ───────────── */
+
+    const prechat = config.widget.prechat
+    const questions = useMemo(() => questionsOf(prechat), [prechat])
+    const needsConsent = Boolean(prechat.consent_text)
+    const [progress, setProgress] = useState<Progress>(() => parseProgress(storage.raw(INTAKE_KEY).get(), Date.now()))
+    // إجابة رُفضت للسؤال الحالي: تظهر فقاعتها ثم السبب ثم السؤال.
+    const [attempt, setAttempt] = useState<{ text: string; reason: string } | null>(null)
+    const [starting, setStarting] = useState(false)
+    const [startError, setStartError] = useState<string | null>(null)
+    const honeypot = useRef('')
+    const openedAt = useRef(Date.now())
+    const intake = !token && config.available && (questions.length > 0 || needsConsent)
+    const step = nextStep(questions, progress, needsConsent)
+    // سجلّ الأسئلة يبقى فوق المحادثة بعد بدئها — لمن أجاب فعلاً، لا لزائرٍ
+    // قديم بلا أسئلة.
+    const answeredIntake = step.kind === 'done' && (Object.keys(progress.answers).length > 0 || progress.skipped.length > 0)
+
+    const saveProgress = (next: Progress) => {
+        setProgress(next)
+        storage.raw(INTAKE_KEY).set(JSON.stringify(next))
+    }
+
+    const labelOf = (question: IntakeQuestion) =>
+        pick(lang, question.label_ar, question.label_en) || (ASK_TEXT[question.target] ? t(ASK_TEXT[question.target]) : t('answer'))
+
+    const intakeMessages =
+        intake || answeredIntake
+            ? transcript(
+                  questions,
+                  progress,
+                  needsConsent,
+                  { label: labelOf, consent: pick(lang, prechat.consent_text, prechat.consent_text_en), accept: t('accept'), skipped: t('skipped') },
+                  attempt,
+              )
+            : []
+
+    /* ───────────── القائمة والأسئلة الشائعة ───────────── */
+
+    const hasFaqs = (config.faqs ?? 0) > 0
+    const [journey, setJourney] = useState<Journey | null>(() => parseJourney(storage.raw(JOURNEY_KEY).get()))
+    const journeyRef = useRef(journey)
+    journeyRef.current = journey
+    const [faqs, setFaqs] = useState<Faq[] | null>(null)
+    // زائرٌ بلا جلسة يبدأ بالقائمة إن كان للتاجر أسئلة شائعة؛ ومن له جلسة بلا
+    // رحلة (قبل الأسئلة الشائعة) يكمل محادثته كما هي. وقائمةٌ لم يضغط فيها
+    // شيئاً تسقط إن حذف التاجر أسئلته كلها.
+    const storedJourney = journey && (hasFaqs || journey.steps.length > 0) ? journey : null
+    const activeJourney = storedJourney ?? (!token && hasFaqs ? newJourney() : null)
+    const stage = activeJourney ? journeyStage(activeJourney) : 'chat'
+    // ما دام في القائمة ولم يصله شيء من الفريق: لا خانة كتابة، أزرارٌ فقط.
+    const inJourney = stage !== 'chat' && messages.length === 0
+    const journeyMessages =
+        activeJourney && (stage !== 'chat' || activeJourney.steps.length > 0)
+            ? // بلا أسئلة عند التاجر الآن: قائمةٌ فارغة معروفة، فيبقى «لم أجد إجابتي».
+              faqTranscript(hasFaqs ? faqs : [], activeJourney, lang, {
+                  menuPrompt: t('menu_prompt'),
+                  menuQuestion: t('menu_question'),
+                  menuProblem: t('menu_problem'),
+                  faqPrompt: t('faq_prompt'),
+                  faqList: t('faq_list'),
+                  morePrompt: t('faq_more_prompt'),
+                  more: t('faq_more'),
+                  none: t('faq_none'),
+                  askQuestion: t('faq_ask'),
+                  describeProblem: t('faq_problem'),
+              })
+            : []
+    // ما سبق المحادثة يبقى فوقها: الأسئلة وإجاباتها، ثم القائمة.
+    const preface = intakeMessages.concat(journeyMessages)
+    const needsFaqs = open && hasFaqs && activeJourney !== null && (stage !== 'chat' || activeJourney.steps.some((step) => step.startsWith('faq:')))
+
+    const saveJourney = (next: Journey | null) => {
+        journeyRef.current = next
+        setJourney(next)
+        storage.raw(JOURNEY_KEY).set(next ? JSON.stringify(next) : '')
+    }
+
+    const pickJourney = (_message: WidgetMessage, optionId: string) => {
+        const next = activeJourney && chooseJourney(activeJourney, optionId)
+
+        if (next) {
+            touch()
+            saveJourney(next)
+        }
+    }
+
+    /** وصلت أوّل رسالة بما قرأه الزائر: لا يُرسل ثانية. */
+    const journeyDelivered = (context: JourneyContext | null) => {
+        const current = journeyRef.current
+
+        if (context && current && !current.sent) {
+            saveJourney({ ...current, sent: true })
+        }
+    }
+
+    // الأسئلة الشائعة حين يحتاجها السجلّ. فشلُ جلبها لا يُعلِق الزائر: تبقى
+    // «لم أجد إجابتي» فيكتب للفريق.
+    useEffect(() => {
+        if (!needsFaqs || faqs !== null) return
+
+        let cancelled = false
+        api.faqs()
+            .then((result) => !cancelled && setFaqs(result.faqs))
+            .catch(() => !cancelled && setFaqs([]))
+
+        return () => {
+            cancelled = true
+        }
+    }, [needsFaqs])
+
     const resetSession = () => {
         storage.clear()
+        storage.raw(INTAKE_KEY).set('')
+        saveJourney(null)
         setPersisted({})
+        setProgress(newProgress(Date.now()))
         setMessages([])
         setHasMore(false)
     }
@@ -242,6 +395,8 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                 setPersisted(storage.read())
             } else if (event.key === `${storage.key}:sync`) {
                 fetchAfter()
+            } else if (event.key === `${storage.key}:${JOURNEY_KEY}`) {
+                setJourney(parseJourney(event.newValue))
             }
         }
 
@@ -357,26 +512,107 @@ export function Widget({ ctx }: { ctx: MountContext }) {
 
     /* ───────────── الأفعال ───────────── */
 
-    const startSession = async (values: PrechatValues): Promise<Record<string, string[]> | null> => {
+    /**
+     * الجلسة بإجابات الأسئلة كلها. رفضُ الخادم لإجابة (422) يعيد سؤالها
+     * بسببه؛ وما سواه (انقطاع، تمهّل) يُعرض مع «حاول مرة أخرى».
+     */
+    const startSession = async (): Promise<boolean> => {
+        if (starting) return false
+
+        setStarting(true)
+        setStartError(null)
+
         try {
+            const answered = Object.keys(progress.answers).length > 0 || progress.consented
             const result = await api.startSession({
-                ...sessionFields(config.widget.prechat, values),
+                ...payload(questions, progress),
+                ...(needsConsent ? { consent: progress.consented } : {}),
+                website: honeypot.current,
+                elapsed_ms: Math.max(0, Date.now() - (answered ? progress.startedAt : openedAt.current)),
                 page_url: location.href,
                 referrer: document.referrer || undefined,
-                locale: navigator.language,
+                // لغة المحادثة كما يراها الزائر، لا لغة متصفّحه.
+                locale: lang,
             })
 
             tokenRef.current = result.token
             persist({ token: result.token, visitorId: result.visitor.id, name: result.visitor.name, channel: result.channel, lastReadSeq: 0 })
             touch()
 
-            return null
-        } catch (error) {
-            if (error instanceof ApiError && error.status === 422) {
-                return error.errors
+            // بعد أسئلة البداية: القائمة. ومن ضغط فيها قبل الجلسة (widget بلا
+            // أسئلة) تبقى رحلته كما هي.
+            if (hasFaqs && !journeyRef.current) {
+                saveJourney(newJourney())
             }
 
-            return { form: [error instanceof ApiError && error.status === 429 ? t('too_fast') : t('error')] }
+            return true
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 422) {
+                const { progress: next, failed } = rewind(questions, progress, error.errors)
+                saveProgress(next)
+                setAttempt(failed ? { text: failed.previous, reason: failed.message } : null)
+
+                if (!failed && !error.errors.consent) {
+                    setStartError(t('error'))
+                    setNotice(t('error'))
+                }
+            } else {
+                // startError لشاشة الأسئلة، وnotice للمحادثة: widget بلا أسئلة
+                // يبدأ جلسته مع أوّل رسالة.
+                const message = error instanceof ApiError && error.status === 429 ? t('too_fast') : t('error')
+                setStartError(message)
+                setNotice(message)
+            }
+
+            return false
+        } finally {
+            setStarting(false)
+        }
+    }
+
+    // آخر سؤال أُجيب: تُرسل الإجابات وتبدأ الجلسة.
+    useEffect(() => {
+        if (intake && step.kind === 'done' && !starting && !startError) {
+            startSession()
+        }
+    }, [intake, step.kind])
+
+    /** widget بلا أسئلة: الجلسة مع أوّل رسالة لا مع فتح النافذة. */
+    const ensureSession = async (): Promise<boolean> => (tokenRef.current ? true : startSession())
+
+    const answerIntake = (raw: string, country: string) => {
+        if (step.kind !== 'ask') return
+
+        touch()
+        const checked = checkAnswer(step.question, raw, country)
+
+        if (!checked.ok) {
+            setAttempt({ text: raw, reason: t(REASON_TEXT[checked.reason]) })
+
+            return
+        }
+
+        setAttempt(null)
+        saveProgress(
+            checked.value === null
+                ? skip(progress, step.question.id)
+                : answer(progress, step.question.id, checked.value, step.question.validation === 'phone' ? country : undefined),
+        )
+    }
+
+    const skipIntake = () => {
+        if (step.kind === 'ask' && !step.question.required) {
+            setAttempt(null)
+            saveProgress(skip(progress, step.question.id))
+        }
+    }
+
+    /** أزرار الفقاعات المحلّية: الموافقة، وخيار سؤال القائمة. */
+    const chooseIntake = (_message: WidgetMessage, optionId: string, title: string) => {
+        if (optionId === 'consent') {
+            saveProgress({ ...progress, consented: true })
+        } else if (optionId.startsWith('o:')) {
+            answerIntake(title, '')
         }
     }
 
@@ -388,12 +624,24 @@ export function Widget({ ctx }: { ctx: MountContext }) {
         }
     }
 
-    const sendText = (text: string, clientId = uuidv4()) => {
+    const sendText = async (text: string, clientId = uuidv4()) => {
         touch()
         setNotice(null)
         setMessages((current) => addPending(current.filter((m) => m.client_id !== clientId || m.id), draft(clientId, { text })))
-        api.sendText(clientId, text, location.href)
-            .then(soonFetch)
+
+        // لم تبدأ الجلسة (انقطاع، تمهّل): تبقى الرسالة بزرّ إعادة المحاولة.
+        if (!(await ensureSession())) {
+            setMessages((current) => markFailed(current, clientId))
+
+            return
+        }
+
+        const context = journeyContext(journeyRef.current)
+        api.sendText(clientId, text, location.href, context)
+            .then(() => {
+                journeyDelivered(context)
+                soonFetch()
+            })
             .catch((error) => {
                 setMessages((current) => markFailed(current, clientId))
                 handleError(error)
@@ -401,13 +649,18 @@ export function Widget({ ctx }: { ctx: MountContext }) {
     }
 
     const choose = (message: WidgetMessage, optionId: string, title: string) => {
-        if (!message.id) return
+        // فقاعات أسئلة البداية (l:…) محلّية: لا خيارات لها عند الخادم.
+        if (!message.id || message.id.startsWith('l:')) return
 
         touch()
         const clientId = uuidv4()
+        const context = journeyContext(journeyRef.current)
         setMessages((current) => addPending(current, draft(clientId, { text: title })))
-        api.sendChoice(clientId, message.id, optionId, location.href)
-            .then(soonFetch)
+        api.sendChoice(clientId, message.id, optionId, location.href, context)
+            .then(() => {
+                journeyDelivered(context)
+                soonFetch()
+            })
             .catch((error) => {
                 setMessages((current) => markFailed(current, clientId))
                 handleError(error)
@@ -424,7 +677,9 @@ export function Widget({ ctx }: { ctx: MountContext }) {
      * ما اختاره الزائر: أوّل files_per_send منها (3)، وما يُرفض نوعاً أو حجماً
      * يُقال باسمه قبل أن يُرفع. كل ملف يُرفع وحده بفقاعته، بالترتيب.
      */
-    const sendFiles = (files: File[]) => {
+    const sendFiles = async (files: File[]) => {
+        if (!(await ensureSession())) return
+
         touch()
         const picked = pickFiles(files, config.limits)
         const rejected = picked.rejected[0]
@@ -450,8 +705,12 @@ export function Widget({ ctx }: { ctx: MountContext }) {
         setMessages((current) =>
             addPending(current, draft(clientId, { type, preview, media: { url: null, name: file.name, mime: file.type, size: file.size } })),
         )
-        api.upload(clientId, file, '')
-            .then(soonFetch)
+        const context = journeyContext(journeyRef.current)
+        api.upload(clientId, file, '', context)
+            .then(() => {
+                journeyDelivered(context)
+                soonFetch()
+            })
             .catch((error) => {
                 setMessages((current) => markFailed(current, clientId))
                 handleError(error)
@@ -483,6 +742,17 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                             <strong>{title}</strong>
                             <span>{subtitle}</span>
                         </div>
+                        {/* نصٌّ لا أيقونة: يكفي ويوفّر الحجم. يعرض اللغة الأخرى. */}
+                        <button
+                            type="button"
+                            class="mnjz-lang"
+                            aria-label={t('language')}
+                            title={t('language')}
+                            lang={lang === 'ar' ? 'en' : 'ar'}
+                            onClick={switchLanguage}
+                        >
+                            {lang === 'ar' ? 'EN' : 'ع'}
+                        </button>
                         <button type="button" class="mnjz-icon mnjz-close" aria-label={t('close')} onClick={() => setOpen(false)}>
                             <Icon icon={faXmark} />
                         </button>
@@ -490,11 +760,54 @@ export function Widget({ ctx }: { ctx: MountContext }) {
 
                     {!config.available && !token ? (
                         <div class="mnjz-empty">{t('unavailable')}</div>
-                    ) : !token ? (
-                        <div class="mnjz-body">
-                            {appearance.welcome_message && <div class="mnjz-welcome">{appearance.welcome_message}</div>}
-                            <Prechat config={config} lang={lang} t={t} onSubmit={startSession} />
-                        </div>
+                    ) : intake ? (
+                        // أسئلة البداية: فقاعاتها في السجلّ، والإجابة في خانة السؤال.
+                        <>
+                            {startError && (
+                                <button type="button" class="mnjz-banner mnjz-banner-error" onClick={() => startSession()}>
+                                    {startError} {t('retry')}
+                                </button>
+                            )}
+                            <MessageList
+                                messages={intakeMessages}
+                                t={t}
+                                lang={lang}
+                                hasMore={false}
+                                loadingEarlier={false}
+                                onEarlier={() => {}}
+                                onChoose={chooseIntake}
+                                onRetry={() => {}}
+                                welcome={welcome}
+                            />
+                            <IntakeInput
+                                question={step.kind === 'ask' ? step.question : null}
+                                t={t}
+                                defaultCountry={prechat.default_country}
+                                busy={starting}
+                                onAnswer={answerIntake}
+                                onSkip={skipIntake}
+                                onHoneypot={(value) => {
+                                    honeypot.current = value
+                                }}
+                            />
+                        </>
+                    ) : inJourney ? (
+                        // القائمة والأسئلة الشائعة: فقاعات محلّية وأزرارها، بلا خانة كتابة.
+                        <>
+                            {!config.open_now && <div class="mnjz-banner">{t('offline')}</div>}
+                            <MessageList
+                                messages={preface}
+                                t={t}
+                                lang={lang}
+                                hasMore={false}
+                                loadingEarlier={false}
+                                onEarlier={() => {}}
+                                onChoose={pickJourney}
+                                onRetry={() => {}}
+                                welcome={welcome}
+                            />
+                            <IntakeInput question={null} t={t} defaultCountry={prechat.default_country} busy={false} onAnswer={() => {}} onSkip={() => {}} onHoneypot={() => {}} />
+                        </>
                     ) : (
                         <>
                             {!config.open_now && <div class="mnjz-banner">{t('offline')}</div>}
@@ -504,7 +817,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 </button>
                             )}
                             <MessageList
-                                messages={messages}
+                                messages={preface.length && !hasMore ? preface.concat(messages) : messages}
                                 t={t}
                                 lang={lang}
                                 hasMore={hasMore}
@@ -512,7 +825,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 onEarlier={loadEarlier}
                                 onChoose={choose}
                                 onRetry={retry}
-                                welcome={appearance.welcome_message}
+                                welcome={welcome}
                             />
                             <Composer
                                 t={t}

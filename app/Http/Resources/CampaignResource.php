@@ -22,6 +22,15 @@ class CampaignResource extends JsonResource
             'uuid' => $this->uuid,
             'name' => $this->name,
             'template' => $this->template,
+            // حملة بلا قالب واتساب (تيليجرام وغيرها): القناة لتعرض القائمة
+            // أيقونتها، واسم القالب المحفوظ إن أُنشئت منه. إضافة لا تغيير.
+            'channel' => $this->channel ?? \App\Services\Messaging\Channel::DEFAULT,
+            'message_template_name' => $this->payloadValue('template')['name'] ?? null,
+            // قنوات لا تُبلغ عن التسليم (البريد، تيليجرام): ما قبلته المنصّة أو
+            // الخادم. null لما يُبلغ (واتساب وغيرها) — نسبة التسليم تكفيها.
+            'sent_count' => in_array($this->channel, [\App\Services\Messaging\Channel::EMAIL, \App\Services\Messaging\Channel::TELEGRAM], true)
+                ? $this->campaignLogs->where('status', 'success')->count()
+                : null,
             'status' => $this->status,
             'contacts_count' => $this->contactsCount(),
             'delivery_count' => $this->deliveryCount(),

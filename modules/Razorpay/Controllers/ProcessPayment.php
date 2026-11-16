@@ -44,7 +44,8 @@ class ProcessPayment extends BaseController
         $this->webhook_secret = $settings['razorpay_webhook_secret'] ?? null;
     }
     
-    public function handlePayment($amount, $planId = NULL)
+    /** @param  array{coupon_ref?: string}  $context  مرجع حجز كوبون «إضافة دفعة» في notes. */
+    public function handlePayment($amount, $planId = NULL, array $context = [])
     {
         try {
             $httpClient = new HttpClient();
@@ -55,7 +56,8 @@ class ProcessPayment extends BaseController
                         'Cache-Control' => 'no-cache'
                     ],
                     'body' => json_encode([
-                        'amount'          => (int) ($amount * 100), // amount in the smallest currency unit (e.g., 50000 paise = 500 INR)
+                        // بأصغر وحدة، مقرَّباً لا مقصوصاً: (int)(899.99*100) يُنقص وحدة.
+                        'amount'          => (int) round($amount * 100),
                         'currency'        => $this->currency,
                         'description'     => 'Subscription payment',
                         'callback_url'    => url('billing'),
@@ -65,11 +67,12 @@ class ProcessPayment extends BaseController
                             'contact'      => null,
                             'email'        => auth()->user()->email,
                         ],
-                        'notes' => [
+                        'notes' => array_filter([
                             'organization_id' => session()->get('current_organization'),
                             'user_id' => auth()->user()->id,
-                            'plan_id' => $planId
-                        ],
+                            'plan_id' => $planId,
+                            'coupon_ref' => $context['coupon_ref'] ?? null,
+                        ], static fn ($value) => $value !== null),
                         'reminder_enable' => false
                     ])
                 ]
@@ -129,6 +132,11 @@ class ProcessPayment extends BaseController
                     ]);
 
                     if ($planId == null) {
+                        // خصم كوبون الشحن إلى الرصيد قبل التفعيل منه، مرّة واحدة.
+                        if (!empty($notes['coupon_ref'])) {
+                            app(\App\Services\Billing\CouponRedemptionService::class)->settleTopup((string) $notes['coupon_ref'], (int) $organizationId, $payment->id, (float) $amount, (int) $userId);
+                        }
+
                         $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId);
                     } else {
                         $this->subscriptionService->updateSubscriptionPlan($organizationId, $planId, $userId);

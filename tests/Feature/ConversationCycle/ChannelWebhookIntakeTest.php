@@ -6,7 +6,9 @@ use App\Models\ChannelAccount;
 use App\Models\Chat;
 use App\Models\Contact;
 use App\Services\Messaging\Channel;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -99,6 +101,22 @@ class ChannelWebhookIntakeTest extends ConversationCycleTestCase
         $this->deliver($channel, $payload)->assertOk();
 
         $this->assertSame(1, Chat::where('organization_id', $this->organization->id)->where('channel', $channel)->count());
+    }
+
+    /**
+     * سجلّ الـ webhooks يسمّي حدث تيك توك: كان يقرأ حقول ميتا وحدها، فلا
+     * يُعرف من السجلّ أيّ حدث وصل من تيك توك.
+     */
+    public function test_the_webhook_log_names_the_tiktok_event(): void
+    {
+        $logged = new \ArrayObject();
+        Log::listen(fn (MessageLogged $log) => $logged->append($log));
+
+        $this->deliver(Channel::TIKTOK, $this->textPayload(Channel::TIKTOK, 'مرحبا'))->assertOk();
+
+        $received = collect($logged)->first(fn (MessageLogged $log) => str_starts_with($log->message, '[tiktok] '));
+        $this->assertNotNull($received, 'nothing was logged for the TikTok webhook');
+        $this->assertSame('im_receive_msg', $received->context['event']);
     }
 
     #[DataProvider('socialChannels')]

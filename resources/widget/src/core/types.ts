@@ -3,6 +3,17 @@
 /** حقل في نموذج الزائر كما ضبطه التاجر. */
 export type FieldMode = 'off' | 'optional' | 'required'
 
+/** سؤال بداية كما يرسله الخادم (WebChatQuestions::publicView). */
+export interface IntakeQuestion {
+    id: string
+    target: 'name' | 'email' | 'phone' | 'field'
+    validation: 'text' | 'number' | 'email' | 'phone' | 'date' | 'select' | 'saudi_id'
+    required: boolean
+    label_ar: string | null
+    label_en: string | null
+    options?: string[]
+}
+
 export interface WidgetMedia {
     url: string | null
     name: string | null
@@ -74,6 +85,10 @@ export interface WidgetConfig {
             title: string
             subtitle: string
             welcome_message: string
+            /** النسخ الإنجليزية اختيارية: الفارغة تعني العربية (pick). غائبة عند خادم أقدم. */
+            title_en?: string
+            subtitle_en?: string
+            welcome_message_en?: string
             language: 'auto' | 'ar' | 'en'
         }
         prechat: {
@@ -84,11 +99,16 @@ export interface WidgetConfig {
             name_label: string | null
             phone_label: string | null
             consent_text: string | null
+            consent_text_en?: string | null
+            /** أسئلة البداية الفعلية. غائبة عند خادم أقدم: تُشتقّ من المفاتيح أعلاه. */
+            questions?: IntakeQuestion[]
         }
         behavior: { show_agent_names: boolean; sound: boolean; uploads: boolean }
     }
     available: boolean
     open_now: boolean
+    /** عدد الأسئلة الشائعة المفعّلة. غائب عند خادم أقدم: لا قائمة. */
+    faqs?: number
     realtime: RealtimeConfig | null
     bundle: string | null
     limits: { text: number; media: Record<string, number>; accept: string[]; files_per_send?: number }

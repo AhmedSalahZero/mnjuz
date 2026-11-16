@@ -104,15 +104,21 @@ class AgentPerformanceController extends BaseController
             return response()->json(['success' => false], 403);
         }
 
-        if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance')) {
+        // وقت النشاط ميزة مدفوعة؛ «متصل الآن» يُسجَّل لكل الباقات (خطوة
+        // التحويل إلى موظف تسأل عنه) ما لم يُطفأ مفتاح presence.all_plans.
+        $tracksActiveTime = SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance');
+
+        if (!$tracksActiveTime && !AgentPresence::recordedFor($organizationId)) {
             return response()->json(['success' => true]);
         }
 
-        AgentPerformanceService::recordHeartbeat(
-            $organizationId,
-            (int) auth()->id(),
-            $request->boolean('visible', true)
-        );
+        if ($tracksActiveTime) {
+            AgentPerformanceService::recordHeartbeat(
+                $organizationId,
+                (int) auth()->id(),
+                $request->boolean('visible', true)
+            );
+        }
 
         // واجهة قديمة مخبّأة (قبل النشر) لا ترسل معرّف تبويب: عميل واحد باسم
         // الويب، فتبقى صحيحة حتى تُحدَّث الصفحة.

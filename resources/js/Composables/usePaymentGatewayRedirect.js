@@ -20,6 +20,7 @@ export async function redirectToPaymentGateway(url, payload) {
         throw new Error(data?.message || 'Could not initialize payment.')
     } catch (error) {
         const message = error.response?.data?.message
+            || error.response?.data?.errors?.coupon?.[0]
             || error.response?.data?.errors?.amount?.[0]
             || error.response?.data?.errors?.method?.[0]
             || error.message

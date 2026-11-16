@@ -30,6 +30,10 @@ class CampaignAudienceService
      */
     public static function query(int $organizationId, $contactGroupId, string $channel = Channel::DEFAULT): Builder
     {
+        if ($channel === Channel::EMAIL) {
+            return self::emailQuery($organizationId, $contactGroupId);
+        }
+
         $base = (empty($contactGroupId) || (string) $contactGroupId === '0')
             ? Contact::where('organization_id', $organizationId)
             : Contact::whereHas('contactGroups', function ($query) use ($contactGroupId) {
@@ -40,6 +44,47 @@ class CampaignAudienceService
             ->where('contacts.channel', $channel)
             ->whereNull('deleted_at')
             ->whereNull('marketing_opted_out_at');
+    }
+
+    /**
+     * جمهور البريد: الشخص عنوانه لا صفّه. صفوف قنوات شتّى قد تحمل العنوان
+     * نفسه (واتساب وتيليجرام)، فسجلٌّ واحد لكل عنوان — على أقدم صفّ حيّ،
+     * ومنه تُملأ المتغيّرات.
+     *
+     * يُستبعد:
+     *  - عنوانٌ ألغى اشتراكه في بريد المنشأة (email_unsubscribes)؛
+     *  - عنوانٌ انسحب أيّ صفّ له من التسويق — الاتّجاه المحافظ؛
+     *  - صفوف المحادثة المباشرة: العنوان فيها كتبه زائرٌ مجهول بلا تحقّق،
+     *    وإرسال تسويقٍ إليه يُعرّض دومين التاجر للحظر.
+     */
+    private static function emailQuery(int $organizationId, $contactGroupId): Builder
+    {
+        $all = empty($contactGroupId) || (string) $contactGroupId === '0';
+
+        return Contact::query()->whereIn('contacts.id', function ($query) use ($organizationId, $contactGroupId, $all) {
+            $query->from('contacts as c')
+                ->selectRaw('MIN(c.id)')
+                ->where('c.organization_id', $organizationId)
+                ->whereNull('c.deleted_at')
+                ->where('c.channel', '!=', Channel::WEBCHAT)
+                ->whereNotNull('c.email')
+                ->where('c.email', 'like', '%_@_%')
+                ->when(!$all, fn ($q) => $q->whereExists(fn ($member) => $member->selectRaw('1')
+                    ->from('contact_contact_group as g')
+                    ->whereColumn('g.contact_id', 'c.id')
+                    ->where('g.contact_group_id', $contactGroupId)))
+                ->whereNotExists(fn ($unsubscribed) => $unsubscribed->selectRaw('1')
+                    ->from('email_unsubscribes as u')
+                    ->where('u.organization_id', $organizationId)
+                    ->whereRaw('u.email = LOWER(TRIM(c.email))'))
+                ->whereNotExists(fn ($optedOut) => $optedOut->selectRaw('1')
+                    ->from('contacts as o')
+                    ->where('o.organization_id', $organizationId)
+                    ->whereNull('o.deleted_at')
+                    ->whereNotNull('o.marketing_opted_out_at')
+                    ->whereRaw('LOWER(TRIM(o.email)) = LOWER(TRIM(c.email))'))
+                ->groupByRaw('LOWER(TRIM(c.email))');
+        });
     }
 
     public static function count(int $organizationId, $contactGroupId, string $channel = Channel::DEFAULT): int

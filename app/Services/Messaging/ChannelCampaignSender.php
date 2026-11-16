@@ -33,6 +33,12 @@ class ChannelCampaignSender
     public function send(Campaign $campaign, Contact $contact, $userId = null): object
     {
         $channel = $campaign->channel ?? Channel::DEFAULT;
+
+        // البريد عبر SMTP التاجر: لا driver ولا نافذة ولا محادثة.
+        if ($channel === Channel::EMAIL) {
+            return app(\App\Services\Email\EmailCampaignSender::class)->send($campaign, $contact);
+        }
+
         $driver = $this->channels->driver($channel);
 
         $account = $campaign->channel_account_id

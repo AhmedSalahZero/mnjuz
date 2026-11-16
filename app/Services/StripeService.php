@@ -34,10 +34,25 @@ class StripeService
         $this->stripe = new \Stripe\StripeClient($this->config->secret_key);
     }
 
-    public function handlePayment($amount, $planId = NULL)
+    /**
+     * @param  array{coupon_ref?: string}  $context  مرجع حجز كوبون «إضافة دفعة»
+     *   يسافر في metadata فيصل الـ webhook.
+     */
+    public function handlePayment($amount, $planId = NULL, array $context = [])
     {
         try {
             if($planId == NULL){
+                $metadata = [
+                    'organization_id' => session()->get('current_organization'),
+                    'user_id' => auth()->user()->id,
+                    'amount' => $amount,
+                    'plan_id' => $planId
+                ];
+
+                if (!empty($context['coupon_ref'])) {
+                    $metadata['coupon_ref'] = (string) $context['coupon_ref'];
+                }
+
                 $stripeSession = $this->stripe->checkout->sessions->create([
                     'line_items' => [[
                         'price_data' => [
@@ -45,19 +60,16 @@ class StripeService
                             'product_data' => [ 
                                 'name' => 'Account Credits' 
                             ], 
-                            'unit_amount' => $amount * 100
+                            // بالهللة صحيحةً: المبلغ بعد خصم الكوبون فيه كسور، و
+                            // 899.99*100 بالفاصلة العائمة ليس عدداً صحيحاً.
+                            'unit_amount' => (int) round($amount * 100)
                         ],
                         'quantity' => 1,
                     ]],
                     'mode' => 'payment',
                     //'customer' => session()->get('current_organization'),
                     'customer_email' => auth()->user()->email,
-                    'metadata' => [
-                        'organization_id' => session()->get('current_organization'),
-                        'user_id' => auth()->user()->id,
-                        'amount' => $amount,
-                        'plan_id' => $planId
-                    ],
+                    'metadata' => $metadata,
                     'success_url' => url('billing'),
                     'cancel_url' => url('billing'),
                 ]);
@@ -401,6 +413,17 @@ class StripeService
                         ]);
 
                         if($metadata->plan_id == null){
+                            // خصم كوبون الشحن إلى الرصيد قبل التفعيل منه، مرّة واحدة.
+                            if (!empty($metadata->coupon_ref)) {
+                                app(\App\Services\Billing\CouponRedemptionService::class)->settleTopup(
+                                    (string) $metadata->coupon_ref,
+                                    (int) $metadata->organization_id,
+                                    $payment->id,
+                                    (float) $metadata->amount,
+                                    (int) $metadata->user_id
+                                );
+                            }
+
                             $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($metadata->organization_id, $metadata->user_id);
                         } else {
                             $this->subscriptionService->updateSubscriptionPlan($metadata->organization_id, $metadata->plan_id, $metadata->user_id);

@@ -413,11 +413,26 @@ class FlowExecutionService
         $jumpedBack = false; // Track if we already attempted a backward jump (prevent re-looping)
         $startStep = (string) $flowData->current_step;
         $handled = false; // نُفّذ إجراءٌ في هذه الجولة
+        $branch = null; // المخرج الذي اختارته خطوة تحويل للتوّ
 
         while ($iteration < $maxIterations) {
             $iteration++;
-            // Get the current node metadata
-            $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
+
+            // بعد خطوة تحويل: الحافّة الخارجة من مخرجها هي وحدها، لا ردّ العميل.
+            if ($branch !== null) {
+                $metadataArray = $this->branchTarget($edges, $flowData->current_step, $branch);
+                $branch = null;
+
+                // مخرج غير موصول: ينتهي التدفّق هنا، والإسناد قائم. «مُعالَجة»
+                // لئلّا تُجيب الردود الأخرى والمساعد على الرسالة نفسها.
+                if (empty($metadataArray)) {
+                    FlowUserData::where('contact_id', $contactId)->delete();
+                    return $handled;
+                }
+            } else {
+                // Get the current node metadata
+                $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
+            }
 
             if (empty($metadataArray)) {
                 $edgesFromCurrentStep = 0;
@@ -455,6 +470,18 @@ class FlowExecutionService
             $nodeType = \Arr::get($metadataArray, "type", null);
             if ($nodeType === 'action') {
                 $result = $this->processActionNode($metadataArray, $contact, $message, $flowData, $contactId);
+
+                // خطوة تحويل: تكمل من مخرجها (متاح / غير متاح).
+                if (is_array($result) && isset($result['branch'])) {
+                    $handled = true;
+                    $branch = (string) $result['branch'];
+
+                    $flowData = FlowUserData::where('contact_id', $contactId)->first();
+                    if (!$flowData) {
+                        return $handled;
+                    }
+                    continue;
+                }
 
                 if ($result === false) {
                     // Action failed, stop the flow
@@ -794,6 +821,12 @@ class FlowExecutionService
         $config = \Arr::get($metadataArray, "data.config", []);
         $isActive = \Arr::get($metadataArray, "data.is_active", true);
 
+        // خطوة تحويل معطّلة: لا إسناد، والعميل يسلك «غير متاح» — له ردّه هناك.
+        if ($actionType !== null && str_replace('-', '_', $actionType) === 'assign_agent' && !$isActive) {
+            $this->proceedToNextStep($flowData, $contactId, $metadataArray['id'] ?? null);
+            return ['branch' => \App\Services\Chat\ConversationHandoff::UNAVAILABLE];
+        }
+
         if (!$actionType || !$isActive) {
             $this->proceedToNextStep($flowData, $contactId, $metadataArray['id'] ?? null);
             return true;
@@ -815,6 +848,16 @@ class FlowExecutionService
 
         // Execute the action
         $result = $actionService->executeAction($actionType, $config, $contact, $message, $flowData, $contactId);
+
+        // التحويل إلى موظف يتفرّع: المخرج يُختار بالحضور. خطأ أثناءه (false)
+        // يسلك «غير متاح» — لا يُنهي الجلسة فيبقى العميل بلا ردّ.
+        if ($actionType === 'assign_agent') {
+            $this->proceedToNextStep($flowData, $contactId, $metadataArray['id'] ?? null);
+
+            return ['branch' => $result === \App\Services\Chat\ConversationHandoff::AVAILABLE
+                ? \App\Services\Chat\ConversationHandoff::AVAILABLE
+                : \App\Services\Chat\ConversationHandoff::UNAVAILABLE];
+        }
 
 		if ($result === 'delayed') {
    			//  logger('Delay action executed - flow paused');
@@ -1148,6 +1191,31 @@ class FlowExecutionService
         return null;
     }
 
+    /**
+     * العقدة التالية على مخرج بعينه من خطوة تحويل. المطابقة بالمصدر والمقبض
+     * معاً: المقبضان (available / unavailable) مشتركان بين كل خطوات التحويل.
+     */
+    private function branchTarget($edges, $sourceId, string $handle): array
+    {
+        foreach ($edges ?? [] as $edge) {
+            if (isset($edge['source']) && (string) $edge['source'] === (string) $sourceId
+                && ($edge['sourceHandle'] ?? null) === $handle) {
+                return $edge['targetNode'] ?? [];
+            }
+        }
+
+        return [];
+    }
+
+    private function isAssignAgentNode($node): bool
+    {
+        if (!is_array($node) || ($node['type'] ?? null) !== 'action') {
+            return false;
+        }
+
+        return str_replace('-', '_', (string) ($node['data']['actionType'] ?? '')) === 'assign_agent';
+    }
+
     private function findEdgesBySource($edges, $sourceId, $message)
     {
         $sourceId = (string) $sourceId;
@@ -1158,6 +1226,12 @@ class FlowExecutionService
         ));
 
         if ($matchingEdges === []) {
+            return [];
+        }
+
+        // جلسة واقفة على خطوة تحويل (تعذّر إرسال ما بعدها): ردّ العميل التالي
+        // لا يختار أحد مخرجيها — مخرجاها يُختاران بالحضور لحظة التحويل وحدها.
+        if ($this->isAssignAgentNode($matchingEdges[0]['sourceNode'] ?? null)) {
             return [];
         }
 

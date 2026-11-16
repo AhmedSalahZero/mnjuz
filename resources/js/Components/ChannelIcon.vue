@@ -24,6 +24,9 @@ const BRAND = {
     instagram: '#E4405F',
     tiktok: '#010101',
     webchat: '#16a34a',
+    // قنوات إرسال للحملات (لا محادثة).
+    email: '#4f46e5',
+    sms: '#0ea5e9',
 };
 
 const color = (channel) => BRAND[channel] || '#64748b';
@@ -72,6 +75,18 @@ const color = (channel) => BRAND[channel] || '#64748b';
         <svg v-else-if="channel === 'webchat'" :width="filled ? size * 0.6 : size" :height="filled ? size * 0.6 : size"
              viewBox="0 0 24 24" :fill="filled ? '#fff' : color('webchat')" aria-hidden="true">
             <path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9.4L5 21.5V18H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 6.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3zm5 0a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3zm5 0a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3z"/>
+        </svg>
+
+        <!-- البريد (حملات عبر SMTP التاجر) -->
+        <svg v-else-if="channel === 'email'" :width="filled ? size * 0.6 : size" :height="filled ? size * 0.6 : size"
+             viewBox="0 0 24 24" :fill="filled ? '#fff' : color('email')" aria-hidden="true">
+            <path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1.4 2L12 12.1L19.6 7H4.4zM20 8.9l-7.45 5a1 1 0 0 1-1.1 0L4 8.9V17h16V8.9z"/>
+        </svg>
+
+        <!-- رسائل SMS -->
+        <svg v-else-if="channel === 'sms'" :width="filled ? size * 0.6 : size" :height="filled ? size * 0.6 : size"
+             viewBox="0 0 24 24" :fill="filled ? '#fff' : color('sms')" aria-hidden="true">
+            <path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h10V5H7zm2 2h6v2H9V7zm0 4h4v2H9v-2zm2.5 8a1 1 0 1 0 1 0h-1z"/>
         </svg>
 
         <!-- قناة غير معروفة: دائرة محايدة بدل فراغ -->

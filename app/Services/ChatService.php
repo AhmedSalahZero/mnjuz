@@ -285,6 +285,25 @@ class ChatService
         $this->assertConversationAccess($contact);
         BroadcastProvider::apply();
 
+        // الحارسان نفساهما في sendOnChannel: بلا حساب كان sendMediaOnChannel
+        // يُمرّر null إلى السائق فينهار بدل رسالة يفهمها الموظّف.
+        if (!$this->channels()->accountForContact($contact)) {
+            return response()->json([
+                'success' => false,
+                'message' => $this->channels()->connectionError((int) $this->organizationId, (string) $contact->channel)
+                    ?? __('Message could not be sent.'),
+            ], 422);
+        }
+
+        if (!$this->channels()->driver((string) $contact->channel)->canAddress($contact)) {
+            return response()->json([
+                'success' => false,
+                'message' => __('This contact has no :channel identifier.', [
+                    'channel' => Channel::label((string) $contact->channel),
+                ]),
+            ], 422);
+        }
+
         $file = new \Illuminate\Http\UploadedFile($absolutePath, $fileName, null, null, true);
         $caption = $this->resolveMediaCaption((object) ['caption' => $caption], $type);
 
@@ -639,6 +658,10 @@ class ChatService
                     'first_name',
                     'last_name',
                     'phone',
+                    // الرقم المعروض: لزائر المحادثة المباشرة هو الرقم الوحيد
+                    // (phone هويّة واتساب وتبقى فارغة له). بدونه كان الرأس
+                    // والشريط يعرضانه فارغاً والبريد ظاهراً.
+                    'formatted_phone',
                     'email',
                     'organization_id',
                     'is_blocked',
@@ -1992,7 +2015,7 @@ class ChatService
                 'formatted_phone_number' => $contact->formatted_phone_number,
                 // كارت «الزائر» للمحادثة المباشرة: من أين جاء وبماذا يتصفّح.
                 'webchat_visitor' => ($contact->channel ?? null) === Channel::WEBCHAT
-                    ? $contact->webchatVisitor?->agentView()
+                    ? $contact->webchatVisitor?->agentView(Contact::contactPhoneNumberShouldEncrypted())
                     : null,
                 'contact_groups' => $contact->relationLoaded('contactGroups')
                     ? $contact->contactGroups->map(fn ($g) => ['id' => $g->id, 'name' => $g->name])->values()->all()

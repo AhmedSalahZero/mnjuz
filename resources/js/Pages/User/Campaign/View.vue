@@ -39,12 +39,12 @@
 							<h4 class="text-sm">{{ $t('Sent') }}</h4>
 						</div>
 						<div class="w-full text-center bg-white py-8 border">
-							<h2 class="text-xl">{{ props.campaign.total_delivered_count }}</h2>
+							<h2 class="text-xl">{{ deliveryTracked ? props.campaign.total_delivered_count : '—' }}</h2>
 							<h4 class="text-sm">{{ $t('Delivered') }}</h4>
 						</div>
 						<div class="w-full bg-white text-center py-8 border">
-							<h2 class="text-xl">{{ props.campaign.total_read_count }}</h2>
-							<h4 class="text-sm">{{ $t('Read') }}</h4>
+							<h2 class="text-xl">{{ deliveryTracked ? props.campaign.total_read_count : '—' }}</h2>
+							<h4 class="text-sm">{{ deliveryTracked ? $t('Read') : $t('Not tracked') }}</h4>
 						</div>
 						<div class="w-full rounded-tr-lg rounded-br-lg bg-white text-center py-8 border">
 							<h2 class="text-xl">{{ props.campaign.total_failed_count }}</h2>
@@ -52,7 +52,8 @@
 						</div>
 					</div>
 					<!-- Table Component-->
-					<CampaignLogTable :rows="props.rows" :filters="props.filters" :uuid="props.campaign.uuid" />
+					<CampaignLogTable :rows="props.rows" :filters="props.filters" :uuid="props.campaign.uuid"
+						:channel="campaignChannel" :showEmail="props.showRecipientEmail !== false" />
 				</div>
 				<div class="md:w-[30%]">
 					<div class="w-full rounded-lg bg-white pt-4 pb-8 border px-4 space-y-1 capitalize">
@@ -62,8 +63,15 @@
 							<p>{{ props.campaign?.name }}</p>
 						</div>
 						<div class="text-sm bg-slate-100 p-3 rounded-lg">
+							<h3>{{ $t('Channel') }}</h3>
+							<p class="flex items-center gap-1.5">
+								<ChannelIcon :channel="campaignChannel" :size="14" filled />
+								<span>{{ $t(channelName) }}</span>
+							</p>
+						</div>
+						<div class="text-sm bg-slate-100 p-3 rounded-lg">
 							<h3>{{ $t('Template') }}</h3>
-							<p>{{ props.campaign?.template?.name }}</p>
+							<p>{{ campaignTemplateLabel(props.campaign, '—') }}</p>
 						</div>
 						<div class="text-sm bg-slate-100 p-3 rounded-lg">
 							<h3>{{ $t('Recipients') }}</h3>
@@ -76,8 +84,11 @@
 						</div>
 					</div>
 					<div class="w-full rounded-lg p-5 mt-5 border chat-bg">
-						<WhatsappTemplate :parameters="JSON.parse(props.campaign.metadata)" :placeholder="false"
+						<WhatsappTemplate v-if="isWhatsapp" :parameters="templateParameters" :placeholder="false"
 							:visible="true" />
+						<!-- حملة تيليجرام أو بريد: رسالتها كما كُتبت، نصّاً لا HTML. -->
+						<ChannelMessagePreview v-else :channel="campaignChannel" :label="$t(channelName)"
+							:subject="message.subject" :text="message.text" :media="message.media" />
 						<div v-if="campaignCarousel" class="max-w-[25em]">
 							<CarouselCardsStrip :format="campaignCarousel.format" :cards="campaignCarousel.cards" />
 						</div>
@@ -92,6 +103,9 @@ import AppLayout from "./../Layout/App.vue"
 import CampaignLogTable from '@/Components/Tables/CampaignLogTable.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
 import CarouselCardsStrip from '@/Components/Template/CarouselCardsStrip.vue'
+import ChannelIcon from '@/Components/ChannelIcon.vue'
+import ChannelMessagePreview from '@/Components/ChannelMessagePreview.vue'
+import { campaignTemplateLabel, isWhatsappCampaign, parseMessagePayload, parseTemplateMetadata, tracksDelivery } from '@/Composables/campaignDisplay.js'
 import { substituteVariables } from '@/Composables/carouselTemplate.js'
 import { Link, router } from "@inertiajs/vue3"
 import { computed, ref } from 'vue'
@@ -99,7 +113,18 @@ import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
-const props = defineProps(['campaign', 'rows', 'filters', 'resendableCount'])
+const props = defineProps(['campaign', 'rows', 'filters', 'resendableCount', 'showRecipientEmail'])
+
+// حملة بلا قالب واتساب (تيليجرام، البريد) لها رسالة حرّة بدل القالب. كانت
+// الصفحة تمرّر metadata "[]" لمعاينة واتساب فتسقط.
+const CHANNEL_NAMES = { whatsapp: 'WhatsApp', telegram: 'Telegram', email: 'Email', sms: 'SMS', messenger: 'Messenger', instagram: 'Instagram', tiktok: 'TikTok' }
+const campaignChannel = computed(() => props.campaign?.channel || 'whatsapp')
+const channelName = computed(() => CHANNEL_NAMES[campaignChannel.value] || campaignChannel.value)
+const isWhatsapp = computed(() => isWhatsappCampaign(props.campaign?.channel))
+const templateParameters = computed(() => parseTemplateMetadata(props.campaign?.metadata))
+const message = computed(() => parseMessagePayload(props.campaign?.message_payload))
+// تيليجرام لا يُبلغ البوت بالتسليم ولا القراءة، والبريد لا نتتبّع فتحه.
+const deliveryTracked = computed(() => tracksDelivery(campaignChannel.value))
 
 // بطاقات حملة الـ carousel كما حُفظت: الوسائط المختارة، والمتغيّر الثابت بقيمته.
 const campaignCarousel = computed(() => {

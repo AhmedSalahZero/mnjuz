@@ -418,6 +418,36 @@ class MobileCampaignTest extends MobileApiTestCase
         $this->getJson('/api/v1/campaigns?status=scheduled')->assertJsonCount(0, 'data.items');
     }
 
+    /**
+     * حملات تيليجرام (والبريد لاحقاً) المنشأة من الويب تظهر في قائمة التطبيق
+     * بلا قالب واتساب: «channel» يُميّزها — إضافة، وكل المفاتيح السابقة باقية.
+     */
+    public function test_campaigns_report_their_channel_additively(): void
+    {
+        $this->campaign(['name' => 'واتساب']);
+        $telegram = $this->campaign([
+            'name' => 'تيليجرام',
+            'channel' => 'telegram',
+            'template_id' => null,
+            'metadata' => '[]',
+            'message_payload' => json_encode(['text' => 'أهلاً', 'media' => null], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $items = collect($this->getJson('/api/v1/campaigns?per_page=10')->assertOk()->json('data.items'))->keyBy('name');
+
+        $this->assertSame('whatsapp', $items['واتساب']['channel']);
+        $this->assertSame('telegram', $items['تيليجرام']['channel']);
+        $this->assertNull($items['تيليجرام']['template']);
+
+        foreach (['uuid', 'name', 'status', 'failure_reason', 'template', 'audience', 'stats', 'scheduled_at', 'created_at', 'can_resend'] as $key) {
+            $this->assertArrayHasKey($key, $items['واتساب'], "المفتاح {$key} اختفى من استجابة التطبيق");
+        }
+
+        $this->getJson('/api/v1/campaigns/' . $telegram->uuid)
+            ->assertOk()
+            ->assertJsonPath('data.channel', 'telegram');
+    }
+
     public function test_show_and_logs_explain_each_failure(): void
     {
         $campaign = $this->campaign();

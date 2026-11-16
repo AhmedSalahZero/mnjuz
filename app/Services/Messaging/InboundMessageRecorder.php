@@ -62,6 +62,17 @@ class InboundMessageRecorder
             return null;
         }
 
+        // زائر المحادثة المباشرة يصير جهة اتصال عند نهاية أسئلة البداية، قبل
+        // أن يكتب. فأوّل رسالة منه تجد جهةً قائمة وهي أوّل محادثة له: مسار
+        // الترحيب (new_contact) وإشعار «عميل جديد» يعاملانها جديدة. وإن راسله
+        // موظّف قبلها (صادرة) فليست أوّل محادثة.
+        if (!$isNewContact
+            && $contact->channel === Channel::WEBCHAT
+            && !Chat::where('contact_id', $contact->id)->where('id', '<', $chat->id)->exists()
+        ) {
+            $isNewContact = true;
+        }
+
         $this->createChatLog($contact->id, $chat->id);
 
         ProcessTicketAssignmentJob::dispatchSync($contact->id, $organizationId, true);

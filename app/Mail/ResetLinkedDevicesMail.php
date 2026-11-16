@@ -12,6 +12,10 @@ class ResetLinkedDevicesMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
+    /** إعادة المحاولة لأخطاء SMTP العابرة — انظر CustomEmail. */
+    public $tries = 3;
+    public $backoff = [10, 60];
+
     public function __construct(
         public User $user,
         public string $resetUrl,

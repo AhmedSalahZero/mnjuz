@@ -52,6 +52,18 @@ class Campaign extends Model {
         ];
     }
 
+    /**
+     * قيمة من حمولة الرسالة غير النصّ والمرفق: موضوع البريد، القالب المحفوظ
+     * الذي أُنشئت منه ({uuid, name})، لغة التذييل. messagePayload() تبقى
+     * بشكلها كما هي — مُرسِلات القنوات تعتمد عليه.
+     */
+    public function payloadValue(string $key, mixed $default = null): mixed
+    {
+        $decoded = $this->message_payload ? json_decode($this->message_payload, true) : null;
+
+        return is_array($decoded) && array_key_exists($key, $decoded) ? $decoded[$key] : $default;
+    }
+
     public function channelAccount()
     {
         return $this->belongsTo(ChannelAccount::class, 'channel_account_id', 'id');
@@ -141,6 +153,21 @@ class Campaign extends Model {
     }
 
     public function getCounts(){
+        // البريد بلا صفوف chats: النتيجة على السجلّ نفسه، والتسليم والقراءة
+        // لا يُتتبّعان (صفر). الأعمدة نفسها ليقرأها كل عارضٍ كما هو.
+        if (($this->channel ?? \App\Services\Messaging\Channel::DEFAULT) === \App\Services\Messaging\Channel::EMAIL) {
+            return $this->campaignLogs()
+                ->selectRaw('
+                    COUNT(*) as total_message_count,
+                    SUM(CASE WHEN campaign_logs.status = "success" THEN 1 ELSE 0 END) as total_sent_count,
+                    0 as total_delivered_count,
+                    SUM(CASE WHEN campaign_logs.status = "failed" THEN 1 ELSE 0 END) as total_failed_count,
+                    0 as total_read_count
+                ')
+                ->where('campaign_logs.campaign_id', $this->id)
+                ->first();
+        }
+
         return $this->campaignLogs()
             ->selectRaw('
                 COUNT(*) as total_message_count,

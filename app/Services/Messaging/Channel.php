@@ -25,6 +25,15 @@ final class Channel
      */
     public const WEBCHAT = 'webchat';
 
+    /**
+     * قنوات إرسال فقط — للحملات: لا محادثة ولا webhook ولا driver. قيمتاهما
+     * تُخزَّنان في campaigns.channel (و channel_accounts.channel لحساب SMTP
+     * التاجر)، لكنّهما خارج all() عمداً: فلا تدخلان صندوق الوارد ولا الأتمتة
+     * ولا ChannelManager::driver() ولا صفحة الربط العامّة. يُنظر CampaignChannels.
+     */
+    public const EMAIL = 'email';
+    public const SMS = 'sms';
+
     /** القناة الافتراضية لكل ما هو مخزَّن قبل إضافة تعدّد القنوات. */
     public const DEFAULT = self::WHATSAPP;
 
@@ -91,6 +100,8 @@ final class Channel
             self::INSTAGRAM => 'Instagram',
             self::TIKTOK => 'TikTok',
             self::WEBCHAT => 'Web Chat',
+            self::EMAIL => 'Email',
+            self::SMS => 'SMS',
             default => ucfirst($channel),
         };
     }

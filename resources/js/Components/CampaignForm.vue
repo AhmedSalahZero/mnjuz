@@ -1,6 +1,17 @@
 <script setup>
 import axios from "axios"
 import ChannelIcon from '@/Components/ChannelIcon.vue'
+import ChannelMessagePreview from '@/Components/ChannelMessagePreview.vue'
+import {
+	acceptsMedia,
+	fileProblem,
+	findSavedTemplate,
+	initialCampaignChannel,
+	isSelectableChannel,
+	mediaAccept,
+	messageLimit,
+	savedTemplateOptions,
+} from '@/Composables/campaignChannels.js'
 import FormInput from '@/Components/FormInput.vue'
 import FormSelect from '@/Components/FormSelect.vue'
 import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
@@ -35,6 +46,17 @@ const props = defineProps({
 		default: () => [],
 	},
 	channelCapabilities: {
+		type: Object,
+		default: () => ({}),
+	},
+	// منتقي الحملة (CampaignChannels::options): القنوات الأربع بحالة ربطها
+	// وما تقبله رسالتها. صفحتا المحادثة والإعدادات لا تُرسلانه.
+	campaignChannels: {
+		type: Array,
+		default: () => [],
+	},
+	// القوالب المحفوظة لكل قناة بلا موافقة: {telegram: [...], email: [...]}.
+	channelTemplates: {
 		type: Object,
 		default: () => ({}),
 	},
@@ -135,6 +157,9 @@ const form = useForm({
 	template: null,
 	message_text: '',
 	message_media: null,
+	// البريد: موضوع الرسالة. والقالب المحفوظ (تيليجرام والبريد) بدل الكتابة.
+	subject: '',
+	channel_template: '',
 	contacts: null,
 	time: null,
 	skip_schedule: false,
@@ -177,6 +202,8 @@ const CHANNEL_LABELS = {
 	messenger: 'Messenger',
 	instagram: 'Instagram',
 	tiktok: 'TikTok',
+	email: 'Email',
+	sms: 'SMS',
 }
 
 const channelLabel = (channel) => CHANNEL_LABELS[channel] || channel
@@ -202,19 +229,81 @@ const availableChannels = computed(() => {
 	return list
 })
 
-const hasAnyChannel = computed(() => availableChannels.value.length > 0)
+// منتقي الحملة الجديد (القنوات الأربع) — في نموذج الحملة وحده. صفحتا
+// المحادثة والإعدادات تبقيان على ما كانتا عليه تماماً.
+const usesCampaignPicker = computed(() => props.isCampaignFlow && (props.campaignChannels || []).length > 0)
+
+const pickerOption = computed(() => (props.campaignChannels || []).find((o) => o.value === form.channel) || null)
+const channelRules = computed(() => pickerOption.value?.rules || {})
+const canSendOnChannel = computed(() => !usesCampaignPicker.value || isSelectableChannel(pickerOption.value))
+
+// مع المنتقي يظهر النموذج دائماً: القنوات غير المربوطة معطّلة وفيها رابط ربطها.
+const hasAnyChannel = computed(() => usesCampaignPicker.value || availableChannels.value.length > 0)
 
 const isWhatsappCampaign = computed(() => form.channel === 'whatsapp')
+const isEmailCampaign = computed(() => form.channel === 'email')
 
 const activeCapabilities = computed(() => props.channelCapabilities?.[form.channel] || {})
+
+// القوالب المحفوظة للقناة المختارة، والقالب المختار منها.
+const savedTemplates = computed(() => savedTemplateOptions(props.channelTemplates, form.channel))
+const chosenSavedTemplate = computed(() => findSavedTemplate(props.channelTemplates, form.channel, form.channel_template))
+
+const textLimit = computed(() => messageLimit(channelRules.value, Boolean(form.message_media)))
+const fileError = ref(null)
+
+const onMessageMedia = (event) => {
+	const file = event.target.files?.[0] || null
+	const problem = fileProblem(channelRules.value, file)
+
+	fileError.value = problem ? trans(problem.key).replace('{limit}', problem.params?.limit ?? '') : null
+	form.message_media = problem ? null : file
+
+	if (problem) event.target.value = ''
+}
+
+// ما تعرضه المعاينة لقناة غير واتساب: القالب المختار أو ما يُكتب الآن.
+const channelPreview = computed(() => {
+	const template = chosenSavedTemplate.value
+
+	return {
+		subject: template ? (template.subject || '') : form.subject,
+		text: template ? template.body : form.message_text,
+		media: template ? (template.media || null) : null,
+	}
+})
 
 // القناة الافتراضية: واتساب إن كانت مربوطة، وإلّا أول قناة متاحة — فلا
 // يفتح النموذج على قناة لا يملكها المستخدم.
 watch(availableChannels, (channels) => {
+	if (usesCampaignPicker.value) {
+		return
+	}
 	if (channels.length && !channels.includes(form.channel)) {
 		form.channel = channels[0]
 	}
 }, { immediate: true })
+
+watch(() => props.campaignChannels, (options) => {
+	if (usesCampaignPicker.value) {
+		form.channel = initialCampaignChannel(options)
+	}
+}, { immediate: true })
+
+// لكل قناة شكل رسالتها: تبديل القناة يبدأ الرسالة من جديد.
+watch(() => form.channel, () => {
+	form.message_text = ''
+	form.subject = ''
+	form.message_media = null
+	form.channel_template = ''
+	fileError.value = null
+})
+
+const chooseChannel = (option) => {
+	if (isSelectableChannel(option)) {
+		form.channel = option.value
+	}
+}
 
 const loadTemplate = async () => {
 	try {
@@ -600,7 +689,37 @@ watch(
 					منتقي القناة: لا يظهر مع قناة واحدة — خيارٌ واحد يشغل
 					مساحة ولا يُقرّر شيئاً.
 				-->
-				<div v-if="isCampaignFlow && availableChannels.length > 1" class="sm:col-span-6">
+				<!-- منتقي الحملة: القنوات الأربع، اختيار واحد. -->
+				<div v-if="usesCampaignPicker" class="sm:col-span-6">
+					<label class="block text-sm mb-2">{{ $t('Channel') }}</label>
+					<div class="grid grid-cols-2 md:grid-cols-4 gap-2" role="radiogroup">
+						<div v-for="option in campaignChannels" :key="option.value"
+							class="rounded-lg border px-3 py-2 text-sm transition-colors"
+							:class="form.channel === option.value
+								? 'bg-slate-800 text-white border-slate-800'
+								: (isSelectableChannel(option) ? 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 cursor-pointer' : 'bg-slate-50 text-slate-400 border-slate-200')"
+							role="radio" :aria-checked="form.channel === option.value"
+							:aria-disabled="!isSelectableChannel(option)"
+							:tabindex="isSelectableChannel(option) ? 0 : -1"
+							@click="chooseChannel(option)" @keydown.enter.prevent="chooseChannel(option)"
+							@keydown.space.prevent="chooseChannel(option)">
+							<div class="flex items-center gap-2">
+								<ChannelIcon :channel="option.value" :size="18" :filled="form.channel === option.value" />
+								<span>{{ option.label }}</span>
+							</div>
+							<div v-if="option.coming_soon" class="text-[11px] mt-1">{{ $t('Coming soon') }}</div>
+							<div v-else-if="!option.connected" class="text-[11px] mt-1">
+								<span>{{ $t('Not connected') }}</span>
+								<Link v-if="option.connect_url" :href="option.connect_url" class="underline ms-1" @click.stop>
+									{{ $t('Connect') }}
+								</Link>
+							</div>
+						</div>
+					</div>
+					<p v-if="form.errors.channel" class="text-xs text-red-600 mt-1">{{ form.errors.channel }}</p>
+				</div>
+
+				<div v-if="!usesCampaignPicker && isCampaignFlow && availableChannels.length > 1" class="sm:col-span-6">
 					<label class="block text-sm mb-2">{{ $t('Channel') }}</label>
 					<div class="flex gap-1.5 flex-wrap">
 						<button v-for="channel in availableChannels" :key="channel" type="button"
@@ -624,26 +743,66 @@ watch(
 					:options="templateOptions" :required="true" :error="form.errors.template" :name="$t('Template')"
 					:class="'sm:col-span-3'" :placeholder="$t('Select template')" />
 
-				<!-- الرسالة الحرّة لبقيّة القنوات -->
-				<div v-if="isCampaignFlow && !isWhatsappCampaign" class="sm:col-span-6">
-					<label class="block text-sm mb-2">{{ $t('Message') }}</label>
-					<textarea v-model="form.message_text" rows="5"
-						class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-slate-400"
-						:placeholder="$t('Write the message your customers will receive…')"></textarea>
-					<p v-if="form.errors.message_text" class="text-xs text-red-600 mt-1">{{ form.errors.message_text }}</p>
-					<p class="text-xs text-slate-400 mt-1">
-						{{ $t('You can use variables like {example}', { example: '{first_name}' }) }}
-					</p>
-
-					<div class="mt-3">
-						<label class="block text-xs text-slate-600 mb-1">{{ $t('Attachment (optional)') }}</label>
-						<input type="file" @change="form.message_media = $event.target.files[0] || null"
-							class="text-xs" />
-						<p v-if="form.errors.message_media" class="text-xs text-red-600 mt-1">{{ form.errors.message_media }}</p>
-						<p v-if="!activeCapabilities.text_with_media" class="text-xs text-amber-600 mt-1">
-							{{ $t('This channel sends the text as a separate message after the attachment.') }}
+				<!-- الرسالة لبقيّة القنوات: قالب محفوظ أو تُكتب هنا -->
+				<div v-if="isCampaignFlow && !isWhatsappCampaign" class="sm:col-span-6 space-y-3">
+					<div v-if="usesCampaignPicker">
+						<label class="block text-sm mb-2">{{ $t('Saved template') }}</label>
+						<select v-model="form.channel_template"
+							class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-slate-400">
+							<option value="">{{ $t('Write a new message') }}</option>
+							<option v-for="template in savedTemplates" :key="template.value" :value="template.value">
+								{{ template.label }}
+							</option>
+						</select>
+						<p v-if="form.errors.channel_template" class="text-xs text-red-600 mt-1">{{ form.errors.channel_template }}</p>
+						<p v-if="!savedTemplates.length" class="text-xs text-slate-400 mt-1">
+							{{ $t('No saved templates for this channel yet.') }}
+							<Link :href="'/templates/channel/' + form.channel + '/create'" class="underline">{{ $t('Create one') }}</Link>
 						</p>
 					</div>
+
+					<template v-if="!form.channel_template">
+						<div v-if="isEmailCampaign">
+							<label class="block text-sm mb-2">{{ $t('Subject') }}</label>
+							<input v-model="form.subject" type="text" :maxlength="channelRules.subject_max || 200" dir="auto"
+								class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+							<p v-if="form.errors.subject" class="text-xs text-red-600 mt-1">{{ form.errors.subject }}</p>
+						</div>
+
+						<div>
+							<label class="block text-sm mb-2">{{ $t('Message') }}</label>
+							<textarea v-model="form.message_text" rows="6" dir="auto" :maxlength="textLimit || undefined"
+								class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-slate-400"
+								:placeholder="$t('Write the message your customers will receive…')"></textarea>
+							<div class="flex justify-between gap-2">
+								<p v-if="form.errors.message_text" class="text-xs text-red-600 mt-1">{{ form.errors.message_text }}</p>
+								<p v-if="textLimit" class="text-xs text-slate-400 mt-1 ms-auto">
+									{{ $t('{count} / {max} characters', { count: (form.message_text || '').length, max: textLimit }) }}
+								</p>
+							</div>
+							<p class="text-xs text-slate-400 mt-1">
+								{{ $t('You can use variables like {example}', { example: '{first_name}' }) }}
+							</p>
+						</div>
+
+						<div v-if="!usesCampaignPicker || acceptsMedia(channelRules)">
+							<label class="block text-xs text-slate-600 mb-1">{{ $t('Attachment (optional)') }}</label>
+							<input type="file" :accept="mediaAccept(channelRules) || undefined" @change="onMessageMedia"
+								class="text-xs" />
+							<p v-if="fileError" class="text-xs text-red-600 mt-1">{{ fileError }}</p>
+							<p v-if="form.errors.message_media" class="text-xs text-red-600 mt-1">{{ form.errors.message_media }}</p>
+							<p v-if="form.channel === 'telegram' && channelRules.caption_max" class="text-xs text-slate-400 mt-1">
+								{{ $t('With an attachment Telegram allows up to {max} characters.', { max: channelRules.caption_max }) }}
+							</p>
+							<p v-if="!usesCampaignPicker && !activeCapabilities.text_with_media" class="text-xs text-amber-600 mt-1">
+								{{ $t('This channel sends the text as a separate message after the attachment.') }}
+							</p>
+						</div>
+					</template>
+
+					<p v-if="isEmailCampaign" class="text-xs text-slate-500">
+						{{ $t('An unsubscribe link is added to every email automatically.') }}
+					</p>
 				</div>
 				<FormSelect v-if="isCampaignFlow" v-model="form.contacts" :options="contactGroupOptions"
 					:name="$t('Send to')" :required="true" :class="'sm:col-span-3'" :placeholder="$t('Select contacts')"
@@ -889,8 +1048,8 @@ watch(
 					</div>
 					<div>
 						<button type="submit"
-							class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary"
-							:disabled="isLoading">
+							class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary disabled:opacity-50"
+							:disabled="isLoading || !canSendOnChannel">
 							<span v-if="!isLoading">{{ sendText ? sendText : $t('Save') }}</span>
 							<svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
 								<path fill="currentColor"
@@ -908,8 +1067,10 @@ watch(
 		</form>
 		<div class="md:w-[50%] py-20 flex justify-center chat-bg" :class="isCampaignFlow ? 'px-20' : 'px-10'">
 			<div>
-				<WhatsappTemplate :parameters="form" :visible="form.template ? true : false"
+				<WhatsappTemplate v-if="isWhatsappCampaign || !isCampaignFlow" :parameters="form" :visible="form.template ? true : false"
 					:placeholder="!headerPreview" />
+				<ChannelMessagePreview v-else :channel="form.channel" :label="channelLabel(form.channel)"
+					:subject="channelPreview.subject" :text="channelPreview.text" :media="channelPreview.media" />
 				<div v-if="isCarousel && form.template" class="max-w-[25em]">
 					<CarouselCardsStrip :format="carouselState.format" :cards="carouselCards" />
 				</div>

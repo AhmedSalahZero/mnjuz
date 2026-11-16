@@ -3,6 +3,13 @@
         <div class="md:h-[90vh]">
             <div class="flex justify-center items-center">
                 <div class="md:w-[60em]">
+                    <div v-if="savedModelRetired" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {{ $t('The saved model {model} is no longer available from OpenAI, so the assistant cannot reply. Choose another model and save.', { model: settings.ai.model }) }}
+                    </div>
+                    <div v-if="props.lastAiError" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        <div class="font-medium">{{ $t('The last AI reply failed') }}</div>
+                        <div class="mt-1 break-words" dir="ltr">{{ props.lastAiError.message || props.lastAiError.code }}</div>
+                    </div>
                     <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-20">
                         <div class="w-full py-2 mb-4 mt-2">
                             <div class="flex w-full">
@@ -128,6 +135,7 @@
                         <div :class="'sm:col-span-6'">
                             <label class="block text-sm leading-6 text-gray-900 mb-1">{{ $t('Integrate AI assistant into chat form') }}</label>
                             <FormToggleSwitch v-model="form2.ai_chat_form_active" :error="form2.errors.ai_chat_form_active" :class="'sm:col-span-6'"/>
+                            <p class="mt-1 text-xs text-slate-500">{{ $t('This adds an AI suggestion button for agents in the chat. It does not reply to customers by itself. To let the assistant reply automatically, turn on Enable automatic AI assistance for new conversations under AI Assistant Setup.') }}</p>
                         </div>
                     </div>
                     <div class="sm:col-span-6 border rounded-md p-2">
@@ -136,7 +144,8 @@
                                 <label class="block text-sm leading-6 text-gray-900 mb-1">{{ $t('Activate audio responses') }}</label>
                                 <FormToggleSwitch v-model="form2.allow_audio_response" :error="form2.errors.allow_audio_response" :class="'sm:col-span-6'"/>
                             </div>
-                            <FormSelect v-model="form2.voice" :error="form2.errors.voice" :name="$t('Audio voice')" :type="'text'"  :options="voices" :class="'sm:col-span-3'"/>
+                            <!-- القائمة تُفتح للأعلى: لوحة Modal عليها overflow-hidden، والمساحة تحت الحقل لا تتّسع إلا لخيارين. -->
+                            <FormSelect v-model="form2.voice" :error="form2.errors.voice" :name="$t('Audio voice')" :type="'text'"  :options="voices" :dropdownUp="true" :class="'sm:col-span-3'"/>
                         </div>
                     </div>
 
@@ -157,7 +166,7 @@
 </template>
 <script setup>
     import SettingLayout from "./../../../../resources/js/Pages/User/Automation/Layout.vue";
-    import { ref, watch } from 'vue';
+    import { computed, ref, watch } from 'vue';
     import { router, useForm } from "@inertiajs/vue3";
     import { trans } from 'laravel-vue-i18n';
     import DocumentTable from '@/Components/Tables/DocumentTable.vue';
@@ -169,17 +178,28 @@
     import Modal from '@/Components/Modal.vue';
     import Pagination from '@/Components/Pagination.vue';
 
-    const props = defineProps(['appSettings', 'rows', 'filters', 'settings', 'aimodule', 'fbmodule', 'models', 'voices']);
+    const props = defineProps(['appSettings', 'rows', 'filters', 'settings', 'aimodule', 'fbmodule', 'models', 'voices', 'lastAiError']);
     const config = ref(props.settings.metadata);
     const settings = ref(config.value ? JSON.parse(config.value) : null);
     const isOpenModal = ref(false);
     const isOpenFormModal = ref(false);
-    const setupForm = ref(false);
+    // الردّ الآلي الفعلي في هذه البطاقة، لا في نافذة المفتاح. كانت مطويّة
+    // فيظنّ التاجر أن مفتاح «نموذج المحادثة» يكفي — فتُفتح ما دام مطفأً.
+    const setupForm = ref(!(settings.value?.ai?.enable_automatic_responses ?? false));
 
     const getValueByKey = (key) => {
         const found = props.appSettings.find(item => item.key === key);
         return found ? found.value : '';
     };
+
+    // موديل محفوظ أوقفته OpenAI وحُذف من القائمة: المساعد صامت حتى يُختار غيره.
+    const savedModelRetired = computed(() => {
+        const model = settings.value?.ai?.model;
+
+        return getValueByKey('enable_model_selection') == 1
+            && !!model
+            && !(props.models ?? []).some((option) => option.value === model);
+    });
 
     const form = useForm({
         active: settings.value?.ai?.active ?? false,
@@ -224,6 +244,9 @@
     const submitForm2 = () => {
         form2.post('/automation/ai/setup', {
             preserveScroll: true,
+            // الحفظ يجرّب المفتاح والموديل مع OpenAI. عند الرفض تبقى النافذة
+            // مفتوحة وخطؤها تحت الحقل؛ بلا هذا تُعاد الصفحة فيُغلق ويضيع الخطأ.
+            preserveState: 'errors',
             onSuccess: () => {
                 router.visit('/automation/ai', {
                     preserveState: false,

@@ -198,6 +198,9 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => $user ? $user->tfa : false,
             ],
             'isRtl' => $isRtl,
+            // نبض «متصل الآن» لكل الباقات (التحويل إلى موظف يسأل عنه). مفتاح
+            // أمان يُطفأ من الخادم دون إعادة بناء الواجهة.
+            'presenceAllPlans' => (bool) config('presence.all_plans', true),
             'settingsModuleWorkingHours' => $settingsModuleWorkingHours,
             'settingsModuleWebChat' => $settingsModuleWebChat,
         ]);

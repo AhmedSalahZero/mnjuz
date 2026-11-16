@@ -49,6 +49,7 @@ const trans = useTrans();
         code: null,
         percentage: null,
         quantity: null,
+        applies_to: 'plans',
     };
 
     const openModal = (key, formData = {}) => {
@@ -66,6 +67,7 @@ const trans = useTrans();
             form.code = null;
             form.percentage = null;
             form.quantity = null;
+            form.applies_to = 'plans';
             isOpenFormModal.value = true;
         }
     }
@@ -112,7 +114,19 @@ const trans = useTrans();
             name: 'quantity',
             label: trans('Quantity'),
             type: 'number',
-            className: 'sm:col-span-6',
+            className: 'sm:col-span-3',
+        },
+        {
+            // أين ينطبق الكوبون. كل منشأة تستعمله مرّة واحدة.
+            inputType: 'FormSelect',
+            name: 'applies_to',
+            label: trans('Applies to'),
+            options: [
+                { value: 'plans', label: trans('Plans') },
+                { value: 'topup', label: trans('Add payment') },
+                { value: 'both', label: trans('Plans and Add payment') },
+            ],
+            className: 'sm:col-span-3',
         },
     ];
 </script>

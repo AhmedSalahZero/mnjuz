@@ -216,6 +216,25 @@ const getAddressDetail = (value, key) => {
           <div class="text-right text-slate-500 pb-2"><span>{{ $t('Last seen') }}</span></div>
           <div><span dir="ltr">{{ new Date(contact.webchat_visitor.last_seen_at).toLocaleString() }}</span></div>
         </template>
+        <template v-if="contact.webchat_visitor.locale === 'ar' || contact.webchat_visitor.locale === 'en'">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Language') }}</span></div>
+          <div><span>{{ contact.webchat_visitor.locale === 'ar' ? 'العربية' : 'English' }}</span></div>
+        </template>
+        <!-- ما فعله قبل أن يكتب: القائمة والأسئلة الشائعة (WebChatLeads::recordJourney) -->
+        <template v-if="contact.webchat_visitor.journey?.menu">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('Started with') }}</span></div>
+          <div><span>{{ contact.webchat_visitor.journey.menu === 'question' ? $t('I have a question') : $t('I have a problem') }}</span></div>
+        </template>
+        <template v-if="contact.webchat_visitor.journey?.faqs_viewed?.length">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('FAQs read') }}</span></div>
+          <ul class="min-w-0 list-disc ps-4">
+            <li v-for="faq in contact.webchat_visitor.journey.faqs_viewed" :key="faq.id" class="break-words">{{ faq.question }}</li>
+          </ul>
+        </template>
+        <template v-if="contact.webchat_visitor.journey?.faq_not_found">
+          <div class="text-right text-slate-500 pb-2"><span>{{ $t('FAQs') }}</span></div>
+          <div><span class="text-amber-700">{{ $t("Didn't find the answer") }}</span></div>
+        </template>
       </div>
     </div>
     <div

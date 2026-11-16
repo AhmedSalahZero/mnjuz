@@ -23,6 +23,15 @@ const props = defineProps({
 	},
 	uuid: {
 		type: String
+	},
+	// حملة البريد: عمود العنوان بدل الرقم.
+	channel: {
+		type: String,
+		default: 'whatsapp'
+	},
+	showEmail: {
+		type: Boolean,
+		default: true
 	}
 })
 
@@ -145,7 +154,7 @@ const getErrorMessage = (details) => {
 			<TableHeaderRow>
 				<TableHeaderRowItem :position="'first'" class="hidden sm:table-cell">{{ $t('Contact') }}
 				</TableHeaderRowItem>
-				<TableHeaderRowItem>{{ $t('Phone') }}</TableHeaderRowItem>
+				<TableHeaderRowItem>{{ channel === 'email' ? $t('Email') : $t('Phone') }}</TableHeaderRowItem>
 				<TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Last updated') }}</TableHeaderRowItem>
 				<TableHeaderRowItem>{{ $t('Retries') }}</TableHeaderRowItem>
 				<TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
@@ -154,14 +163,15 @@ const getErrorMessage = (details) => {
 		</TableHeader>
 		<TableBody>
 			<TableBodyRow v-for="(item, index) in rows.data" :key="index">
-				<TableBodyRowItem :position="'first'" class="hidden sm:table-cell">{{ item.contact.full_name }}
+				<TableBodyRowItem :position="'first'" class="hidden sm:table-cell">{{ item.contact?.full_name }}
 				</TableBodyRowItem>
 				<TableBodyRowItem>
-					{{ item.contact.phone }}
+					<span v-if="channel === 'email'" dir="ltr">{{ showEmail ? item.contact?.email : '••••' }}</span>
+					<template v-else>{{ item.contact?.phone }}</template>
 				</TableBodyRowItem>
 				<TableBodyRowItem class="hidden sm:table-cell">
 					<span v-if="item.status === 'success'"
-						class="border-b border-dashed border-black">{{ item.chat.created_at }}</span>
+						class="border-b border-dashed border-black">{{ item.chat?.created_at ?? item.updated_at }}</span>
 					<span v-else class="border-b border-dashed border-black">{{ item.created_at }}</span>
 				</TableBodyRowItem>
 				<TableBodyRowItem>
@@ -175,11 +185,11 @@ const getErrorMessage = (details) => {
 				<TableBodyRowItem>
 					<span class="px-2 py-1 text-xs rounded-md capitalize"
 						:class="item.status === 'success' ? 'bg-green-700 text-white' : 'bg-red-400 text-white'">
-						{{ item.status === 'success' ? item.chat.status : item.status }}
+						{{ item.status === 'success' ? (item.chat?.status ?? $t('Sent')) : item.status }}
 					</span>
 				</TableBodyRowItem>
 				<TableBodyRowItem>
-					<div @click="openModal(item.status, item.status === 'success' ? item.chat?.logs : item.metadata)"
+					<div @click="openModal(item.status, item.status === 'success' ? (item.chat?.logs ?? []) : item.metadata)"
 						class="flex items-center underline cursor-pointer">
 						<svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
 							<g fill="currentColor">

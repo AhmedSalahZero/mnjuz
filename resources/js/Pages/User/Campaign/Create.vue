@@ -14,7 +14,8 @@
                 </div>
             </div>
             <CampaignForm :templates="templates" :contactGroups="contactGroups" :settings="settings"
-                :connectedChannels="connectedChannels || []" :channelCapabilities="channelCapabilities || {}"/>
+                :connectedChannels="connectedChannels || []" :channelCapabilities="channelCapabilities || {}"
+                :campaignChannels="campaignChannels || []" :channelTemplates="channelTemplates || {}"/>
         </div>
     </AppLayout>
 </template>
@@ -30,5 +31,5 @@
 
 const trans = useTrans();
 
-    const props = defineProps(['templates', 'contactGroups', 'settings', 'connectedChannels', 'channelCapabilities']);
+    const props = defineProps(['templates', 'contactGroups', 'settings', 'connectedChannels', 'channelCapabilities', 'campaignChannels', 'channelTemplates']);
 </script>

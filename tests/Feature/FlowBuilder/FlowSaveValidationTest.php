@@ -204,6 +204,77 @@ class FlowSaveValidationTest extends FlowBuilderTestCase
         $this->assertSame(__('Choose the condition type.'), $result[0]['message']);
     }
 
+    // ------------------------------------------------- التحويل إلى موظف
+
+    public function test_a_transfer_step_needs_at_least_one_team_member(): void
+    {
+        foreach ([[], ['user_ids' => []], ['user_ids' => 'all']] as $config) {
+            $result = (new FlowValidator())->validateMessageNodes(['nodes' => [
+                $this->startNode(),
+                $this->actionNode('2', 'assign_agent', $config),
+            ]]);
+
+            $this->assertSame(__('Choose at least one team member to transfer the conversation to.'), $result[0]['message'] ?? null, json_encode($config));
+        }
+    }
+
+    public function test_a_transfer_step_rejects_entries_that_are_not_member_ids(): void
+    {
+        foreach ([['user_ids' => ['abc']], ['user_ids' => [0]], ['user_ids' => [-3]], ['user_ids' => [1.5]]] as $config) {
+            $result = (new FlowValidator())->validateMessageNodes(['nodes' => [
+                $this->startNode(),
+                $this->actionNode('2', 'assign_agent', $config),
+            ]]);
+
+            $this->assertSame(__('The transfer step has an invalid team member.'), $result[0]['message'] ?? null, json_encode($config));
+        }
+
+        $result = (new FlowValidator())->validateMessageNodes(['nodes' => [
+            $this->startNode(),
+            $this->actionNode('2', 'assign_agent', ['user_ids' => range(1, 51)]),
+        ]]);
+        $this->assertSame(__('A transfer step can list at most :max team members.', ['max' => 50]), $result[0]['message'] ?? null);
+    }
+
+    /** المعرّفات تُحفظ أرقاماً أو نصوص أرقام (من المحرّر)، والخطوة المعطّلة لا تُفحص. */
+    public function test_a_valid_transfer_step_publishes(): void
+    {
+        $result = (new FlowValidator())->validateMessageNodes(['nodes' => [
+            $this->startNode(),
+            $this->actionNode('2', 'assign_agent', ['user_ids' => [$this->owner->id, (string) $this->owner->id]]),
+            $this->actionNode('3', 'assign_agent', [], false),
+        ]]);
+
+        $this->assertTrue($result, json_encode($result, JSON_UNESCAPED_UNICODE));
+
+        $flow = $this->makeFlow([
+            $this->startNode('keywords', 'start'),
+            $this->actionNode('2', 'assign_agent', ['user_ids' => [$this->owner->id]]),
+            $this->textNode('3', 'تم'),
+        ], [['1', '2'], ['2', '3', 'available']], ['status' => 'inactive']);
+
+        $this->save($flow, json_decode($flow->metadata, true), 1)
+            ->assertOk()
+            ->assertJsonPath('success', true);
+        $this->assertSame('active', $flow->fresh()->status);
+    }
+
+    /** مسارات حُفظت قبل خطوة التحويل تُتحقَّق كما كانت. */
+    public function test_flows_saved_before_the_transfer_step_still_validate(): void
+    {
+        $result = (new FlowValidator())->validateMessageNodes(['nodes' => [
+            $this->startNode(),
+            $this->buttonsNode('2', 'اختر', ['نعم', 'لا']),
+            $this->actionNode('3', 'add_to_group', ['group_id' => 5]),
+            $this->actionNode('4', 'remove_from_group'),
+            $this->actionNode('5', 'update_contact', ['target_field' => 'email']),
+            $this->actionNode('6', 'delay', ['duration' => 5]),
+            $this->actionNode('7', 'webhook', ['url' => 'https://example.com/hook']),
+        ]]);
+
+        $this->assertTrue($result, json_encode($result, JSON_UNESCAPED_UNICODE));
+    }
+
     // ------------------------------------------------- القائمة والتكرار
 
     public function test_a_duplicated_flow_starts_unpublished(): void

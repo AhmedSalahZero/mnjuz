@@ -291,11 +291,21 @@ class AgentPerformanceService
                 ->whereNull('deleted_at')
                 ->exists();
 
-            if (!$isMember || !SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance')) {
+            if (!$isMember) {
                 return;
             }
 
-            self::recordHeartbeat($organizationId, $userId, false);
+            // وقت النشاط ميزة مدفوعة؛ «متصل الآن» يُسجَّل لكل الباقات (خطوة
+            // التحويل إلى موظف تسأل عنه) ما لم يُطفأ المفتاح.
+            $tracksActiveTime = SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance');
+
+            if (!$tracksActiveTime && !AgentPresence::recordedFor($organizationId)) {
+                return;
+            }
+
+            if ($tracksActiveTime) {
+                self::recordHeartbeat($organizationId, $userId, false);
+            }
 
             // عميل مؤقّت باسم الدخول: يُظهره متصلاً قبل أن تنبض صفحته، وينقضي
             // وحده بعد النافذة — نبضة التبويب أو التطبيق تكون قد تسلّمت.

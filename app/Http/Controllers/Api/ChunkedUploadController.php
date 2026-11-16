@@ -106,8 +106,15 @@ class ChunkedUploadController extends Controller
             return self::fail(403, $error);
         }
 
+        // القنوات الأخرى: الحساب مفصول أو يحتاج إعادة ربط. كان الفحص غائباً
+        // فتُرفع القطع كلّها ثم يسقط الإرسال عند آخرها.
+        if ($byUuid && ($contact->channel ?: Channel::WHATSAPP) !== Channel::WHATSAPP
+            && ($error = app(\App\Services\Messaging\ChannelManager::class)->connectionError($organizationId, (string) $contact->channel))) {
+            return self::fail(403, $error);
+        }
+
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowApiJsonResponse();
+            return MessagingWindowHelper::closedWindowApiJsonResponse($contact);
         }
 
         $directory = ChunkedUploadService::directoryFor(
@@ -279,7 +286,11 @@ class ChunkedUploadController extends Controller
                 'total' => $total,
                 'contact_id' => $contact->id,
                 'contact_uuid' => (string) $contact->uuid,
-                'phone' => $contact->phone,
+                // المُرسِل بالمعرّف لا يأخذ الرقم كاملاً إن كان يُخفى عنه.
+                'phone' => empty($validated['phone']) && $contact->phone
+                    && Contact::mobileMasksPhonesFor($organizationId)
+                    ? \Illuminate\Support\Str::mask($contact->phone, '*', 4)
+                    : $contact->phone,
             ],
         ], 200);
     }

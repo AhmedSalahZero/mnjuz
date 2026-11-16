@@ -187,7 +187,9 @@ onBeforeUnmount(() => props.draft.cards.forEach((card) => revoke(card.preview)))
                         class="w-full h-full object-cover"
                         alt="" />
                 </div>
-                <label class="cursor-pointer text-sm text-indigo-600 hover:text-indigo-500">
+                <!-- relative: sr-only هو position absolute؛ بلاها يتموضع الحقل على
+                     الصفحة لا داخل اللوحة، فيمرّر التركيزُ الصفحة كلّها إليه. -->
+                <label class="relative cursor-pointer text-sm text-indigo-600 hover:text-indigo-500">
                     <span>{{ card.file ? $t('Replace') : (draft.format === 'VIDEO' ? $t('Choose a video') : $t('Choose an image')) }}</span>
                     <input
                         type="file"

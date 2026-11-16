@@ -11,9 +11,10 @@ import { uuidv4 } from '../../resources/widget/src/core/uuid.ts'
 import { createStorage } from '../../resources/widget/src/core/storage.ts'
 import { ApiError, apiRoot } from '../../resources/widget/src/core/api.ts'
 import { resolveLanguage, translator } from '../../resources/widget/src/core/i18n.ts'
+import { pick, withLang } from '../../resources/widget/src/core/lang.ts'
 import { pickFiles, filesPerSend, mediaType } from '../../resources/widget/src/core/files.ts'
 import { BRAND_URL } from '../../resources/widget/src/core/brand.ts'
-import { phoneMode, sessionFields } from '../../resources/widget/src/core/prechat.ts'
+import { newProgress, payload, questionsOf, answer } from '../../resources/widget/src/core/intake.ts'
 
 let checks = 0
 const fail = []
@@ -139,9 +140,19 @@ const msg = (id, seq, extra = {}) => ({ id, seq, client_id: null, direction: 'ou
     is(apiRoot('https://app.example.com/', 'wc_abc'), 'https://app.example.com/api/webchat/v1/w/wc_abc', 'مسار الواجهة')
     const error = new ApiError('x', 401, 'unauthorized')
     is([error.status, error.code], [401, 'unauthorized'], 'خطأ الواجهة يحمل حالته')
-    is(resolveLanguage('auto', 'ar-SA', 'en'), 'ar', 'لغة الموقع')
-    is(resolveLanguage('en', 'ar', 'ar'), 'en', 'الإعداد يغلب')
+    is(resolveLanguage(null, 'auto', 'ar-SA', 'en'), 'ar', 'لغة الموقع')
+    is(resolveLanguage(null, 'en', 'ar', 'ar'), 'en', 'الإعداد يغلب')
+    is(resolveLanguage('en', 'ar', 'ar', 'ar'), 'en', 'اختيار الزائر يغلب الإعداد')
+    is(resolveLanguage('ar', 'en', 'en', 'en'), 'ar', 'وبالعكس')
+    is(resolveLanguage('fr', 'ar', 'en', 'en'), 'ar', 'اختيار مجهول يُتجاهل')
     is(translator('ar')('send'), 'إرسال', 'الترجمة')
+    is([translator('ar')('language'), translator('en')('language')], ['تغيير اللغة', 'Change language'], 'زرّ اللغة باللغتين')
+    is(pick('en', 'تحدّث معنا', 'Chat with us'), 'Chat with us', 'نصّ التاجر بالإنجليزية')
+    is(pick('en', 'تحدّث معنا', '  '), 'تحدّث معنا', 'بلا إنجليزية يظهر العربي')
+    is(pick('ar', 'تحدّث معنا', 'Chat with us'), 'تحدّث معنا', 'والعربي للعربي')
+    is(pick('ar', '', 'Chat with us'), 'Chat with us', 'وبلا عربي يظهر الإنجليزي')
+    is(withLang('https://app/x/sessions', 'ar'), 'https://app/x/sessions?lang=ar', 'اللغة في عنوان الطلب')
+    is(withLang('https://app/x/messages?after=3', 'en'), 'https://app/x/messages?after=3&lang=en', 'مع استعلام قائم')
 }
 
 // ── ملفات الزائر: ثلاثة في المرّة، وما يُرفض يُرفض قبل الرفع ──
@@ -171,25 +182,22 @@ const msg = (id, seq, extra = {}) => ({ id, seq, client_id: null, direction: 'ou
     is(BRAND_URL, 'https://app.mnjz.net/', 'رابط منجز شات')
 }
 
-// ── نموذج الزائر: الجوال بحسب إعداد التاجر ──
+// ── خادمٌ أقدم بلا أسئلة: تُشتقّ من إعداد النموذج القديم (كان phoneMode/sessionFields) ──
 {
-    const values = { name: 'سارة', phone: '0501234567', country: 'SA', email: 'sara@example.com', consent: true, website: '', elapsed_ms: 4000 }
     const base = { default_country: 'SA', email: 'off', name_label: null, phone_label: null, consent_text: null }
-    const withPhone = { name: 'سارة', phone: '0501234567', country: 'SA', website: '', elapsed_ms: 4000 }
-    const withoutPhone = { name: 'سارة', website: '', elapsed_ms: 4000 }
+    const ids = (prechat) => questionsOf(prechat).map((q) => `${q.id}:${q.required ? 'req' : 'opt'}`)
 
-    is(phoneMode(base), 'required', 'خادم أقدم من الإعداد: الجوال إجباري')
-    is(phoneMode({ ...base, phone: 'nonsense' }), 'required', 'قيمة مجهولة: إجباري')
-    is(phoneMode({ ...base, phone: 'optional' }), 'optional', 'اختياري')
-    is(phoneMode({ ...base, phone: 'off' }), 'off', 'مخفيّ')
+    is(ids(base), ['name:req', 'phone:req'], 'إعداد الجوال الغائب: إجباري')
+    is(ids({ ...base, phone: 'nonsense' }), ['name:req', 'phone:req'], 'قيمة مجهولة: إجباري')
+    is(ids({ ...base, phone: 'optional' }), ['name:req', 'phone:opt'], 'اختياري')
+    is(ids({ ...base, phone: 'off' }), ['name:req'], 'مخفيّ: لا يُسأل')
+    is(ids({ ...base, phone: 'off', email: 'optional' }), ['name:req', 'email:opt'], 'البريد كما كان')
+    is(questionsOf({ ...base, phone_label: 'جوالك' })[1].label_ar, 'جوالك', 'عنوان الجوال من الإعداد')
 
-    is(sessionFields({ ...base, phone: 'required' }, values), withPhone, 'الإجباري يُرسل الرقم ودولته')
-    is(sessionFields(base, values), withPhone, 'وكذلك الإعداد الغائب')
-    is(sessionFields({ ...base, phone: 'optional' }, values), withPhone, 'الاختياري المكتوب يُرسل')
-    is(sessionFields({ ...base, phone: 'optional' }, { ...values, phone: '   ' }), withoutPhone, 'الاختياري الفارغ لا يُرسل')
-    is(sessionFields({ ...base, phone: 'off' }, values), withoutPhone, 'المخفيّ لا يُرسل ولو بقي رقمٌ في الحالة')
-    is(sessionFields({ ...base, email: 'optional', consent_text: 'أوافق' }, values), { name: 'سارة', phone: '0501234567', country: 'SA', email: 'sara@example.com', consent: true, website: '', elapsed_ms: 4000 }, 'البريد والموافقة كما كانا')
-    is(sessionFields({ ...base, email: 'optional' }, { ...values, email: '' }), withPhone, 'البريد الفارغ لا يُرسل')
+    // ما يُرسل: إجابات الأسئلة المعروضة وحدها — رقمٌ بقي في الحالة لسؤالٍ مخفيّ لا يُرسل.
+    let progress = answer(answer(newProgress(0), 'name', 'سارة'), 'phone', '0501234567', 'SA')
+    is(payload(questionsOf(base), progress), { answers: { name: 'سارة', phone: '0501234567' }, countries: { phone: 'SA' } }, 'الإجباري يُرسل الرقم ودولته')
+    is(payload(questionsOf({ ...base, phone: 'off' }), progress), { answers: { name: 'سارة' }, countries: {} }, 'المخفيّ لا يُرسل')
 }
 
 if (fail.length) {

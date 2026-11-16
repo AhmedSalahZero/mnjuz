@@ -387,6 +387,29 @@ class FlowValidator
                 }
                 break;
 
+            // الشكل فقط: العضوية تُفحص عند التشغيل، وإلّا تعذّر حفظ تدفّق قائم
+            // كلّما غادر أحدٌ الفريق.
+            case 'assign_agent':
+                $ids = $config['user_ids'] ?? null;
+
+                if (!is_array($ids) || $ids === []) {
+                    $fail(__('Choose at least one team member to transfer the conversation to.'));
+                    break;
+                }
+
+                if (count($ids) > 50) {
+                    $fail(__('A transfer step can list at most :max team members.', ['max' => 50]));
+                    break;
+                }
+
+                foreach ($ids as $value) {
+                    if (!(is_int($value) || (is_string($value) && ctype_digit($value))) || (int) $value <= 0) {
+                        $fail(__('The transfer step has an invalid team member.'));
+                        break;
+                    }
+                }
+                break;
+
             default:
                 $fail(empty($actionType)
                     ? __('Choose the action type.')

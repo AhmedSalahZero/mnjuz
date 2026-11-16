@@ -34,6 +34,8 @@
         emit('delete', id);
     }
 
+    const APPLIES_TO_LABELS = { plans: 'Plans', topup: 'Add payment', both: 'Plans and Add payment' };
+
     const deleteAction = (key) => {
         form.delete('/admin/coupons/' + key);
     }
@@ -46,6 +48,7 @@
                 <TableHeaderRowItem>{{ $t('Coupon code') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Percentage') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Quantity') }}</TableHeaderRowItem>
+                <TableHeaderRowItem>{{ $t('Applies to') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
                 <TableHeaderRowItem :position="'last'"></TableHeaderRowItem>
             </TableHeaderRow>
@@ -55,7 +58,8 @@
                 <TableBodyRowItem :position="'first'">{{ item.name }}</TableBodyRowItem>
                 <TableBodyRowItem>{{ item.code }}</TableBodyRowItem>
                 <TableBodyRowItem>{{ item.percentage }}%</TableBodyRowItem>
-                <TableBodyRowItem>{{ item.quantity - item.quantity_redeemed }}</TableBodyRowItem>
+                <TableBodyRowItem>{{ (item.quantity ?? 0) - (item.quantity_redeemed ?? 0) }} / {{ item.quantity }}</TableBodyRowItem>
+                <TableBodyRowItem>{{ $t(APPLIES_TO_LABELS[item.applies_to] || 'Plans') }}</TableBodyRowItem>
                 <TableBodyRowItem>{{ $t(item.status) }}</TableBodyRowItem>
                 <TableBodyRowItem :position="'last'">
                     <Dropdown :align="'right'" class="mt-2">

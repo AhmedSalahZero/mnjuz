@@ -38,6 +38,17 @@ class CampaignResendService
      */
     public function resendableLogIds(int $campaignId): Collection
     {
+        // البريد بلا محادثة ولا webhook: الفشل النهائي (عنوان مرفوض، ملغى
+        // الاشتراك…) مكتوب على السجلّ نفسه ولا يُعاد.
+        if (Campaign::whereKey($campaignId)->value('channel') === \App\Services\Messaging\Channel::EMAIL) {
+            return CampaignLog::where('campaign_id', $campaignId)
+                ->where('status', 'failed')
+                ->get(['id', 'metadata'])
+                ->reject(fn (CampaignLog $log) => \App\Services\Email\EmailCampaignSender::isPermanentFailure($log->getRawOriginal('metadata')))
+                ->pluck('id')
+                ->values();
+        }
+
         $logs = CampaignLog::where('campaign_id', $campaignId)
             ->where('status', 'failed')
             ->pluck('chat_id', 'id');

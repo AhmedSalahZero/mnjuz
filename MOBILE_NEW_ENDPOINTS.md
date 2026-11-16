@@ -196,6 +196,7 @@ POST /api/v1/performance/offline
 ```
 
 **ملاحظات:**
+- **النبضة تُسجَّل لكل الباقات** (منذ خطوة «تحويل إلى موظف» في الأتمتة، التي تسأل من المتصل الآن). وقت النشاط وصفحة الأداء وتقريرها يبقيان لمن في باقته `agent_performance` (403 لغيرهم كما هو). لا تغيير مطلوب في التطبيق: انبض دائماً.
 - **التوكن هو هوية الجهاز.** كل توكن جلسة مستقلّة، فجهازان لنفس الموظف عميلان منفصلان، وإغلاق أحدهما لا يُسقط الآخر.
 - **المنشأة هي `current_mobile_organization_id`.** بعد `set-current-organization` يغادر التطبيق المنشأة السابقة تلقائيًا، فانبض بعده مباشرة.
 - **حدود الانقطاع.** إذا لم تصل نبضة خلال **90 ثانية**، أو لم يصل `offline` بسبب قتل التطبيق أو انقطاع الشبكة، يُعلَن الموظف غير متصل خلال دقيقتين على الأكثر.
@@ -384,7 +385,7 @@ GET /api/v1/tickets?status=open&assigned_to=50&search=سارة
 |---|---|
 | من يستطيع | الجميع. **الموظّف يرى تذاكره وحدها** تلقائيًا بلا معامل |
 | شرط الباقة | لا يوجد |
-| المعاملات | `status` (`open`/`closed`) · `assigned_to` (معرّف أو `unassigned`) · `search` · `page` · `per_page` — كلها **اختيارية** |
+| المعاملات | `status` (`open`/`closed`) · `assigned_to` (معرّف أو `unassigned`) · `channel` · `search` · `page` · `per_page` — كلها **اختيارية** |
 | الأخطاء | لا أخطاء خاصّة |
 
 ```json
@@ -397,6 +398,9 @@ GET /api/v1/tickets?status=open&assigned_to=50&search=سارة
       "contact_uuid": "030b2120-fb32-4d14-8e5a-dd58eafddfd9",
       "contact_name": "سارة",
       "phone": "+966501234567",
+      "channel": "whatsapp",
+      "channel_identifier": null,
+      "formatted_phone_number": "+966 50 123 4567",
       "assigned_to": 50,
       "assigned_to_name": "خالد العتيبي",
       "assigned_seen": false,
@@ -416,6 +420,12 @@ GET /api/v1/tickets?status=open&assigned_to=50&search=سارة
 | `assigned_seen` | boolean | هل فتحها من أُسندت إليه بعد الإسناد |
 | `last_message_at` | string \| **null** | وقت آخر رسالة في المحادثة |
 | `contact_name` | string \| **null** | يكون `null` إذا كانت جهة الاتصال بلا اسم |
+| `phone` | string \| **null** | `null` لجهات القنوات الأخرى (لا رقم لها) |
+| `channel` | string | قناة جهة الاتصال (منذ ١٦ نوفمبر) |
+| `channel_identifier` | string \| **null** | معرّف العميل لدى المنصّة، و`null` لواتساب |
+| `formatted_phone_number` | string \| **null** | الرقم للعرض — لزائر المحادثة المباشرة رقمه هنا وحده. `search` يبحث فيه أيضاً |
+
+`channel` معامل اختياري (`?channel=telegram`)، والقيمة المجهولة تُتجاهل. انظر [MOBILE_CHANNELS_IMPLEMENTATION.md](MOBILE_CHANNELS_IMPLEMENTATION.md).
 
 **الموظّف (agent) يرى تذاكره وحدها** — نفس ما يحكم قائمة المحادثات. المالك والمدير يريان الكل.
 
@@ -431,7 +441,7 @@ GET /api/v1/tickets/summary
 |---|---|
 | من يستطيع | الجميع. عدّاد الموظّف يُحسب على تذاكره وحدها |
 | شرط الباقة | لا يوجد |
-| المعاملات | لا يوجد |
+| المعاملات | `channel` — اختياري |
 | الأخطاء | لا أخطاء خاصّة |
 
 ```json
@@ -861,6 +871,24 @@ GET /api/v1/settings/placeholders
 | 20 | `POST /performance/heartbeat` | الكل |
 | 21 | `POST /performance/offline` | الكل |
 | 22 | `GET /performance/status` | owner · manager |
+
+**نقاط القنوات (١٦ نوفمبر)** — موثّقة في [MOBILE_CHANNELS_IMPLEMENTATION.md](MOBILE_CHANNELS_IMPLEMENTATION.md):
+
+| # | النقطة | الصلاحية |
+|---|---|---|
+| 23 | `GET /channels` | الكل |
+| 24 | `GET /settings/channels` | owner · manager |
+| 25 | `POST /settings/channels` | owner · manager |
+| 26 | `DELETE /settings/channels/{uuid}` | owner · manager |
+| 27 | `DELETE /settings/channels/whatsapp` | owner · manager |
+| 28 | `GET /settings/channels/email` | owner · manager |
+| 29 | `POST /settings/channels/email` | owner · manager |
+| 30 | `POST /settings/channels/email/test` | owner · manager |
+| 31 | `GET /settings/webchat` | owner · manager + إضافة Web Chat |
+| 32 | `POST /settings/webchat` | owner · manager + إضافة Web Chat |
+| 33 | `POST /settings/webchat/logo` · `DELETE /settings/webchat/logo` | owner · manager + إضافة Web Chat |
+| 34 | `POST /settings/webchat/rotate-key` | owner · manager + إضافة Web Chat |
+| 35 | `POST /settings/webchat/faqs` · `POST /settings/webchat/faqs/{id}` · `DELETE /settings/webchat/faqs/{id}` · `POST /settings/webchat/faqs/reorder` | owner · manager + إضافة Web Chat |
 
 ---
 

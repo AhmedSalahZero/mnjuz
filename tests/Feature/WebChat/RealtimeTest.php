@@ -9,6 +9,7 @@ use App\Models\ChannelAccount;
 use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\Setting;
+use App\Models\WebChatVisitor;
 use App\Services\Broadcasting\BroadcastProvider;
 use App\Services\ChatService;
 use App\Services\Messaging\Channel;
@@ -164,7 +165,15 @@ class RealtimeTest extends WebChatTestCase
 
     public function test_a_visitor_is_linked_as_soon_as_their_contact_exists(): void
     {
-        [, $visitor] = $this->openSession();
+        // زائر بلا جهة اتصال بعد: الجلسة الآن تُنشئ الجهة نفسها عند نهاية
+        // الأسئلة، والمقصود هنا ربط ContactObserver حين تُنشأ من مسار آخر.
+        $visitor = WebChatVisitor::create([
+            'organization_id' => $this->organization->id,
+            'channel_account_id' => $this->widget->id,
+            'token_hash' => WebChatVisitor::hashToken(WebChatVisitor::newToken()),
+            'name' => 'سارة',
+            'last_seen_at' => now(),
+        ]);
 
         $contact = Contact::create([
             'organization_id' => $this->organization->id,

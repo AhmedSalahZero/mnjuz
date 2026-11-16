@@ -173,7 +173,19 @@ class ContactService
 			$contact->address = $address;
 		}
 		if($request->metadata){
-			$contact->metadata = json_encode($request->metadata);
+			$metadata = $request->metadata;
+			// ما كتبته المنصّة عن العميل (ContactResolver): @username واسمه
+			// الظاهر. نموذج الحقول المخصّصة لا يعرفهما فلا يُرسلهما، فكان كل
+			// تعديل يمحوهما ويختفي «@username» من رأس المحادثة.
+			if (is_array($metadata)) {
+				$previous = json_decode((string) $contact->getRawOriginal('metadata'), true);
+				foreach (['channel_username', 'channel_display_name'] as $platformKey) {
+					if (!array_key_exists($platformKey, $metadata) && is_array($previous) && isset($previous[$platformKey])) {
+						$metadata[$platformKey] = $previous[$platformKey];
+					}
+				}
+			}
+			$contact->metadata = json_encode($metadata);
 		}
 		if($request->has('is_blocked')){
 			$contact->is_blocked = $request->boolean('is_blocked');

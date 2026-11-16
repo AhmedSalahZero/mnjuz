@@ -34,7 +34,11 @@ class MyFatoorahService
     /**
      * Initialize a hosted MyFatoorah payment and return the redirect URL.
      */
-    public function handlePayment($amount, $planId = null)
+    /**
+     * @param  array{coupon_ref?: string}  $context  مرجع حجز كوبون «إضافة دفعة»:
+     *   يسافر في UserDefinedField فيصل العودة والـ webhook (بلا جلسة) معاً.
+     */
+    public function handlePayment($amount, $planId = null, array $context = [])
     {
         try {
             $organizationId = (int) session()->get('current_organization');
@@ -51,7 +55,8 @@ class MyFatoorahService
                 (float) $amount,
                 $organizationId,
                 $userId,
-                $planId
+                $planId,
+                $context
             );
 
             $response = $this->client()->sendPayment($payload);
@@ -268,6 +273,7 @@ class MyFatoorahService
                 : ($userDefined['plan_id'] ?? $reference['plan_id']);
             // ما حُصِّل فعلاً وبأي كوبون — لا ما تقوله جلسةٌ قد لا تكون موجودة.
             $reference['coupon_code'] = $userDefined['coupon_code'] ?? null;
+            $reference['topup_coupon_ref'] = $userDefined['topup_coupon_ref'] ?? null;
             $reference['requested_amount'] = $userDefined['requested_amount'] ?? null;
         }
 
@@ -301,6 +307,10 @@ class MyFatoorahService
             'organization_id' => (int) ($reference['organization_id'] ?? 0),
             'user_id' => (int) ($reference['user_id'] ?? 0),
             'plan_id' => $reference['plan_id'],
+            // كانت تُقرأ أعلاه ثم تسقط من السياق المُرجَع: الـ webhook (بلا جلسة)
+            // يحسب شراء الباقة بكوبون بالسعر الكامل فيسقط التفعيل.
+            'coupon_code' => $reference['coupon_code'] ?? null,
+            'topup_coupon_ref' => $reference['topup_coupon_ref'] ?? null,
         ];
     }
 

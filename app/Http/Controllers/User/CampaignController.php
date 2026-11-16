@@ -76,9 +76,30 @@ class CampaignController extends BaseController
                 ->mapWithKeys(fn ($channel) => [$channel => $manager->capabilities($channel)->toArray()])
                 ->all();
 
+            // منتقي الحملة: القنوات الأربع دائماً (واتساب، تيليجرام، البريد،
+            // SMS قريباً) بحالة ربطها وما تقبله رسالتها.
+            $data['campaignChannels'] = \App\Services\Messaging\CampaignChannels::options(
+                (int) $organizationId,
+                !\App\Models\Contact::currentUserIsAgent()
+            );
+
+            // القوالب المحفوظة لكل قناة (بلا موافقة): الحملة تختار منها أو تكتب
+            // رسالتها مباشرة.
+            $data['channelTemplates'] = \App\Models\ChannelTemplate::forOrganization((int) $organizationId)
+                ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS)
+                ->orderBy('name')
+                ->get(['uuid', 'channel', 'name', 'subject', 'body', 'media'])
+                ->groupBy('channel');
+
             return Inertia::render('User/Campaign/Create', $data);
         } else {
-            $campaign = Campaign::with('contactGroup', 'template')->where('uuid', $uuid)->first();
+            // بالمنشأة مع الـ uuid: رابط حملة منشأة أخرى لا يفتح سجلّها.
+            $campaign = Campaign::with('contactGroup', 'template')
+                ->where('uuid', $uuid)
+                ->where('organization_id', $organizationId)
+                ->first();
+
+            abort_unless($campaign, 404);
 
             if ($campaign) {
                 $counts = $campaign->getCounts();
@@ -104,17 +125,23 @@ class CampaignController extends BaseController
                 $campaign
                     ? CampaignLog::with('contact', 'chat.logs', 'attempts')
                         ->where('campaign_id', $campaign->id)
-                        ->where(function ($query) use ($searchTerm) {
-                            $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
+                        ->where(function ($query) use ($searchTerm, $campaign) {
+                            $query->whereHas('contact', function ($contactQuery) use ($searchTerm, $campaign) {
                                 $contactQuery->where('first_name', 'like', '%' . $searchTerm . '%')
                                              ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
-                                             ->orWhere('phone', 'like', '%' . $searchTerm . '%');
+                                             ->orWhere('phone', 'like', '%' . $searchTerm . '%')
+                                             // حملة البريد: المستلم عنوانه.
+                                             ->when($campaign->channel === \App\Services\Messaging\Channel::EMAIL,
+                                                 fn ($q) => $q->orWhere('email', 'like', '%' . $searchTerm . '%'));
                             });
                         })
                         ->orderBy('id')
                         ->paginate(10)
                     : CampaignLog::whereRaw('0')->paginate(10)
             );
+            // حملة البريد تعرض عنوان المستلم بدل رقمه — إلا لموظّفٍ تُخفى عنه
+            // بيانات جهات الاتصال (الإعداد نفسه الذي يُخفي الأرقام).
+            $data['showRecipientEmail'] = !\App\Models\Contact::contactPhoneNumberShouldEncrypted();
             $data['title'] = __('View campaign');
 
             return Inertia::render('User/Campaign/View', $data);
@@ -173,14 +200,28 @@ class CampaignController extends BaseController
     }
 
     public function export($uuid = null){
-        return Excel::download(new CampaignDetailsExport($uuid), 'campaign.csv');
+        $organizationId = (int) session()->get('current_organization');
+
+        abort_unless(
+            Campaign::where('uuid', $uuid)->where('organization_id', $organizationId)->exists(),
+            404
+        );
+
+        return Excel::download(new CampaignDetailsExport($uuid, $organizationId), 'campaign.csv');
     }
 
     public function delete($uuid){
-        // نقرأ الاسم قبل الحذف — بعده لا يبقى ما يُسمّى في السجلّ.
-        $campaign = \App\Models\Campaign::where('uuid', $uuid)->first(['id', 'name']);
+        $organizationId = (int) session()->get('current_organization');
 
-        $this->campaignService->destroy($uuid);
+        // نقرأ الاسم قبل الحذف — بعده لا يبقى ما يُسمّى في السجلّ. وبالمنشأة:
+        // الحذف بالـ uuid وحده كان يحذف حملة منشأة أخرى.
+        $campaign = \App\Models\Campaign::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->first(['id', 'name']);
+
+        abort_unless($campaign, 404);
+
+        $this->campaignService->destroy($uuid, $organizationId);
 
         ActivityLogger::log(
             ActivityLogger::CAMPAIGN_DELETED,

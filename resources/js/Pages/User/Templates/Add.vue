@@ -104,6 +104,7 @@
                 v-model="form.name"
                 :name="$t('Name')"
                 :type="'text'"
+                :error="nameRejected ? $t('The template name may only contain lowercase letters, numbers and underscores.') : ''"
                 @input="handleNameInput"
                 @keydown.space.prevent="addUnderscore"
                 :class="'sm:col-span-6'" />
@@ -1061,6 +1062,7 @@ import {
   newCarouselDraft,
   validateCarouselDraft,
 } from '@/Composables/carouselTemplateDraft.js'
+import { cleanTemplateName } from '@/Composables/templateName.js'
 import { Link, router, usePage } from '@inertiajs/vue3'
 import axios from 'axios'
 import { computed, ref, watch } from 'vue'
@@ -1223,9 +1225,14 @@ const changeHeaderType = (value) => {
   form.value.header.example = previousExamples.value[value] ?? null
 }
 
+// الحقل يحذف ما لا تقبله Meta في الاسم، وكان يحذفه صامتاً فبدا معطّلاً لمن
+// يكتب بالعربية: nameRejected يُظهر القاعدة تحته.
+const nameRejected = ref(false)
+
 const handleNameInput = (event) => {
-  const value = event.target.value.toLowerCase()
-  form.value.name = value.replace(/[^a-zA-Z0-9_]/g, '')
+  const { name, rejected } = cleanTemplateName(event.target.value)
+  form.value.name = name
+  nameRejected.value = rejected
 }
 
 const handleFileUpload = (event) => {
@@ -1294,6 +1301,7 @@ const removeFile = () => {
 const addUnderscore = (event) => {
   event.preventDefault()
   form.value.name += '_'
+  nameRejected.value = false
 }
 
 const characterCount = (type) => {

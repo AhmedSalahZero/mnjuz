@@ -12,6 +12,9 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        'webhook/*'
+        'webhook/*',
+        // إلغاء الاشتراك بنقرة واحدة (RFC 8058): مزوّد البريد يرسل POST من
+        // خادمه بلا جلسة. التوقيع في الرابط هو التصريح.
+        'email/unsubscribe/*',
     ];
 }

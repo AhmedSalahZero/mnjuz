@@ -22,6 +22,13 @@ class Contact extends Model
 
     protected $guarded = [];
     protected $appends = ['full_name', 'formatted_phone_number'];
+
+    /**
+     * أعمدة افتراضية لقيود الفهرس الفريد، لا يقرؤها أحد خارج قاعدة البيانات.
+     * phone_active_key نسخةٌ من phone كاملاً: كانت تصل في كل JSON لجهة اتصال
+     * (صفحة جهات الاتصال مثلاً) فتكشف الرقم لموظفٍ أُخفي عنه.
+     */
+    protected $hidden = ['phone_active_key', 'channel_identifier_active_key'];
     protected $dates = ['deleted_at'];
     public $timestamps = false;
 
@@ -552,6 +559,20 @@ class Contact extends Model
         return PhoneService::formatForDisplay($phone);
     }
 
+    /**
+     * معرّف العميل الظاهر على منصّته (@username على تيليجرام مثلاً)، كما
+     * حفظه ContactResolver في metadata عند أوّل رسالة. null لواتساب والزائر
+     * ولمن لا اسم مستخدم له.
+     */
+    public function channelUsername(): ?string
+    {
+        $metadata = $this->attributes['metadata'] ?? null;
+        $decoded = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+        $username = is_array($decoded) ? ($decoded['channel_username'] ?? null) : null;
+
+        return is_string($username) && $username !== '' ? $username : null;
+    }
+
     protected function decodeUnicodeBytes($value)
     {
         // نُرجع '' لا null عن عمد.
@@ -584,31 +605,107 @@ class Contact extends Model
 		if(!$phoneMustBeEncrypted){
 			return 	$this->formatted_phone_number?:$this->phone ;
 		}
-		$mask =Str::mask($this->phone, '*', 4);
-		$this->phone= $mask;
+		if ($this->phone !== null && $this->phone !== '') {
+			$this->phone = Str::mask($this->phone, '*', 4);
+		}
+
+		// الرقم المعروض عمودٌ مستقل (formatted_phone) يُقرأ قبل phone. كان يبقى
+		// كاملاً، فيصل رقم العميل لمن يُفترض ألّا يراه: صفحة جهات الاتصال،
+		// و ContactResource، والتصدير — ورقم زائر المحادثة المباشرة في الـ inbox.
+		$display = $this->attributes['formatted_phone'] ?? null;
+		if ($display !== null && $display !== '') {
+			$this->attributes['formatted_phone'] = self::maskDisplayPhone($display);
+		}
+
 		return $this->formatted_phone_number?:'-';
 	}
+
+	/**
+	 * «+966 50 123 4567» ← «+966 ** *** ****»: أوّل أربعة محارف كما يُخفي
+	 * Str::mask عمود phone، وما بعدها أرقامٌ نجوم والمسافات كما هي.
+	 */
+	public static function maskDisplayPhone(string $display): string
+	{
+		return mb_substr($display, 0, 4) . (preg_replace('/\d/u', '*', mb_substr($display, 4)) ?? '');
+	}
+
+	/**
+	 * هل تُطبَّق قيود الموظّف على هذا الطلب من التطبيق؟ انظر
+	 * config('chat.mobile_agent_restrictions'). الويب لا يمرّ من هنا.
+	 */
+	public static function mobileAgentRestrictionsApply(): bool
+	{
+		return (bool) config('chat.mobile_agent_restrictions', false)
+			&& request()->is('api/v1/*');
+	}
+
+	/**
+	 * هل تُخفى أرقام العملاء في ردّ التطبيق؟ لا إلا حين تُفعَّل قيود الموظّف
+	 * على الخادم وكان المستخدم موظّفاً في منشأة تُخفي الأرقام. معطّلة = الردّ
+	 * كما كان حرفياً.
+	 */
+	public static function mobileMasksPhonesFor(int $organizationId): bool
+	{
+		if (!self::mobileAgentRestrictionsApply()) {
+			return false;
+		}
+
+		$organization = Organization::find($organizationId);
+
+		return $organization !== null && self::contactPhoneNumberShouldEncrypted($organization);
+	}
+
+	/**
+	 * المنشأة التي يُسأل عن دور المستخدم فيها لإخفاء الأرقام.
+	 *
+	 * الويب: من الجلسة ثم organization_id في الطلب، كما كان حرفياً.
+	 *
+	 * التطبيق (حين تُفعَّل القيود): من التوكن وحده. لا جلسة لطلبات الـ API،
+	 * ولا يُقبل organization_id من الطلب: موظّفٌ يملك منشأة أخرى كان يكفيه
+	 * أن يُرسل رقمها ليُعامَل مالكاً فيرى الأرقام.
+	 */
+	private static function maskingOrganizationId()
+	{
+		if (self::mobileAgentRestrictionsApply()) {
+			return auth()->user()?->current_mobile_organization_id;
+		}
+
+		return session()->get('current_organization', Request()->get('organization_id'));
+	}
+
 	public static function currentUserIsAgent()
 	{
-		// تخزين مؤقت لكل طلب (نفس النتيجة لجميع جهات الاتصال في الصفحة)
-		static $cached = null;
-		if ($cached !== null) {
-			return $cached;
-		}
-		$organizationId = session()->get('current_organization', Request()->get('organization_id'));
+		$organizationId = self::maskingOrganizationId();
 		$user = auth()->user();
+
+		// لكل (منشأة، مستخدم) لا للعمليّة كلّها: كانت القيمة الأولى تُعاد
+		// لكل مستخدم بعده في العمليّة نفسها (عامل طابور، اختبارات متتالية).
+		static $cache = [];
+		$key = ($organizationId ?? '-') . ':' . ($user?->id ?? '-');
+		if (array_key_exists($key, $cache)) {
+			return $cache[$key];
+		}
+
 		$team = null;
 		if ($user && $organizationId) {
 			$team = Team::where('organization_id', $organizationId)->where('user_id', $user->id)->first();
 		}
-		$cached = $team && $team->role === 'agent';
-		return $cached;
+
+		return $cache[$key] = $team && $team->role === 'agent';
 	}
 
 	public static function contactPhoneNumberShouldEncrypted(?Organization $organization = null):bool
 	{
-		// تخزين مؤقت لكل طلب ومُنظمة (تجنب N+1 في ContactResource)
-		$key = $organization ? $organization->id : (session()->get('current_organization') ?? 'session');
+		// تخزين مؤقت لكل طلب ومُنظمة (تجنب N+1 في ContactResource)، ومستخدم:
+		// موظفٌ ومالكٌ في العمليّة نفسها لا يتقاسمان الجواب.
+		// طلب التطبيق بقيوده مفتاحٌ مستقل: الجواب فيه غير جواب الطلب نفسه
+		// بلا قيود، والذاكرة تعيش طوال العمليّة.
+		$mode = self::mobileAgentRestrictionsApply() ? 'mobile:' : '';
+		$fallbackOrganization = self::mobileAgentRestrictionsApply()
+			? self::maskingOrganizationId()
+			: session()->get('current_organization');
+		$key = $mode . ($organization ? $organization->id : ($fallbackOrganization ?? 'session'))
+			. ':' . (auth()->id() ?? '-');
 		static $cache = [];
 		if (!isset($cache[$key])) {
 			$cache[$key] = self::currentUserIsAgent() && self::getTicketSettings($organization);
@@ -617,7 +714,10 @@ class Contact extends Model
 	}
 	private static function getTicketSettings(?Organization $organization = null){
         // Retrieve the settings for the current organization
-        $settings = $organization?: Organization::where('id', session()->get('current_organization'))->first();
+        $organizationId = self::mobileAgentRestrictionsApply()
+            ? self::maskingOrganizationId()
+            : session()->get('current_organization');
+        $settings = $organization?: Organization::where('id', $organizationId)->first();
 
         if ($settings) {
             // Decode the JSON metadata column into an associative array

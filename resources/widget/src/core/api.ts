@@ -1,3 +1,5 @@
+import type { Faq, JourneyContext } from './faq.ts'
+import { withLang, type Lang } from './lang.ts'
 import type { SessionInfo, WidgetConfig, WidgetMessage } from './types.ts'
 
 /**
@@ -22,7 +24,12 @@ export function apiRoot(base: string, widgetKey: string): string {
     return `${base.replace(/\/+$/, '')}/api/webchat/v1/w/${encodeURIComponent(widgetKey)}`
 }
 
-export function createApi(base: string, widgetKey: string, getToken: () => string | null, preview = false) {
+/**
+ * getLang: لغة الـ widget الآن. تُضاف ?lang= إلى كل طلب يغيّر شيئاً فيعود
+ * خطأ التحقّق («رقم جوال غير صحيح») بلغة الزائر. القراءة (GET) بلا لغة:
+ * /config يُخبَّأ في المتصفّح، ولا يحمل رسائل.
+ */
+export function createApi(base: string, widgetKey: string, getToken: () => string | null, preview = false, getLang?: () => Lang) {
     const root = apiRoot(base, widgetKey)
 
     async function request<T>(method: string, path: string, body?: unknown, form = false): Promise<T> {
@@ -43,9 +50,10 @@ export function createApi(base: string, widgetKey: string, getToken: () => strin
         }
 
         let response: Response
+        const url = method !== 'GET' && getLang ? withLang(`${root}/${path}`, getLang()) : `${root}/${path}`
 
         try {
-            response = await fetch(`${root}/${path}`, {
+            response = await fetch(url, {
                 method,
                 headers,
                 body: body === undefined ? undefined : form ? (body as FormData) : JSON.stringify(body),
@@ -81,6 +89,8 @@ export function createApi(base: string, widgetKey: string, getToken: () => strin
 
         config: () => request<WidgetConfig>('GET', preview ? 'config?preview=1' : 'config'),
 
+        faqs: () => request<{ faqs: Faq[] }>('GET', preview ? 'faqs?preview=1' : 'faqs'),
+
         startSession: (body: Record<string, unknown>) =>
             request<{ token: string; visitor: { id: string; name: string }; channel: string | null }>('POST', 'sessions', body),
 
@@ -95,24 +105,33 @@ export function createApi(base: string, widgetKey: string, getToken: () => strin
             return request<{ messages: WidgetMessage[]; has_more: boolean }>('GET', query ? `messages?${query}` : 'messages')
         },
 
-        sendText: (clientId: string, text: string, pageUrl: string) =>
-            request('POST', 'messages', { client_message_id: clientId, type: 'text', text, page_url: pageUrl }),
+        // context: ما فعله الزائر قبل أوّل رسالة (core/faq.ts)، مع أوّلها وحدها.
+        sendText: (clientId: string, text: string, pageUrl: string, context: JourneyContext | null = null) =>
+            request('POST', 'messages', { client_message_id: clientId, type: 'text', text, page_url: pageUrl, ...(context ? { context } : {}) }),
 
-        sendChoice: (clientId: string, messageId: string, optionId: string, pageUrl: string) =>
+        sendChoice: (clientId: string, messageId: string, optionId: string, pageUrl: string, context: JourneyContext | null = null) =>
             request('POST', 'messages', {
                 client_message_id: clientId,
                 type: 'interactive',
                 reply: { message_id: messageId, option_id: optionId },
                 page_url: pageUrl,
+                ...(context ? { context } : {}),
             }),
 
-        upload: (clientId: string, file: File, caption: string) => {
+        upload: (clientId: string, file: File, caption: string, context: JourneyContext | null = null) => {
             const form = new FormData()
             form.append('client_message_id', clientId)
             form.append('file', file)
 
             if (caption) {
                 form.append('caption', caption)
+            }
+
+            // الحقول نفسها بصيغة النماذج: context[menu] و context[faqs][]…
+            if (context) {
+                if (context.menu) form.append('context[menu]', context.menu)
+                context.faqs.forEach((id) => form.append('context[faqs][]', String(id)))
+                form.append('context[not_found]', context.not_found ? '1' : '0')
             }
 
             return request('POST', 'uploads', form, true)

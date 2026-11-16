@@ -4,10 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\MobileApi;
 use App\Http\Controllers\Controller;
+use App\Models\Contact;
+use App\Services\Messaging\Channel;
+use App\Services\PhoneService;
 use App\Support\OrganizationRole;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * تذاكر الدعم: قائمة المحادثات المفتوحة والمغلقة.
@@ -39,6 +43,11 @@ class MobileTicketController extends Controller
             $query->where('chat_tickets.status', (string) $request->input('status'));
         }
 
+        // قناة واحدة؛ والمجهولة تُتجاهل فيُرجَع الكلّ، كفلتر قائمة المحادثات.
+        if ($channel = $this->channelFilter($request)) {
+            $query->where('contacts.channel', $channel);
+        }
+
         if ($request->filled('assigned_to')) {
             $assigned = $request->input('assigned_to');
 
@@ -58,7 +67,9 @@ class MobileTicketController extends Controller
             $query->where(function ($q) use ($term) {
                 $q->where('contacts.first_name', 'like', $term)
                     ->orWhere('contacts.last_name', 'like', $term)
-                    ->orWhere('contacts.phone', 'like', $term);
+                    ->orWhere('contacts.phone', 'like', $term)
+                    // رقم زائر المحادثة المباشرة للعرض وحده، لا في phone.
+                    ->orWhere('contacts.formatted_phone', 'like', $term);
             });
         }
 
@@ -75,10 +86,15 @@ class MobileTicketController extends Controller
                 'contacts.first_name',
                 'contacts.last_name',
                 'contacts.phone',
+                'contacts.formatted_phone',
+                'contacts.channel',
+                'contacts.channel_identifier',
                 'contacts.latest_chat_created_at',
                 'users.first_name as agent_first_name',
                 'users.last_name as agent_last_name',
             ]);
+
+        $maskPhones = Contact::mobileMasksPhonesFor($organizationId);
 
         $rows->getCollection()->transform(fn ($row) => [
             'id' => (int) $row->id,
@@ -86,7 +102,12 @@ class MobileTicketController extends Controller
             'contact_id' => (int) $row->contact_id,
             'contact_uuid' => $row->contact_uuid,
             'contact_name' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')) ?: null,
-            'phone' => $row->phone,
+            'phone' => $maskPhones && $row->phone ? Str::mask($row->phone, '*', 4) : $row->phone,
+            // إضافية: القناة، ومعرّف العميل عليها، والرقم للعرض (زائر المحادثة
+            // المباشرة رقمه هنا وحده، وphone له null).
+            'channel' => $row->channel ?: Channel::DEFAULT,
+            'channel_identifier' => $row->channel_identifier,
+            'formatted_phone_number' => $this->displayPhone($row, $maskPhones),
             'assigned_to' => $row->assigned_to ? (int) $row->assigned_to : null,
             'assigned_to_name' => $row->assigned_to
                 ? (trim(($row->agent_first_name ?? '') . ' ' . ($row->agent_last_name ?? '')) ?: null)
@@ -110,9 +131,15 @@ class MobileTicketController extends Controller
             ->whereNull('contacts.deleted_at')
             ->where('chat_tickets.is_latest', true);
 
-        $scope = function ($query) use ($request) {
+        $channel = $this->channelFilter($request);
+
+        $scope = function ($query) use ($request, $channel) {
             if (OrganizationRole::isAgent($this->role($request))) {
                 $query->where('chat_tickets.assigned_to', $request->user()->id);
+            }
+
+            if ($channel) {
+                $query->where('contacts.channel', $channel);
             }
 
             return $query;
@@ -123,5 +150,28 @@ class MobileTicketController extends Controller
             'closed' => $scope($base())->where('chat_tickets.status', 'closed')->count(),
             'unassigned' => $scope($base())->whereNull('chat_tickets.assigned_to')->count(),
         ]);
+    }
+
+    private function channelFilter(Request $request): ?string
+    {
+        $channel = $request->input('channel');
+
+        return Channel::normalize(is_string($channel) ? $channel : null);
+    }
+
+    /** الرقم المعروض: العمود المحفوظ، وإلا صياغة phone — كما في Contact. */
+    private function displayPhone(object $row, bool $mask): ?string
+    {
+        $display = $row->formatted_phone;
+
+        if ($display === null || $display === '') {
+            $display = $row->phone ? PhoneService::formatForDisplay($row->phone) : null;
+        }
+
+        if ($display === null || $display === '') {
+            return null;
+        }
+
+        return $mask ? Contact::maskDisplayPhone($display) : $display;
     }
 }

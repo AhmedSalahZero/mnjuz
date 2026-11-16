@@ -1,0 +1,38 @@
+[
+    {"why": "name is trimmed", "question": {"target": "name", "validation": "text", "required": true}, "input": "  سارة العتيبي  ", "ok": true, "value": "سارة العتيبي"},
+    {"why": "required and empty", "question": {"target": "name", "validation": "text", "required": true}, "input": "   ", "ok": false, "reason": "required"},
+    {"why": "optional and empty is skipped", "question": {"target": "email", "validation": "email", "required": false}, "input": "", "ok": true, "value": null},
+    {"why": "name over 80 characters", "question": {"target": "name", "validation": "text", "required": true}, "input": "أأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأأ", "ok": false, "reason": "too_long"},
+
+    {"why": "email is lowercased", "question": {"target": "email", "validation": "email", "required": true}, "input": "Sara@Example.COM", "ok": true, "value": "sara@example.com"},
+    {"why": "double at sign", "question": {"target": "email", "validation": "email", "required": true}, "input": "x@@y.com", "ok": false, "reason": "email"},
+    {"why": "no at sign", "question": {"target": "email", "validation": "email", "required": true}, "input": "sara.example.com", "ok": false, "reason": "email"},
+
+    {"why": "local mobile", "question": {"target": "phone", "validation": "phone", "required": true}, "input": "0501234567", "country": "SA", "ok": true, "value": "+966501234567"},
+    {"why": "arabic digits", "question": {"target": "phone", "validation": "phone", "required": true}, "input": "٠٥٠١٢٣٤٥٦٧", "country": "SA", "ok": true, "value": "+966501234567"},
+    {"why": "letter O", "question": {"target": "phone", "validation": "phone", "required": true}, "input": "05O1234567", "country": "SA", "ok": false, "reason": "phone_letters"},
+    {"why": "riyadh landline", "question": {"target": "phone", "validation": "phone", "required": true}, "input": "0112345678", "country": "SA", "ok": false, "reason": "phone_landline"},
+    {"why": "too short", "question": {"target": "phone", "validation": "phone", "required": true}, "input": "12", "country": "SA", "ok": false, "reason": "phone_invalid"},
+
+    {"why": "integer", "question": {"target": "field", "validation": "number", "required": true}, "input": "12", "ok": true, "value": "12"},
+    {"why": "arabic digits and decimal mark", "question": {"target": "field", "validation": "number", "required": true}, "input": "١٢٫٥", "ok": true, "value": "12.5"},
+    {"why": "comma decimal", "question": {"target": "field", "validation": "number", "required": true}, "input": "12,5", "ok": true, "value": "12.5"},
+    {"why": "not a number", "question": {"target": "field", "validation": "number", "required": true}, "input": "اثنا عشر", "ok": false, "reason": "number"},
+
+    {"why": "iso date", "question": {"target": "field", "validation": "date", "required": true}, "input": "2026-11-14", "ok": true, "value": "2026-11-14"},
+    {"why": "day/month/year", "question": {"target": "field", "validation": "date", "required": true}, "input": "14/11/2026", "ok": true, "value": "2026-11-14"},
+    {"why": "arabic digits date", "question": {"target": "field", "validation": "date", "required": true}, "input": "١٤/١١/٢٠٢٦", "ok": true, "value": "2026-11-14"},
+    {"why": "february 31", "question": {"target": "field", "validation": "date", "required": true}, "input": "31/02/2026", "ok": false, "reason": "date"},
+    {"why": "year out of range", "question": {"target": "field", "validation": "date", "required": true}, "input": "1800-01-01", "ok": false, "reason": "date"},
+
+    {"why": "one of the options", "question": {"target": "field", "validation": "select", "required": true, "options": ["الرياض", "جدة"]}, "input": "جدة", "ok": true, "value": "جدة"},
+    {"why": "not an option", "question": {"target": "field", "validation": "select", "required": true, "options": ["الرياض", "جدة"]}, "input": "الدمام", "ok": false, "reason": "select"},
+
+    {"why": "citizen id", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "1000000008", "ok": true, "value": "1000000008"},
+    {"why": "resident iqama", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "2000000006", "ok": true, "value": "2000000006"},
+    {"why": "alternating digits", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "1010101010", "ok": true, "value": "1010101010"},
+    {"why": "arabic digits id", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "١٠٠٠٠٠٠٠٠٨", "ok": true, "value": "1000000008"},
+    {"why": "wrong check digit", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "1000000009", "ok": false, "reason": "saudi_id"},
+    {"why": "starts with 3", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "3000000004", "ok": false, "reason": "saudi_id"},
+    {"why": "nine digits", "question": {"target": "field", "validation": "saudi_id", "required": true}, "input": "100000000", "ok": false, "reason": "saudi_id"}
+]

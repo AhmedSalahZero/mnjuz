@@ -11,6 +11,8 @@ import { useTrans } from '@/Composables/useTrans'
 const trans = useTrans()
 
 const props = defineProps(['contactGroups', 'contactCategories', 'contactCategoriesEnabled', 'contact', 'fields', 'locationSettings'])
+// جهة جديدة أو قديمة بلا قناة: واتساب كما كانت.
+const isWhatsappContact = !props.contact?.channel || props.contact.channel === 'whatsapp'
 const fileUrl = props.contact?.avatar ? ref(props.contact?.avatar) : ref(null)
 const results = ref()
 const inputFields = props.fields
@@ -126,8 +128,15 @@ const transformOptions = (optionsString) => {
 					:type="'text'" :class="'sm:col-span-3'" />
 				<FormInput v-model="form.last_name" :name="$t('Last name')" :error="form.errors.last_name"
 					:type="'text'" :class="'sm:col-span-3'" />
-				<FormPhoneInput v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'"
+				<FormPhoneInput v-if="isWhatsappContact" v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'"
 					:class="'sm:col-span-3'" />
+				<!-- قناة أخرى (المحادثة المباشرة…): phone هويّة واتساب وتبقى فارغة، والرقم الذي
+				     كتبه العميل في formatted_phone — يُعرض ولا يُعدَّل من هنا. -->
+				<div v-else class="sm:col-span-3">
+					<FormInput :modelValue="props.contact?.formatted_phone_number ?? ''" :name="$t('Phone')"
+						:type="'text'" :disabled="true" dir="ltr" />
+					<p class="mt-1 text-xs text-slate-500">{{ $t('The number the customer typed on this channel. It is not a WhatsApp number.') }}</p>
+				</div>
 				<FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'text'"
 					:class="'sm:col-span-3'" />
 				<FormSelect v-model="form.group" :name="$t('Group')" :error="form.errors.group"

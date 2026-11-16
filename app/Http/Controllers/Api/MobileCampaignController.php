@@ -386,6 +386,9 @@ class MobileCampaignController extends Controller
             'uuid' => $campaign->uuid,
             'name' => $campaign->name,
             'status' => $campaign->status,
+            // إضافة: حملات تيليجرام والبريد المنشأة من الويب تظهر هنا بلا قالب
+            // واتساب (template = null)، والقناة تُميّزها للتطبيق.
+            'channel' => $campaign->channel ?? \App\Services\Messaging\Channel::DEFAULT,
             'failure_reason' => $metadata['failure_reason'] ?? null,
             'template' => $campaign->template ? [
                 'uuid' => $campaign->template->uuid,

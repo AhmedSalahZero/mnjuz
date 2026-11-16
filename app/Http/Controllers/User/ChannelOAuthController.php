@@ -51,7 +51,7 @@ class ChannelOAuthController extends Controller
         $driver = $this->channels->driver($channel);
 
         if (!$driver instanceof SupportsOAuth) {
-            return redirect('/settings/channels')->with('status', [
+            return redirect($this->channelPage($channel))->with('status', [
                 'type' => 'error',
                 'message' => __(':channel is connected by pasting a token, not by authorization.', [
                     'channel' => Channel::label($channel),
@@ -60,7 +60,7 @@ class ChannelOAuthController extends Controller
         }
 
         if (!$this->platformConfigured($channel)) {
-            return redirect('/settings/channels')->with('status', [
+            return redirect($this->channelPage($channel))->with('status', [
                 'type' => 'error',
                 'message' => __('This platform is not configured on the server yet. Contact the administrator.'),
             ]);
@@ -80,10 +80,15 @@ class ChannelOAuthController extends Controller
 
         // رفض المستخدم أو خطأ من المنصّة: يصل قبل أي code.
         if ($request->filled('error') || $request->filled('error_description')) {
+            // في السجلّ أيضاً لا في الرسالة وحدها: «الربط لا يعمل» على الإنتاج
+            // لا يُشخَّص إلا بما قالته المنصّة (تطبيق لم يُعتمد، صلاحية ناقصة…).
+            $this->logRefusal($normalized ?? $channel, (string) $request->input('error'), (string) $request->input('error_description'));
+
             return $this->back(
                 'error',
                 $request->input('error_description')
-                    ?: __('The authorization was cancelled.')
+                    ?: __('The authorization was cancelled.'),
+                $normalized
             );
         }
 
@@ -92,7 +97,7 @@ class ChannelOAuthController extends Controller
         // الحالة غير صالحة: منتهية، أو مُستعملة، أو مُركَّبة. لا نُفرّق —
         // التفريق يُعطي المهاجم إشارة.
         if ($state === null) {
-            return $this->back('error', __('This authorization link is no longer valid. Start again.'));
+            return $this->back('error', __('This authorization link is no longer valid. Start again.'), $normalized);
         }
 
         if ($normalized === null || $state['channel'] !== $normalized) {
@@ -103,13 +108,13 @@ class ChannelOAuthController extends Controller
         // تعني ربط حساب بمنشأة لم تطلبه.
         if ((int) auth()->id() !== $state['user_id']
             || (int) session()->get('current_organization') !== $state['organization_id']) {
-            return $this->back('error', __('Your session changed during the authorization. Start again.'));
+            return $this->back('error', __('Your session changed during the authorization. Start again.'), $normalized);
         }
 
         $code = (string) $request->input('code', '');
 
         if ($code === '') {
-            return $this->back('error', __('The authorization did not return a code. Start again.'));
+            return $this->back('error', __('The authorization did not return a code. Start again.'), $normalized);
         }
 
         $driver = $this->channels->driver($normalized);
@@ -117,18 +122,20 @@ class ChannelOAuthController extends Controller
         try {
             $result = $driver->exchangeCode($code, $this->redirectUri($normalized));
         } catch (ChannelConfigurationException $e) {
-            return $this->back('error', $e->getMessage());
+            $this->logRefusal($normalized, 'exchange_refused', $e->getMessage());
+
+            return $this->back('error', $e->getMessage(), $normalized);
         } catch (\Throwable $e) {
             Log::error('Channel OAuth exchange failed', [
                 'channel' => $normalized,
                 'error' => $e->getMessage(),
             ]);
 
-            return $this->back('error', __('Could not complete the authorization. Try again.'));
+            return $this->back('error', __('Could not complete the authorization. Try again.'), $normalized);
         }
 
         if ($result->isEmpty()) {
-            return $this->back('error', $this->nothingToConnectMessage($normalized));
+            return $this->back('error', $this->nothingToConnectMessage($normalized), $normalized);
         }
 
         if ($result->needsSelection()) {
@@ -138,7 +145,8 @@ class ChannelOAuthController extends Controller
                 'accounts' => $result->accounts,
             ]);
 
-            return redirect('/settings/channels?select=' . $normalized);
+            // صفحة القناة نفسها تعرض الاختيار. ?select= يبقى للروابط القديمة.
+            return redirect($this->channelPage($normalized) . '?select=' . $normalized);
         }
 
         return $this->persist($normalized, $state['organization_id'], $result->first());
@@ -167,7 +175,7 @@ class ChannelOAuthController extends Controller
 
         // معرّف لم يفوّضه المستخدم: محاولة ربط صفحة لا يملكها.
         if ($account === null) {
-            return $this->back('error', __('That account was not part of the authorization.'));
+            return $this->back('error', __('That account was not part of the authorization.'), $pending['channel'] ?? null);
         }
 
         session()->forget(self::PENDING_KEY);
@@ -178,9 +186,12 @@ class ChannelOAuthController extends Controller
     /** إلغاء الاختيار المعلّق — توكنات الصفحات لا تبقى في الجلسة بلا داعٍ. */
     public function cancelSelection(Request $request)
     {
+        $pending = session()->get(self::PENDING_KEY);
         session()->forget(self::PENDING_KEY);
 
-        return redirect('/settings/channels');
+        $channel = is_array($pending) ? ($pending['channel'] ?? null) : null;
+
+        return redirect($this->channelPage($channel));
     }
 
     /* ───────────────────────── داخلي ───────────────────────── */
@@ -198,7 +209,7 @@ class ChannelOAuthController extends Controller
         if ($takenElsewhere) {
             return $this->back('error', __('This :channel account is already connected to another organization.', [
                 'channel' => Channel::label($channel),
-            ]));
+            ]), $channel);
         }
 
         $credentials = $account['credentials'];
@@ -234,10 +245,10 @@ class ChannelOAuthController extends Controller
         );
 
         if (!$this->channels->driver($channel)->registerWebhook($saved)) {
-            return $this->back('warning', __('The account was connected but the webhook could not be registered. Messages will not arrive until it is.'));
+            return $this->back('warning', __('The account was connected but the webhook could not be registered. Messages will not arrive until it is.'), $channel);
         }
 
-        return $this->back('success', __(':channel was connected.', ['channel' => Channel::label($channel)]));
+        return $this->back('success', __(':channel was connected.', ['channel' => Channel::label($channel)]), $channel);
     }
 
     /** عنوان العودة — يجب أن يطابق حرفياً ما سُجّل في لوحة المنصّة. */
@@ -267,11 +278,33 @@ class ChannelOAuthController extends Controller
         };
     }
 
-    private function back(string $type, string $message)
+    /**
+     * صفحة القناة إن كانت قناةً تُربط من الإعدادات، وإلّا قائمة القنوات.
+     * القيمة تُفحص هنا لأنها قد تأتي من عنوان العودة أو من الجلسة.
+     */
+    private function channelPage(?string $channel): string
     {
-        return redirect('/settings/channels')->with('status', [
+        return $channel !== null && in_array($channel, Channel::connectable(), true)
+            ? '/settings/channels/' . $channel
+            : '/settings/channels';
+    }
+
+    private function back(string $type, string $message, ?string $channel = null)
+    {
+        return redirect($this->channelPage($channel))->with('status', [
             'type' => $type,
             'message' => $message,
+        ]);
+    }
+
+    /** رفض المنصّة للربط. نصّها لا يحمل أسراراً، والـ code والـ state لا يُسجَّلان. */
+    private function logRefusal(string $channel, string $error, string $description): void
+    {
+        Log::warning('Channel OAuth refused', [
+            'channel' => $channel,
+            'organization_id' => session()->get('current_organization'),
+            'error' => mb_substr($error, 0, 100),
+            'description' => mb_substr($description, 0, 500),
         ]);
     }
 }

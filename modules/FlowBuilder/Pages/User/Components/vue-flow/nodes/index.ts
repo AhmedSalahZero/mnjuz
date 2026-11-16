@@ -105,3 +105,10 @@ export interface AIResponseNodeEvents {
 
 // Export all action nodes
 export * from './actions'
+
+export interface AssignAgentNodeData {
+  actionType: string
+  name: string
+  config: { user_ids: number[] }
+  is_active: boolean
+}

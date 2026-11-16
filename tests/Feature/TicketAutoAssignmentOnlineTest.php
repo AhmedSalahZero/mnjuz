@@ -464,6 +464,39 @@ class TicketAutoAssignmentOnlineTest extends CycleTestCase
         );
     }
 
+    /**
+     * الحضور صار يُسجَّل لكل الباقات (خطوة التحويل إلى موظف تسأل عنه)، لكن
+     * الإسناد التلقائي بلا الميزة يبقى كما كان: لا يرشّح بالمتصلين. موظفٌ
+     * متصل مشغول لا يسبق مالكاً غير متصل وخامل.
+     */
+    public function test_recorded_presence_does_not_change_auto_assignment_without_the_feature(): void
+    {
+        $this->planWithPerformance(false);
+        $agent = $this->agent();
+        $this->busyWith($agent, 2);
+        AgentPresence::touch($this->organization->id, $agent->id, 'tab-agent', AgentPresence::WEB);
+
+        $this->assertTrue(AgentPresence::isLive($this->organization->id, $agent->id));
+        $this->assertSame($this->owner->id, (int) $this->assignNewConversation()->assigned_to);
+    }
+
+    /** وكذلك الدور: يمرّ على غير المتصل كما كان بلا الميزة. */
+    public function test_recorded_presence_does_not_change_round_robin_without_the_feature(): void
+    {
+        $this->planWithPerformance(false);
+        $this->mode('round_robin');
+        $agent = $this->agent();
+        AgentPresence::touch($this->organization->id, $agent->id, 'tab-agent', AgentPresence::WEB);
+
+        $this->assertSame(
+            [$this->owner->id, $agent->id],
+            [
+                (int) $this->assignNewConversation()->assigned_to,
+                (int) $this->assignNewConversation()->assigned_to,
+            ]
+        );
+    }
+
     public function test_an_expired_subscription_falls_back_to_the_old_behaviour(): void
     {
         Subscription::where('organization_id', $this->organization->id)->update(['valid_until' => now()->subDay()]);

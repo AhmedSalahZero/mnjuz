@@ -21,7 +21,7 @@ class SendWebChatMessageRequest extends WebChatRequest
             'reply.message_id' => ['required_if:type,interactive', 'nullable', 'uuid'],
             'reply.option_id' => ['required_if:type,interactive', 'nullable', 'string', 'max:200'],
             'page_url' => ['nullable', 'string', 'max:2048'],
-        ];
+        ] + self::journeyRules();
     }
 
     public function messageText(): string

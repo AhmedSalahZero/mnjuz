@@ -12,8 +12,10 @@ use App\Services\Messaging\ChannelManager;
 use App\Services\Messaging\OAuth\OAuthState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 /**
@@ -533,6 +535,53 @@ class ChannelOAuthFlowTest extends TestCase
         $this->assertSame('error', session('status')['type']);
         $this->assertStringContainsString('Invalid auth code', session('status')['message']);
         $this->assertSame(0, ChannelAccount::count());
+    }
+
+    /**
+     * والرفض نفسه في السجلّ: «تيك توك لا يعمل» على الإنتاج لا يُشخَّص من
+     * رسالة رآها التاجر وحده. بلا الـ code ولا الـ state.
+     */
+    public function test_a_tiktok_rejection_is_logged_for_diagnosis(): void
+    {
+        Http::fake([
+            '*/tt_user/oauth2/token/' => Http::response(['code' => 40001, 'message' => 'Invalid auth code'], 200),
+        ]);
+        $logged = $this->captureLogs();
+
+        $this->controller->callback($this->callbackRequest(Channel::TIKTOK), Channel::TIKTOK);
+
+        $refusal = collect($logged)->first(fn (MessageLogged $log) => $log->message === 'Channel OAuth refused');
+        $this->assertNotNull($refusal, 'the refusal was not logged');
+        $this->assertSame('warning', $refusal->level);
+        $this->assertSame(Channel::TIKTOK, $refusal->context['channel']);
+        $this->assertStringContainsString('Invalid auth code', $refusal->context['description']);
+        $this->assertStringNotContainsString('the-code', json_encode($refusal->context));
+    }
+
+    /** خطأ تعيده المنصّة في رابط العودة (تطبيق لم يُعتمد بعد…) يُعرض ويُسجَّل. */
+    public function test_a_platform_error_in_the_callback_is_logged(): void
+    {
+        $logged = $this->captureLogs();
+        $request = Request::create('/channels/oauth/tiktok/callback', 'GET', [
+            'error' => 'access_denied',
+            'error_description' => 'The app is not approved for Business Messaging.',
+        ]);
+
+        $this->controller->callback($request, Channel::TIKTOK);
+
+        $this->assertStringContainsString('not approved', session('status')['message']);
+        $refusal = collect($logged)->first(fn (MessageLogged $log) => $log->message === 'Channel OAuth refused');
+        $this->assertNotNull($refusal);
+        $this->assertSame('access_denied', $refusal->context['error']);
+    }
+
+    /** @return \ArrayObject<int, MessageLogged> تمتلئ بما يُسجَّل بعد الاستدعاء. */
+    private function captureLogs(): \ArrayObject
+    {
+        $logged = new \ArrayObject();
+        Log::listen(fn (MessageLogged $log) => $logged->append($log));
+
+        return $logged;
     }
 
     /** وفشل جلب اسم الحساب لا يمنع الربط — بيانات عرض لا أكثر. */

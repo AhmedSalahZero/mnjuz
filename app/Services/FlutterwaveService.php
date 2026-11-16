@@ -55,7 +55,8 @@ class FlutterwaveService
         }
     }
 
-    public function handlePayment($amount, $planId = NULL)
+    /** @param  array{coupon_ref?: string}  $context  مرجع حجز كوبون «إضافة دفعة» في meta. */
+    public function handlePayment($amount, $planId = NULL, array $context = [])
     {
         $currency = strtoupper(Setting::where('key', 'currency')->first()->value);
         $redirectUrl = url('payment/flutterwave');
@@ -71,11 +72,12 @@ class FlutterwaveService
                     'amount' => $amount,
                     'currency' => $currency,
                     'redirect_url' => $redirectUrl,
-                    'meta' => [
+                    'meta' => array_filter([
                         'organization_id' => session()->get('current_organization'),
                         'plan_id' => $planId,
                         'user_id' => auth()->user()->id,
-                    ],
+                        'coupon_ref' => $context['coupon_ref'] ?? null,
+                    ], static fn ($value) => $value !== null),
                     'customer' => [
                         'email' => $user->email,
                         'phonenumber' => $user->phone,
@@ -143,6 +145,11 @@ class FlutterwaveService
                         ]);
 
                         if($planId == null){
+                            // خصم كوبون الشحن إلى الرصيد قبل التفعيل منه، مرّة واحدة.
+                            if (!empty($metadata->coupon_ref)) {
+                                app(\App\Services\Billing\CouponRedemptionService::class)->settleTopup((string) $metadata->coupon_ref, (int) $organizationId, $payment->id, (float) $amount, (int) $userId);
+                            }
+
                             $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId);
                         } else {
                             $this->subscriptionService->updateSubscriptionPlan($organizationId, $planId, $userId);

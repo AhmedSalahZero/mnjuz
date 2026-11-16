@@ -1,5 +1,6 @@
 import { faCommentDots } from '@fortawesome/free-solid-svg-icons'
 import { apiRoot } from './core/api.ts'
+import { LANG_KEY, resolveLanguage } from './core/lang.ts'
 import { createStorage } from './core/storage.ts'
 
 /**
@@ -112,7 +113,9 @@ const ICON = `<svg width="26" height="26" viewBox="0 0 ${faCommentDots.icon[0]} 
         button.style.setProperty('--c', appearance.color)
         button.style.setProperty('--x', `${appearance.offset_x}px`)
         button.style.setProperty('--y', `${appearance.offset_y}px`)
-        button.setAttribute('aria-label', (document.documentElement.lang || navigator.language).startsWith('ar') ? 'افتح المحادثة' : 'Open chat')
+        // بلغة الواجهة نفسها: اختيار الزائر، ثم إعداد التاجر، ثم لغة الصفحة.
+        const language = resolveLanguage(storage.raw(LANG_KEY).get(), appearance.language, document.documentElement.lang, navigator.language)
+        button.setAttribute('aria-label', language === 'ar' ? 'افتح المحادثة' : 'Open chat')
         button.innerHTML = ICON
 
         const badge = document.createElement('span')

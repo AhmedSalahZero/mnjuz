@@ -15,6 +15,12 @@
     import Dropdown from '@/Components/Dropdown.vue';
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
+    import ChannelIcon from '@/Components/ChannelIcon.vue';
+    import { campaignTemplateLabel, tracksDelivery } from '@/Composables/campaignDisplay.js';
+
+    // اسم القناة لعمود «القالب» في حملة بلا قالب واتساب.
+    const CHANNEL_NAMES = { whatsapp: 'WhatsApp', telegram: 'Telegram', email: 'Email', sms: 'SMS', messenger: 'Messenger', instagram: 'Instagram', tiktok: 'TikTok' };
+    const channelLabel = (channel) => CHANNEL_NAMES[channel || 'whatsapp'] || channel;
 
     const props = defineProps({
         rows: {
@@ -110,14 +116,19 @@
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden md:table-cell">
-                    <Link :href="'/campaigns/' + item.uuid" class="block w-full">
-                        {{ item.template.name }}
+                    <Link :href="'/campaigns/' + item.uuid" class="flex items-center gap-1.5 w-full">
+                        <ChannelIcon :channel="item.channel || 'whatsapp'" :size="14" filled />
+                        <span>{{ campaignTemplateLabel(item, $t(channelLabel(item.channel))) }}</span>
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">
                     <Link :href="'/campaigns/' + item.uuid" class="block w-full">
                         <div v-if="item.status == 'scheduled'">
                             {{ $t('N/A') }}
+                        </div>
+                        <!-- البريد وتيليجرام: ما قُبل إرساله، لا تسليم يُبلَّغ عنه -->
+                        <div v-else-if="!tracksDelivery(item.channel)">
+                            {{ $t('Sent') }} {{ formatStats(item.sent_count ?? 0, item.contacts_count, item.contact_group_count) }}
                         </div>
                         <div v-else>
                             <span class="bg-slate-200 px-1 py-1 rounded-lg mr-1 hidden md:inline-block">
@@ -131,6 +142,9 @@
                     <Link :href="'/campaigns/' + item.uuid" class="block w-full">
                         <div v-if="item.status == 'scheduled'">
                             {{ $t('N/A') }}
+                        </div>
+                        <div v-else-if="!tracksDelivery(item.channel)" class="text-slate-400">
+                            {{ $t('Not tracked') }}
                         </div>
                         <div v-else>
                             <span class="bg-slate-200 px-1 py-1 rounded-lg mr-1 hidden md:inline-block">

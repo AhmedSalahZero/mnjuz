@@ -28,16 +28,16 @@ class CouponRequest extends FormRequest
             'coupon' => [ 
                 'required',
                 function ($attribute, $value, $fail) {
-                    $coupon = Coupon::where('code', $value)->where('status', 'active')->whereNull('deleted_at')->first();
+                    // القواعد نفسها التي يحسب بها السعر: فعّال، للباقات، لم ينفد،
+                    // ولم تستعمله هذه المنشأة من قبل.
+                    $result = app(\App\Services\Billing\CouponRedemptionService::class)->findUsable(
+                        (string) $value,
+                        (int) session()->get('current_organization'),
+                        \App\Models\CouponRedemption::CONTEXT_PLAN
+                    );
 
-                    if (!$coupon) {
-                        $fail(__('The coupon code is invalid!'));
-                        return;
-                    }
-
-                    // Check if the quantity exceeds the limit
-                    if ($coupon->quantity_redeemed >= $coupon->quantity) {
-                        $fail(__('The coupon has expired!'));
+                    if ($result['error'] !== null) {
+                        $fail($result['error']);
                     }
                 },
             ],

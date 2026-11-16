@@ -291,9 +291,25 @@ class AgentPresence
             ->delay(now()->addSeconds(self::OFFLINE_GRACE_SECONDS));
     }
 
+    /**
+     * هل يُسجَّل حضور هذه المنشأة؟ لكل منشأة ما دام المفتاح مفعّلاً (خطوة
+     * التحويل إلى موظف تحتاجه)، وإلّا لمن في باقتها «أداء الموظفين» فقط.
+     */
+    public static function recordedFor(int $organizationId): bool
+    {
+        return (bool) config('presence.all_plans', true)
+            || SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance');
+    }
+
     private static function announce(int $organizationId, int $userId, bool $online, ?string $lastActivityAt): void
     {
         try {
+            // البثّ لا يسمعه إلا صفحة الأداء، وهي ميزة مدفوعة: الحضور يُسجَّل
+            // لكل الباقات (للتحويل إلى موظف) دون أن يكلّف بثّاً لا يستقبله أحد.
+            if (!SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance')) {
+                return;
+            }
+
             event(new AgentPresenceChanged($organizationId, $userId, $online, $lastActivityAt, self::clock()));
         } catch (\Throwable $e) {
             // تعذّر البثّ لا يمسّ الحالة المحفوظة: الصفحة تصالحها بالاستعلام.

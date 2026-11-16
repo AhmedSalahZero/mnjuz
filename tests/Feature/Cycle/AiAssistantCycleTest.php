@@ -14,10 +14,14 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
+use App\Services\Messaging\Contracts\AutomationSender;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\IntelliReply\Services\AIResponseService;
 
@@ -548,5 +552,118 @@ class AiAssistantCycleTest extends CycleTestCase
         $this->assertSame(1, (int) $contact->fresh()->ai_assistance_enabled);
         $this->assertCount(1, $this->graphRequests);
         $this->assertTrue($this->openedContact($contact)['ai_assistance_enabled']);
+    }
+
+    // ------------------------------------------------- فشل OpenAI لا يمرّ صامتاً
+
+    /**
+     * موديل أوقفته OpenAI (o1-mini عند العميل): الردّ 404 كان يُرمى بلا أثر.
+     * الآن يُسجَّل في السجلّ ويُحفظ لصفحة الإعدادات، ولا يصل العميلَ شيء.
+     */
+    public function test_an_openai_rejection_is_logged_and_kept_for_the_settings_page(): void
+    {
+        $this->fakeOpenAi(['error' => [
+            'message' => 'The model `o1-mini` does not exist or you do not have access to it.',
+            'type' => 'invalid_request_error',
+            'code' => 'model_not_found',
+        ]], 404);
+        $this->contact(['ai_assistance_enabled' => 1]);
+        $this->captureLogs();
+
+        $this->customerWrites();
+
+        $this->assertCount(0, $this->graphRequests);
+        $failure = AIResponseService::lastError($this->organization->id);
+        $this->assertSame(404, $failure['status']);
+        $this->assertSame('model_not_found', $failure['code']);
+        $this->assertStringContainsString('o1-mini', $failure['message']);
+
+        $warning = collect($this->logged)->first(fn (MessageLogged $log) => $log->message === 'OpenAI chat request failed');
+        $this->assertNotNull($warning, 'the failure was not logged');
+        $this->assertSame('warning', $warning->level);
+        $this->assertSame($this->organization->id, $warning->context['organization_id']);
+
+        $this->asAgent();
+        $props = $this->get('/automation/ai')->assertOk()->viewData('page')['props'];
+        $this->assertSame('model_not_found', $props['lastAiError']['code']);
+    }
+
+    /** ردّ ناجح بعد الإصلاح يمسح الفشل القديم من الصفحة. */
+    public function test_a_successful_reply_clears_the_last_failure(): void
+    {
+        Cache::put(AIResponseService::LAST_ERROR_CACHE_PREFIX . $this->organization->id, ['code' => 'model_not_found'], now()->addDay());
+        $this->contact(['ai_assistance_enabled' => 1]);
+
+        $this->customerWrites();
+
+        $this->assertCount(1, $this->graphRequests);
+        $this->assertNull(AIResponseService::lastError($this->organization->id));
+    }
+
+    /** مفتاح ظهر جزءٌ منه في رسالة OpenAI لا يُحفظ ولا يُسجَّل كما هو. */
+    public function test_a_key_echoed_by_openai_is_redacted(): void
+    {
+        $this->fakeOpenAi(['error' => [
+            'message' => 'Incorrect API key provided: sk-test-k***-key. You can find your API key at https://platform.openai.com/account/api-keys.',
+            'code' => 'invalid_api_key',
+        ]], 401);
+        $this->contact(['ai_assistance_enabled' => 1]);
+
+        $this->customerWrites();
+
+        $message = AIResponseService::lastError($this->organization->id)['message'];
+        $this->assertStringNotContainsString('sk-test', $message);
+        $this->assertStringContainsString('sk-***', $message);
+    }
+
+    // ------------------------------------------------- الرسائل الصوتية
+
+    /** Whisper يكتشف اللغة: فرض الإنجليزية كان يُفسد رسائل العملاء العربية. */
+    public function test_voice_notes_are_transcribed_without_forcing_english(): void
+    {
+        $this->fakeOpenAi(['text' => 'السلام عليكم']);
+        $path = tempnam(sys_get_temp_dir(), 'voice');
+        file_put_contents($path, 'fake-audio');
+
+        try {
+            $result = $this->callPrivate('transcribeAudioToText', $this->organization->id, $path);
+        } finally {
+            @unlink($path);
+        }
+
+        $this->assertSame(['success' => true, 'text' => 'السلام عليكم'], $result);
+        $request = collect($this->openAiRequests())->sole(fn (HttpRequest $r) => str_contains($r->url(), '/audio/transcriptions'));
+        $parts = collect($request->data())->mapWithKeys(fn ($part) => [$part['name'] => $part['contents']]);
+        $this->assertSame('whisper-1', $parts['model']);
+        $this->assertFalse($parts->has('language'), 'the language is forced');
+    }
+
+    /** فشل تحويل الردّ إلى صوت يُرجع false، لا خطأ نوعٍ يُسقط المعالجة. */
+    public function test_a_failed_text_to_speech_returns_false(): void
+    {
+        $this->fakeOpenAi(['error' => ['message' => 'tts down']], 500);
+        $contact = $this->contact();
+        $sender = $this->createMock(AutomationSender::class);
+        $sender->expects($this->never())->method('sendMedia');
+
+        $this->assertFalse($this->callPrivate('sendAudioResponse', $sender, $contact, 'نصّ الردّ'));
+    }
+
+    /** @var array<int, MessageLogged> ما سُجّل بعد captureLogs(). */
+    private array $logged = [];
+
+    private function captureLogs(): void
+    {
+        Log::listen(function (MessageLogged $log) {
+            $this->logged[] = $log;
+        });
+    }
+
+    private function callPrivate(string $method, ...$arguments)
+    {
+        $reflection = new \ReflectionMethod(AIResponseService::class, $method);
+        $reflection->setAccessible(true);
+
+        return $reflection->invoke(app(AIResponseService::class), ...$arguments);
     }
 }

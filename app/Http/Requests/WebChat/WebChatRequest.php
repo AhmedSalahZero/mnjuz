@@ -39,11 +39,32 @@ abstract class WebChatRequest extends FormRequest
         ], 422));
     }
 
+    /**
+     * ما فعله الزائر قبل أوّل رسالة (core/faq.ts journeyContext): يأتي مع
+     * أوّل رسالة أو ملف، ويحفظه WebChatLeads::recordJourney مرّة واحدة.
+     */
+    protected static function journeyRules(): array
+    {
+        return [
+            'context' => ['nullable', 'array:menu,faqs,not_found'],
+            'context.menu' => ['nullable', 'string', 'in:' . implode(',', \App\Services\WebChat\WebChatLeads::MENU_CHOICES)],
+            'context.faqs' => ['nullable', 'array', 'max:' . \App\Services\WebChat\WebChatFaqs::MAX],
+            'context.faqs.*' => ['integer', 'min:1'],
+            'context.not_found' => ['nullable', 'boolean'],
+        ];
+    }
+
+    /** @return array{menu?: ?string, faqs?: ?array<int, int|string>, not_found?: mixed}|null */
+    public function journeyContext(): ?array
+    {
+        $context = $this->validated('context');
+
+        return is_array($context) ? $context : null;
+    }
+
     /** نصّ حرّ من الزائر بلا محارف تحكّم (ما عدا السطر الجديد والجدولة). */
     protected static function cleanText(?string $value, int $max): string
     {
-        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value) ?? '';
-
-        return mb_substr(trim($value), 0, $max);
+        return \App\Services\WebChat\WebChatAnswers::cleanText($value, $max);
     }
 }

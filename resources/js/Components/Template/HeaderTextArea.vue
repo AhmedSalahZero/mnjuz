@@ -12,7 +12,9 @@ const props = defineProps({
 const textInput = ref(props.modelValue)
 const placeholders = ref([])
 const originalNumbers = ref({})
-const customValues = ref(props.customValues)
+// Add.vue يمرّر form.header.example وقيمته الأولى null، وافتراضيّ الـ prop لا
+// يُطبَّق على null. المصفوفة تبقى بمرجعها كما كانت.
+const customValues = ref(Array.isArray(props.customValues) ? props.customValues : [])
 const characterLimit = ref('60')
 const characterCount = ref('0')
 const variableButtonDisabled = ref(false)

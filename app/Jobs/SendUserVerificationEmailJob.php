@@ -15,6 +15,13 @@ class SendUserVerificationEmailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * إعادة المحاولة لأخطاء SMTP العابرة — انظر CustomEmail. handle() يتوقّف
+     * إن تحقّق المستخدم في الأثناء، فلا يصل رمز مُستعمَل.
+     */
+    public $tries = 3;
+    public $backoff = [10, 60];
+
     public function __construct(
         public int $verificationId,
         public string $code,

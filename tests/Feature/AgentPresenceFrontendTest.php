@@ -191,6 +191,22 @@ class AgentPresenceFrontendTest extends TestCase
         $this->assertStringNotContainsString('setInterval(sendHeartbeat', $layout);
     }
 
+    /**
+     * التبويب ينبض لكل الباقات (التحويل إلى موظف يسأل عن «متصل الآن») ما
+     * دام مفتاح الخادم مفعّلاً، ولمن في باقته الميزة وحده إن أُطفئ.
+     */
+    public function test_the_layout_beats_for_every_plan_behind_the_server_switch(): void
+    {
+        $layout = $this->source(self::LAYOUT);
+
+        $this->assertStringContainsString('usePage().props.presenceAllPlans', $layout);
+        $this->assertStringContainsString('organization.value?.plan?.features?.agent_performance', $layout);
+        $this->assertStringContainsString('startAgentHeartbeat(organization.value.id)', $layout);
+
+        $shared = file_get_contents(app_path('Http/Middleware/HandleInertiaRequests.php'));
+        $this->assertStringContainsString("'presenceAllPlans' => (bool) config('presence.all_plans', true)", $shared);
+    }
+
     /** إيقاع النبضة كما يتوقّعه الخادم في نافذته. */
     public function test_the_heartbeat_interval_matches_the_server(): void
     {

@@ -25,13 +25,14 @@ class StoreCampaign extends FormRequest
      */
     public function rules(): array
     {
-        $channel = \App\Services\Messaging\Channel::normalize($this->input('channel'))
-            ?? \App\Services\Messaging\Channel::DEFAULT;
+        $channel = $this->campaignChannel();
 
         $rules = [
             'name' => 'required',
             'contacts' => 'required',
-            'channel' => ['nullable', \Illuminate\Validation\Rule::in(app(\App\Services\Messaging\ChannelManager::class)->campaignCapableChannels())],
+            // واتساب وتيليجرام والبريد. حملة جديدة على ماسنجر أو إنستغرام أو
+            // تيك توك تُرفض؛ القائم منها يكمل إرساله (الإرسال لا يقرأ هذه القائمة).
+            'channel' => ['nullable', \Illuminate\Validation\Rule::in(\App\Services\Messaging\CampaignChannels::creatable())],
         ];
 
         // القالب لواتساب وحدها، والرسالة الحرّة لما عداها. القاعدتان
@@ -39,7 +40,7 @@ class StoreCampaign extends FormRequest
         if ($channel === \App\Services\Messaging\Channel::WHATSAPP) {
             $rules['template'] = 'required';
         } else {
-            $rules['message_text'] = ['required', 'string', 'max:4000'];
+            $rules = array_merge($rules, $this->messageRules($channel));
         }
 
         if ($this->isMethod('post')) {
@@ -184,10 +185,15 @@ class StoreCampaign extends FormRequest
                 $groupId = $group->id;
             }
 
-            $channel = \App\Services\Messaging\Channel::normalize($this->input('channel'))
-                ?? \App\Services\Messaging\Channel::DEFAULT;
+            $channel = $this->campaignChannel();
 
             if (CampaignAudienceService::isEmpty($organizationId, $groupId, $channel)) {
+                if ($channel === \App\Services\Messaging\Channel::EMAIL) {
+                    $validator->errors()->add('contacts', __('None of these contacts has an email address.'));
+
+                    return;
+                }
+
                 $validator->errors()->add(
                     'contacts',
                     $selection === 'all'
@@ -196,6 +202,54 @@ class StoreCampaign extends FormRequest
                 );
             }
         });
+    }
+
+    /** القناة المطلوبة؛ بلا قناة = واتساب (الويب القديم وتطبيق الجوال). */
+    protected function campaignChannel(): string
+    {
+        return \App\Services\Messaging\CampaignChannels::normalize($this->input('channel'))
+            ?? \App\Services\Messaging\Channel::DEFAULT;
+    }
+
+    /**
+     * رسالة القناة غير واتساب: من قالب محفوظ (channel_template)، أو تُكتب
+     * مباشرة. لكل قناة شكلها: تيليجرام نصّ ومرفق (والتعليق تحت المرفق
+     * 1024 حرفاً لا 4096)، والبريد موضوع ومتن بلا مرفقات.
+     *
+     * @return array<string, mixed>
+     */
+    protected function messageRules(string $channel): array
+    {
+        $fromTemplate = $this->filled('channel_template');
+
+        $rules = [
+            'channel_template' => ['nullable', 'string', 'max:64'],
+        ];
+
+        if ($channel === \App\Services\Messaging\Channel::EMAIL) {
+            return $rules + [
+                'subject' => [$fromTemplate ? 'nullable' : 'required', 'string', 'max:' . \App\Services\Messaging\CampaignChannels::EMAIL_SUBJECT_MAX, 'not_regex:/[\x00-\x1F\x7F]/'],
+                'message_text' => [$fromTemplate ? 'nullable' : 'required', 'string', 'max:' . \App\Services\Messaging\CampaignChannels::EMAIL_TEXT_MAX],
+                'message_media' => ['prohibited'],
+            ];
+        }
+
+        $withMedia = $this->hasFile('message_media');
+
+        return $rules + [
+            'message_text' => [
+                $fromTemplate ? 'nullable' : 'required',
+                'string',
+                'max:' . \App\Services\Messaging\CampaignChannels::textLimit($channel, $withMedia),
+            ],
+            'message_media' => ['nullable', 'file', function ($attribute, $file, $fail) {
+                $extension = strtolower((string) $file->getClientOriginalExtension());
+
+                if (in_array($extension, \App\Services\Messaging\CampaignChannels::BLOCKED_ATTACHMENT_EXTENSIONS, true)) {
+                    $fail(__('This file type cannot be sent as an attachment.'));
+                }
+            }],
+        ];
     }
 
     /**
@@ -209,11 +263,20 @@ class StoreCampaign extends FormRequest
 
     public function messages()
     {
+        $channelMessages = [
+            'channel.in' => __('This channel is not available for campaigns.'),
+            'message_text.max' => $this->campaignChannel() === \App\Services\Messaging\Channel::TELEGRAM && $this->hasFile('message_media')
+                ? __('With an attachment Telegram allows up to :max characters.', ['max' => \App\Services\Messaging\CampaignChannels::TELEGRAM_CAPTION_MAX])
+                : __('The message may not be longer than :max characters.', ['max' => \App\Services\Messaging\CampaignChannels::textLimit($this->campaignChannel())]),
+            'subject.not_regex' => __('The subject must be on one line.'),
+            'message_media.prohibited' => __('Email campaigns cannot carry attachments. Link the file in the message instead.'),
+        ];
+
         $carouselMessages = is_array($this->input('carousel'))
             ? CarouselSendRules::messages($this->carouselInput())
             : [];
 
-        return $carouselMessages + [
+        return $carouselMessages + $channelMessages + [
             'name.required' => __('The name field is required.'),
             'template.required' => __('The template field is required.'),
             'contacts.required' => __('The contacts field is required.'),

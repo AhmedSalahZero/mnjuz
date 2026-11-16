@@ -186,6 +186,25 @@ class ContactResolver
     }
 
     /**
+     * جهة اتصال من بيانات المُرسِل وحدها، بلا رسالة: زائر المحادثة المباشرة
+     * عند نهاية أسئلة البداية (WebChatLeads). القواعد نفسها — المفتاح، وتقسيم
+     * الاسم، ورقم العرض لا phone، وسباق الإنشاء — فأوّل رسالة منه تجدها.
+     *
+     * @return array{0: ?Contact, 1: bool}
+     */
+    public function resolveProfile(ChannelAccount $account, string $externalId, ?string $name, ?string $phone, ?string $email): array
+    {
+        return $this->resolve($account, new InboundMessage(
+            providerMessageId: 'profile:' . $externalId,
+            senderId: $externalId,
+            metadata: [],
+            senderName: $name,
+            senderPhone: $phone,
+            senderEmail: $email,
+        ));
+    }
+
+    /**
      * جهة اتصال بمعرّف خارجي — يستعملها الإرسال الابتدائي (حملة مثلاً)
      * حين نعرف المعرّف ولم تصلنا منه رسالة بعد.
      */

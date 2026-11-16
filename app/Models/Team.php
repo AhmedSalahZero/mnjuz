@@ -30,5 +30,28 @@ class Team extends Model {
     {
         return $this->hasMany(ChatTicket::class, 'assigned_to', 'user_id');
     }
-	
+
+    /**
+     * أقلّ عضو نشط انشغالاً: أقلّ تذاكر مفتوحة مسندة إليه، والتعادل بترتيب
+     * الانضمام. تعريف واحد للانشغال يستعمله الإسناد التلقائي وخطوة «تحويل إلى
+     * موظف» في الأتمتة — فلا يختلفان في من هو «الأقلّ انشغالاً».
+     *
+     * @param  list<int>|null  $onlyUserIds  null = كل الأعضاء النشطين.
+     */
+    public static function leastBusyUserId(int $organizationId, ?array $onlyUserIds = null): ?int
+    {
+        $member = self::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->when($onlyUserIds !== null, fn ($query) => $query->whereIn('user_id', $onlyUserIds))
+            ->withCount(['tickets' => function ($query) {
+                $query->where('status', 'open')
+                    ->where('is_latest', true);
+            }])
+            ->orderBy('tickets_count', 'asc')
+            ->orderBy('id', 'asc')
+            ->first();
+
+        return $member?->user_id !== null ? (int) $member->user_id : null;
+    }
 }

@@ -15,7 +15,9 @@ use App\Models\Chat;
 use App\Models\WebChatVisitor;
 use App\Services\Broadcasting\BroadcastProvider;
 use App\Services\Messaging\Drivers\WebChatDriver;
+use App\Services\WebChat\WebChatFaqs;
 use App\Services\WebChat\WebChatInboundService;
+use App\Services\WebChat\WebChatLeads;
 use App\Services\WebChat\WebChatMessagePresenter;
 use App\Services\WebChat\WebChatSettings;
 use App\Services\WebChat\WebChatUploads;
@@ -38,7 +40,10 @@ class WidgetController extends Controller
     /** أقصى ما يُبثّ للموظّف من صحّ القراءة في المرّة الواحدة. */
     private const READ_BROADCAST_LIMIT = 20;
 
-    public function __construct(private readonly WebChatInboundService $inbound)
+    public function __construct(
+        private readonly WebChatInboundService $inbound,
+        private readonly WebChatLeads $leads,
+    )
     {
     }
 
@@ -52,6 +57,8 @@ class WidgetController extends Controller
             'widget' => WebChatSettings::publicView($account),
             'available' => WebChatWidgetService::acceptsInbound($organizationId),
             'open_now' => !WorkingHoursService::isOutsideConfiguredHours($organizationId),
+            // عدد الأسئلة الشائعة: الـ widget يعرض «عندي سؤال / عندي مشكلة» إن وُجدت.
+            'faqs' => WebChatFaqs::count($organizationId),
             // بثّ معطَّل (log/null) لا يُعطى الـ widget إعداداً لا يتّصل بشيء:
             // null تعني «اكتفِ بالمزامنة».
             'realtime' => self::realtimeEnabled() ? BroadcastProvider::clientConfig($organizationId) : null,
@@ -67,6 +74,16 @@ class WidgetController extends Controller
             ],
         ])->header('Cache-Control', ResolveWebChatWidget::isPreview($request) ? 'no-store' : 'public, max-age=60')
             // الردّ نفسه يختلف قبولاً ورفضاً بحسب الموقع: لا يُخزَّن لموقعٍ ويُقدَّم لآخر.
+            ->header('Vary', 'Origin');
+    }
+
+    /** الأسئلة الشائعة المفعّلة بترتيبها. قراءتها لا تُنشئ محادثة ولا زائراً. */
+    public function faqs(Request $request): JsonResponse
+    {
+        $account = $this->widget($request);
+
+        return response()->json(['faqs' => WebChatFaqs::publicList((int) $account->organization_id)])
+            ->header('Cache-Control', ResolveWebChatWidget::isPreview($request) ? 'no-store' : 'public, max-age=60')
             ->header('Vary', 'Origin');
     }
 
@@ -145,6 +162,11 @@ class WidgetController extends Controller
             'last_seen_at' => now(),
         ]);
 
+        // نهاية أسئلة البداية: جهة اتصال بكل الإجابات، ولو لم يكتب الزائر.
+        if ($request->hasAnswers()) {
+            $this->leads->capture($account, $visitor, $request->fieldAnswers());
+        }
+
         return response()->json([
             'token' => $token,
             'visitor' => $this->visitorView($visitor),
@@ -214,6 +236,8 @@ class WidgetController extends Controller
         $account = $request->widget();
         $visitor = $request->visitor();
         $this->touchPage($visitor, $request->input('page_url'));
+        // قبل الرسالة: حين تظهر المحادثة للموظّف يجد معها ما قرأه الزائر.
+        $this->leads->recordJourney($visitor, $request->journeyContext());
 
         if ($request->input('type') === 'interactive') {
             $accepted = $this->inbound->dispatchInteractiveReply(
@@ -266,6 +290,7 @@ class WidgetController extends Controller
             return response()->json(['error' => 'upload_failed'], 500);
         }
 
+        $this->leads->recordJourney($request->visitor(), $request->journeyContext());
         $this->inbound->dispatchMedia($account, $request->visitor(), $request->clientMessageId(), $file + ['temp_path' => $path], $request->caption());
 
         return response()->json([

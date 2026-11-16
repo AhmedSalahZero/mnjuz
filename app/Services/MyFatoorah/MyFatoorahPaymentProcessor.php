@@ -35,6 +35,7 @@ class MyFatoorahPaymentProcessor
         $userId = (int) ($context['user_id'] ?? 0);
         $planId = $context['plan_id'] ?? null;
         $couponCode = $context['coupon_code'] ?? null;
+        $topupCouponRef = $context['topup_coupon_ref'] ?? null;
 
         if ($paymentId === '' || $organizationId <= 0) {
             Log::warning('MyFatoorah payment context incomplete', $context);
@@ -61,7 +62,8 @@ class MyFatoorahPaymentProcessor
             $organizationId,
             $userId,
             $planId,
-            $couponCode
+            $couponCode,
+            $topupCouponRef
         ) {
             $payment = BillingPayment::create([
                 'organization_id' => $organizationId,
@@ -84,7 +86,16 @@ class MyFatoorahPaymentProcessor
                 'created_by' => $userId,
             ]);
 
-            $invoice = ($planId === null || $planId === '' || $planId === 'topup')
+            $isTopUpPayment = $planId === null || $planId === '' || $planId === 'topup';
+
+            // خصم كوبون الشحن إلى الرصيد قبل التفعيل منه: اشتراك منتهٍ يتجدّد
+            // من المدفوع والخصم معاً. مرّة واحدة مهما تكرّر التأكيد.
+            if ($isTopUpPayment && $topupCouponRef) {
+                app(\App\Services\Billing\CouponRedemptionService::class)
+                    ->settleTopup($topupCouponRef, $organizationId, $payment->id, $amount, $userId);
+            }
+
+            $invoice = $isTopUpPayment
                 ? $this->subscriptionService->activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId)
                 : $this->subscriptionService->updateSubscriptionPlan($organizationId, (int) $planId, $userId, $couponCode);
 
@@ -160,7 +171,7 @@ class MyFatoorahPaymentProcessor
         ];
     }
 
-    public function buildSendPaymentPayload(float $amount, int $organizationId, int $userId, mixed $planId = null): array
+    public function buildSendPaymentPayload(float $amount, int $organizationId, int $userId, mixed $planId = null, array $context = []): array
     {
         $config = MyFatoorahApiClient::resolveConfig();
         $user = User::find($userId);
@@ -190,7 +201,11 @@ class MyFatoorahPaymentProcessor
                 // من البوّابة قد تصل بلا جلسة — فيختلف الحسابان: يُحصَّل مبلغ
                 // مخفَّض ثم يُطلَب الكامل، فيبدو العميل مديناً بالفرق ويسقط
                 // التفعيل صامتاً. حِفظه هنا يجعل الحسابين يريان الشيء نفسه.
-                'coupon_code' => session('applied_coupon') ?: null,
+                // كوبون صفحة الباقات للباقات وحدها: كان يُحمَل في الشحن أيضاً
+                // فيُطبَّق على تجديدٍ لم يُدفع به.
+                'coupon_code' => $planId !== null ? (session('applied_coupon') ?: null) : null,
+                // حجز كوبون «إضافة دفعة»: يُسوّى خصمُه بعد التأكيد.
+                'topup_coupon_ref' => $context['coupon_ref'] ?? null,
             ]),
             'CallBackUrl' => url('/payment/myfatoorah/success'),
             'ErrorUrl' => url('/payment/myfatoorah/error'),

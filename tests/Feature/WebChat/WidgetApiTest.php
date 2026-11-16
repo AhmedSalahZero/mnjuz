@@ -119,8 +119,10 @@ class WidgetApiTest extends WebChatTestCase
         $this->assertSame('سارة', $visitor->name);
         $this->assertSame(WebChatVisitor::hashToken($token), $visitor->token_hash);
         $this->assertSame('https://shop.example.com/products/1', $visitor->first_page_url);
-        $this->assertNull($visitor->contact_id, 'جهة الاتصال تُنشأ مع أول رسالة لا مع النموذج.');
-        $this->assertSame(0, Contact::where('channel', Channel::WEBCHAT)->count());
+        // قرار صاحب المنتج (2026-11-14): من أنهى أسئلة البداية جهة اتصال فوراً،
+        // ولو لم يكتب رسالة. كانت تُنشأ مع أول رسالة.
+        $this->assertNotNull($visitor->contact_id, 'جهة الاتصال تُنشأ عند نهاية أسئلة البداية.');
+        $this->assertSame(1, Contact::where('channel', Channel::WEBCHAT)->count());
     }
 
     public function test_a_local_number_uses_the_widget_default_country(): void

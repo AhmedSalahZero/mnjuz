@@ -1,16 +1,32 @@
-/** نصوص الـ widget بالعربية والإنجليزية. اللغة من الإعداد، أو من الموقع نفسه. */
+/** نصوص الـ widget بالعربية والإنجليزية. اللغة من اختيار الزائر، ثم الإعداد، ثم الموقع نفسه. */
 const ar = {
     open: 'افتح المحادثة',
     close: 'إغلاق',
     title: 'تحدّث معنا',
     subtitle: 'نردّ عادةً خلال دقائق',
-    prechat_intro: 'عرّفنا بنفسك لنبدأ المحادثة.',
-    name: 'الاسم',
     phone: 'رقم الجوال',
-    email: 'البريد الإلكتروني',
-    optional: 'اختياري',
-    start: 'ابدأ المحادثة',
     starting: 'جارٍ البدء…',
+    // أسئلة البداية: الأسئلة الأساسية حين لا يكتب التاجر نصّها، ورسائل الرفض
+    // (نفسها في lang/ar.json للخادم).
+    ask_name: 'ما اسمك؟',
+    ask_email: 'ما بريدك الإلكتروني؟',
+    ask_phone: 'ما رقم جوالك؟',
+    answer: 'اكتب إجابتك…',
+    skip: 'تخطٍّ',
+    skipped: 'تخطّيت هذا السؤال',
+    accept: 'أوافق',
+    choose_above: 'اختر من الخيارات أعلاه',
+    retry: 'حاول مرة أخرى',
+    err_required: 'هذا السؤال مطلوب.',
+    err_too_long: 'الإجابة أطول من المسموح.',
+    err_email: 'أدخل بريداً إلكترونياً صحيحاً.',
+    err_number: 'أدخل رقماً.',
+    err_date: 'أدخل تاريخاً صحيحاً.',
+    err_select: 'اختر أحد الخيارات.',
+    err_saudi_id: 'أدخل رقم هوية وطنية أو إقامة صحيحاً (10 أرقام).',
+    err_phone: 'أدخل رقم جوال صحيحاً.',
+    err_phone_letters: 'استخدم الأرقام فقط في رقم الجوال.',
+    err_phone_landline: 'يبدو أنه رقم هاتف أرضي. أدخل رقم جوال.',
     placeholder: 'اكتب رسالتك…',
     send: 'إرسال',
     attach: 'إرفاق ملف',
@@ -41,6 +57,18 @@ const ar = {
     bot: 'الردّ الآلي',
     you: 'أنت',
     new_message: 'رسالة جديدة',
+    language: 'تغيير اللغة',
+    // القائمة بعد أسئلة البداية، والأسئلة الشائعة (core/faq.ts).
+    menu_prompt: 'كيف نقدر نساعدك؟',
+    menu_question: 'عندي سؤال',
+    menu_problem: 'عندي مشكلة',
+    faq_prompt: 'اختر سؤالك:',
+    faq_list: 'الأسئلة الشائعة',
+    faq_more_prompt: 'هل تحتاج شيئاً آخر؟',
+    faq_more: 'أسئلة أخرى',
+    faq_none: 'لم أجد إجابتي',
+    faq_ask: 'اكتب سؤالك هنا وسيردّ عليك فريقنا.',
+    faq_problem: 'اكتب مشكلتك هنا وسيردّ عليك فريقنا.',
 }
 
 type Dictionary = typeof ar
@@ -50,13 +78,27 @@ const en: Dictionary = {
     close: 'Close',
     title: 'Chat with us',
     subtitle: 'We usually reply in a few minutes',
-    prechat_intro: 'Tell us who you are to start the chat.',
-    name: 'Name',
     phone: 'Mobile number',
-    email: 'Email',
-    optional: 'optional',
-    start: 'Start chat',
     starting: 'Starting…',
+    ask_name: "What's your name?",
+    ask_email: "What's your email address?",
+    ask_phone: "What's your mobile number?",
+    answer: 'Type your answer…',
+    skip: 'Skip',
+    skipped: 'Skipped this question',
+    accept: 'I agree',
+    choose_above: 'Choose one of the options above',
+    retry: 'Try again',
+    err_required: 'This question is required.',
+    err_too_long: 'That answer is too long.',
+    err_email: 'Enter a valid email address.',
+    err_number: 'Enter a number.',
+    err_date: 'Enter a valid date.',
+    err_select: 'Choose one of the options.',
+    err_saudi_id: 'Enter a valid Saudi national ID or Iqama number (10 digits).',
+    err_phone: 'Enter a valid mobile number.',
+    err_phone_letters: 'Use digits only for the mobile number.',
+    err_phone_landline: 'That looks like a landline number. Enter a mobile number.',
     placeholder: 'Type your message…',
     send: 'Send',
     attach: 'Attach a file',
@@ -87,19 +129,23 @@ const en: Dictionary = {
     bot: 'Automated reply',
     you: 'You',
     new_message: 'New message',
+    language: 'Change language',
+    menu_prompt: 'How can we help you?',
+    menu_question: 'I have a question',
+    menu_problem: 'I have a problem',
+    faq_prompt: 'Choose your question:',
+    faq_list: 'FAQs',
+    faq_more_prompt: 'Anything else?',
+    faq_more: 'More questions',
+    faq_none: "I didn't find my answer",
+    faq_ask: 'Type your question here and our team will reply.',
+    faq_problem: 'Describe your problem here and our team will reply.',
 }
 
 export type TextKey = keyof Dictionary
 
-export function resolveLanguage(setting: string, documentLang: string, browserLang: string): 'ar' | 'en' {
-    if (setting === 'ar' || setting === 'en') {
-        return setting
-    }
-
-    const lang = (documentLang || browserLang || '').toLowerCase()
-
-    return lang.startsWith('ar') ? 'ar' : 'en'
-}
+// في lang.ts: يستورده الـ loader الصغير دون هذا القاموس.
+export { resolveLanguage } from './lang.ts'
 
 export function translator(language: 'ar' | 'en') {
     const dictionary = language === 'ar' ? ar : en

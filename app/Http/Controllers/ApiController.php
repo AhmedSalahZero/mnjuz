@@ -78,6 +78,7 @@ class ApiController extends Controller
             // Page size only — does NOT limit which contacts are searchable.
             'per_page' => 'integer|min:1|max:100',
             'search' => 'sometimes|string|max:255',
+            'channel' => 'sometimes|nullable|string|max:20',
         ]);
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
@@ -86,13 +87,24 @@ class ApiController extends Controller
         $page = $request->input('page', 1);
         $perPage = $request->input('per_page', 10);
         $organizationId = $request->organization;
-        if ($request->is('api/v1/*')) {
+        $isMobile = $request->is('api/v1/*');
+        if ($isMobile) {
             $organizationId = $request->user()->current_mobile_organization_id;
         }
         $searchTerm = $request->filled('search') ? (string) $request->input('search') : null;
+        // قناة مجهولة تُتجاهل فتُرجع الكلّ، كفلتر قائمة المحادثات في الويب.
+        $channel = \App\Services\Messaging\Channel::normalize($request->input('channel'));
+
+        $relations = ['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color'];
+        if ($isMobile) {
+            // بطاقة «الزائر» للمحادثة المباشرة: ContactResource يُخرجها حين
+            // تُحمَّل العلاقة فقط، ولم تكن تُحمَّل هنا قطّ.
+            $relations[] = 'webchatVisitor';
+        }
 
         $contacts = Contact::where('organization_id', $organizationId)
-            ->with(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color'])
+            ->with($relations)
+            ->when($channel, fn ($q, $c) => $q->where('channel', $c))
             ->searchTerm($searchTerm)
             ->orderByDesc('id')
             ->paginate($perPage, ['*'], 'page', $page);
@@ -331,7 +343,13 @@ class ApiController extends Controller
                 'message' => __('Contact not found', [], getApiLang())
             ], 404);
         }
-        $chatTicket = ChatTicket::where('contact_id', $contact->id)->first();
+        // الأحدث لا «أي صفّ»: بلا ترتيب يرجع الأقدم لمن له أكثر من تذكرة،
+        // فيعرض التطبيق حالةً وموظفاً قديمين بينما toggle-ticket-status يعدّل
+        // الأحدث. نفس إصلاح رأس المحادثة في الويب (ChatService) والمزامنة.
+        $chatTicket = ChatTicket::where('contact_id', $contact->id)
+            ->orderByDesc('is_latest')
+            ->orderByDesc('id')
+            ->first();
         $contact->chat_ticket = $chatTicket ?? null;
 
         $contact->load(['contactGroups', 'contactCategories:id,name,uuid,background_color,text_color']);
@@ -349,6 +367,22 @@ class ApiController extends Controller
                 'text_color' => $cat->text_color ?? '#ffffff',
             ];
         });
+
+        // ما تحتاجه شاشة المحادثة عن القناة — إضافيّ، والمفاتيح القديمة كما هي.
+        $maskPhones = $this->mobileMasksPhones($organizationId);
+        $window = MessagingWindowHelper::payloadForContact($contact);
+        $contact->channel_capabilities = app(\App\Services\Messaging\ChannelManager::class)
+            ->capabilities($contact->channel ?: \App\Services\Messaging\Channel::DEFAULT)
+            ->toArray();
+        $contact->channel_username = $contact->channelUsername();
+        $contact->messaging_window_hours = $window['messaging_window_hours'];
+        $contact->is_messaging_window_open = $window['is_messaging_window_open'];
+        // استعلامٌ لا علاقة: العلاقة المحمّلة تُسلسَل صفّاً خاماً فيه token_hash.
+        $contact->webchat_visitor = $contact->webchatVisitor()->first()?->agentView($maskPhones);
+        if ($maskPhones) {
+            $contact->encryptPhoneNumber(true);
+        }
+
         return response()->json([
             'statusCode' => 200,
             'success' => true,
@@ -991,7 +1025,7 @@ class ApiController extends Controller
         $contact = $this->resolveContactByPhone($request, $organizationId);
 
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowApiJsonResponse();
+            return MessagingWindowHelper::closedWindowApiJsonResponse($contact);
         }
 
         $this->initializeWhatsappService($organizationId);
@@ -1074,11 +1108,19 @@ class ApiController extends Controller
         if (\App\Services\Messaging\AutomationTransport::isWhatsapp($contact)) {
             $request->merge(['phone' => $contact->phone]);
 
-            return $this->sendMessage($request);
+            return $this->maskResponsePhone($this->sendMessage($request), $organizationId);
         }
 
+        // msg_uuid يربط الرسالة بفقاعة التطبيق المؤقّتة. كان يضيع هنا فتبقى
+        // الفقاعة معلّقة ويُرى الردّ رسالتين بعد المزامنة.
+        $messageUuid = $request->input('msg_uuid');
+
         $result = (new ChatService($organizationId))->sendMessage(
-            Request::create('/chats', 'POST', ['uuid' => $contact->uuid, 'message' => (string) $request->input('message')])
+            Request::create('/chats', 'POST', [
+                'uuid' => $contact->uuid,
+                'message' => (string) $request->input('message'),
+                'messageUUID' => is_string($messageUuid) && $messageUuid !== '' ? $messageUuid : null,
+            ])
         );
 
         if ($result instanceof \Illuminate\Http\JsonResponse) {
@@ -1102,6 +1144,101 @@ class ApiController extends Controller
                 'message_id' => $result->data->messages[0]->id ?? null,
             ],
         ], 200);
+    }
+
+    /** انظر Contact::mobileMasksPhonesFor — config chat.mobile_agent_restrictions. */
+    private function mobileMasksPhones(int $organizationId): bool
+    {
+        return Contact::mobileMasksPhonesFor($organizationId);
+    }
+
+    /**
+     * الإرسال بـ contact_uuid يُرجع رقم الجهة في data.phone. موظّفٌ يرى الأرقام
+     * مخفيّة لا يأخذه كاملاً من ردّ الإرسال.
+     */
+    private function maskResponsePhone($response, int $organizationId)
+    {
+        if (!$response instanceof JsonResponse || !$this->mobileMasksPhones($organizationId)) {
+            return $response;
+        }
+
+        $payload = $response->getData(true);
+        $phone = $payload['data']['phone'] ?? null;
+
+        if (!is_string($phone) || $phone === '') {
+            return $response;
+        }
+
+        $payload['data']['phone'] = Str::mask($phone, '*', 4);
+
+        return $response->setData($payload);
+    }
+
+    /**
+     * قالب إلى جهة بمعرّفها: يضع رقمها الحقيقي في الطلب ليكمل مسار الرقم كما
+     * هو، أو يُرجع سبب الرفض.
+     *
+     * القوالب المعتمدة واتساب وحدها (ChannelCapabilities::templates). كان
+     * التطبيق يُرسل رقم زائر المحادثة المباشرة المعروض، فتُنشأ له جهة واتساب
+     * جديدة ويخرج إليها قالب لم يقصده أحد.
+     */
+    private function useTemplateRecipientFromContactUuid(Request $request, int $organizationId): ?JsonResponse
+    {
+        $validator = Validator::make($request->all(), ['contact_uuid' => ['required', 'uuid']]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'statusCode' => 400,
+                'success' => false,
+                'message' => __('The provided data is invalid.'),
+                'errors' => $validator->errors(),
+            ], 400);
+        }
+
+        $contact = $this->findContactForMobile($request, $organizationId);
+
+        if (!$contact) {
+            return response()->json(['statusCode' => 404, 'success' => false, 'message' => __('Contact not found.')], 404);
+        }
+
+        $channel = $contact->channel ?: \App\Services\Messaging\Channel::DEFAULT;
+
+        if (!app(\App\Services\Messaging\ChannelManager::class)->capabilities($channel)->templates) {
+            return response()->json([
+                'statusCode' => 422,
+                'success' => false,
+                'message' => __(':feature is not available on :channel.', [
+                    'feature' => __('Templates'),
+                    'channel' => \App\Services\Messaging\Channel::label($channel),
+                ]),
+            ], 422);
+        }
+
+        $request->merge(['phone' => $contact->phone]);
+
+        return null;
+    }
+
+    /**
+     * رفض ميزة لا تدعمها قناة الجهة، بشكل ردّ التطبيق (statusCode). النصّ
+     * نفسه الذي يُرجعه ChatService::guardCapability للويب.
+     */
+    private function mobileCapabilityRefusal(Contact $contact, string $feature, string $label): ?JsonResponse
+    {
+        $channel = $contact->channel ?: \App\Services\Messaging\Channel::DEFAULT;
+
+        if (app(\App\Services\Messaging\ChannelManager::class)->capabilities($channel)->{$feature}) {
+            return null;
+        }
+
+        return response()->json([
+            'statusCode' => 422,
+            'success' => false,
+            'message' => __(':feature is not available on :channel.', [
+                'feature' => $label,
+                'channel' => \App\Services\Messaging\Channel::label($channel),
+            ]),
+        ], 422);
     }
 
     private function findContactForMobile(Request $request, int $organizationId): ?Contact
@@ -1259,6 +1396,14 @@ class ApiController extends Controller
     {
         $this->markMobilePresence($request);
 
+        // جهةٌ بمعرّفها بدل رقمها: الموظّف الذي يرى الأرقام مخفيّة لا يملك
+        // رقماً يُرسل إليه. بلا phone فقط — مسار الرقم كما هو حرفياً.
+        if (!$request->filled('phone') && $request->filled('contact_uuid')) {
+            if ($refusal = $this->useTemplateRecipientFromContactUuid($request, self::resolveOrganizationId($request))) {
+                return $refusal;
+            }
+        }
+
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -1343,6 +1488,13 @@ class ApiController extends Controller
      */
     public function sendAuthTemplate(Request $request)
     {
+        if (!$request->filled('phone') && $request->filled('contact_uuid')) {
+            $organizationId = (int) ($request->user()->current_mobile_organization_id ?? session()->get('current_organization'));
+            if ($refusal = $this->useTemplateRecipientFromContactUuid($request, $organizationId)) {
+                return $refusal;
+            }
+        }
+
         $rules = [
             'phone' => ['required', 'string', 'max:255', function ($attribute, $value, $fail) {
                 if (!PhoneService::isValid($value)) {
@@ -1567,9 +1719,9 @@ class ApiController extends Controller
         }
 
         // نافذة المراسلة تُفحص هنا لا في الخدمة: مسار الويب يردّ بشكله،
-        // والتطبيق يقرأ statusCode.
+        // والتطبيق يقرأ statusCode. والنصّ بحسب قناة الجهة.
         if (!MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowApiJsonResponse();
+            return MessagingWindowHelper::closedWindowApiJsonResponse($contact);
         }
 
         // لا تسجيل هنا: المسار المشترك يسجّل MEDIA_SENT بنفسه، وتسجيله مرّتين
@@ -1625,7 +1777,7 @@ class ApiController extends Controller
             ], 422);
         }
 
-        return response()->json([
+        $response = response()->json([
             'statusCode' => 200,
             'success' => true,
             'message' => __('Message sent successfully'),
@@ -1637,6 +1789,9 @@ class ApiController extends Controller
                 'phone' => $contact->phone,
             ],
         ], 200);
+
+        // المُرسِل بالرقم يعرفه أصلاً؛ المُرسِل بالمعرّف لا يأخذه من هنا.
+        return $request->filled('phone') ? $response : $this->maskResponsePhone($response, (int) $organizationId);
     }
 
     private function resolveContactByPhone(Request $request, int $organizationId): Contact
@@ -2215,7 +2370,7 @@ class ApiController extends Controller
             'search' => 'sometimes|string|max:255',
             'per_page' => 'sometimes|integer|min:1|max:500',
             'page' => 'sometimes|integer|min:1',
-        ]);
+        ] + self::SYNC_SCOPE_RULES);
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
@@ -2233,8 +2388,13 @@ class ApiController extends Controller
         $perPage = $request->filled('per_page') ? (int) $request->input('per_page') : null;
         $page = max(1, (int) $request->input('page', 1));
 
-        $data = $this->loadChatSyncData($orgId, $createdAt, $entityTypes, $perPage, $page);
+        $scope = $this->chatSyncScope($request, $orgId);
+        $data = $this->loadChatSyncData($orgId, $createdAt, $entityTypes, $perPage, $page, $scope);
         $pagination = $data['pagination'];
+        // إضافي: true حين تُرجع المزامنة ما أُسند إلى الموظّف وحده. المحادثة
+        // التي تُسحب منه لا يصله عنها شيء، فيُعيد التطبيق المزامنة كاملة.
+        $assignedOnly = $scope['assigned_to'] !== null;
+        $maskPhones = $this->mobileMasksPhones($orgId);
 
         if ($data['contactsById']->isEmpty()) {
             return response()->json(array_filter([
@@ -2243,6 +2403,7 @@ class ApiController extends Controller
                 'message' => __('Chat messages fetched successfully'),
                 'data' => [],
                 'pagination' => $pagination,
+                'assigned_only' => $assignedOnly,
             ], fn ($value) => $value !== null), 200);
         }
 
@@ -2258,6 +2419,10 @@ class ApiController extends Controller
             $logs = $chatLogsByContact->get($contactId);
             if (!$logs || $logs->isEmpty()) {
                 continue;
+            }
+
+            if ($maskPhones) {
+                $contact->encryptPhoneNumber(true);
             }
 
             $formattedPhone = $contact->formatted_phone;
@@ -2308,6 +2473,7 @@ class ApiController extends Controller
                         'text_color' => $c->text_color ?? '#ffffff',
                     ])->values()->all()
                     : [],
+            ] + $this->syncChannelFields($contact) + [
                 'messages' => $messages,
             ];
         }
@@ -2318,6 +2484,7 @@ class ApiController extends Controller
             'message' => __('Chat messages fetched successfully'),
             'data' => $results,
             'pagination' => $pagination,
+            'assigned_only' => $assignedOnly,
         ], fn ($value) => $value !== null);
 
         $json = JsonText::encode($payload);
@@ -2368,7 +2535,7 @@ class ApiController extends Controller
             'search' => 'sometimes|string|max:255',
             'per_page' => 'sometimes|integer|min:1|max:500',
             'page' => 'sometimes|integer|min:1',
-        ]);
+        ] + self::SYNC_SCOPE_RULES);
         if ($validator->fails()) {
             return response()->json(['error' => $validator->errors()], 400);
         }
@@ -2379,8 +2546,13 @@ class ApiController extends Controller
         $perPage = $request->filled('per_page') ? (int) $request->input('per_page') : null;
         $page = max(1, (int) $request->input('page', 1));
 
-        $data = $this->loadChatSyncData($orgId, $createdAt, $entityTypes, $perPage, $page);
+        $scope = $this->chatSyncScope($request, $orgId);
+        $data = $this->loadChatSyncData($orgId, $createdAt, $entityTypes, $perPage, $page, $scope);
         $pagination = $data['pagination'];
+        // إضافي: true حين تُرجع المزامنة ما أُسند إلى الموظّف وحده. المحادثة
+        // التي تُسحب منه لا يصله عنها شيء، فيُعيد التطبيق المزامنة كاملة.
+        $assignedOnly = $scope['assigned_to'] !== null;
+        $maskPhones = $this->mobileMasksPhones($orgId);
 
         if ($data['contactsById']->isEmpty()) {
             return response()->json(array_filter([
@@ -2389,6 +2561,7 @@ class ApiController extends Controller
                 'message' => __('Chat messages fetched successfully'),
                 'data' => [],
                 'pagination' => $pagination,
+                'assigned_only' => $assignedOnly,
             ], fn ($value) => $value !== null), 200);
         }
 
@@ -2426,6 +2599,10 @@ class ApiController extends Controller
 
             if (empty($messages)) continue;
 
+            if ($maskPhones) {
+                $contact->encryptPhoneNumber(true);
+            }
+
             $formattedPhone = $contact->formatted_phone;
             if ($formattedPhone === null || $formattedPhone === '') {
                 $formattedPhone = $contact->formatted_phone_number;
@@ -2460,7 +2637,7 @@ class ApiController extends Controller
                             'text_color' => $c->text_color ?? '#ffffff',
                         ])->values()->all()
                         : [],
-                ],
+                ] + $this->syncChannelFields($contact),
                 'messages' => $messages,
             ];
         }
@@ -2471,6 +2648,7 @@ class ApiController extends Controller
             'message' => __('Chat messages fetched successfully'),
             'data' => $results,
             'pagination' => $pagination,
+            'assigned_only' => $assignedOnly,
         ], fn ($value) => $value !== null);
 
         $json = JsonText::encode($payload);
@@ -2648,8 +2826,14 @@ class ApiController extends Controller
             ->where('organization_id', $organizationId)
             ->first();
 
+        // القدرة قبل النافذة: على ماسنجر بنافذة مغلقة كان الموظّف يُنصح بقالب
+        // لا وجود له، والصحيح أن الميزة غير متاحة على القناة أصلاً.
+        if ($contact && ($refusal = $this->mobileCapabilityRefusal($contact, 'locationRequest', __('Location requests')))) {
+            return $refusal;
+        }
+
         if ($contact && !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowApiJsonResponse();
+            return MessagingWindowHelper::closedWindowApiJsonResponse($contact);
         }
 
         return (new ChatService($organizationId))->requestLocation(
@@ -2696,8 +2880,12 @@ class ApiController extends Controller
             ->where('organization_id', $organizationId)
             ->first();
 
+        if ($contact && ($refusal = $this->mobileCapabilityRefusal($contact, 'location', __('Sending a location')))) {
+            return $refusal;
+        }
+
         if ($contact && !MessagingWindowHelper::isMessagingWindowOpen($contact)) {
-            return MessagingWindowHelper::closedWindowApiJsonResponse();
+            return MessagingWindowHelper::closedWindowApiJsonResponse($contact);
         }
 
         $service = new ChatService($organizationId);
@@ -2754,15 +2942,22 @@ class ApiController extends Controller
     {
         $organizationId = (int) $request->user()->current_mobile_organization_id;
 
-        if ($organizationId && SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance')) {
-            AgentPerformanceService::recordHeartbeat(
-                $organizationId,
-                (int) $request->user()->id,
-                $request->boolean('visible', true)
-            );
+        if ($organizationId) {
+            // وقت النشاط ميزة مدفوعة؛ «متصل الآن» لكل الباقات (التحويل إلى موظف).
+            $tracksActiveTime = SubscriptionService::isSubscriptionFeatureEnabled((string) $organizationId, 'agent_performance');
 
-            [$clientId, $sessionKey] = AgentPresence::mobileClient($request);
-            AgentPresence::touch($organizationId, (int) $request->user()->id, $clientId, AgentPresence::MOBILE, $sessionKey);
+            if ($tracksActiveTime) {
+                AgentPerformanceService::recordHeartbeat(
+                    $organizationId,
+                    (int) $request->user()->id,
+                    $request->boolean('visible', true)
+                );
+            }
+
+            if ($tracksActiveTime || AgentPresence::recordedFor($organizationId)) {
+                [$clientId, $sessionKey] = AgentPresence::mobileClient($request);
+                AgentPresence::touch($organizationId, (int) $request->user()->id, $clientId, AgentPresence::MOBILE, $sessionKey);
+            }
         }
 
         return response()->json(['success' => true, 'interval' => AgentPresence::HEARTBEAT_SECONDS]);
@@ -2801,6 +2996,65 @@ class ApiController extends Controller
         AgentPerformanceService::markPresent($organizationId, (int) $user->id, AgentPresence::MOBILE, $clientId, $sessionKey);
     }
 
+    /** حقول المزامنة الإضافية: الفلاتر الاختيارية وما يُسمح للموظّف برؤيته. */
+    private const SYNC_SCOPE_RULES = [
+        'channel' => 'sometimes|nullable|string|max:20',
+        'contact_uuid' => 'sometimes|nullable|uuid',
+    ];
+
+    /**
+     * نطاق المزامنة.
+     *
+     * channel: قناة واحدة، والمجهولة تُتجاهل فيُرجَع الكلّ كفلتر الويب.
+     * contact_uuid: محادثة واحدة — يستكمل بها التطبيق محادثةً وصله عنها حدث
+     * ولا يعرفها (أُسندت إليه للتوّ مثلاً).
+     * assigned_to: حين تُفعَّل قيود الموظّف على الخادم، والمنشأة تفعّل التذاكر
+     * وتمنع الموظّفين من رؤية كل المحادثات — نفس قاعدة الويب
+     * (ChatService::canAccessConversation) والبثّ (ChatChannelRecipients).
+     *
+     * @return array{channel: ?string, contact_uuid: ?string, assigned_to: ?int}
+     */
+    private function chatSyncScope(Request $request, int $orgId): array
+    {
+        $assignedTo = null;
+
+        if (Contact::mobileAgentRestrictionsApply() && $request->user()) {
+            $role = $request->user()->getRoleNameForOrganization($orgId) ?: OrganizationRole::OWNER;
+            $organization = Organization::find($orgId);
+
+            if (OrganizationRole::isAgent($role)
+                && $organization
+                && $organization->getTicketingActive()
+                && !$organization->getAllowAgentsToViewAllChats()) {
+                $assignedTo = (int) $request->user()->id;
+            }
+        }
+
+        $channel = $request->input('channel');
+
+        return [
+            'channel' => \App\Services\Messaging\Channel::normalize(is_string($channel) ? $channel : null),
+            'contact_uuid' => $request->filled('contact_uuid') ? (string) $request->input('contact_uuid') : null,
+            'assigned_to' => $assignedTo,
+        ];
+    }
+
+    /**
+     * حقول القناة لجهة الاتصال في المزامنة — إضافية يتجاهلها القديم.
+     * القدرات لا تتكرّر هنا لكل جهة: يأخذها التطبيق مرّة من GET /channels.
+     *
+     * @return array{channel: string, channel_identifier: ?string, channel_username: ?string, messaging_window_hours: ?int}
+     */
+    private function syncChannelFields(Contact $contact): array
+    {
+        return [
+            'channel' => $contact->channel ?: \App\Services\Messaging\Channel::DEFAULT,
+            'channel_identifier' => $contact->channel_identifier,
+            'channel_username' => $contact->channelUsername(),
+            'messaging_window_hours' => MessagingWindowHelper::windowHoursFor($contact),
+        ];
+    }
+
     /**
      * تحميل ما تحتاجه مزامنة المحادثات — جهات الاتصال وسجلّاتها والكيانات
      * المرتبطة — بلا أي بناء للردّ. النسختان v1 و v2 تختلفان في شكل الردّ
@@ -2808,14 +3062,30 @@ class ApiController extends Controller
      *
      * @return array{contactsById: \Illuminate\Support\Collection, logsByContact: \Illuminate\Support\Collection, chatsMap: \Illuminate\Support\Collection, ticketLogsMap: \Illuminate\Support\Collection, notesMap: \Illuminate\Support\Collection, pagination: ?array}
      */
-    private function loadChatSyncData(int $orgId, ?string $createdAt, array $entityTypes, ?int $perPage, int $page): array
+    private function loadChatSyncData(int $orgId, ?string $createdAt, array $entityTypes, ?int $perPage, int $page, array $scope = []): array
     {
         // Step 1: Load only contacts that have matching chat_logs (skip empty contacts)
         $contactsQuery = Contact::where('organization_id', $orgId)
             ->with([
                 'contactCategories:id,name,uuid,background_color,text_color',
-                'ticket:id,status,assigned_to,contact_id',
+                // التذكرة الأحدث كما يعرضها الويب. العلاقة hasOne بلا شرط،
+                // فكانت جهةٌ لها تذاكر عدّة تُرجع حالة أقدمها ومُسنَدها. الترتيب
+                // يجعل الأولى هي is_latest، ومن لا is_latest له يأخذ أحدثها.
+                'ticket' => fn ($q) => $q->select('id', 'status', 'assigned_to', 'contact_id')
+                    ->orderByDesc('is_latest')
+                    ->orderByDesc('id'),
             ])
+            // فلاتر اختيارية: القناة، ومحادثة واحدة (استكمال ما فات)، وما أُسند
+            // إلى الموظّف وحده حين تمنع المنشأة رؤية الكل. انظر chatSyncScope().
+            ->when($scope['channel'] ?? null, fn ($q, $channel) => $q->where('contacts.channel', $channel))
+            ->when($scope['contact_uuid'] ?? null, fn ($q, $uuid) => $q->where('contacts.uuid', $uuid))
+            ->when($scope['assigned_to'] ?? null, fn ($q, $userId) => $q->whereExists(
+                fn ($sub) => $sub->select(DB::raw(1))
+                    ->from('chat_tickets')
+                    ->whereColumn('chat_tickets.contact_id', 'contacts.id')
+                    ->where('chat_tickets.is_latest', true)
+                    ->where('chat_tickets.assigned_to', $userId)
+            ))
             ->addSelect(
                 'contacts.*',
                 DB::raw(
@@ -2947,7 +3217,11 @@ class ApiController extends Controller
         $chats = $this->getModelsByIdsInChunks(
             $this->visibleChatsQuery()->toBase()->select(
                 'id', 'uuid', 'organization_id', 'metadata', 'type',
-                'wam_id', 'status', 'media_id', 'user_id', 'created_at', 'deleted_at'
+                'wam_id', 'status', 'media_id', 'user_id', 'created_at', 'deleted_at',
+                // قناة الرسالة نفسها. كانت غائبة عن الاختيار، فيقرأ
+                // formatChatMessageV2 الافتراضيّ ويُرجع كل رسالة «whatsapp»
+                // حتى على تيليجرام والمحادثة المباشرة.
+                'channel'
             ),
             'id',
             $chatIds
@@ -2997,6 +3271,7 @@ class ApiController extends Controller
                 'metadata'   => $chat->metadata,
                 'type'       => $chat->type,
                 'wam_id'     => $chat->wam_id,
+                'channel'    => $chat->channel ?? \App\Services\Messaging\Channel::DEFAULT,
                 'status'     => $chat->status,
                 'created_at' => DateTimeHelper::toOrganizationTimeString(
                     $chat->created_at,

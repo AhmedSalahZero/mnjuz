@@ -60,10 +60,16 @@ class MessagingWindowHelper
             return Carbon::parse($raw, 'UTC');
         }
 
+        // المستورد لا يفتح النافذة: لم يصل هذه المنصّة، والاستيراد يترك
+        // العمود فارغاً عمداً (ChatImportWriter، والأمر الذي يُصلح العمود).
+        // وtoBase() ليقرأ القيمة الخام بتوقيت UTC: Chat::getCreatedAtAttribute
+        // يحوّلها إلى توقيت المنشأة، ويحتاج organization_id الذي لا يُجلب هنا.
         $latest = $contact->chats()
             ->where('type', 'inbound')
             ->whereNull('deleted_at')
+            ->whereNull('chat_import_id')
             ->orderByDesc('created_at')
+            ->toBase()
             ->value('created_at');
 
         return $latest ? Carbon::parse($latest, 'UTC') : null;

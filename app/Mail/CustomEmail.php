@@ -14,6 +14,14 @@ class CustomEmail extends Mailable
     public $subject;
     public $body;
 
+    /**
+     * إعادة المحاولة لأخطاء SMTP العابرة: SES يُغلق الاتصال الخامل في الـ worker
+     * فتردّ الرسالة التالية "451 4.4.2 Timeout"، والمحاولة التالية تتّصل من جديد.
+     * ورمز 4xx يعني أن الخادم لم يقبل الرسالة، فلا تصل مرّتين.
+     */
+    public $tries = 3;
+    public $backoff = [10, 60];
+
     public function __construct($subject, $body)
     {
         $this->subject = $subject;

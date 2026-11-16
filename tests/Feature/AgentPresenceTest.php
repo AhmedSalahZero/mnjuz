@@ -248,6 +248,17 @@ class AgentPresenceTest extends CycleTestCase
         $this->assertNull($this->activity($this->organization, $this->owner));
     }
 
+    /** لكن «متصل الآن» يُسجَّل لكل الباقات: التحويل إلى موظف يسأل عنه. */
+    public function test_marking_present_without_the_feature_records_presence_only(): void
+    {
+        $this->planWithPerformance($this->organization, false);
+
+        AgentPerformanceService::markPresent($this->organization->id, $this->owner->id);
+
+        $this->assertTrue(AgentPresence::isLive($this->organization->id, $this->owner->id));
+        $this->assertNull($this->activity($this->organization, $this->owner));
+    }
+
     /** من لم يعد عضواً لا يُكتب له نشاط في منظمة — معرّف «آخر منظمة» قد يكون قديماً. */
     public function test_a_non_member_is_not_recorded(): void
     {
@@ -549,14 +560,72 @@ class AgentPresenceTest extends CycleTestCase
         $this->heartbeat(['client_id' => 'bad id!'])->assertUnprocessable();
     }
 
-    public function test_the_heartbeat_records_nothing_without_the_feature(): void
+    /**
+     * بلا ميزة «أداء الموظفين»: «متصل الآن» يُسجَّل — خطوة التحويل إلى موظف
+     * في الأتمتة تسأل عنه — لكن وقت النشاط لا يُحسب، ولا بثّ (لا يسمعه إلا
+     * صفحة الأداء المدفوعة). كان النبض يُهمل كلّه قبل التحويل إلى موظف.
+     */
+    public function test_the_heartbeat_without_the_feature_records_presence_but_no_active_time(): void
+    {
+        Event::fake([AgentPresenceChanged::class]);
+        $this->planWithPerformance($this->organization, false);
+        $this->asOwner();
+
+        $this->heartbeat()->assertOk()->assertJson(['interval' => AgentPresence::HEARTBEAT_SECONDS]);
+
+        $this->assertCount(1, $this->clients($this->owner));
+        $this->assertTrue(AgentPresence::isLive($this->organization->id, $this->owner->id));
+        $this->assertNull($this->activity($this->organization, $this->owner));
+        Event::assertNotDispatched(AgentPresenceChanged::class);
+    }
+
+    /** ومفتاح الأمان المطفأ يعيد السلوك القديم: لا شيء يُسجَّل بلا الميزة. */
+    public function test_the_kill_switch_restores_the_old_behaviour_without_the_feature(): void
+    {
+        config(['presence.all_plans' => false]);
+        $this->planWithPerformance($this->organization, false);
+        $this->asOwner();
+
+        $this->heartbeat()->assertOk();
+        AgentPerformanceService::markPresent($this->organization->id, $this->owner->id);
+
+        $this->assertCount(0, $this->clients($this->owner));
+    }
+
+    /** والمنظّف لا يبثّ «غير متصل» لمنشأة بلا الميزة. */
+    public function test_presence_without_the_feature_is_never_broadcast(): void
+    {
+        Event::fake([AgentPresenceChanged::class]);
+        $this->planWithPerformance($this->organization, false);
+        $this->clientSeenAt($this->organization, $this->owner, now()->subMinutes(5));
+
+        AgentPresence::sweep();
+
+        $this->assertCount(0, $this->clients($this->owner));
+        Event::assertNotDispatched(AgentPresenceChanged::class);
+    }
+
+    /** وصفحة الأداء تبقى مقفلة رغم أن الحضور يُسجَّل. */
+    public function test_the_performance_status_stays_locked_while_presence_is_recorded(): void
     {
         $this->planWithPerformance($this->organization, false);
         $this->asOwner();
 
         $this->heartbeat()->assertOk();
 
-        $this->assertCount(0, $this->clients($this->owner));
+        $this->get('/performance/status')->assertForbidden();
+    }
+
+    /** وتطبيق الجوال بلا الميزة: حضور بلا وقت نشاط. */
+    public function test_the_app_heartbeat_without_the_feature_records_presence_only(): void
+    {
+        $this->planWithPerformance($this->organization, false);
+        $token = $this->mobileToken($this->owner);
+
+        $this->withToken($token)->postJson('/api/v1/performance/heartbeat')->assertOk();
+
+        $this->assertSame(AgentPresence::MOBILE, $this->clients($this->owner)->first()?->platform);
+        $this->assertNull($this->activity($this->organization, $this->owner));
     }
 
     // ------------------------------------------------- المنظّف
