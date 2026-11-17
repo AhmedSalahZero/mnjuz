@@ -121,7 +121,7 @@ class InboxQueryBudgetTest extends CycleTestCase
 
         $props = $this->get('/chats/' . $contact->uuid)->assertOk()->viewData('page')['props'];
 
-        foreach (['templates', 'fields', 'locationSettings', 'simpleForm', 'timezone', 'isChatLimitReached', 'contactCategoriesEnabled', 'connectedChannels', 'settings', 'addon', 'organization', 'organizations', 'config', 'languages', 'isRtl', 'tfa', 'broadcast', 'settingsModuleWorkingHours', 'settingsModuleWebChat'] as $key) {
+        foreach (['templates', 'fields', 'locationSettings', 'simpleForm', 'alwaysWideComposer', 'timezone', 'isChatLimitReached', 'contactCategoriesEnabled', 'connectedChannels', 'settings', 'addon', 'organization', 'organizations', 'config', 'languages', 'isRtl', 'tfa', 'broadcast', 'settingsModuleWorkingHours', 'settingsModuleWebChat'] as $key) {
             $this->assertArrayHasKey($key, $props, $key);
             $this->assertNotInstanceOf(\Closure::class, $props[$key], "{$key} was sent unresolved");
         }

@@ -88,8 +88,9 @@ class CampaignController extends BaseController
             $data['channelTemplates'] = \App\Models\ChannelTemplate::forOrganization((int) $organizationId)
                 ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS)
                 ->orderBy('name')
-                ->get(['uuid', 'channel', 'name', 'subject', 'body', 'media'])
+                ->get(['uuid', 'channel', 'name', 'subject', 'body', 'media', 'design'])
                 ->groupBy('channel');
+            $data['organizationName'] = (string) \App\Models\Organization::where('id', $organizationId)->value('name');
 
             return Inertia::render('User/Campaign/Create', $data);
         } else {
@@ -111,6 +112,8 @@ class CampaignController extends BaseController
             }
 
             $data['campaign'] = $campaign;
+            // معاينة حملة البريد المصمَّمة تعرض {organization_name} باسم المنشأة.
+            $data['organizationName'] = (string) \App\Models\Organization::where('id', $organizationId)->value('name');
 
             // عدد ما سيُرسَل فعلاً لو ضُغط زر إعادة الإرسال — يُعرَض على الزر
             // نفسه وفي تأكيد الإرسال، فلا يُفاجأ العميل بعدد لم يتوقّعه.
@@ -165,6 +168,7 @@ class CampaignController extends BaseController
     {
         $validated = $request->validate([
             'type' => 'required|in:IMAGE,DOCUMENT,VIDEO',
+            'search' => 'nullable|string|max:100',
         ]);
 
         $organizationId = (int) session()->get('current_organization');
@@ -172,7 +176,9 @@ class CampaignController extends BaseController
         return response()->json([
             'data' => app(CampaignMediaHistoryService::class)->listForOrganization(
                 $organizationId,
-                $validated['type']
+                $validated['type'],
+                30,
+                $validated['search'] ?? null
             ),
         ]);
     }

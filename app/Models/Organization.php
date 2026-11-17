@@ -110,6 +110,18 @@ class Organization extends Model {
 	}
 
 	/**
+	 * صندوق الكتابة الكبير في المحادثات دائماً، ولو كان زرّ اقتراح الرد بالـ AI
+	 * غير مفعّل. مطفأ افتراضياً: يبقى الصندوق صغيراً بلا AI كما كان، والمنشأة
+	 * التي تريده تفعّله من إعدادات التذاكر.
+	 */
+	public function getAlwaysWideChatComposer(): bool
+	{
+		$settings = $this->metadata ? json_decode($this->metadata, true) : null;
+
+		return is_array($settings) && ($settings['chat']['always_wide_composer'] ?? false) === true;
+	}
+
+	/**
 	 * وضع إسناد التذاكر: manual | auto | round_robin | shared.
 	 * نستنتج القيمة من الإعداد القديم auto_assignment عند غياب assignment_mode
 	 * لضمان التوافق مع البيانات الحالية.

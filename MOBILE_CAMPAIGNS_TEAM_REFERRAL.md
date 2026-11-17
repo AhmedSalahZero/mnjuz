@@ -65,6 +65,13 @@ DELETE /api/v1/campaigns/{uuid}                حذف
   "contact_groups": [ { "uuid": "…", "name": "VIP", "contacts_count": 120 } ],
   "all_contacts_count": 5400,
   "dynamic_values": ["first name", "last name", "name", "phone", "email"],
+  "dynamic_fields": [
+    { "id": "first name", "label": "الاسم الأول لجهة الاتصال" },
+    { "id": "last name",  "label": "اسم عائلة جهة الاتصال" },
+    { "id": "name",       "label": "الاسم الكامل لجهة الاتصال" },
+    { "id": "phone",      "label": "هاتف جهة الاتصال" },
+    { "id": "email",      "label": "بريد جهة الاتصال" }
+  ],
   "timezone": "Asia/Riyadh",
   "now": "2026-11-05 14:20",
   "limits": { "campaign_limit": 10, "used": 3, "remaining": 7 },
@@ -77,6 +84,8 @@ DELETE /api/v1/campaigns/{uuid}                حذف
 - **`contacts_count`** هو عدد من سيصلهم فعلاً: يستثني المحذوفين ومن أوقفوا الرسائل التسويقية.
 - **`campaign_limit`**: القيمة `null` تعني بلا حدّ.
 - **`now`** هو وقت المنشأة الحالي. استعمله لتحديد أقلّ قيمة يقبلها حقل وقت الجدولة.
+- **`dynamic_fields`** خيارات قائمة «ديناميكي». اعرض `label`، وأرسل `id` كما هو في `value`. يصل `label` بلغة `Accept-Language` (`ar`/`en`)، فلا تترجمه في التطبيق.
+- **`dynamic_values`** القائمة القديمة نفسها بلا عناوين. باقية للنسخ القديمة من التطبيق فقط؛ لا تبنِ عليها شيئاً جديداً.
 
 ### `GET /campaigns/templates/{uuid}`
 
@@ -96,7 +105,14 @@ DELETE /api/v1/campaigns/{uuid}                حذف
         "parameters": [ { "type": "static", "value": "https://shop.test/summer" } ] }
     ]
   },
-  "dynamic_values": ["first name", "last name", "name", "phone", "email"]
+  "dynamic_values": ["first name", "last name", "name", "phone", "email"],
+  "dynamic_fields": [
+    { "id": "first name", "label": "الاسم الأول لجهة الاتصال" },
+    { "id": "last name",  "label": "اسم عائلة جهة الاتصال" },
+    { "id": "name",       "label": "الاسم الكامل لجهة الاتصال" },
+    { "id": "phone",      "label": "هاتف جهة الاتصال" },
+    { "id": "email",      "label": "بريد جهة الاتصال" }
+  ]
 }
 ```
 
@@ -104,7 +120,7 @@ DELETE /api/v1/campaigns/{uuid}                حذف
 
 | الموضع | المفتاح | القيم |
 |---|---|---|
-| `header` نصّية، `body` | `selection` | `static` يعني أن `value` نصّ يكتبه المستخدم. `dynamic` يعني أن `value` واحدة من `dynamic_values` وتُملأ من بيانات كل جهة اتصال |
+| `header` نصّية، `body` | `selection` | `static` يعني أن `value` نصّ يكتبه المستخدم. `dynamic` يعني أن `value` هي `id` أحد عناصر `dynamic_fields` (مثل `first name`) وتُملأ من بيانات كل جهة اتصال |
 | `buttons[].parameters` | `type` | `static` أو `dynamic`، بالمعنى نفسه |
 | ترويسة وسائط | `selection` | `upload` (ملف في الطلب نفسه)، أو `history` (قيمة `value` = uuid من media-history)، أو `default` (قيمة `value` = رابط مباشر) |
 

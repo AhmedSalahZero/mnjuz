@@ -11,6 +11,7 @@ use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Models\User;
+use App\Traits\TemplateTrait;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -181,6 +182,57 @@ class MobileCampaignTest extends MobileApiTestCase
             ->assertJsonPath('data.parameters.header.parameters.0.type', 'VIDEO')
             ->assertJsonPath('data.parameters.header.parameters.0.selection', 'upload')
             ->assertJsonPath('data.parameters.header.parameters.0.example_url', 'https://scontent.test/example.mp4');
+    }
+
+    /**
+     * التطبيق كان يعرض القيم الديناميكية نصوصاً إنجليزية كما هي («first name»).
+     * dynamic_fields تحمل معها label بلغة الطلب، وid هو القيمة نفسها التي
+     * تُحفظ في الحملة. dynamic_values القديمة باقية بشكلها للنسخ القديمة.
+     */
+    public function test_dynamic_fields_carry_an_id_and_a_label_in_the_request_language(): void
+    {
+        $ids = ['first name', 'last name', 'name', 'phone', 'email'];
+        $labels = [
+            'ar' => ['الاسم الأول لجهة الاتصال', 'اسم عائلة جهة الاتصال', 'الاسم الكامل لجهة الاتصال', 'هاتف جهة الاتصال', 'بريد جهة الاتصال'],
+            'en' => ['Contact First Name', 'Contact Last Name', 'Contact Full Name', 'Contact Phone', 'Contact Email'],
+        ];
+        $endpoints = ['/api/v1/campaigns/options', '/api/v1/campaigns/templates/' . $this->template->uuid];
+
+        foreach ($labels as $language => $expected) {
+            foreach ($endpoints as $endpoint) {
+                $response = $this->getJson($endpoint, ['Accept-Language' => $language])->assertOk();
+
+                $this->assertSame(
+                    array_map(fn ($id, $label) => ['id' => $id, 'label' => $label], $ids, $expected),
+                    $response->json('data.dynamic_fields'),
+                    "{$language} {$endpoint}"
+                );
+                $this->assertSame($ids, $response->json('data.dynamic_values'), "old contract: {$language} {$endpoint}");
+            }
+        }
+    }
+
+    /** كل id في القائمة يعرفه المُرسِل: id لا يعرفه يُرسَل رقم الجوال بدل الاسم. */
+    public function test_every_dynamic_field_id_resolves_to_the_contact_data(): void
+    {
+        $resolver = new class {
+            use TemplateTrait;
+        };
+        $contact = (object) ['first_name' => 'سارة', 'last_name' => 'علي', 'email' => 's@example.com', 'phone' => '+966500000011'];
+        $expected = [
+            'first name' => 'سارة',
+            'last name' => 'علي',
+            'name' => 'سارة علي',
+            'phone' => '+966500000011',
+            'email' => 's@example.com',
+        ];
+
+        $fields = $this->getJson('/api/v1/campaigns/options')->assertOk()->json('data.dynamic_fields');
+
+        $this->assertSame(array_keys($expected), array_column($fields, 'id'));
+        foreach ($fields as $field) {
+            $this->assertSame($expected[$field['id']], $resolver->getParameters($contact, $field['id']), $field['id']);
+        }
     }
 
     public function test_a_template_of_another_organization_is_not_found(): void

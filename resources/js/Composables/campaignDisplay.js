@@ -56,6 +56,27 @@ export const parseMessagePayload = (raw) => {
     }
 }
 
+/**
+ * تصميم الـ builder في حمولة حملة البريد ({settings, blocks})، أو null
+ * للحملة النصّية والقديمة. منفصلة عن parseMessagePayload كي لا يتغيّر
+ * شكلها عند من يعتمد عليه.
+ */
+export const parseMessageDesign = (raw) => {
+    let decoded = raw
+
+    if (typeof raw === 'string') {
+        try {
+            decoded = JSON.parse(raw)
+        } catch {
+            return null
+        }
+    }
+
+    const design = decoded && typeof decoded === 'object' ? decoded.design : null
+
+    return design && typeof design === 'object' && Array.isArray(design.blocks) && design.blocks.length ? design : null
+}
+
 /** metadata قالب واتساب، بأمان: "[]" والقيم التالفة تصبح كائناً فارغاً. */
 export const parseTemplateMetadata = (raw) => {
     try {

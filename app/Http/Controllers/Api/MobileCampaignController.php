@@ -39,8 +39,20 @@ class MobileCampaignController extends Controller
 {
     use MobileApi;
 
-    /** القيم الديناميكية التي تُملأ من بيانات جهة الاتصال (TemplateTrait::getParameters). */
-    private const DYNAMIC_VALUES = ['first name', 'last name', 'name', 'phone', 'email'];
+    /**
+     * القيم الديناميكية التي تُملأ من بيانات جهة الاتصال (TemplateTrait::getParameters)،
+     * ومفتاح ترجمة كلٍّ منها (المفاتيح نفسها في نموذج الحملة على الويب).
+     *
+     * المفتاح هو ما يُحفظ في الحملة ويُرسل في value، فلا يتغيّر: الحملات
+     * المحفوظة والنسخ القديمة من التطبيق تعتمد عليه.
+     */
+    private const DYNAMIC_FIELDS = [
+        'first name' => 'Contact first name',
+        'last name' => 'Contact last name',
+        'name' => 'Contact full name',
+        'phone' => 'Contact phone',
+        'email' => 'Contact email',
+    ];
 
     private const MEDIA_FORMATS = ['IMAGE', 'VIDEO', 'DOCUMENT'];
 
@@ -119,7 +131,9 @@ class MobileCampaignController extends Controller
             'templates' => $templates,
             'contact_groups' => $groups,
             'all_contacts_count' => CampaignAudienceService::count($organizationId, 0),
-            'dynamic_values' => self::DYNAMIC_VALUES,
+            // dynamic_values: قائمة النصوص القديمة، باقية للنسخ القديمة من التطبيق.
+            'dynamic_values' => array_keys(self::DYNAMIC_FIELDS),
+            'dynamic_fields' => $this->dynamicFields(),
             'timezone' => $timezone,
             'now' => Carbon::now($timezone)->format('Y-m-d H:i'),
             'limits' => [
@@ -192,7 +206,9 @@ class MobileCampaignController extends Controller
                         : array_map(fn ($value) => ['type' => 'static', 'value' => $value], (array) ($button['example'] ?? [])),
                 ], $buttons),
             ],
-            'dynamic_values' => self::DYNAMIC_VALUES,
+            // dynamic_values: قائمة النصوص القديمة، باقية للنسخ القديمة من التطبيق.
+            'dynamic_values' => array_keys(self::DYNAMIC_FIELDS),
+            'dynamic_fields' => $this->dynamicFields(),
         ]);
     }
 
@@ -520,6 +536,23 @@ class MobileCampaignController extends Controller
             // مثال القالب في Meta — رابط مؤقّت للمعاينة فقط.
             'example_url' => $example['header_handle'][0] ?? null,
         ]];
+    }
+
+    /**
+     * القيم الديناميكية للعرض: يعرض التطبيق label بلغة Accept-Language،
+     * ويرسل id كما هو في value.
+     *
+     * @return list<array{id: string, label: string}>
+     */
+    private function dynamicFields(): array
+    {
+        $fields = [];
+
+        foreach (self::DYNAMIC_FIELDS as $id => $labelKey) {
+            $fields[] = ['id' => $id, 'label' => __($labelKey)];
+        }
+
+        return $fields;
     }
 
     private function timezone(int $organizationId): string

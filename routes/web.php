@@ -273,6 +273,8 @@ Route::middleware(['auth:user'])->group(function () {
                     ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
                 Route::post('/templates/channel/{channel}', [App\Http\Controllers\User\ChannelTemplateController::class, 'store'])
                     ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
+                // صور عناصر قالب البريد — قبل /{channel}/{uuid} وإلا التقطها التحديث.
+                Route::post('/templates/channel/email/images', [App\Http\Controllers\User\ChannelTemplateController::class, 'uploadImage']);
                 Route::get('/templates/channel/{channel}/{uuid}', [App\Http\Controllers\User\ChannelTemplateController::class, 'edit'])
                     ->whereIn('channel', \App\Models\ChannelTemplate::CHANNELS);
                 Route::post('/templates/channel/{channel}/{uuid}', [App\Http\Controllers\User\ChannelTemplateController::class, 'update'])

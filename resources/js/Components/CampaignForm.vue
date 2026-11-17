@@ -2,6 +2,7 @@
 import axios from "axios"
 import ChannelIcon from '@/Components/ChannelIcon.vue'
 import ChannelMessagePreview from '@/Components/ChannelMessagePreview.vue'
+import EmailPreview from '@/Components/EmailBuilder/EmailPreview.vue'
 import {
 	acceptsMedia,
 	fileProblem,
@@ -59,6 +60,11 @@ const props = defineProps({
 	channelTemplates: {
 		type: Object,
 		default: () => ({}),
+	},
+	// معاينة قالب البريد المصمَّم: {organization_name} باسم المنشأة.
+	organizationName: {
+		type: String,
+		default: '',
 	},
 	contact: {
 		type: String,
@@ -139,16 +145,17 @@ const config = ref(props.settings?.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 
 const variableOptions = ref([
-	{ value: 'static', label: trans('static') },
-	{ value: 'dynamic', label: trans('dynamic') }
+	{ value: 'static', label: trans('Static') },
+	{ value: 'dynamic', label: trans('Dynamic') }
 ])
 
+// value هو ما يُحفظ في الحملة فلا يتغيّر. المفاتيح نفسها في dynamic_fields لتطبيق الجوال.
 const dynamicOptions = ref([
-	{ value: 'first name', label: trans('contact first name') },
-	{ value: 'last name', label: trans('contact last name') },
-	{ value: 'name', label: trans('contact full name') },
-	{ value: 'phone', label: trans('contact phone') },
-	{ value: 'email', label: trans('contact email') },
+	{ value: 'first name', label: trans('Contact first name') },
+	{ value: 'last name', label: trans('Contact last name') },
+	{ value: 'name', label: trans('Contact full name') },
+	{ value: 'phone', label: trans('Contact phone') },
+	{ value: 'email', label: trans('Contact email') },
 ])
 
 const form = useForm({
@@ -248,6 +255,9 @@ const activeCapabilities = computed(() => props.channelCapabilities?.[form.chann
 // القوالب المحفوظة للقناة المختارة، والقالب المختار منها.
 const savedTemplates = computed(() => savedTemplateOptions(props.channelTemplates, form.channel))
 const chosenSavedTemplate = computed(() => findSavedTemplate(props.channelTemplates, form.channel, form.channel_template))
+const emailDesign = computed(() => (isEmailCampaign.value && chosenSavedTemplate.value?.design?.blocks?.length
+	? chosenSavedTemplate.value.design
+	: null))
 
 const textLimit = computed(() => messageLimit(channelRules.value, Boolean(form.message_media)))
 const fileError = ref(null)
@@ -1070,10 +1080,13 @@ watch(
 				</div>
 			</div>
 		</form>
-		<div class="md:w-[50%] py-20 flex justify-center chat-bg" :class="isCampaignFlow ? 'px-20' : 'px-10'">
-			<div>
+		<div class="md:w-[50%] py-20 flex justify-center chat-bg" :class="emailDesign ? 'px-6' : (isCampaignFlow ? 'px-20' : 'px-10')">
+			<div :class="{ 'w-full': emailDesign }">
 				<WhatsappTemplate v-if="isWhatsappCampaign || !isCampaignFlow" :parameters="form" :visible="form.template ? true : false"
 					:placeholder="!headerPreview" />
+				<!-- قالب بريد مصمَّم: المعاينة كما سيصل (للعرض فقط). -->
+				<EmailPreview v-else-if="emailDesign" :design="emailDesign" :subject="chosenSavedTemplate?.subject || ''"
+					:organization-name="organizationName" />
 				<ChannelMessagePreview v-else :channel="form.channel" :label="channelLabel(form.channel)"
 					:subject="channelPreview.subject" :text="channelPreview.text" :media="channelPreview.media" />
 				<div v-if="isCarousel && form.template" class="max-w-[25em]">

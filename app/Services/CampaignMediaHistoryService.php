@@ -9,11 +9,19 @@ class CampaignMediaHistoryService
     /**
      * @return array<int, array{uuid: string, name: string, path: string, media_type: string, size: ?string, created_at: ?string}>
      */
-    public function listForOrganization(int $organizationId, string $mediaType, int $limit = 30): array
+    public function listForOrganization(int $organizationId, string $mediaType, int $limit = 30, ?string $search = null): array
     {
+        $search = trim((string) $search);
+
         return CampaignMediaHistory::query()
             ->where('organization_id', $organizationId)
             ->where('media_type', $mediaType)
+            // بحث مكتبة الصور بالاسم؛ % و_ في نصّ المستخدم حرفيّان لا أنماط.
+            ->when($search !== '', fn ($query) => $query->where(
+                'name',
+                'like',
+                '%' . addcslashes($search, '%_\\') . '%'
+            ))
             ->orderByDesc('created_at')
             ->limit($limit)
             ->get(['uuid', 'name', 'path', 'media_type', 'size', 'created_at'])

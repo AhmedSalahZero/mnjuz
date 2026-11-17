@@ -198,6 +198,35 @@
             </div>
           </div>
 
+          <!-- صندوق الكتابة الكبير دائماً: مطفأ افتراضياً فيبقى كما كان (صغير بلا AI
+               وكبير معه)، ومن أراد الكبير لكل الموظفين يفعّله. -->
+          <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm px-4 mb-20">
+            <div class="w-full py-2 mb-4 mt-2">
+              <div class="flex w-full">
+                <div class="w-3/4 text-md">
+                  <h4 class="text-[16px]">{{ $t('Always show the large message box') }}</h4>
+                  <div class="mb-1 text-slate-500">
+                    {{ $t('Shows the large message box with its toolbar in conversations even when the AI suggestion button is off. When off, the large box appears only with the AI suggestion button.') }}
+                  </div>
+                </div>
+                <div class="w-1/4">
+                  <button
+                    type="button"
+                    role="switch"
+                    :aria-checked="form.always_wide_composer"
+                    :aria-label="$t('Always show the large message box')"
+                    class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
+                    :class="{ 'bg-primary': form.always_wide_composer }"
+                    @click="toggleAlwaysWideComposer()">
+                    <div
+                      class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                      :class="{ 'translate-x-6': form.always_wide_composer }"></div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- استبيان رضا العميل بعد إغلاق المحادثة -->
           <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm px-4 mb-20">
             <div class="w-full py-2 mb-4 mt-2">
@@ -276,7 +305,7 @@ import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
-const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays', 'ratingButtonLabelMax', 'markReadAfterAutoReply'])
+const props = defineProps(['rows', 'filters', 'settings', 'modules', 'ratingSurvey', 'ratingLinkValidDays', 'ratingMaxCooldownDays', 'ratingButtonLabelMax', 'markReadAfterAutoReply', 'alwaysWideComposer'])
 const config = ref(props.settings.metadata)
 const settings = ref(config.value ? JSON.parse(config.value) : null)
 
@@ -321,6 +350,7 @@ const form = useForm({
   rating_survey_button_label: props.ratingSurvey?.button_label ?? '',
   rating_survey_cooldown_days: props.ratingSurvey?.cooldown_days ?? 30,
   mark_read_after_auto_reply: props.markReadAfterAutoReply ?? true,
+  always_wide_composer: props.alwaysWideComposer ?? false,
 })
 
 const toggleState1 = () => {
@@ -349,6 +379,11 @@ const toggleRatingSurvey = () => {
 
 const toggleMarkReadAfterAutoReply = () => {
   form.mark_read_after_auto_reply = !form.mark_read_after_auto_reply
+  submitForm()
+}
+
+const toggleAlwaysWideComposer = () => {
+  form.always_wide_composer = !form.always_wide_composer
   submitForm()
 }
 

@@ -5,9 +5,11 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreChannelTemplate;
 use App\Models\ChannelTemplate;
+use App\Models\Organization;
 use App\Services\ActivityLogger;
 use App\Services\CampaignService;
 use App\Services\ContactPlaceholderService;
+use App\Services\Email\EmailDesign;
 use App\Services\Messaging\CampaignChannels;
 use App\Services\Messaging\Channel;
 use Illuminate\Http\Request;
@@ -23,6 +25,9 @@ use Inertia\Inertia;
  */
 class ChannelTemplateController extends Controller
 {
+    /** حدّ صورة عنصر البريد: كحدّ صورة ترويسة واتساب، فتصلح الصورة للاثنين. */
+    private const IMAGE_MAX_KB = 5120;
+
     public function __construct(private readonly CampaignService $campaigns)
     {
     }
@@ -67,12 +72,15 @@ class ChannelTemplateController extends Controller
         $organizationId = $this->organizationId();
 
         // الحقول تُبنى صراحةً: المنشأة من الجلسة، والقناة من المسار.
+        $design = $this->submittedDesign($request, $channel);
+
         $template = ChannelTemplate::create([
             'organization_id' => $organizationId,
             'channel' => $channel,
             'name' => $request->input('name'),
             'subject' => $channel === Channel::EMAIL ? $request->input('subject') : null,
-            'body' => $request->input('body'),
+            'body' => $design !== null ? EmailDesign::toPlainText($design) : $request->input('body'),
+            'design' => $design,
             'media' => $this->uploadedMedia($request, $organizationId, $channel),
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
@@ -99,11 +107,14 @@ class ChannelTemplateController extends Controller
             $media = null;
         }
 
+        $design = $this->submittedDesign($request, $channel);
+
         // الملف القديم لا يُحذف: حملة مجدولة نسخت رابطه.
         $template->update([
             'name' => $request->input('name'),
             'subject' => $channel === Channel::EMAIL ? $request->input('subject') : null,
-            'body' => $request->input('body'),
+            'body' => $design !== null ? EmailDesign::toPlainText($design) : $request->input('body'),
+            'design' => $design,
             'media' => $channel === Channel::EMAIL ? null : $media,
             'updated_by' => auth()->id(),
         ]);
@@ -135,14 +146,55 @@ class ChannelTemplateController extends Controller
             'channelLabel' => __(Channel::label($channel)),
             'rules' => CampaignChannels::rules($channel),
             'placeholders' => ContactPlaceholderService::optionsForOrganization($this->organizationId()),
+            'organizationName' => (string) Organization::where('id', $this->organizationId())->value('name'),
             'template' => $template ? [
                 'uuid' => (string) $template->uuid,
                 'name' => $template->name,
                 'subject' => $template->subject,
                 'body' => $template->body,
                 'media' => $template->media,
+                // قالب بريد قديم (قبل الـ builder) يُفتح عنصرَ نصّ واحداً.
+                'design' => $channel === Channel::EMAIL
+                    ? (is_array($template->design) && !empty($template->design['blocks'])
+                        ? EmailDesign::normalize($template->design)
+                        : EmailDesign::fromPlainText((string) $template->body))
+                    : null,
             ] : null,
         ]);
+    }
+
+    /**
+     * صورة لعناصر قالب البريد، تُضاف إلى مكتبة صور المنشأة (الملفات
+     * المستعملة سابقاً في الحملات) فتظهر هناك وهنا.
+     */
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png', 'mimetypes:image/jpeg,image/png', 'max:' . self::IMAGE_MAX_KB],
+        ], [
+            'image.mimes' => __('Upload a JPG or PNG image.'),
+            'image.mimetypes' => __('Upload a JPG or PNG image.'),
+            'image.image' => __('Upload a JPG or PNG image.'),
+            'image.max' => __('The image may not be larger than :max MB.', ['max' => self::IMAGE_MAX_KB / 1024]),
+        ]);
+
+        $image = $this->campaigns->storeLibraryImage($request->file('image'), $this->organizationId(), auth()->id());
+
+        return response()->json(['data' => $image], 201);
+    }
+
+    /** التصميم كما يُخزَّن (قائمة السماح)، لقالب البريد وحده. */
+    private function submittedDesign(StoreChannelTemplate $request, string $channel): ?array
+    {
+        if ($channel !== Channel::EMAIL) {
+            return null;
+        }
+
+        $design = $request->input('design');
+
+        return is_array($design)
+            ? EmailDesign::normalize($design)
+            : EmailDesign::fromPlainText((string) $request->input('body'));
     }
 
     private function find(string $channel, string $uuid): ChannelTemplate

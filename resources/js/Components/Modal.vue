@@ -9,6 +9,11 @@
         showHeader: {
             type: Boolean,
             default: true
+        },
+        // عرض النافذة: الافتراضي كما كان، والنوافذ الواسعة (معرض القوالب، مكتبة الصور) تمرّر غيره.
+        maxWidth: {
+            type: String,
+            default: 'max-w-md'
         }
     })
 
@@ -47,7 +52,8 @@
                     leave-to="opacity-0 scale-95"
                 >
                     <DialogPanel
-                    class="w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-xl transition-all"
+                    class="w-full transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-xl transition-all"
+                    :class="props.maxWidth"
                     >
                     <div v-if="props.showHeader != false" class="flex justify-between items-center bg-gray-50 px-4 py-3">
                         <DialogTitle as="h3" class="text-lg font-medium leading-6 text-gray-900">

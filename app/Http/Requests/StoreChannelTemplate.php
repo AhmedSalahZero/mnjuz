@@ -3,10 +3,12 @@
 namespace App\Http\Requests;
 
 use App\Models\ChannelTemplate;
+use App\Services\Email\EmailDesign;
 use App\Services\Messaging\CampaignChannels;
 use App\Services\Messaging\Channel;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * قالب محفوظ لقناة بلا موافقة. القناة من المسار لا من الطلب.
@@ -39,9 +41,17 @@ class StoreChannelTemplate extends FormRequest
         ];
 
         if ($channel === Channel::EMAIL) {
+            // المتن يُبنى بالـ builder (design)، والنسخة النصّية يولّدها الخادم
+            // منه. ويبقى body وحده مقبولاً كما كان (يصير عنصر نصّ واحداً).
             return $rules + [
                 'subject' => ['required', 'string', 'max:' . CampaignChannels::EMAIL_SUBJECT_MAX, 'not_regex:/[\x00-\x1F\x7F]/'],
-                'body' => ['required', 'string', 'max:' . CampaignChannels::EMAIL_TEXT_MAX],
+                'body' => ['required_without:design', 'nullable', 'string', 'max:' . CampaignChannels::EMAIL_TEXT_MAX],
+                'design' => ['required_without:body', 'array'],
+                'design.settings' => ['nullable', 'array'],
+                'design.blocks' => ['required_with:design', 'array', 'min:1', 'max:' . EmailDesign::MAX_BLOCKS],
+                'design.blocks.*' => ['array'],
+                'design.blocks.*.type' => ['required', Rule::in(EmailDesign::TYPES)],
+                'design.blocks.*.props' => ['nullable', 'array'],
                 'media' => ['prohibited'],
             ];
         }
@@ -59,6 +69,24 @@ class StoreChannelTemplate extends FormRequest
         ];
     }
 
+    /** تفاصيل التصميم (ألوان، روابط، أطوال) بمسار كل خطأ — بعد اجتياز الهيكل. */
+    public function withValidator(Validator $validator): void
+    {
+        if ($this->route('channel') !== Channel::EMAIL) {
+            return;
+        }
+
+        $validator->after(function (Validator $validator) {
+            if ($validator->errors()->isNotEmpty() || !is_array($this->input('design'))) {
+                return;
+            }
+
+            foreach (EmailDesign::validate($this->input('design')) as $key => $message) {
+                $validator->errors()->add($key, $message);
+            }
+        });
+    }
+
     public function messages(): array
     {
         return [
@@ -68,6 +96,11 @@ class StoreChannelTemplate extends FormRequest
                 ? __('With an attachment Telegram allows up to :max characters.', ['max' => CampaignChannels::TELEGRAM_CAPTION_MAX])
                 : __('The message may not be longer than :max characters.', ['max' => CampaignChannels::textLimit((string) $this->route('channel'))]),
             'media.prohibited' => __('Email campaigns cannot carry attachments. Link the file in the message instead.'),
+            'design.required_without' => __('Add at least one element to the email.'),
+            'design.blocks.required_with' => __('Add at least one element to the email.'),
+            'design.blocks.min' => __('Add at least one element to the email.'),
+            'design.blocks.max' => __('An email can have at most :max elements.', ['max' => EmailDesign::MAX_BLOCKS]),
+            'design.blocks.*.type.in' => __('Unknown element type.'),
         ];
     }
 

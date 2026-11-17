@@ -27,6 +27,8 @@ class ChannelTemplate extends Model
 
     protected $casts = [
         'media' => 'array',
+        // تصميم الـ builder لقالب البريد (EmailDesign)، null لتيليجرام والقديم.
+        'design' => 'array',
     ];
 
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
@@ -42,10 +44,16 @@ class ChannelTemplate extends Model
     /** ما يُنسخ إلى الحملة. */
     public function campaignPayload(): array
     {
-        return [
+        $payload = [
             'text' => (string) $this->body,
             'media' => is_array($this->media) && !empty($this->media['url']) ? $this->media : null,
             'subject' => $this->subject,
         ];
+
+        if (is_array($this->design) && !empty($this->design['blocks'])) {
+            $payload['design'] = $this->design;
+        }
+
+        return $payload;
     }
 }

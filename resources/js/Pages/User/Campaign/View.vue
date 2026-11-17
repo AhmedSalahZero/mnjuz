@@ -86,6 +86,9 @@
 					<div class="w-full rounded-lg p-5 mt-5 border chat-bg">
 						<WhatsappTemplate v-if="isWhatsapp" :parameters="templateParameters" :placeholder="false"
 							:visible="true" />
+						<!-- بريد من قالب مصمَّم: المعاينة كما وصل (للعرض فقط). -->
+						<EmailPreview v-else-if="emailDesign" :design="emailDesign" :subject="message.subject"
+							:organization-name="props.organizationName || ''" />
 						<!-- حملة تيليجرام أو بريد: رسالتها كما كُتبت، نصّاً لا HTML. -->
 						<ChannelMessagePreview v-else :channel="campaignChannel" :label="$t(channelName)"
 							:subject="message.subject" :text="message.text" :media="message.media" />
@@ -105,7 +108,8 @@ import WhatsappTemplate from '@/Components/WhatsappTemplate.vue'
 import CarouselCardsStrip from '@/Components/Template/CarouselCardsStrip.vue'
 import ChannelIcon from '@/Components/ChannelIcon.vue'
 import ChannelMessagePreview from '@/Components/ChannelMessagePreview.vue'
-import { campaignTemplateLabel, isWhatsappCampaign, parseMessagePayload, parseTemplateMetadata, tracksDelivery } from '@/Composables/campaignDisplay.js'
+import { campaignTemplateLabel, isWhatsappCampaign, parseMessageDesign, parseMessagePayload, parseTemplateMetadata, tracksDelivery } from '@/Composables/campaignDisplay.js'
+import EmailPreview from '@/Components/EmailBuilder/EmailPreview.vue'
 import { substituteVariables } from '@/Composables/carouselTemplate.js'
 import { Link, router } from "@inertiajs/vue3"
 import { computed, ref } from 'vue'
@@ -113,7 +117,7 @@ import { useTrans } from '@/Composables/useTrans'
 
 const trans = useTrans()
 
-const props = defineProps(['campaign', 'rows', 'filters', 'resendableCount', 'showRecipientEmail'])
+const props = defineProps(['campaign', 'rows', 'filters', 'resendableCount', 'showRecipientEmail', 'organizationName'])
 
 // حملة بلا قالب واتساب (تيليجرام، البريد) لها رسالة حرّة بدل القالب. كانت
 // الصفحة تمرّر metadata "[]" لمعاينة واتساب فتسقط.
@@ -123,6 +127,7 @@ const channelName = computed(() => CHANNEL_NAMES[campaignChannel.value] || campa
 const isWhatsapp = computed(() => isWhatsappCampaign(props.campaign?.channel))
 const templateParameters = computed(() => parseTemplateMetadata(props.campaign?.metadata))
 const message = computed(() => parseMessagePayload(props.campaign?.message_payload))
+const emailDesign = computed(() => (campaignChannel.value === 'email' ? parseMessageDesign(props.campaign?.message_payload) : null))
 // تيليجرام لا يُبلغ البوت بالتسليم ولا القراءة، والبريد لا نتتبّع فتحه.
 const deliveryTracked = computed(() => tracksDelivery(campaignChannel.value))
 

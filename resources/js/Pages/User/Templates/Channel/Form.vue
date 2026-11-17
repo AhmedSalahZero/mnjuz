@@ -13,7 +13,36 @@
                 </div>
             </div>
 
-            <div class="md:flex gap-6">
+            <!-- البريد: الـ builder (عناصر، ترتيب، خصائص، إعدادات، معاينة). -->
+            <form v-if="isEmail" @submit.prevent="save" class="space-y-4 text-sm">
+                <div class="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-2">
+                    <div>
+                        <label class="block text-sm mb-1" for="template-name">{{ $t('Template name') }}</label>
+                        <input id="template-name" v-model="form.name" type="text" maxlength="100" dir="auto"
+                            class="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+                        <p v-if="form.errors.name" class="text-xs text-red-600 mt-1">{{ form.errors.name }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1" for="template-subject">{{ $t('Email subject') }}</label>
+                        <input id="template-subject" v-model="form.subject" type="text" :maxlength="rules.subject_max || 200" dir="auto"
+                            class="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+                        <p v-if="form.errors.subject" class="text-xs text-red-600 mt-1">{{ form.errors.subject }}</p>
+                    </div>
+                </div>
+
+                <EmailBuilder v-model="form.design" :subject="form.subject" :placeholders="placeholders"
+                    :organization-name="organizationName" :errors="form.errors" :open-presets="!template" :direction="direction" />
+
+                <div class="flex justify-end gap-2">
+                    <Link :href="`/templates/channel/${channel}`" class="rounded-md px-3 py-2 text-sm text-gray-600 bg-slate-200">{{ $t('Cancel') }}</Link>
+                    <button type="submit" :disabled="form.processing"
+                        class="rounded-md px-3 py-2 text-sm text-white bg-primary disabled:opacity-50">
+                        {{ $t('Save') }}
+                    </button>
+                </div>
+            </form>
+
+            <div v-else class="md:flex gap-6">
                 <form @submit.prevent="save" class="md:w-[55%] bg-white border border-slate-200 rounded-lg p-4 space-y-4 text-sm">
                     <div>
                         <label class="block text-sm mb-1">{{ $t('Template name') }}</label>
@@ -96,6 +125,9 @@ import { computed, ref } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import AppLayout from '../../Layout/App.vue'
 import ChannelMessagePreview from '@/Components/ChannelMessagePreview.vue'
+import EmailBuilder from '@/Components/EmailBuilder/EmailBuilder.vue'
+import { insertAtCursor } from '@/Composables/insertAtCursor.js'
+import { useRtl } from '@/Composables/useRtl.js'
 import { acceptsMedia, fileProblem, mediaAccept, messageLimit } from '@/Composables/campaignChannels.js'
 import { previewText, SAMPLE_VALUES } from '@/Composables/channelMessagePreview.js'
 import { useTrans } from '@/Composables/useTrans'
@@ -106,6 +138,7 @@ const props = defineProps({
     rules: { type: Object, default: () => ({}) },
     placeholders: { type: Array, default: () => [] },
     template: { type: Object, default: null },
+    organizationName: { type: String, default: '' },
 })
 
 const trans = useTrans()
@@ -118,7 +151,13 @@ const form = useForm({
     body: props.template?.body ?? '',
     media: null,
     remove_media: false,
+    // البريد: تصميم الـ builder (الخادم يولّد منه النسخة النصّية).
+    design: props.template?.design ?? null,
 })
+
+// اتجاه قالب جديد من لغة الواجهة.
+const { isRtl } = useRtl()
+const direction = computed(() => (isRtl.value === false ? 'ltr' : 'rtl'))
 
 const hasMedia = computed(() => Boolean(form.media) || (Boolean(existingMedia.value) && !form.remove_media))
 const textLimit = computed(() => messageLimit(props.rules, hasMedia.value))
@@ -145,17 +184,7 @@ const onFile = (event) => {
 }
 
 const insertPlaceholder = (token) => {
-    const field = bodyField.value
-    const text = form.body || ''
-
-    if (!field) {
-        form.body = text + token
-        return
-    }
-
-    const start = field.selectionStart ?? text.length
-    const end = field.selectionEnd ?? text.length
-    form.body = text.slice(0, start) + token + text.slice(end)
+    form.body = insertAtCursor(form.body, token, bodyField.value).text
 }
 
 const save = () => {
@@ -163,7 +192,15 @@ const save = () => {
         ? `/templates/channel/${props.channel}/${props.template.uuid}`
         : `/templates/channel/${props.channel}`
 
-    form.transform((data) => ({
+    // البريد بلا ملفات: JSON، والتصميم كما هو (مصفوفات متداخلة).
+    if (isEmail.value) {
+        form.transform((data) => ({ name: data.name, subject: data.subject, design: data.design }))
+            .post(url, { preserveScroll: true })
+        return
+    }
+
+    // تيليجرام: الطلب كما كان (لا design).
+    form.transform(({ design, ...data }) => ({
         ...data,
         // البريد بلا مرفقات؛ والحقل الفارغ لا يُرسل ملفاً.
         media: isEmail.value ? null : data.media,

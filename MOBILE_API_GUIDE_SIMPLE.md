@@ -146,6 +146,13 @@ Accept-Language: ar
     ],
     "all_contacts_count": 2500,
     "dynamic_values": ["first name", "last name", "name", "phone", "email"],
+    "dynamic_fields": [
+      { "id": "first name", "label": "الاسم الأول لجهة الاتصال" },
+      { "id": "last name",  "label": "اسم عائلة جهة الاتصال" },
+      { "id": "name",       "label": "الاسم الكامل لجهة الاتصال" },
+      { "id": "phone",      "label": "هاتف جهة الاتصال" },
+      { "id": "email",      "label": "بريد جهة الاتصال" }
+    ],
     "timezone": "Asia/Riyadh",
     "now": "2026-11-05 14:20",
     "limits": { "campaign_limit": null, "used": 11, "remaining": null },
@@ -162,6 +169,8 @@ Accept-Language: ar
 | `contacts_count` | عدد اللي هتوصلهم الرسالة فعلاً |
 | `now` | الوقت الحالي للشركة، واستخدمه كأقل ميعاد مسموح في اختيار الجدولة |
 | `campaign_limit` | `null` يعني مفيش حد |
+| `dynamic_fields` | اختيارات قايمة «ديناميكي». اعرض `label` وابعت `id` زي ما هو في `value`. الـ `label` بيرجع بلغة `Accept-Language`، فمتترجمهوش في التطبيق |
+| `dynamic_values` | نفس القايمة من غير labels. موجودة علشان النسخ القديمة بس، متبنيش عليها حاجة جديدة |
 
 ---
 
@@ -191,7 +200,14 @@ Accept-Language: ar
         { "type": "QUICK_REPLY", "text": "بدء المحادثة", "value": null, "parameters": [ { "type": "static", "value": null } ] }
       ]
     },
-    "dynamic_values": ["first name", "last name", "name", "phone", "email"]
+    "dynamic_values": ["first name", "last name", "name", "phone", "email"],
+    "dynamic_fields": [
+      { "id": "first name", "label": "الاسم الأول لجهة الاتصال" },
+      { "id": "last name",  "label": "اسم عائلة جهة الاتصال" },
+      { "id": "name",       "label": "الاسم الكامل لجهة الاتصال" },
+      { "id": "phone",      "label": "هاتف جهة الاتصال" },
+      { "id": "email",      "label": "بريد جهة الاتصال" }
+    ]
   }
 }
 ```
@@ -200,7 +216,7 @@ Accept-Language: ar
 
 - كل `{{1}}` و`{{2}}` في النص ليها parameter، والمستخدم يملا الـ `value` بتاعها.
   - `selection: "static"`: نص ثابت يكتبه المستخدم، زي `"خصم 30%"`.
-  - `selection: "dynamic"`: يتملى من بيانات كل عميل. الـ `value` بتبقى واحدة من `dynamic_values`، زي `"first name"`.
+  - `selection: "dynamic"`: يتملى من بيانات كل عميل. الـ `value` بتبقى الـ `id` بتاع عنصر من `dynamic_fields`، زي `"first name"`، والمستخدم بيشوف الـ `label` بتاعه.
 - زرار `QUICK_REPLY` لازم المستخدم يكتب له `value`، أقصاه 25 حرف.
 - القيم اللي راجعة في الـ response أمثلة بس. اعرضها كـ placeholder.
 

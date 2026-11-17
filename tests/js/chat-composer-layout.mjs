@@ -1,12 +1,13 @@
 /**
- * صندوق كتابة الرسائل في الـ chats بالشكل الكبير للكل، في Chrome حقيقي
+ * صندوق كتابة الرسائل في الـ chats، في Chrome حقيقي
  * (resources/js/Components/ChatComponents/ChatForm.vue).
  *
- * الطلب: الصندوق كان صغيراً (سطر واحد) عند من لم يفعّل مساعد الـ AI، وكبيراً
- * (ثلاثة أسطر وتحتها شريط الأدوات) عند من فعّله. المطلوب الكبير دائماً، ويبقى
- * زرّ «AI Assist» وحده مربوطاً بالتفعيل لأنه لا يعمل بدونه.
+ * الافتراضي كما كان: صغير (سطر واحد) بلا زرّ اقتراح الرد بالـ AI، وكبير (ثلاثة
+ * أسطر وتحتها شريط الأدوات) معه. خيار «إظهار صندوق الكتابة الكبير دائماً» في
+ * إعدادات التذاكر (alwaysWideComposer) يجعله كبيراً بلا AI أيضاً، ويبقى زرّ
+ * «AI Assist» وحده مربوطاً بالـ AI لأنه لا يعمل بدونه.
  *
- * والصندوق الكبير كان يصل إلى المفعّلين فقط، فما فيه من أعطال يصل الآن للكل:
+ * والصندوق الكبير يصل بالخيار إلى من لا AI عنده، فأعطاله صُلّحت وتُفحص هنا:
  * - زرّ «Templates» النصّي بلا type داخل الـ form ⇒ يُرسل النصّ المكتوب.
  * - تسجيل صوتي بلا نصّ لا يُرسَل (الخروج المبكر في sendMessage).
  * - بعد أول تسجيل كانت كل رسالة نصية تُتبَع بـ POST صوتي فارغ.
@@ -88,14 +89,14 @@ writeFileSync(join(tmp, 'Harness.vue'), `
 <script setup>
 import ChatForm from '@/Components/ChatComponents/ChatForm.vue'
 
-defineProps(['simpleForm'])
+defineProps(['simpleForm', 'alwaysWideComposer'])
 
 const contact = { uuid: 'contact-1', is_blocked: false, is_messaging_window_open: true, channel_capabilities: {} }
 const onViewTemplate = () => window.__events.push('viewTemplate')
 </script>
 <template>
   <div id="pane" style="max-width:900px;margin:24px auto">
-    <ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="false" @viewTemplate="onViewTemplate" />
+    <ChatForm :contact="contact" :simpleForm="simpleForm" :alwaysWideComposer="alwaysWideComposer" :chatLimitReached="false" @viewTemplate="onViewTemplate" />
   </div>
 </template>
 `)
@@ -108,9 +109,9 @@ import Harness from './Harness.vue'
 
 window.__requests = []
 window.__events = []
-window.__mount = (simpleForm) => {
+window.__mount = (props) => {
     const i18n = createI18n({ legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false, messages: { en: {} } })
-    createApp(Harness, { simpleForm }).use(i18n).mount('#host')
+    createApp(Harness, props).use(i18n).mount('#host')
 }
 `)
 
@@ -170,14 +171,20 @@ const origin = `http://127.0.0.1:${server.address().port}/`
 
 const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox'] })
 
-const open = async (viewport, simpleForm) => {
+// الحالات كما يرسلها ChatService: simpleForm = زرّ الـ AI غير مفعّل.
+const AI_OFF = { simpleForm: true, alwaysWideComposer: false }
+const AI_OFF_WIDE = { simpleForm: true, alwaysWideComposer: true }
+const AI_ON = { simpleForm: false, alwaysWideComposer: false }
+const AI_ON_WIDE = { simpleForm: false, alwaysWideComposer: true }
+
+const open = async (viewport, props) => {
     const page = await browser.newPage()
     await page.setViewport(viewport)
     page.errors = []
     page.on('pageerror', (e) => page.errors.push(e.message))
     page.on('console', (m) => m.type() === 'error' && page.errors.push(m.text()))
     await page.goto(origin, { waitUntil: 'load' })
-    await page.evaluate((flag) => window.__mount(flag), simpleForm)
+    await page.evaluate((p) => window.__mount(p), props)
     await page.waitForSelector('textarea')
     return page
 }
@@ -233,11 +240,16 @@ const clearText = async (page) => {
 }
 
 try {
-    // ── الشكل: كبير في الحالتين، والفرق الوحيد زرّ المساعد ──
+    // ── الشكل: الافتراضي كما كان، والخيار يكبّر الصندوق بلا AI ──
     const heights = {}
 
-    for (const [label, simpleForm, aiExpected] of [['AI off', true, false], ['AI on', false, true]]) {
-        const page = await open(DESKTOP, simpleForm)
+    for (const [label, props, wide, aiExpected] of [
+        ['AI off (default)', AI_OFF, false, false],
+        ['AI off + always large', AI_OFF_WIDE, true, false],
+        ['AI on', AI_ON, true, true],
+        ['AI on + always large', AI_ON_WIDE, true, true],
+    ]) {
+        const page = await open(DESKTOP, props)
 
         const layout = await page.evaluate(() => {
             const textarea = document.querySelector('textarea')
@@ -250,17 +262,26 @@ try {
                 lineHeight: parseFloat(style.lineHeight),
             }
         })
-        heights[label] = layout.height
 
         ok(layout.forms === 1, `${label}: expected one composer form, got ${layout.forms}`)
         ok(layout.textareas === 1, `${label}: expected one textarea, got ${layout.textareas}`)
-        ok(layout.rows === '3', `${label}: textarea rows should be 3 (large composer), got ${layout.rows}`)
-        ok(layout.height >= 3 * layout.lineHeight, `${label}: textarea is not three lines tall, got ${JSON.stringify(layout)}`)
 
-        // شريط الأدوات تحت الحقل كما في الصورة الثانية.
-        ok(await hasVisibleButton(page, byText, 'Templates'), `${label}: toolbar without the Templates button`)
-        ok(await hasVisibleButton(page, byIcon, MIC_PATH), `${label}: toolbar without the voice recording button`)
-        ok(await hasVisibleButton(page, byText, 'Send'), `${label}: toolbar without the Send button`)
+        if (wide) {
+            heights[label] = layout.height
+            ok(layout.rows === '3', `${label}: textarea rows should be 3 (large composer), got ${layout.rows}`)
+            ok(layout.height >= 3 * layout.lineHeight, `${label}: textarea is not three lines tall, got ${JSON.stringify(layout)}`)
+
+            // شريط الأدوات تحت الحقل كما في الصورة الثانية.
+            ok(await hasVisibleButton(page, byText, 'Templates'), `${label}: toolbar without the Templates button`)
+            ok(await hasVisibleButton(page, byIcon, MIC_PATH), `${label}: toolbar without the voice recording button`)
+            ok(await hasVisibleButton(page, byText, 'Send'), `${label}: toolbar without the Send button`)
+        } else {
+            // الصندوق الصغير كما كان: سطر واحد والأيقونات بجانبه، بلا تسجيل صوتي.
+            ok(layout.rows === '1', `${label}: textarea rows should be 1 (small composer), got ${layout.rows}`)
+            ok(layout.height < 2 * layout.lineHeight, `${label}: textarea is taller than one line, got ${JSON.stringify(layout)}`)
+            ok(!(await hasVisibleButton(page, byIcon, MIC_PATH)), `${label}: the small composer shows the voice recording button`)
+            ok(!(await hasVisibleButton(page, byText, 'Send')), `${label}: the small composer shows the large Send button`)
+        }
 
         const ai = await hasVisibleButton(page, (b) => b.textContent.includes('AI Assist'))
         ok(ai === aiExpected, `${label}: AI Assist button visible=${ai}, expected ${aiExpected}`)
@@ -269,14 +290,19 @@ try {
         await page.close()
     }
 
-    ok(heights['AI off'] === heights['AI on'],
-        `the composer must be the same size with and without AI, got ${JSON.stringify(heights)}`)
+    ok(new Set(Object.values(heights)).size === 1,
+        `the large composer must be the same size in every case, got ${JSON.stringify(heights)}`)
 
-    // ── الموبايل: الصندوق كبير، و«AI Assist» في قائمة المرفقات مع التفعيل فقط ──
-    for (const [label, simpleForm, aiExpected] of [['mobile AI off', true, false], ['mobile AI on', false, true]]) {
-        const page = await open(MOBILE, simpleForm)
+    // ── الموبايل: نفس القرار، و«AI Assist» في قائمة المرفقات مع الـ AI فقط ──
+    for (const [label, props, rows, aiExpected] of [
+        ['mobile AI off (default)', AI_OFF, '1', false],
+        ['mobile AI off + always large', AI_OFF_WIDE, '3', false],
+        ['mobile AI on', AI_ON, '3', true],
+    ]) {
+        const page = await open(MOBILE, props)
 
-        ok(await page.$eval('textarea', (t) => t.getAttribute('rows')) === '3', `${label}: textarea rows should be 3`)
+        const actual = await page.$eval('textarea', (t) => t.getAttribute('rows'))
+        ok(actual === rows, `${label}: textarea rows should be ${rows}, got ${actual}`)
 
         const attach = await page.$('button[aria-label="Attach"]')
         ok(!!attach, `${label}: no Attach button`)
@@ -292,9 +318,9 @@ try {
         await page.close()
     }
 
-    // ── السلوك عند من لم يفعّل الـ AI (يرى الصندوق الكبير لأول مرة) ──
+    // ── السلوك في الصندوق الكبير بلا AI (الخيار مفعّل) ──
     {
-        const page = await open(DESKTOP, true)
+        const page = await open(DESKTOP, AI_OFF_WIDE)
 
         // «Templates» يفتح القوالب ولا يُرسل ما كُتب.
         await page.type('textarea', 'draft text')
@@ -373,7 +399,7 @@ try {
 
     // ── مع الـ AI: زرّ المساعد ما زال يجلب الاقتراح إلى الحقل ──
     {
-        const page = await open(DESKTOP, false)
+        const page = await open(DESKTOP, AI_ON)
 
         await clickButton(page, 'AI on: AI Assist', (b) => b.textContent.includes('AI Assist'))
         try {

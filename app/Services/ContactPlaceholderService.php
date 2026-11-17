@@ -64,10 +64,23 @@ class ContactPlaceholderService
      */
     public static function replace(int $organizationId, string $contactUuid, string $message): string
     {
+        $values = self::valuesFor($organizationId, $contactUuid);
+
+        return $values === null ? $message : self::replaceWith($values, $message);
+    }
+
+    /**
+     * قيم المتغيّرات لجهة اتصال واحدة — تُجلب مرّة ثم تُطبَّق على نصوص
+     * كثيرة بـ replaceWith (عناصر قالب البريد مثلاً) بدل استعلامات لكل نصّ.
+     *
+     * @return array<string, mixed>|null null إن لم توجد المنشأة أو جهة الاتصال.
+     */
+    public static function valuesFor(int $organizationId, string $contactUuid): ?array
+    {
         $organization = Organization::where('id', $organizationId)->first();
         $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
         if (!$organization || !$contact) {
-            return $message;
+            return null;
         }
 
         $address = $contact->address ? json_decode($contact->address, true) : [];
@@ -117,8 +130,16 @@ class ContactPlaceholderService
             }
         }
 
-        $mergedData = array_merge($data, $transformedMetadata);
+        return array_merge($data, $transformedMetadata);
+    }
 
+    /**
+     * استبدال `{field}` و`{url:field}` بقيم valuesFor. الرمز المجهول يبقى كما هو.
+     *
+     * @param array<string, mixed> $mergedData
+     */
+    public static function replaceWith(array $mergedData, string $message): string
+    {
         // المُعدِّل u ضروري: بدونه \w حروفٌ لاتينية فقط، فحقلٌ مخصّص باسم عربي
         // مثل «عدد الطلبات» لا يُطابَق أبداً — يكتبه المستخدم {عدد_الطلبات}
         // فيصل العميل الرمز كما هو، بلا خطأ يشير إلى السبب.

@@ -42,6 +42,13 @@ final class CampaignChannels
      * حدود إرسال تيليجرام بالرابط (sendPhoto/sendDocument بـ URL): الصورة
      * 5MB والباقي 20MB — أصغر ممّا يقبله الرفع المباشر.
      */
+    /**
+     * ما يقبله sendPhoto في تيليجرام بالرابط. صورة بغيرها (AVIF وHEIC
+     * وWebP…) تُحوَّل JPG عند رفعها — كانت تُقبل ثم يرفضها تيليجرام عند
+     * الإرسال بـ «failed to get HTTP URL content».
+     */
+    public const TELEGRAM_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png'];
+
     private const TELEGRAM_URL_LIMITS = [
         'image' => 5 * 1024 * 1024,
         'video' => 20 * 1024 * 1024,

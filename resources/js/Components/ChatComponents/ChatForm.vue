@@ -35,11 +35,13 @@ const currentUploadJobs = computed(() => uploads.jobsFor(props.contact?.uuid))
 const currentUploadPercent = computed(() => uploads.percentFor(props.contact?.uuid))
 const currentUploadFileCount = computed(() => uploads.fileCountFor(props.contact?.uuid))
 const recorder = ref(null)
-const props = defineProps(['contact', 'chatLimitReached', 'simpleForm'])
+const props = defineProps(['contact', 'chatLimitReached', 'simpleForm', 'alwaysWideComposer'])
 
-// الاسم تاريخي: simpleForm كان يختار الصندوق الصغير، ومعناه الآن «مساعد
-// الـ AI غير مفعّل» (ChatService). الصندوق كبير للكل، والمساعد يُخفى وحده
-// لأن /automation/chat/suggestion لا يعمل بلا AI.
+// simpleForm = زرّ اقتراح الرد بالـ AI غير مفعّل في المحادثة (ChatService).
+// الافتراضي كما كان: صندوق صغير بلا AI وكبير معه. المنشأة التي تريد الكبير
+// دائماً تفعّل alwaysWideComposer من إعدادات التذاكر، ويبقى زرّ المساعد مع
+// الـ AI وحده لأن /automation/chat/suggestion لا يعمل بدونه.
+const wideComposer = computed(() => !props.simpleForm || !!props.alwaysWideComposer)
 const showAiAssist = computed(() => !props.simpleForm)
 
 // قدرات قناة الجهة كما أعلنها الخادم (channel_capabilities). ما لا تدعمه
@@ -1030,8 +1032,180 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 	</div>
-	<!-- صندوق واحد بالشكل الكبير للكل؛ تفعيل الـ AI يُظهر زرّ المساعد فقط (showAiAssist). -->
 	<form v-if="
+		!wideComposer &&
+		!props.chatLimitReached &&
+		!props.contact.is_blocked
+	" @submit.prevent="sendMessage()" class="relative flex w-full flex-col px-2 md:px-10">
+		<ShortcutsDropdown v-if="shortcutsOpen" :items="filteredShortcuts" :activeIndex="activeShortcutIndex"
+			@hover="setActiveShortcut" @select="(i) => applyShortcut(filteredShortcuts[i])" />
+		<div class="w-full overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+			<Chat24HourComposeBanner
+				v-if="!isInboundChatWithin24Hours"
+				:sending-auth-template="sendingAuthTemplate"
+				@view-template="viewTemplate()"
+				@send-auth-template="sendAuthTemplate()"
+			/>
+			<UploadProgressIndicator
+				:jobs="currentUploadJobs"
+				:percent="currentUploadPercent"
+				:file-count="currentUploadFileCount"
+				:expanded="uploadsExpanded"
+				@toggle="uploadsExpanded = !uploadsExpanded"
+				@retry="retryUpload"
+				@cancel="(job) => uploads.cancel(job.id)"
+				@dismiss="(job) => uploads.dismiss(job.id)"
+			/>
+			<!-- النافذة مغلقة: يُخفى الحقل كله (v-show لا v-if فيبقى textInputRef) — كان باهتاً معطّلاً
+			     يملأ المساحة تحت اللافتة، وزرّ القوالب فيه مكرّر ولا يعمل. -->
+			<div v-show="isInboundChatWithin24Hours"
+				class="flex items-center py-4 md:py-2 pl-2 pr-2"
+				:class="processingForm ? 'bg-gray-200' : 'bg-white'">
+				<div class="absolute">
+					<button type="button" @click="toggleEmojiPicker"> 😀 </button>
+					<div v-if="emojiPicker" class="absolute left-0 bottom-full" ref="emojiPickerRef">
+						<EmojiPicker :native="true" @select="addEmoji" />
+					</div>
+				</div>
+				<textarea ref="textInputRef" @focus="form.type = 'text'" @keydown="onComposeKeydown" @keydown.enter.exact.prevent="handleEnterKey"
+					class="w-full ml-3 outline-none resize-none text-sm md:text-base pl-6"
+					:class="processingForm ? 'bg-gray-200' : 'bg-white'" v-model="formTextInput"
+					@input="adjustTextareaHeight" type="text" rows="1" :autofocus="isInboundChatWithin24Hours"
+					:placeholder="$t('Type your message...')" :disabled="processingForm || !isInboundChatWithin24Hours">
+      </textarea>
+				<input type="file" class="sr-only" :accept="getAcceptedFileTypes()" id="file-upload"
+					@change="handleFileUpload($event)" />
+				<div class="shrink-0 md:hidden">
+					<ChatAttachMenu
+						:show-ai-assist="false"
+						:requesting-location="requestingLocation"
+						:sending-location="sendingLocation"
+						:show-request-location="canRequestLocation"
+						:show-send-location="canSendLocation"
+						:show-templates="canUseTemplates"
+						:disabled="!isInboundChatWithin24Hours"
+						@action="handleAttachAction"
+					/>
+				</div>
+				<div class="hidden md:contents">
+				<label @click="form.type = 'image'" for="file-upload" class="text-slate-500 mr-2 cursor-pointer">
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+						<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+							stroke-width="1.5">
+							<path d="M6.5 8a2 2 0 1 0 4 0a2 2 0 0 0-4 0Zm14.427 1.99c-6.61-.908-12.31 4-11.927 10.51" />
+							<path d="M3 13.066c2.78-.385 5.275.958 6.624 3.1" />
+							<path
+								d="M3 12c0-4.243 0-6.364 1.318-7.682C5.636 3 7.758 3 12 3c4.243 0 6.364 0 7.682 1.318C21 5.636 21 7.758 21 12c0 4.243 0 6.364-1.318 7.682C18.364 21 16.242 21 12 21c-4.243 0-6.364 0-7.682-1.318C3 18.364 3 16.242 3 12Z" />
+						</g>
+					</svg>
+				</label>
+				<label @click="form.type = 'document'" for="file-upload" class="text-slate-500 mr-1 cursor-pointer">
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+						<g fill="none" stroke="currentColor" stroke-width="1.5">
+							<path
+								d="M3 10c0-3.771 0-5.657 1.172-6.828C5.343 2 7.229 2 11 2h2c3.771 0 5.657 0 6.828 1.172C21 4.343 21 6.229 21 10v4c0 3.771 0 5.657-1.172 6.828C18.657 22 16.771 22 13 22h-2c-3.771 0-5.657 0-6.828-1.172C3 19.657 3 17.771 3 14v-4Z" />
+							<path stroke-linecap="round" d="M8 10h8m-8 4h5" />
+						</g>
+					</svg>
+				</label>
+				<label @click="form.type = 'audio'" for="file-upload" class="text-slate-500 mr-1 cursor-pointer">
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 1024 1024">
+						<path fill="currentColor"
+							d="M842 454c0-4.4-3.6-8-8-8h-60c-4.4 0-8 3.6-8 8c0 140.3-113.7 254-254 254S258 594.3 258 454c0-4.4-3.6-8-8-8h-60c-4.4 0-8 3.6-8 8c0 168.7 126.6 307.9 290 327.6V884H326.7c-13.7 0-24.7 14.3-24.7 32v36c0 4.4 2.8 8 6.2 8h407.6c3.4 0 6.2-3.6 6.2-8v-36c0-17.7-11-32-24.7-32H548V782.1c165.3-18 294-158 294-328.1M512 624c93.9 0 170-75.2 170-168V232c0-92.8-76.1-168-170-168s-170 75.2-170 168v224c0 92.8 76.1 168 170 168m-94-392c0-50.6 41.9-92 94-92s94 41.4 94 92v224c0 50.6-41.9 92-94 92s-94-41.4-94-92z" />
+					</svg>
+				</label>
+				<label @click="form.type = 'video'" for="file-upload" class="text-slate-500 mr-2 cursor-pointer">
+					<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 32 32">
+						<path fill="currentColor"
+							d="M6.5 5.5A4.5 4.5 0 0 0 2 10v12a4.5 4.5 0 0 0 4.5 4.5h12A4.5 4.5 0 0 0 23 22v-1.5l4.2 3.15c1.153.865 2.8.042 2.8-1.4V9.75c0-1.442-1.647-2.265-2.8-1.4L23 11.5V10a4.5 4.5 0 0 0-4.5-4.5zM23 14l5-3.75v11.5L23 18zm-2-4v12a2.5 2.5 0 0 1-2.5 2.5h-12A2.5 2.5 0 0 1 4 22V10a2.5 2.5 0 0 1 2.5-2.5h12A2.5 2.5 0 0 1 21 10" />
+					</svg>
+				</label>
+				<button v-if="canRequestLocation" type="button" @click="requestLocation()" :disabled="requestingLocation"
+					class="hidden md:inline-flex text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
+					:title="$t('Request customer location')" :aria-label="$t('Request customer location')">
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+						<g fill="none" stroke="currentColor" stroke-width="1.5">
+							<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z" />
+							<circle cx="12" cy="10.5" r="2.5" />
+						</g>
+					</svg>
+				</button>
+				<button v-if="canSendLocation" type="button" @click="openLocationModal()"
+					:disabled="sendingLocation || !isInboundChatWithin24Hours"
+					class="hidden md:inline-flex text-slate-500 mr-2 cursor-pointer disabled:opacity-40"
+					:title="$t('Send our location')" :aria-label="$t('Send our location')">
+					<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24">
+						<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+							stroke-linejoin="round">
+							<path d="M12 21c-4.418-4.03-7-7.4-7-10.5a7 7 0 1 1 14 0c0 3.1-2.582 6.47-7 10.5Z"
+								fill="currentColor" fill-opacity="0.15" />
+							<path d="m14.5 8.5l-5 2.2l2.1 1l1 2.1z" fill="currentColor" />
+						</g>
+					</svg>
+				</button>
+				<label v-if="canUseTemplates" @click="viewTemplate()" class="text-slate-500 mr-4 cursor-pointer hidden md:inline-flex">
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256">
+						<path fill="currentColor"
+							d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z">
+						</path>
+					</svg>
+				</label>
+				</div>
+				<button class="flex shrink-0 items-center" type="submit"
+					:disabled="formTextInput === null || formTextInput.trim() === '' || processingForm || !isInboundChatWithin24Hours">
+					<svg v-if="!processingForm" :class="formTextInput === null || formTextInput.trim() === '' || !isInboundChatWithin24Hours ? 'text-slate-300' : 'text-black'
+						" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 16 16">
+						<path fill="currentColor"
+							d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.69.953c.268.053.268.437 0 .49l-5.69.953a.5.5 0 0 0-.397.354l-1.403 4.85a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5Z" />
+					</svg>
+					<svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+						<circle cx="12" cy="2" r="0" fill="currentColor">
+							<animate attributeName="r" begin="0" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(45 12 12)">
+							<animate attributeName="r" begin="0.125s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(90 12 12)">
+							<animate attributeName="r" begin="0.25s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(135 12 12)">
+							<animate attributeName="r" begin="0.375s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(180 12 12)">
+							<animate attributeName="r" begin="0.5s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(225 12 12)">
+							<animate attributeName="r" begin="0.625s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(270 12 12)">
+							<animate attributeName="r" begin="0.75s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+						<circle cx="12" cy="2" r="0" fill="currentColor" transform="rotate(315 12 12)">
+							<animate attributeName="r" begin="0.875s" calcMode="spline" dur="1s"
+								keySplines="0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8;0.2 0.2 0.4 0.8" repeatCount="indefinite"
+								values="0;2;0;0" />
+						</circle>
+					</svg>
+				</button>
+			</div>
+		</div>
+	</form>
+	<form v-if="
+		wideComposer &&
 		!props.chatLimitReached &&
 		!props.contact.is_blocked
 	" @submit.prevent="sendMessage()" class="relative flex items-center px-2 md:px-10 space-x-2">

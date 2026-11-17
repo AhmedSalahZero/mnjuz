@@ -264,6 +264,7 @@ class SettingController extends BaseController
                 'markReadAfterAutoReply' => \App\Services\Chat\ChatReadService::autoReplyMarksRead(
                     json_decode((string) ($settings?->metadata ?? ''), true)
                 ),
+                'alwaysWideComposer' => (bool) $settings?->getAlwaysWideChatComposer(),
             ]);
         } else if($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
@@ -297,6 +298,11 @@ class SettingController extends BaseController
             // ترسله، فيبقى المحفوظ كما هو بدل أن يعود للافتراضي.
             if ($request->has('mark_read_after_auto_reply')) {
                 $metadataArray['automation']['mark_read_after_auto_reply'] = $request->boolean('mark_read_after_auto_reply');
+            }
+
+            // صندوق الكتابة الكبير دائماً. بنفس الحذر: لا يُكتب إلا إن أُرسل.
+            if ($request->has('always_wide_composer')) {
+                $metadataArray['chat']['always_wide_composer'] = $request->boolean('always_wide_composer');
             }
 
             $updatedMetadataJson = json_encode($metadataArray);

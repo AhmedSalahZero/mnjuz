@@ -328,6 +328,7 @@ class CampaignService
 
         if ($template) {
             $media = $template->campaignPayload()['media'];
+            $this->assertTelegramCanSendTemplateMedia($channel, $media);
         } elseif (!$isEmail) {
             $file = method_exists($request, 'file') ? $request->file('message_media') : null;
 
@@ -354,6 +355,12 @@ class CampaignService
 
         if ($template) {
             $payload['template'] = ['uuid' => (string) $template->uuid, 'name' => $template->name];
+
+            // تصميم الـ builder يُنسخ مع النصّ: الحملة تُرسل كما رآها التاجر
+            // ولو عُدِّل القالب بعدها.
+            if ($isEmail && isset($template->campaignPayload()['design'])) {
+                $payload['design'] = \App\Services\Email\EmailDesign::normalize($template->campaignPayload()['design']);
+            }
         }
 
         $campaign = new Campaign;
@@ -408,7 +415,8 @@ class CampaignService
      */
     public function storeValidatedChannelMedia($file, int $organizationId, string $channel, string $field = 'message_media'): array
     {
-        $type = $this->mediaTypeFor($file->getMimeType());
+        $mimeType = (string) $file->getMimeType();
+        $type = $this->mediaTypeFor($mimeType);
         $limits = \App\Services\Messaging\CampaignChannels::mediaLimits($channel);
 
         if (!array_key_exists($type, $limits)) {
@@ -429,7 +437,123 @@ class CampaignService
             ]);
         }
 
+        if ($this->needsTelegramPhotoConversion($channel, $type, $mimeType)) {
+            return $this->storeConvertedTelegramPhoto($file, $mimeType, $organizationId, $field, $limits[$type]);
+        }
+
         return $this->storeCampaignMedia($file, $organizationId, $type);
+    }
+
+    /**
+     * قالب تيليجرام حُفظت صورته قبل التحويل (AVIF وأخواتها): الحملة منه
+     * تفشل لكل مستلم. نرفضها الآن بسبب يقود التاجر إلى الحلّ — إعادة رفع
+     * الصورة في القالب، فتتحوّل JPG.
+     */
+    private function assertTelegramCanSendTemplateMedia(string $channel, ?array $media): void
+    {
+        if ($channel !== \App\Services\Messaging\Channel::TELEGRAM || !$media) {
+            return;
+        }
+
+        $mimeType = strtolower((string) ($media['mime_type'] ?? ''));
+
+        if (($media['type'] ?? null) !== 'image' || $mimeType === '') {
+            return;
+        }
+
+        if (!in_array($mimeType, \App\Services\Messaging\CampaignChannels::TELEGRAM_PHOTO_MIME_TYPES, true)) {
+            throw ValidationException::withMessages([
+                'channel_template' => __('This template\'s image is in a format Telegram does not accept. Open the template and upload the image again; it will be converted to JPG automatically.'),
+            ]);
+        }
+    }
+
+    /**
+     * صورة لعناصر قالب البريد: تُخزَّن كمرفقات الحملات وتُسجَّل في مكتبة
+     * المنشأة (campaign_media_history) فتظهر في «الملفات المستعملة سابقاً»
+     * أيضاً. التحقّق من النوع والحجم في الطلب قبلها.
+     *
+     * @return array{uuid: string, name: string, path: string, media_type: string, size: ?string, created_at: ?string}
+     */
+    public function storeLibraryImage($file, int $organizationId, ?int $userId): array
+    {
+        $stored = $this->storeCampaignMedia($file, $organizationId, 'image');
+
+        $item = app(CampaignMediaHistoryService::class)->record(
+            $organizationId,
+            $userId,
+            'IMAGE',
+            $stored['name'],
+            $stored['url'],
+            $stored['location'],
+            $stored['mime_type'],
+            (string) $stored['size'],
+        );
+
+        return [
+            'uuid' => (string) $item->uuid,
+            'name' => (string) $item->name,
+            'path' => (string) $item->path,
+            'media_type' => (string) $item->media_type,
+            'size' => $item->size,
+            'created_at' => $item->created_at?->toDateTimeString(),
+        ];
+    }
+
+    private function needsTelegramPhotoConversion(string $channel, string $type, string $mimeType): bool
+    {
+        return $channel === \App\Services\Messaging\Channel::TELEGRAM
+            && $type === 'image'
+            && !in_array(strtolower($mimeType), \App\Services\Messaging\CampaignChannels::TELEGRAM_PHOTO_MIME_TYPES, true);
+    }
+
+    /**
+     * صورة لا يقبلها sendPhoto (AVIF وأخواتها) تُخزَّن JPG بدلها: التاجر
+     * يرفع ما عنده، والعميل يستلم صورة. وما لا يتحوّل يُرفض هنا بسببه، لا
+     * عند الإرسال لكل مستلم.
+     */
+    private function storeConvertedTelegramPhoto($file, string $mimeType, int $organizationId, string $field, ?int $limit): array
+    {
+        $unsupported = ValidationException::withMessages([
+            $field => __('Telegram accepts JPG or PNG images, and this image could not be converted. Upload a JPG or PNG image.'),
+        ]);
+
+        if (!\App\Services\Media\JpegConverter::supports($mimeType)) {
+            throw $unsupported;
+        }
+
+        try {
+            $jpeg = app(\App\Services\Media\JpegConverter::class)
+                ->convert((string) file_get_contents($file->getRealPath()), $mimeType);
+        } catch (\App\Services\Media\ImageConversionFailed $e) {
+            Log::warning('Telegram image conversion failed', [
+                'organization_id' => $organizationId,
+                'mime_type' => $mimeType,
+                'error' => $e->getMessage(),
+            ]);
+
+            throw $unsupported;
+        }
+
+        if ($limit !== null && strlen($jpeg) > $limit) {
+            throw ValidationException::withMessages([
+                $field => __('This file is larger than :channel allows (:limit MB).', [
+                    'channel' => \App\Services\Messaging\Channel::label(\App\Services\Messaging\Channel::TELEGRAM),
+                    'limit' => round($limit / 1024 / 1024, 1),
+                ]),
+            ]);
+        }
+
+        $name = pathinfo((string) $file->getClientOriginalName(), PATHINFO_FILENAME);
+
+        return $this->storeMediaBytes(
+            $jpeg,
+            ($name !== '' ? $name : 'image') . '.jpg',
+            'image/jpeg',
+            strlen($jpeg),
+            $organizationId,
+            'image'
+        );
     }
 
     /** نوع الوسائط كما يفهمه النظام من نوع MIME. */
@@ -450,14 +574,27 @@ class CampaignService
      */
     private function storeCampaignMedia($file, int $organizationId, string $type): array
     {
-        $contents = file_get_contents($file->getRealPath());
-        $fileName = $file->getClientOriginalName();
+        return $this->storeMediaBytes(
+            (string) file_get_contents($file->getRealPath()),
+            (string) $file->getClientOriginalName(),
+            (string) $file->getMimeType(),
+            (int) $file->getSize(),
+            $organizationId,
+            $type
+        );
+    }
+
+    /**
+     * @return array{url: string, name: string, type: string, mime_type: string, size: int, location: string}
+     */
+    private function storeMediaBytes(string $contents, string $fileName, string $mimeType, int $size, int $organizationId, string $type): array
+    {
         $safeName = uniqid() . '_' . sanitize_filename_for_storage($fileName);
         $storage = Setting::where('key', 'storage_system')->first()?->value;
 
         if ($storage === 'aws') {
             $path = 'uploads/media/campaigns/' . $organizationId . '/' . $safeName;
-            Storage::disk('s3')->put($path, $contents, ['ContentType' => $file->getMimeType()]);
+            Storage::disk('s3')->put($path, $contents, ['ContentType' => $mimeType]);
             $url = Storage::disk('s3')->url($path);
             $location = 'amazon';
         } else {
@@ -473,8 +610,8 @@ class CampaignService
             'url' => $url,
             'name' => $fileName,
             'type' => $type,
-            'mime_type' => $file->getMimeType(),
-            'size' => (int) $file->getSize(),
+            'mime_type' => $mimeType,
+            'size' => $size,
             'location' => $location,
         ];
     }

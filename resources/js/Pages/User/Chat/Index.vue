@@ -55,7 +55,7 @@
 					!formLoading &&
 					!displayTemplate
 				" class="w-full py-4">
-					<ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
+					<ChatForm :contact="contact" :simpleForm="simpleForm" :alwaysWideComposer="alwaysWideComposer" :chatLimitReached="isChatLimitReached"
 						@viewTemplate="displayTemplate = true" @newMessage="generateNewMessage"
 						@removeMessage="removeOptimisticMessage" />
 				</div>
@@ -110,6 +110,8 @@ const props = defineProps({
 	fields: Array,
 	locationSettings: Object,
 	simpleForm: Boolean,
+	// صندوق الكتابة الكبير دائماً (إعدادات التذاكر)؛ الافتراضي false = كما كان.
+	alwaysWideComposer: Boolean,
 	user: Array,
 	timezone: String,
 	contactCategoriesEnabled: Boolean,

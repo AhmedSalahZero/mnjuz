@@ -33,19 +33,28 @@ class CampaignEmailBuilder
         try {
             $organization = Organization::find($campaign->organization_id);
             $payload = $campaign->messagePayload();
+            $design = self::designOf($campaign);
+            $resolve = $this->resolver($campaign, $contact, $design !== null);
 
-            $subject = self::singleLine($this->placeholders($campaign, $contact, (string) $campaign->payloadValue('subject', '')), 255);
-            $text = $this->placeholders($campaign, $contact, (string) $payload['text']);
+            $subject = self::singleLine($resolve((string) $campaign->payloadValue('subject', '')), 255);
+            $text = $resolve((string) $payload['text']);
             $fromName = self::singleLine((string) $account->name, 100);
             $unsubscribeUrl = EmailUnsubscribeController::urlFor($organization, $to, $locale);
 
-            $html = view('emails.campaign', [
-                'locale' => $locale,
-                'subject' => $subject,
-                'bodyHtml' => self::bodyHtml($text),
-                'fromName' => $fromName,
-                'unsubscribeUrl' => $unsubscribeUrl,
-            ])->render();
+            $html = $design !== null
+                ? app(EmailDesignRenderer::class)->render($design, $resolve, [
+                    'locale' => $locale,
+                    'subject' => $subject,
+                    'fromName' => $fromName,
+                    'unsubscribeUrl' => $unsubscribeUrl,
+                ])
+                : view('emails.campaign', [
+                    'locale' => $locale,
+                    'subject' => $subject,
+                    'bodyHtml' => self::bodyHtml($text),
+                    'fromName' => $fromName,
+                    'unsubscribeUrl' => $unsubscribeUrl,
+                ])->render();
 
             $plain = $text . "\n\n—\n" . __('You received this email from :name.', ['name' => $fromName])
                 . "\n" . __('Unsubscribe') . ': ' . $unsubscribeUrl;
@@ -83,6 +92,34 @@ class CampaignEmailBuilder
         $value = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $value) ?? '';
 
         return mb_substr(trim(preg_replace('/\s{2,}/u', ' ', $value) ?? ''), 0, $max);
+    }
+
+    /** تصميم الـ builder المنسوخ في الحملة، أو null لحملة نصّية (القديمة والجوال). */
+    public static function designOf(Campaign $campaign): ?array
+    {
+        $design = $campaign->payloadValue('design');
+
+        return is_array($design) && !empty($design['blocks']) ? $design : null;
+    }
+
+    /**
+     * استبدال المتغيّرات لهذا المستلم. الحملة المصمَّمة فيها نصوص كثيرة
+     * (عنصر لكل نصّ وزرّ ورابط)، فتُجلب القيم مرّة واحدة؛ والنصّية تبقى
+     * على مسارها كما كان.
+     *
+     * @return \Closure(string): string
+     */
+    private function resolver(Campaign $campaign, Contact $contact, bool $designed): \Closure
+    {
+        if (!$designed) {
+            return fn (string $text): string => $this->placeholders($campaign, $contact, $text);
+        }
+
+        $values = ContactPlaceholderService::valuesFor((int) $campaign->organization_id, (string) $contact->uuid);
+
+        return static fn (string $text): string => $values === null || $text === '' || !str_contains($text, '{')
+            ? $text
+            : ContactPlaceholderService::replaceWith($values, $text);
     }
 
     private function placeholders(Campaign $campaign, Contact $contact, string $text): string
