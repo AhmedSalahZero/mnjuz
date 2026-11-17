@@ -2188,5 +2188,9 @@
     "You pay {charge} · {amount} will be added to your balance": "You pay {charge} · {amount} will be added to your balance",
     "Applies to": "Applies to",
     "Plans and Add payment": "Plans and Add payment",
-    "Connect :channel from the web dashboard.": "Connect :channel from the web dashboard."
+    "Connect :channel from the web dashboard.": "Connect :channel from the web dashboard.",
+    "Message after the visitor questions (optional)": "Message after the visitor questions (optional)",
+    "We are transferring your conversation to a customer service agent.": "We are transferring your conversation to a customer service agent.",
+    "Shown after the visitor answers the questions when no FAQs are active. Leave it empty to show nothing.": "Shown after the visitor answers the questions when no FAQs are active. Leave it empty to show nothing.",
+    "Message after the visitor questions in English (optional)": "Message after the visitor questions in English (optional)"
 }

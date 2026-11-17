@@ -144,19 +144,24 @@ class MessagingWindowCountdownTest extends TestCase
     // ------------------------------------------------- حقل الكتابة
 
     /**
-     * النافذة مغلقة: يُخفى حقل الكتابة بنسختيه ولا يبقى باهتاً معطّلاً تحت اللافتة.
+     * النافذة مغلقة: يُخفى حقل الكتابة في كل صندوق ولا يبقى باهتاً معطّلاً تحت اللافتة.
      * v-show لا v-if: الدوال التي تلمس textInputRef تبقى تجده.
+     *
+     * كانا صندوقين (صغير/كبير بحسب الـ AI)، والآن صندوق كبير واحد للكل؛ العدد
+     * يتبع الصناديق فلا يُنسى الإخفاء أو اللافتة إن عادت صيغة ثانية.
      */
     public function test_the_compose_box_is_hidden_while_the_window_is_closed(): void
     {
         $form = $this->source(self::FORM);
+        $composers = preg_match_all('/<form\b[^>]*@submit\.prevent="sendMessage\(\)"/', $form);
 
-        $this->assertSame(2, substr_count($form, '<div v-show="isInboundChatWithin24Hours"'), 'إحدى نسختي حقل الكتابة لا تُخفى.');
+        $this->assertGreaterThanOrEqual(1, $composers, 'لا صندوق رسائل يُرسل بـ sendMessage.');
+        $this->assertSame($composers, substr_count($form, '<div v-show="isInboundChatWithin24Hours"'), 'صندوق رسائل حقله لا يُخفى.');
         $this->assertStringNotContainsString("'pointer-events-none opacity-40'", $form, 'الحقل الباهت المعطّل ما زال.');
         $this->assertStringNotContainsString('v-if="isInboundChatWithin24Hours"', $form, 'v-if يفكّ textInputRef فترمي الدوال التي تلمسه.');
 
-        // اللافتة نفسها ما زالت تظهر في النسختين حين تُغلق النافذة.
-        $this->assertSame(2, substr_count($form, '<Chat24HourComposeBanner' . "\n" . "\t\t\t\tv-if=\"!isInboundChatWithin24Hours\""));
+        // اللافتة نفسها ما زالت تظهر في كل صندوق حين تُغلق النافذة.
+        $this->assertSame($composers, substr_count($form, '<Chat24HourComposeBanner' . "\n" . "\t\t\t\tv-if=\"!isInboundChatWithin24Hours\""));
     }
 
     // ------------------------------------------------- مصدر واحد للحقيقة

@@ -100,6 +100,12 @@ export interface WidgetConfig {
             phone_label: string | null
             consent_text: string | null
             consent_text_en?: string | null
+            /**
+             * رسالة بعد أسئلة البداية حين لا قائمة أسئلة شائعة («سنحوّل
+             * محادثتك…»). فارغة أو غائبة (خادم أقدم): لا شيء.
+             */
+            handoff_message?: string | null
+            handoff_message_en?: string | null
             /** أسئلة البداية الفعلية. غائبة عند خادم أقدم: تُشتقّ من المفاتيح أعلاه. */
             questions?: IntakeQuestion[]
         }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { faCommentDots, faXmark } from '@fortawesome/free-solid-svg-icons'
 import { ApiError, createApi } from '../core/api.ts'
 import { checkAnswer, type Reason } from '../core/answers.ts'
+import { localBubble } from '../core/bubble.ts'
 import { chooseJourney, faqTranscript, journeyContext, journeyStage, newJourney, parseJourney, type Faq, type Journey, type JourneyContext } from '../core/faq.ts'
 import { mediaType, pickFiles } from '../core/files.ts'
 import { translator, type TextKey } from '../core/i18n.ts'
@@ -11,6 +12,7 @@ import { connectRealtime, type RealtimeState } from '../core/realtime.ts'
 import { isLeader, parseLock, pollInterval, shouldConnectRealtime } from '../core/scheduler.ts'
 import { addPending, lastOutboundSeq, lastSeq, firstSeq, markFailed, mergeMessages, unreadCount } from '../core/store.ts'
 import { createStorage, type Persisted } from '../core/storage.ts'
+import { firstNewBotBubble, typingDelay } from '../core/typing.ts'
 import type { IntakeQuestion, WidgetConfig, WidgetMessage } from '../core/types.ts'
 import { uuidv4 } from '../core/uuid.ts'
 import { Composer, rememberEmoji } from './Composer.tsx'
@@ -24,6 +26,11 @@ export interface MountContext {
     config: WidgetConfig
     preview: boolean
     open: boolean
+    /**
+     * للاختبارات وحدها: مدّة نقاط الكتابة ثابتة، و0 بلا نقاط. غائبة في
+     * الإنتاج (main.tsx لا يضعها): المدّة من طول النص (core/typing.ts).
+     */
+    typingMs?: number
 }
 
 const PAGE_SIZE = 30
@@ -206,9 +213,43 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                   describeProblem: t('faq_problem'),
               })
             : []
-    // ما سبق المحادثة يبقى فوقها: الأسئلة وإجاباتها، ثم القائمة.
-    const preface = intakeMessages.concat(journeyMessages)
+    // انتهت أسئلة البداية وبدأت الجلسة ولا قائمة أسئلة شائعة: رسالة التاجر
+    // («سنحوّل محادثتك…») إن كتبها، وإلّا لا يصل الزائرَ بعد اسمه شيء.
+    const handoffText = pick(lang, prechat.handoff_message, prechat.handoff_message_en)
+    const intakeFinished = step.kind === 'done' && (answeredIntake || (needsConsent && progress.consented))
+    const handoffMessages = token && intakeFinished && !activeJourney && handoffText ? [localBubble('l:handoff', 'out', handoffText)] : []
+    // ما سبق المحادثة يبقى فوقها: الأسئلة وإجاباتها، ثم رسالة ما بعدها أو القائمة.
+    const preface = intakeMessages.concat(handoffMessages, journeyMessages)
     const needsFaqs = open && hasFaqs && activeJourney !== null && (stage !== 'chat' || activeJourney.steps.some((step) => step.startsWith('faq:')))
+
+    /* ───────────── نقاط الكتابة ───────────── */
+
+    // ما تعرضه النافذة قبل المحادثة: الأسئلة وحدها أثناءها، ثم السجلّ كلّه
+    // (startSession يعيد حساب الموضع حين يتبدّل الاثنان).
+    const scripted = intake ? intakeMessages : preface
+    // ضغطة الزائر أو إجابته تُمسك ما بعدها: فقاعته تظهر فوراً، وأوّل فقاعة آلية
+    // بعدها (السؤال التالي، رسالة ما بعد الأسئلة، القائمة) تسبقها النقاط.
+    // before = طول السجلّ لحظة الضغط؛ والتحميل وتبديل اللغة لا يُمسكان شيئاً.
+    const [hold, setHold] = useState<{ before: number } | null>(null)
+    const expectReply = () => {
+        if (ctx.typingMs !== 0) {
+            setHold({ before: scripted.length })
+        }
+    }
+    // بدأت المحادثة الفعلية (رسالة الزائر أو ردّ): لا شيء يُخفى.
+    const holdAt = hold && messages.length === 0 ? firstNewBotBubble(scripted, hold.before) : -1
+    const typing = holdAt >= 0
+    const shown = typing ? scripted.slice(0, holdAt) : scripted
+    const typingFor = typing ? ctx.typingMs ?? typingDelay(scripted[holdAt].text) : 0
+
+    // يبدأ مع ظهور النقاط ولا يُعاد بتغيّر السجلّ أثناءها (وصول الأسئلة الشائعة).
+    useEffect(() => {
+        if (!typing) return
+
+        const timer = setTimeout(() => setHold(null), typingFor)
+
+        return () => clearTimeout(timer)
+    }, [typing])
 
     const saveJourney = (next: Journey | null) => {
         journeyRef.current = next
@@ -221,6 +262,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
 
         if (next) {
             touch()
+            expectReply()
             saveJourney(next)
         }
     }
@@ -250,6 +292,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
     }, [needsFaqs])
 
     const resetSession = () => {
+        setHold(null)
         storage.clear()
         storage.raw(INTAKE_KEY).set('')
         saveJourney(null)
@@ -538,6 +581,9 @@ export function Widget({ ctx }: { ctx: MountContext }) {
             tokenRef.current = result.token
             persist({ token: result.token, visitorId: result.visitor.id, name: result.visitor.name, channel: result.channel, lastReadSeq: 0 })
             touch()
+            // ما ينتظر النقاط (رسالة ما بعد الأسئلة، القائمة) يأتي بعد ما يبقى
+            // من الأسئلة فوق المحادثة — ولا شيء يبقى لـ widget الموافقة وحدها.
+            setHold((current) => (current ? { before: answeredIntake ? intakeMessages.length : 0 } : null))
 
             // بعد أسئلة البداية: القائمة. ومن ضغط فيها قبل الجلسة (widget بلا
             // أسئلة) تبقى رحلته كما هي.
@@ -548,6 +594,8 @@ export function Widget({ ctx }: { ctx: MountContext }) {
             return true
         } catch (error) {
             if (error instanceof ApiError && error.status === 422) {
+                // رفض الخادم يُعرض فوراً كرفض المتصفّح، بلا نقاط قبله.
+                setHold(null)
                 const { progress: next, failed } = rewind(questions, progress, error.errors)
                 saveProgress(next)
                 setAttempt(failed ? { text: failed.previous, reason: failed.message } : null)
@@ -593,6 +641,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
         }
 
         setAttempt(null)
+        expectReply()
         saveProgress(
             checked.value === null
                 ? skip(progress, step.question.id)
@@ -603,6 +652,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
     const skipIntake = () => {
         if (step.kind === 'ask' && !step.question.required) {
             setAttempt(null)
+            expectReply()
             saveProgress(skip(progress, step.question.id))
         }
     }
@@ -610,6 +660,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
     /** أزرار الفقاعات المحلّية: الموافقة، وخيار سؤال القائمة. */
     const chooseIntake = (_message: WidgetMessage, optionId: string, title: string) => {
         if (optionId === 'consent') {
+            expectReply()
             saveProgress({ ...progress, consented: true })
         } else if (optionId.startsWith('o:')) {
             answerIntake(title, '')
@@ -769,7 +820,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 </button>
                             )}
                             <MessageList
-                                messages={intakeMessages}
+                                messages={shown}
                                 t={t}
                                 lang={lang}
                                 hasMore={false}
@@ -778,12 +829,15 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 onChoose={chooseIntake}
                                 onRetry={() => {}}
                                 welcome={welcome}
+                                typing={typing}
                             />
                             <IntakeInput
-                                question={step.kind === 'ask' ? step.question : null}
+                                question={step.kind === 'ask' && !typing ? step.question : null}
                                 t={t}
+                                lang={lang}
                                 defaultCountry={prechat.default_country}
                                 busy={starting}
+                                waiting={typing}
                                 onAnswer={answerIntake}
                                 onSkip={skipIntake}
                                 onHoneypot={(value) => {
@@ -796,7 +850,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                         <>
                             {!config.open_now && <div class="mnjz-banner">{t('offline')}</div>}
                             <MessageList
-                                messages={preface}
+                                messages={shown}
                                 t={t}
                                 lang={lang}
                                 hasMore={false}
@@ -805,8 +859,9 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 onChoose={pickJourney}
                                 onRetry={() => {}}
                                 welcome={welcome}
+                                typing={typing}
                             />
-                            <IntakeInput question={null} t={t} defaultCountry={prechat.default_country} busy={false} onAnswer={() => {}} onSkip={() => {}} onHoneypot={() => {}} />
+                            <IntakeInput question={null} t={t} lang={lang} defaultCountry={prechat.default_country} busy={false} onAnswer={() => {}} onSkip={() => {}} onHoneypot={() => {}} />
                         </>
                     ) : (
                         <>
@@ -817,7 +872,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 </button>
                             )}
                             <MessageList
-                                messages={preface.length && !hasMore ? preface.concat(messages) : messages}
+                                messages={preface.length && !hasMore ? shown.concat(messages) : messages}
                                 t={t}
                                 lang={lang}
                                 hasMore={hasMore}
@@ -826,6 +881,7 @@ export function Widget({ ctx }: { ctx: MountContext }) {
                                 onChoose={choose}
                                 onRetry={retry}
                                 welcome={welcome}
+                                typing={typing}
                             />
                             <Composer
                                 t={t}

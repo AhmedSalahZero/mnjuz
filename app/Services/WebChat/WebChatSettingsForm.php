@@ -71,6 +71,9 @@ class WebChatSettingsForm
             'prechat.phone_label' => ['nullable', 'string', 'max:60'],
             'prechat.consent_text' => ['nullable', 'string', 'max:500'],
             'prechat.consent_text_en' => ['sometimes', 'nullable', 'string', 'max:500'],
+            // sometimes: صفحة أو تطبيقٌ أقدم منهما يحفظ بدونهما فتبقى المحفوظة.
+            'prechat.handoff_message' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'prechat.handoff_message_en' => ['sometimes', 'nullable', 'string', 'max:500'],
             // أسئلة البداية. sometimes: صفحة فُتحت قبل منشئ الأسئلة تحفظ بدونه
             // فتبقى الأسئلة المحفوظة كما هي.
             'prechat.questions' => ['sometimes', 'nullable', 'array', 'max:' . WebChatQuestions::MAX],
@@ -124,7 +127,7 @@ class WebChatSettingsForm
                 ]
             ),
             'prechat' => array_replace(
-                array_intersect_key($current['prechat'], array_flip(['consent_text_en', 'questions'])),
+                array_intersect_key($current['prechat'], array_flip(['consent_text_en', 'questions', 'handoff_message', 'handoff_message_en'])),
                 $validated['prechat']
             ),
             'behavior' => $validated['behavior'],

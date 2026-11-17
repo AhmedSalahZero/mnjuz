@@ -89,6 +89,31 @@ class MobileWebChatSettingsTest extends MobileApiTestCase
         $this->assertSame('required', $saved['prechat']['phone']);
     }
 
+    /**
+     * رسالة بعد أسئلة البداية: التطبيق يقرؤها ويحفظها، وإصدارٌ أقدم لا يرسلها
+     * لا يمحوها (HandoffMessageTest للويب).
+     */
+    public function test_the_handoff_message_is_read_saved_and_kept_by_older_builds(): void
+    {
+        $this->getJson('/api/v1/settings/webchat')->assertOk()
+            ->assertJsonPath('data.settings.prechat.handoff_message', null)
+            ->assertJsonPath('data.settings.prechat.handoff_message_en', null);
+
+        $this->postJson('/api/v1/settings/webchat', $this->payload(['prechat' => [
+            'handoff_message' => 'سنحوّل محادثتك إلى أحد موظفي خدمة العملاء.',
+            'handoff_message_en' => 'We are transferring you to an agent.',
+        ]]))->assertOk()
+            ->assertJsonPath('data.settings.prechat.handoff_message', 'سنحوّل محادثتك إلى أحد موظفي خدمة العملاء.')
+            ->assertJsonPath('data.settings.prechat.handoff_message_en', 'We are transferring you to an agent.');
+
+        // إصدارٌ أقدم من الحقلين يحفظ بدونهما.
+        $this->postJson('/api/v1/settings/webchat', $this->payload())->assertOk();
+
+        $saved = WebChatSettings::for($this->widget()->fresh());
+        $this->assertSame('سنحوّل محادثتك إلى أحد موظفي خدمة العملاء.', $saved['prechat']['handoff_message']);
+        $this->assertSame('We are transferring you to an agent.', $saved['prechat']['handoff_message_en']);
+    }
+
     public function test_the_questions_decide_whether_the_phone_is_asked(): void
     {
         $this->postJson('/api/v1/settings/webchat', $this->payload(['prechat' => ['questions' => [

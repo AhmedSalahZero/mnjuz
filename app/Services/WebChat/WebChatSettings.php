@@ -47,6 +47,10 @@ final class WebChatSettings
             'phone_label' => null,
             'consent_text' => null,
             'consent_text_en' => null,
+            // رسالة بعد أسئلة البداية حين لا أسئلة شائعة مفعّلة («سنحوّل
+            // محادثتك…»). فارغة = لا شيء، كما كان كل widget قبلها.
+            'handoff_message' => null,
+            'handoff_message_en' => null,
             // أسئلة البداية (WebChatQuestions). null = لم يحدّدها التاجر بعد،
             // فتُشتقّ من المفاتيح أعلاه كما كان النموذج يسأل.
             'questions' => null,
@@ -112,9 +116,9 @@ final class WebChatSettings
         $prechat['phone'] = in_array($prechat['phone'], self::PHONE_MODES, true) ? $prechat['phone'] : 'required';
         $prechat['email'] = in_array($prechat['email'], self::EMAIL_MODES, true) ? $prechat['email'] : 'off';
         $prechat['default_country'] = self::country($prechat['default_country']);
-        foreach (['name_label', 'phone_label', 'consent_text', 'consent_text_en'] as $text) {
+        foreach (['name_label', 'phone_label', 'consent_text', 'consent_text_en', 'handoff_message', 'handoff_message_en'] as $text) {
             $value = trim((string) $prechat[$text]);
-            $prechat[$text] = $value === '' ? null : mb_substr($value, 0, str_starts_with($text, 'consent_text') ? 500 : 60);
+            $prechat[$text] = $value === '' ? null : mb_substr($value, 0, in_array($text, ['name_label', 'phone_label'], true) ? 60 : 500);
         }
         $prechat['questions'] = WebChatQuestions::normalize($prechat['questions']);
 

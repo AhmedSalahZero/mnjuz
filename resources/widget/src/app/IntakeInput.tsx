@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { faPaperPlane } from '@fortawesome/free-solid-svg-icons'
+import { faChevronDown, faPaperPlane } from '@fortawesome/free-solid-svg-icons'
 import { BRAND_URL } from '../core/brand.ts'
 import type { Translate } from '../core/i18n.ts'
+import type { Lang } from '../core/lang.ts'
 import type { IntakeQuestion } from '../core/types.ts'
 import { COUNTRIES } from './data.ts'
 import { Icon } from './Icon.tsx'
@@ -10,8 +11,15 @@ interface Props {
     /** السؤال الحالي؛ null حين يُختار من فقاعة (الموافقة) أو تُرسل الإجابات. */
     question: IntakeQuestion | null
     t: Translate
+    /** لغة الزائر: أسماء الدول في قائمة رمز الدولة. */
+    lang: Lang
     defaultCountry: string
     busy: boolean
+    /**
+     * نقاط الكتابة ظاهرة والسؤال التالي لم يظهر بعد: خانةٌ معطّلة مكانه (لا
+     * «اختر من الخيارات») فلا يُجيب الزائر سؤالاً لم يره ولا تقفز اللوحة.
+     */
+    waiting?: boolean
     onAnswer: (value: string, country: string) => void
     onSkip: () => void
     onHoneypot: (value: string) => void
@@ -33,7 +41,7 @@ const INPUTS: Record<string, { type: string; inputMode?: string; autoComplete?: 
  * سؤال الجوال معه الدولة، والاختياري معه «تخطٍّ»، والقائمة تُختار من فقاعتها.
  * حقل website المخفيّ للروبوتات وحدها.
  */
-export function IntakeInput({ question, t, defaultCountry, busy, onAnswer, onSkip, onHoneypot }: Props) {
+export function IntakeInput({ question, t, lang, defaultCountry, busy, waiting = false, onAnswer, onSkip, onHoneypot }: Props) {
     const [value, setValue] = useState('')
     const countries = useMemo(() => {
         const list = COUNTRIES.slice()
@@ -56,6 +64,7 @@ export function IntakeInput({ question, t, defaultCountry, busy, onAnswer, onSki
 
     const typing = question !== null && question.validation !== 'select'
     const spec = question ? INPUTS[question.target === 'name' ? 'name' : question.validation] ?? INPUTS.text : INPUTS.text
+    const dial = countries.find((c) => c.code === country)?.dial
 
     const submit = (event: Event) => {
         event.preventDefault()
@@ -68,6 +77,22 @@ export function IntakeInput({ question, t, defaultCountry, busy, onAnswer, onSki
         }
     }
 
+    const answerInput = (
+        <input
+            ref={input}
+            class="mnjz-answer"
+            type={spec.type}
+            inputMode={spec.inputMode as any}
+            autoComplete={spec.autoComplete}
+            dir={spec.ltr ? 'ltr' : undefined}
+            value={value}
+            placeholder={t('answer')}
+            aria-label={t('answer')}
+            disabled={busy || waiting}
+            onInput={(event) => setValue((event.currentTarget as HTMLInputElement).value)}
+        />
+    )
+
     return (
         <div class="mnjz-composer">
             {question && !question.required && !busy && (
@@ -75,37 +100,36 @@ export function IntakeInput({ question, t, defaultCountry, busy, onAnswer, onSki
                     {t('skip')}
                 </button>
             )}
-            {typing ? (
+            {typing || waiting ? (
                 <form class="mnjz-compose" onSubmit={submit}>
-                    {question.validation === 'phone' && (
-                        <select
-                            class="mnjz-country"
-                            aria-label={t('phone')}
-                            dir="ltr"
-                            value={country}
-                            onChange={(event) => setCountry((event.currentTarget as HTMLSelectElement).value)}
-                        >
-                            {countries.map((c) => (
-                                <option key={c.code} value={c.code}>
-                                    +{c.dial} {c.code}
-                                </option>
-                            ))}
-                        </select>
+                    {question?.validation === 'phone' ? (
+                        // الرمز يسار الرقم في اللغتين، كما يُكتب الرقم الدولي (+966 05…).
+                        // الوجه المرئي «+966 ˅»، والقائمة الأصلية شفّافة فوقه: منتقي
+                        // الجوال ولوحة المفاتيح وقارئ الشاشة كما هي.
+                        <div class="mnjz-phone" dir="ltr">
+                            <span class="mnjz-country">
+                                <span class="mnjz-country-code">+{dial}</span>
+                                <Icon icon={faChevronDown} class="mnjz-country-caret" />
+                                <select
+                                    aria-label={t('country_code')}
+                                    dir={lang === 'ar' ? 'rtl' : 'ltr'}
+                                    value={country}
+                                    onChange={(event) => setCountry((event.currentTarget as HTMLSelectElement).value)}
+                                >
+                                    {countries.map((c) => (
+                                        // LRM: تبقى «+966» في القائمة العربية ولا تنقلب «966+».
+                                        <option key={c.code} value={c.code}>
+                                            {`${c.name[lang]} \u200E+${c.dial}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </span>
+                            {answerInput}
+                        </div>
+                    ) : (
+                        answerInput
                     )}
-                    <input
-                        ref={input}
-                        class="mnjz-answer"
-                        type={spec.type}
-                        inputMode={spec.inputMode as any}
-                        autoComplete={spec.autoComplete}
-                        dir={spec.ltr ? 'ltr' : undefined}
-                        value={value}
-                        placeholder={t('answer')}
-                        aria-label={t('answer')}
-                        disabled={busy}
-                        onInput={(event) => setValue((event.currentTarget as HTMLInputElement).value)}
-                    />
-                    <button type="submit" class="mnjz-send" aria-label={t('send')} title={t('send')} disabled={busy || !value.trim()}>
+                    <button type="submit" class="mnjz-send" aria-label={t('send')} title={t('send')} disabled={busy || waiting || !value.trim()}>
                         <Icon icon={faPaperPlane} />
                     </button>
                 </form>

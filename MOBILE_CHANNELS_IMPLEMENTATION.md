@@ -528,6 +528,7 @@ POST /api/v1/settings/channels
     "prechat": {
       "default_country": "SA", "phone": "required", "email": "off",
       "name_label": null, "phone_label": null, "consent_text": null, "consent_text_en": null,
+      "handoff_message": null, "handoff_message_en": null,
       "questions": [ { "id": "name", "target": "name", "field": null, "validation": "text", "required": true, "label_ar": null, "label_en": null } ]
     },
     "behavior": { "show_agent_names": true, "sound": true, "uploads": true }
@@ -568,7 +569,7 @@ POST /api/v1/settings/channels
   "enabled": true,
   "allowed_domains": ["shop.example.com", "*.example.org"],
   "appearance": { "color": "#123abc", "position": "left", "offset_x": 10, "offset_y": 30, "title": "تحدّث معنا", "subtitle": "", "welcome_message": "أهلاً بك", "title_en": "Chat with us", "subtitle_en": "", "welcome_message_en": "", "language": "ar" },
-  "prechat": { "default_country": "SA", "email": "off", "name_label": "", "phone_label": "", "consent_text": "", "consent_text_en": "", "questions": [ { "target": "name", "required": true }, { "target": "phone", "required": false } ] },
+  "prechat": { "default_country": "SA", "email": "off", "name_label": "", "phone_label": "", "consent_text": "", "consent_text_en": "", "handoff_message": "سنحوّل محادثتك إلى أحد موظفي خدمة العملاء.", "handoff_message_en": "", "questions": [ { "target": "name", "required": true }, { "target": "phone", "required": false } ] },
   "behavior": { "show_agent_names": true, "sound": true, "uploads": true }
 }
 ```
@@ -578,7 +579,9 @@ POST /api/v1/settings/channels
   - الشعار.
   - النصوص الإنجليزية (`*_en`).
   - `consent_text_en`.
+  - `handoff_message` و`handoff_message_en`.
   - `prechat.questions`.
+- **`prechat.handoff_message` / `handoff_message_en`** (اختياريان، حتى ٥٠٠ حرف): رسالة تظهر للزائر في الـ widget بعد أن يجيب أسئلة البداية، **حين لا توجد أسئلة شائعة مفعّلة** (مثل «سنحوّل محادثتك إلى أحد موظفي خدمة العملاء»). الفارغة = لا شيء. اعرض حقل الإنجليزية حين تُكتب العربية، كنصّ الموافقة.
 - **`prechat.questions` إن أرسلتها تحكم:** منها يُشتقّ `prechat.phone` و`prechat.email`. سؤال الجوال `required: false` ⇒ `phone: optional`، وغيابه ⇒ `off`.
   - لكل سؤال: `target`، و`field` (لـ `target: field`)، و`validation`، و`required`، و`label_ar`، و`label_en`.
   - الحقل الواحد يُسأل مرّة واحدة، وحتى ١٢ سؤالاً.
@@ -613,6 +616,7 @@ POST /api/v1/settings/channels
 |---|---|---|
 | `400` | بيانات غير صالحة — `errors` بمفاتيح الحقول، كل قيمة `string[]` | الخطأ تحت حقله |
 | `403` | الدور لا يسمح، أو الميزة خارج الباقة، أو القناة غير مربوطة (القطع) | `message` |
+| `403` + `code: organization_required` | لا منشأة مختارة للتطبيق (مستخدم في أكثر من منشأة) | شاشة اختيار المنشأة ثم `set-current-organization` (MOBILE_AUTH_GUIDE.md). ليست عطلاً في البثّ |
 | `404` | غير موجود أو في منشأة أخرى | `message` |
 | `422` | رفض عمل: نافذة مغلقة، ميزة لا تدعمها القناة، توكن مرفوض، قناة تُربط من الويب | `message` كما هي |
 | `429` | تجاوز حدّ الطلبات (ربط القنوات، البريد) | «حاول بعد قليل» |

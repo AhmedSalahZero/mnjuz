@@ -2470,5 +2470,9 @@
     "You pay {charge} · {amount} will be added to your balance": "تدفع {charge} · ويُضاف {amount} إلى رصيدك",
     "Applies to": "ينطبق على",
     "Plans and Add payment": "الباقات وإضافة دفعة",
-    "Connect :channel from the web dashboard.": "اربط :channel من لوحة التحكّم في المتصفّح."
+    "Connect :channel from the web dashboard.": "اربط :channel من لوحة التحكّم في المتصفّح.",
+    "Message after the visitor questions (optional)": "رسالة بعد أسئلة الزائر (اختيارية)",
+    "We are transferring your conversation to a customer service agent.": "سنحوّل محادثتك إلى أحد موظفي خدمة العملاء.",
+    "Shown after the visitor answers the questions when no FAQs are active. Leave it empty to show nothing.": "تظهر للزائر بعد إجابته عن الأسئلة إن لم تكن هناك أسئلة شائعة مفعّلة. اتركها فارغة إن لم ترغب في إظهار شيء.",
+    "Message after the visitor questions in English (optional)": "الرسالة بعد أسئلة الزائر بالإنجليزية (اختيارية)"
 }

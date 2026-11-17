@@ -171,17 +171,56 @@
 }
 /* الحبّة كلّها تُظهر التركيز (.mnjz-compose:focus-within)، كخانة الكتابة. */
 .mnjz-composer .mnjz-answer:focus-visible { outline: none; }
-.mnjz-country {
-    flex: none;
-    max-width: 96px;
-    border: 0;
-    border-inline-end: 1px solid var(--mnjz-line);
-    background: transparent;
-    font: inherit;
-    font-size: 12px;
-    color: inherit;
-    padding: 0 6px;
+/* سؤال الجوال: رمز الدولة يسار الرقم في اللغتين (dir="ltr")، وزرّ الإرسال في مكانه. */
+.mnjz-phone {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-inline: 2px;
+    align-self: center;
 }
+/* رمز الدولة: حبّة واضحة بلون التاجر الخفيف، و«+966» في وسطها. */
+.mnjz-country {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 17px;
+    background: #f1f5f9;
+    background: color-mix(in srgb, var(--mnjz-color) 12%, #fff);
+    color: var(--mnjz-ink);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background .15s;
+}
+.mnjz-country:hover { background: color-mix(in srgb, var(--mnjz-color) 20%, #fff); }
+.mnjz-country-caret { font-size: 10px; color: var(--mnjz-color); }
+/* القائمة الأصلية شفّافة فوق الحبّة كلها: الضغط في أيّ مكان منها يفتحها.
+   16px: أصغر منها يكبّر iOS الصفحة عند لمسها. */
+.mnjz-country select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    border: 0;
+    appearance: none;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 400;
+    cursor: pointer;
+}
+/* إطار القائمة نفسها لا يُرى وهي شفّافة: الحبّة تُظهر تركيز لوحة المفاتيح. */
+.mnjz-country:has(select:focus-visible) { outline: 2px solid var(--mnjz-color); outline-offset: 2px; }
 .mnjz-skip {
     display: block;
     margin: 0 0 8px auto;
@@ -214,6 +253,14 @@
 .mnjz-mine .mnjz-bubble { background: var(--mnjz-color); color: #fff; border-color: transparent; }
 .mnjz-mine .mnjz-bubble a { color: #fff; }
 .mnjz-bubble-failed { opacity: .7; }
+/* نقاط الكتابة قبل الفقاعة الآلية التالية (core/typing.ts). */
+.mnjz-typing { display: inline-flex; align-items: center; gap: 4px; padding: 12px 14px; }
+.mnjz-typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--mnjz-muted); opacity: .4; animation: mnjz-dot 1.2s infinite ease-in-out; }
+.mnjz-typing i:nth-child(2) { animation-delay: .15s; }
+.mnjz-typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes mnjz-dot { 0%, 60%, 100% { opacity: .4; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .mnjz-typing i { animation: none; opacity: .7; } }
+.mnjz-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mnjz-text { white-space: pre-wrap; }
 .mnjz-text a { color: var(--mnjz-color); text-decoration: underline; }
 .mnjz-sender { font-size: 11px; font-weight: 600; color: var(--mnjz-muted); margin-bottom: 2px; }

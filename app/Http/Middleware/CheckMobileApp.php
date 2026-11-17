@@ -25,7 +25,10 @@ class CheckMobileApp
         if (!$user->current_mobile_organization_id) {
             return response()->json([
                 'success' => false,
-                'message' => __('Mobile App requires a selected organization. Please set your current organization.')
+                'message' => __('Mobile App requires a selected organization. Please set your current organization.'),
+                // رمزٌ ثابت لا يتغيّر بلغة الرسالة: التطبيق يفتح اختيار المنشأة
+                // به (set-current-organization) بدل أن يعدّه انقطاعاً في البثّ.
+                'code' => 'organization_required',
             ], 403);
         }
         

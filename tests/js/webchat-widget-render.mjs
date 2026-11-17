@@ -82,7 +82,10 @@ window.mountWidget = (options = {}) => {
             name: 'متجر',
             appearance: { color: '#16a34a', position: 'right', offset_x: 20, offset_y: 20, logo_url: null, title: 'تحدّث معنا', subtitle: '', welcome_message: 'أهلاً بك', language: 'ar' },
             prechat: {
-                default_country: 'SA', phone: 'required', email: 'optional', name_label: null, phone_label: null, consent_text: null,
+                default_country: 'SA', phone: 'required', email: 'optional', name_label: null, phone_label: null,
+                consent_text: options.consent ?? null,
+                handoff_message: options.handoff ?? null,
+                handoff_message_en: options.handoffEn ?? null,
                 questions: [
                     { id: 'name', target: 'name', validation: 'text', required: true, label_ar: null, label_en: null },
                     { id: 'phone', target: 'phone', validation: 'phone', required: true, label_ar: null, label_en: null },
@@ -97,7 +100,8 @@ window.mountWidget = (options = {}) => {
         faqs: options.faqs ?? 0,
     }
     if (options.questions) config.widget.prechat.questions = options.questions
-    render(<Widget ctx={{ base: 'https://app.test', key: 'wc_test', config, preview: false, open: true }} />, host)
+    // نقاط الكتابة: 0 (بلا نقاط) ما لم يطلبها السيناريو، فتبقى انتظارات البقية قصيرة.
+    render(<Widget ctx={{ base: 'https://app.test', key: 'wc_test', config, preview: false, open: true, typingMs: options.typingMs ?? 0 }} />, host)
 }
 
 window.renderScenario = (name) => {
@@ -203,6 +207,33 @@ try {
             dir: document.querySelector('.mnjz-root').getAttribute('dir'),
         }
     })
+    // مستطيلات سؤال الجوال: الحبّة والرقم وزرّ الإرسال والحقل كلّه.
+    const phoneLayout = () => site.evaluate(() => {
+        const rect = (el) => {
+            const r = el.getBoundingClientRect()
+            return { left: r.left, right: r.right, cy: r.top + r.height / 2 }
+        }
+        const chip = document.querySelector('.mnjz-country')
+        const code = chip.querySelector('.mnjz-country-code')
+        const select = chip.querySelector('select')
+        const style = getComputedStyle(code)
+
+        return {
+            code: code.textContent,
+            chip: rect(chip),
+            codeBox: rect(code),
+            caret: rect(chip.querySelector('.mnjz-country-caret')),
+            input: rect(document.querySelector('.mnjz-answer')),
+            send: rect(document.querySelector('.mnjz-compose .mnjz-send')),
+            pill: rect(document.querySelector('.mnjz-compose')),
+            fontSize: parseFloat(style.fontSize),
+            fontWeight: Number(style.fontWeight),
+            background: getComputedStyle(chip).backgroundColor,
+            selectFontSize: parseFloat(getComputedStyle(select).fontSize),
+            label: select.getAttribute('aria-label'),
+            firstOption: select.options[0].textContent,
+        }
+    })
     const reply = async (text) => {
         // السؤال الجديد يفرّغ خانته بعد الرسم: الكتابة قبلها يضيع أوّل حرف منها.
         await site.waitForFunction(() => {
@@ -238,6 +269,24 @@ try {
     v = await view()
     ok(v.last === 'ما رقم جوالك؟', `intake: the phone question next, got ${v.last}`)
     ok(v.input?.type === 'tel' && v.input?.inputMode === 'tel' && v.input?.dir === 'ltr' && v.country, 'intake: the phone input is tel, left-to-right, with its country')
+
+    // رمز الدولة (شكوى Waz: لم يره الزائر). حبّة واضحة يسار الرقم و«+966»
+    // في وسطها، وزرّ الإرسال في مكانه (يسار الحبّة بالعربية).
+    let phone = await phoneLayout()
+    ok(phone.code === '+966', `phone: the chip shows the dial code, got ${phone.code}`)
+    ok(phone.chip.right <= phone.input.left + 0.5, `phone: the code is left of the number (chip right ${phone.chip.right}, input left ${phone.input.left})`)
+    ok(phone.send.right <= phone.chip.left + 0.5, 'phone: the send button keeps its place, left of the code in Arabic')
+    ok(Math.abs(phone.chip.cy - phone.pill.cy) <= 1 && Math.abs(phone.input.cy - phone.pill.cy) <= 1, `phone: the chip and the number are vertically centered in the field, got ${JSON.stringify([phone.chip.cy, phone.input.cy, phone.pill.cy])}`)
+    ok(Math.abs(phone.codeBox.cy - phone.chip.cy) <= 1, 'phone: the code is vertically centered in its chip')
+    ok(Math.abs((phone.codeBox.left - phone.chip.left) - (phone.chip.right - phone.caret.right)) <= 1, `phone: the code and its arrow are horizontally centered, got ${phone.codeBox.left - phone.chip.left} vs ${phone.chip.right - phone.caret.right}`)
+    ok(phone.fontSize >= 14 && phone.fontWeight >= 600 && phone.background !== 'rgba(0, 0, 0, 0)', `phone: the code is readable on a visible chip, got ${JSON.stringify([phone.fontSize, phone.fontWeight, phone.background])}`)
+    ok(phone.selectFontSize >= 16, `phone: 16px+ on the select so iOS does not zoom, got ${phone.selectFontSize}`)
+    ok(phone.label === 'رمز الدولة' && phone.firstOption.includes('السعودية') && phone.firstOption.includes('+966'), `phone: the list names countries in Arabic, got ${JSON.stringify([phone.label, phone.firstOption])}`)
+
+    await site.select('.mnjz-country select', 'AE')
+    ok((await phoneLayout()).code === '+971', 'phone: picking another country updates the chip')
+    await site.select('.mnjz-country select', 'SA')
+    await site.focus('.mnjz-answer')
 
     await reply('0112345678')
     v = await view()
@@ -324,6 +373,8 @@ try {
     await site.reload()
     await site.evaluate(() => window.mountWidget({ questions: [], faqs: 2 }))
     await site.waitForSelector('.mnjz-composer textarea')
+    // إجابة السؤال تنتظر جلب الأسئلة الشائعة (طلبٌ غير متزامن): لا نقرأ قبلها.
+    await site.waitForSelector('.mnjz-messages img.mnjz-image')
     v = await view()
     ok(v.bubbles.includes('طرق الدفع؟') && v.bubbles.includes('لم أجد إجابتي'), 'faq: the journey stays above the chat after a reload')
     const alt = await site.evaluate(() => document.querySelector('.mnjz-messages img.mnjz-image')?.getAttribute('alt'))
@@ -374,6 +425,130 @@ try {
     await site.waitForFunction(() => window.__requests.some((r) => r.method === 'POST' && r.url.includes('/messages')))
     const retried = await site.evaluate(() => window.__requests.filter((r) => r.method === 'POST' && r.url.includes('/messages')).map((r) => r.body.text))
     ok(JSON.stringify(retried) === JSON.stringify(['مرحبا']), `no questions: the retry sends the same message once, got ${JSON.stringify(retried)}`)
+
+    // ── نقاط الكتابة ورسالة ما بعد الأسئلة: widget Waz (موافقة ثم الاسم، بلا أسئلة شائعة) ──
+    const handoffAr = 'سنحوّل محادثتك إلى أحد موظفي خدمة العملاء.'
+    const handoffEn = 'We are transferring you to a customer service agent.'
+    const waz = {
+        questions: [{ id: 'name', target: 'name', validation: 'text', required: true, label_ar: 'ادخل أسمك', label_en: 'Your name please' }],
+        consent: 'باستخدامك لهذه المحادثة فإنك توافق على الشروط',
+        faqs: 0,
+        typingMs: 600,
+        handoff: handoffAr,
+        handoffEn,
+    }
+    const dots = () => site.evaluate(() => !!document.querySelector('.mnjz-typing'))
+    const noDots = () => site.waitForFunction(() => !document.querySelector('.mnjz-typing'))
+    const fresh = async (options) => {
+        await site.evaluate(() => {
+            localStorage.clear()
+            window.__requests = []
+        })
+        await site.reload()
+        await site.evaluate((o) => window.mountWidget(o), options)
+        await site.waitForSelector('.mnjz-root')
+    }
+
+    await fresh(waz)
+    await site.waitForSelector('.mnjz-choice')
+    v = await view()
+    ok(!(await dots()) && v.last === waz.consent, `typing: the consent shows at once when the widget opens, got ${JSON.stringify(v.last)}`)
+
+    await press('أوافق')
+    v = await view()
+    ok(await dots(), 'typing: dots after the consent tap')
+    ok(v.bubbles.includes('أوافق') && !v.bubbles.includes('ادخل أسمك'), `typing: the tap shows, the name question waits behind the dots, got ${JSON.stringify(v.bubbles)}`)
+    const waiting = await site.evaluate(() => ({ disabled: document.querySelector('.mnjz-answer')?.disabled ?? null, hint: document.querySelector('.mnjz-hint')?.textContent ?? null }))
+    ok(waiting.disabled === true && waiting.hint === null, `typing: a disabled answer field meanwhile, not "choose above", got ${JSON.stringify(waiting)}`)
+    const sr = await site.evaluate(() => document.querySelector('.mnjz-typing .mnjz-sr')?.textContent ?? null)
+    ok(sr === 'يكتب…', `typing: screen readers hear it, got ${sr}`)
+
+    await noDots()
+    v = await view()
+    ok(v.last === 'ادخل أسمك', `typing: then the name question, got ${v.last}`)
+
+    // الاسم ⇐ تبدأ الجلسة ⇐ النقاط ثم رسالة ما بعد الأسئلة.
+    await reply('عبدالاله')
+    await site.waitForSelector('.mnjz-composer textarea')
+    await site.waitForSelector('.mnjz-typing')
+    v = await view()
+    ok(v.bubbles.includes('عبدالاله') && !v.bubbles.includes(handoffAr), `handoff: hidden behind the dots first, got ${JSON.stringify(v.bubbles)}`)
+    await noDots()
+    v = await view()
+    ok(v.last === handoffAr, `handoff: shown after the name when there are no FAQs, got ${JSON.stringify(v.last)}`)
+    ok((await requests()).filter((r) => r.startsWith('POST sessions')).length === 1 && !(await requests()).some((r) => r.startsWith('POST messages')), 'handoff: a local bubble, nothing sent to the server')
+
+    await site.click('.mnjz-lang')
+    v = await view()
+    ok(v.last === handoffEn && !(await dots()), `handoff: the English text after switching, without dots, got ${JSON.stringify(v.last)}`)
+
+    await site.reload()
+    await site.evaluate((o) => window.mountWidget(o), waz)
+    await site.waitForSelector('.mnjz-composer textarea')
+    v = await view()
+    ok(!(await dots()) && v.last === handoffEn && v.bubbles.includes('عبدالاله'), `handoff: still there after a reload, no dots, got ${JSON.stringify(v.bubbles)}`)
+
+    // الزائر يكتب والنقاط ظاهرة: يظهر كل شيء فوراً، والرسالة فوق رسالته.
+    await fresh({ ...waz, typingMs: 5000 })
+    await site.waitForSelector('.mnjz-choice')
+    await site.evaluate(() => [...document.querySelectorAll('.mnjz-choice')].find((c) => c.textContent.trim() === 'أوافق').click())
+    await site.waitForSelector('.mnjz-typing')
+    await site.waitForFunction(() => !document.querySelector('.mnjz-typing'), { timeout: 8000 })
+    await reply('سارة')
+    await site.waitForSelector('.mnjz-composer textarea')
+    await site.waitForSelector('.mnjz-typing')
+    await site.type('.mnjz-composer textarea', 'هلا')
+    await site.keyboard.press('Enter')
+    await new Promise((r) => setTimeout(r, 80))
+    v = await view()
+    ok(!(await dots()), 'handoff: the visitor writing ends the dots')
+    ok(v.bubbles.indexOf(handoffAr) >= 0 && v.bubbles.indexOf(handoffAr) < v.bubbles.indexOf('هلا'), `handoff: shown above the visitor message, got ${JSON.stringify(v.bubbles)}`)
+
+    // مع أسئلة شائعة: القائمة بعد الاسم (بعد النقاط)، لا رسالة ما بعد الأسئلة.
+    await fresh({ ...waz, faqs: 2, typingMs: 300 })
+    await site.waitForSelector('.mnjz-choice')
+    await press('أوافق')
+    await noDots()
+    await reply('سارة')
+    await site.waitForSelector('.mnjz-typing')
+    await noDots()
+    v = await view()
+    ok(v.last === 'كيف نقدر نساعدك؟' && !v.bubbles.includes(handoffAr), `handoff: the FAQ menu instead when FAQs exist, got ${JSON.stringify(v.bubbles)}`)
+
+    await press('عندي سؤال')
+    ok(await dots(), 'typing: dots before the FAQ list too')
+    await site.waitForFunction(() => document.querySelectorAll('.mnjz-choice').length === 3)
+    ok((await view()).last === 'اختر سؤالك:', 'typing: then the FAQ list')
+
+    // widget الموافقة وحدها (بلا أسئلة): الرسالة بعد «أوافق»، بعد النقاط.
+    await fresh({ ...waz, questions: [], typingMs: 300 })
+    await site.waitForSelector('.mnjz-choice')
+    await press('أوافق')
+    await site.waitForSelector('.mnjz-composer textarea')
+    await site.waitForSelector('.mnjz-typing')
+    ok(!(await view()).bubbles.includes(handoffAr), 'handoff: consent only — hidden behind the dots first')
+    await noDots()
+    ok((await view()).last === handoffAr, `handoff: consent only — then shown, got ${JSON.stringify((await view()).bubbles)}`)
+
+    // بلا نصّ عند التاجر: كما كان، لا شيء بعد الاسم ولا نقاط تبقى.
+    await fresh({ ...waz, handoff: null, handoffEn: null, typingMs: 300 })
+    await site.waitForSelector('.mnjz-choice')
+    await press('أوافق')
+    await noDots()
+    await reply('سارة')
+    await site.waitForSelector('.mnjz-composer textarea')
+    await new Promise((r) => setTimeout(r, 400))
+    v = await view()
+    ok(!(await dots()) && v.last === 'سارة', `handoff: nothing when the merchant left it empty, got ${JSON.stringify(v.bubbles)}`)
+
+    // ── رمز الدولة بالإنجليزية: يسار الرقم أيضاً، وزرّ الإرسال في آخر الحقل (يميناً) ──
+    await fresh({ questions: [{ id: 'phone', target: 'phone', validation: 'phone', required: true, label_ar: null, label_en: null }], faqs: 0 })
+    await site.waitForSelector('.mnjz-country')
+    await site.click('.mnjz-lang')
+    ok((await view()).dir === 'ltr', 'phone en: the widget is in English')
+    phone = await phoneLayout()
+    ok(phone.chip.right <= phone.input.left + 0.5 && phone.input.right <= phone.send.left + 0.5, `phone en: code, number, then send from left to right, got ${JSON.stringify([phone.chip, phone.input, phone.send])}`)
+    ok(phone.code === '+966' && phone.label === 'Country code' && phone.firstOption.includes('Saudi Arabia') && phone.firstOption.includes('+966'), `phone en: English names in the list, got ${JSON.stringify([phone.code, phone.label, phone.firstOption])}`)
 
     ok(errors.length === 0, 'page errors: ' + errors.join('; '))
 } finally {

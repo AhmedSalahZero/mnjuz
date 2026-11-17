@@ -192,6 +192,18 @@ Authorization: Bearer {token}
 2. بعد `set-current-organization` أو `leave-current-organization`: **اقفل الاتصال القديم** واتصل بالـ `broadcast` اللي رجعت في الـ response، لأن الشركة الجديدة ممكن تكون على مزوّد تاني.
 3. عند كل فتح للتطبيق: اقرا `GET /api/v1/broadcast-config`، عشان لو الأدمن غيّر المزوّد التطبيق يتبعه.
 
+#### `403` بـ `code: organization_required`: مفيش شركة مختارة
+
+لو المستخدم في أكتر من شركة وما فيش شركة مختارة للتطبيق، السيرفر **مش بيختار عنه**. أي طلب `v1` (ومنها `broadcast-config`) بيرجع:
+
+```json
+{ "success": false, "message": "…", "code": "organization_required" }
+```
+
+- ده **مش** عطل في البث، فما تعرضش «التحديثات المباشرة غير متاحة».
+- افتح شاشة اختيار الشركة بالقائمة اللي رجعت في الـ login (`data.organizations`، خزّنها). `GET /api/v1/profile` نفسه بيرجع نفس الـ `403` في الحالة دي. وبعد ما يختار ابعت `POST /api/v1/auth/set-current-organization` واتصل بالـ `broadcast` اللي رجعت.
+- اعتمد على `code` مش على `message`، لأن الرسالة بتتترجم حسب لغة المستخدم.
+
 #### الاشتراك والأحداث
 
 - القناة presence channel. Laravel Echo بيضيف `presence-` لوحده: `echo.join('chats.ch{org}.{user}')`. أما عميل Pusher المباشر (زي `pusher_channels_flutter`) فاشترك بـ `channel` زي ما هي.

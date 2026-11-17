@@ -4,7 +4,7 @@ const ar = {
     close: 'إغلاق',
     title: 'تحدّث معنا',
     subtitle: 'نردّ عادةً خلال دقائق',
-    phone: 'رقم الجوال',
+    country_code: 'رمز الدولة',
     starting: 'جارٍ البدء…',
     // أسئلة البداية: الأسئلة الأساسية حين لا يكتب التاجر نصّها، ورسائل الرفض
     // (نفسها في lang/ar.json للخادم).
@@ -69,6 +69,8 @@ const ar = {
     faq_none: 'لم أجد إجابتي',
     faq_ask: 'اكتب سؤالك هنا وسيردّ عليك فريقنا.',
     faq_problem: 'اكتب مشكلتك هنا وسيردّ عليك فريقنا.',
+    // نقاط الكتابة قبل الفقاعة الآلية التالية (core/typing.ts): لقارئ الشاشة.
+    typing: 'يكتب…',
 }
 
 type Dictionary = typeof ar
@@ -78,7 +80,7 @@ const en: Dictionary = {
     close: 'Close',
     title: 'Chat with us',
     subtitle: 'We usually reply in a few minutes',
-    phone: 'Mobile number',
+    country_code: 'Country code',
     starting: 'Starting…',
     ask_name: "What's your name?",
     ask_email: "What's your email address?",
@@ -140,6 +142,7 @@ const en: Dictionary = {
     faq_none: "I didn't find my answer",
     faq_ask: 'Type your question here and our team will reply.',
     faq_problem: 'Describe your problem here and our team will reply.',
+    typing: 'Typing…',
 }
 
 export type TextKey = keyof Dictionary

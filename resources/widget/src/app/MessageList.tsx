@@ -16,6 +16,8 @@ interface Props {
     onChoose: (message: WidgetMessage, optionId: string, title: string) => void
     onRetry: (message: WidgetMessage) => void
     welcome: string
+    /** نقاط الكتابة تحت آخر فقاعة: الفقاعة الآلية التالية في الطريق. */
+    typing?: boolean
 }
 
 /** نصّ بروابط قابلة للضغط — عُقد نصّية لا HTML (انظر core/linkify). */
@@ -190,14 +192,14 @@ function Bubble({ message, t, lang, onChoose, onRetry, isLatest }: { message: Wi
 }
 
 /** سجلّ المحادثة. الأزرار تُعرض تحت آخر رسالة وحدها: القديمة انتهى وقتها. */
-export function MessageList({ messages, t, lang, hasMore, loadingEarlier, onEarlier, onChoose, onRetry, welcome }: Props) {
+export function MessageList({ messages, t, lang, hasMore, loadingEarlier, onEarlier, onChoose, onRetry, welcome, typing = false }: Props) {
     const end = useRef<HTMLDivElement>(null)
     const count = messages.length
     const lastId = [...messages].reverse().find((m) => m.direction === 'out')?.id ?? null
 
     useEffect(() => {
         end.current?.scrollIntoView({ block: 'end' })
-    }, [count])
+    }, [count, typing])
 
     return (
         <div class="mnjz-messages" aria-live="polite" aria-relevant="additions">
@@ -224,6 +226,16 @@ export function MessageList({ messages, t, lang, hasMore, loadingEarlier, onEarl
                     isLatest={message.id !== null && message.id === lastId && messages[messages.length - 1] === message}
                 />
             ))}
+            {typing && (
+                <div class="mnjz-row mnjz-theirs">
+                    <div class="mnjz-bubble mnjz-typing">
+                        <i aria-hidden="true" />
+                        <i aria-hidden="true" />
+                        <i aria-hidden="true" />
+                        <span class="mnjz-sr">{t('typing')}</span>
+                    </div>
+                </div>
+            )}
             <div ref={end} />
         </div>
     )

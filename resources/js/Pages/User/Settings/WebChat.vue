@@ -202,6 +202,18 @@
 								<span class="text-slate-700">{{ $t('Consent text in English (optional)') }}</span>
 								<textarea rows="2" maxlength="500" dir="ltr" v-model="form.prechat.consent_text_en" :class="inputClass('prechat.consent_text_en')"></textarea>
 							</label>
+							<!-- رسالة بعد الأسئلة حين لا أسئلة شائعة مفعّلة (فقاعة في الـ widget). -->
+							<label class="block md:col-span-2">
+								<span class="text-slate-700">{{ $t('Message after the visitor questions (optional)') }}</span>
+								<textarea rows="2" maxlength="500" v-model="form.prechat.handoff_message" :placeholder="$t('We are transferring your conversation to a customer service agent.')" :class="inputClass('prechat.handoff_message')"></textarea>
+								<span class="text-xs text-slate-500">{{ $t('Shown after the visitor answers the questions when no FAQs are active. Leave it empty to show nothing.') }}</span>
+								<FieldError :message="form.errors['prechat.handoff_message']" />
+							</label>
+							<label v-if="form.prechat.handoff_message" class="block md:col-span-2">
+								<span class="text-slate-700">{{ $t('Message after the visitor questions in English (optional)') }}</span>
+								<textarea rows="2" maxlength="500" dir="ltr" v-model="form.prechat.handoff_message_en" :class="inputClass('prechat.handoff_message_en')"></textarea>
+								<FieldError :message="form.errors['prechat.handoff_message_en']" />
+							</label>
 						</div>
 					</section>
 
