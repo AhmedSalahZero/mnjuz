@@ -169,6 +169,8 @@
     color: inherit;
     background: transparent;
 }
+/* الحبّة كلّها تُظهر التركيز (.mnjz-compose:focus-within)، كخانة الكتابة. */
+.mnjz-composer .mnjz-answer:focus-visible { outline: none; }
 .mnjz-country {
     flex: none;
     max-width: 96px;

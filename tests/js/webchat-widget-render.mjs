@@ -216,6 +216,20 @@ try {
 
     await site.evaluate(() => window.mountWidget())
     await site.waitForSelector('.mnjz-answer')
+
+    // خانة الإجابة بلا إطار مستطيل حولها: التركيز تُظهره الحبّة كلّها (كخانة الكتابة).
+    const focusLook = await site.evaluate(() => {
+        const input = document.querySelector('.mnjz-answer')
+        return {
+            focused: document.activeElement === input && input.matches(':focus-visible'),
+            outline: getComputedStyle(input).outlineStyle,
+            ring: getComputedStyle(document.querySelector('.mnjz-compose')).boxShadow,
+        }
+    })
+    ok(focusLook.focused, 'intake focus: the answer input is focused and :focus-visible (the case that drew the box)')
+    ok(focusLook.outline === 'none', `intake focus: no outline box around the answer input, got ${focusLook.outline}`)
+    ok(focusLook.ring !== 'none', 'intake focus: the rounded field still shows the focus ring')
+
     let v = await view()
     ok(v.bubbles[0] === 'أهلاً بك' && v.last === 'ما اسمك؟', `intake: welcome then the name question, got ${JSON.stringify(v.bubbles)}`)
     ok(v.input?.type === 'text' && !v.skip, 'intake: the required name has a text input and no skip')
