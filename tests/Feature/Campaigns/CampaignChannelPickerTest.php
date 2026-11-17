@@ -108,6 +108,23 @@ class CampaignChannelPickerTest extends CampaignTestCase
         }
     }
 
+    /**
+     * «غير متصل» ورابط «ربط» عنصران متجاوران بلا مسافة نصّية — Vue يحذف
+     * المسافة بين العنصرين — فكانا يظهران «غير متصلربط». الفاصل الظاهر وgap
+     * يفصلانهما على الشاشة وفي النصّ المنسوخ.
+     */
+    public function test_the_not_connected_status_is_separated_from_its_connect_link(): void
+    {
+        $form = file_get_contents(resource_path('js/Components/CampaignForm.vue'));
+
+        $this->assertMatchesRegularExpression(
+            '/class="[^"]*\bgap-x-\d[^"]*">\s*<span>\{\{ \$t\(\'Not connected\'\) \}\}<\/span>\s*'
+            . '<template v-if="option\.connect_url">\s*<span aria-hidden="true">·<\/span>\s*<Link[^>]*>\s*\{\{ \$t\(\'Connect\'\) \}\}/',
+            $form,
+            'الحالة ورابط الربط بلا فاصل بينهما'
+        );
+    }
+
     /** بلا قناة = واتساب: نموذج الويب القديم وتطبيق الجوال. */
     public function test_a_campaign_without_a_channel_stays_whatsapp(): void
     {

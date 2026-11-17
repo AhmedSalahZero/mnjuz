@@ -119,7 +119,9 @@
 								<span class="text-slate-700">{{ $t('Logo') }}</span>
 								<div class="mt-1 flex items-center gap-3">
 									<img v-if="props.widget.logo" :src="props.widget.logo" alt="" class="h-10 w-10 rounded-full object-cover border border-slate-200" />
-									<label class="cursor-pointer rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50">
+									<!-- relative: sr-only هو position absolute؛ بلاها يتموضع الحقل على
+									     الصفحة لا داخل اللوحة، فيمرّر التركيزُ الصفحة كلّها إليه. -->
+									<label class="relative cursor-pointer rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50">
 										{{ props.widget.logo ? $t('Change') : $t('Upload') }}
 										<input type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" @change="uploadLogo" />
 									</label>

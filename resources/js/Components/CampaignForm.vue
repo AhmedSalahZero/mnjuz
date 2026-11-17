@@ -708,11 +708,16 @@ watch(
 								<span>{{ option.label }}</span>
 							</div>
 							<div v-if="option.coming_soon" class="text-[11px] mt-1">{{ $t('Coming soon') }}</div>
-							<div v-else-if="!option.connected" class="text-[11px] mt-1">
+							<!-- الحالة والرابط عنصران متجاوران بلا مسافة نصّية: gap وفاصلٌ ظاهر
+							     يمنعان أن يُقرآ كلمةً واحدة («غير متصلربط»). -->
+							<div v-else-if="!option.connected" class="text-[11px] mt-1 flex flex-wrap items-center gap-x-1">
 								<span>{{ $t('Not connected') }}</span>
-								<Link v-if="option.connect_url" :href="option.connect_url" class="underline ms-1" @click.stop>
-									{{ $t('Connect') }}
-								</Link>
+								<template v-if="option.connect_url">
+									<span aria-hidden="true">·</span>
+									<Link :href="option.connect_url" class="underline" @click.stop>
+										{{ $t('Connect') }}
+									</Link>
+								</template>
 							</div>
 						</div>
 					</div>

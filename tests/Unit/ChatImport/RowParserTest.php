@@ -118,7 +118,7 @@ class RowParserTest extends TestCase
     {
         $short = $this->phoneError('96600647244');
         $this->assertSame('The number is too short: Saudi Arabia numbers have 9 digits after the country code.', $short['message']);
-        $this->assertStringContainsString('الرقم ناقص', $short['message_ar']);
+        $this->assertStringContainsString('أقصر من المطلوب', $short['message_ar']);
         $this->assertStringContainsString('السعودية', $short['message_ar']);
 
         $long = $this->phoneError('9665314916119');

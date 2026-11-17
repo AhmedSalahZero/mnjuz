@@ -193,12 +193,12 @@ class ChatImportValidationTest extends ChatImportTestCase
         Queue::assertPushed(\App\Jobs\ImportChatHistoryJob::class);
 
         $this->assertSame(3, $import->errors[0]['row']);
-        $this->assertStringContainsString('الرقم ناقص', $import->errors[0]['message_ar']);
+        $this->assertStringContainsString('أقصر من المطلوب',$import->errors[0]['message_ar']);
 
         $report = Storage::disk('local')->get($import->errors_file_path);
         $this->assertStringContainsString('96600647244', $report);
         $this->assertStringContainsString('too short', $report);
-        $this->assertStringContainsString('الرقم ناقص', $report);
+        $this->assertStringContainsString('أقصر من المطلوب',$report);
     }
 
     public function test_a_row_with_a_bad_number_and_a_bad_date_is_only_skipped(): void
@@ -251,7 +251,7 @@ class ChatImportValidationTest extends ChatImportTestCase
 
         $this->assertCount(4, str_getcsv($lines[0], ',', '"', ''));
         $this->assertCount(4, str_getcsv($lines[1], ',', '"', ''));
-        $this->assertStringContainsString('الرقم ناقص', $lines[1]);
+        $this->assertStringContainsString('أقصر من المطلوب',$lines[1]);
     }
 
     public function test_duplicates_inside_the_file_are_counted_not_rejected(): void

@@ -355,7 +355,7 @@ class SendLocationTest extends TestCase
 
         $this->assertSame('يجب تحديد موقع صالح.', __('A valid location is required.'));
         $this->assertSame(
-            'لم يُحدَّد موقع نشاطك بعد. أضِفه من الإعدادات أولاً.',
+            'لم يُحدَّد موقع منشأتك بعد. أضفه من الإعدادات أولاً.',
             __('Your business location is not set yet. Add it in Settings first.')
         );
     }

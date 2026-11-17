@@ -230,7 +230,7 @@ class CampaignHistoryMediaTest extends TestCase
 
         $message = $validator->errors()->first('header.parameters.0.value');
 
-        $this->assertStringContainsString('صورة الترويسة', $message);
+        $this->assertStringContainsString('صورة العنوان', $message);
         $this->assertStringContainsString('سابقاً', $message, 'الرسالة يجب أن تذكر خيار الملف السابق');
         $this->assertStringNotContainsString('This field is required', $message);
     }
@@ -244,7 +244,7 @@ class CampaignHistoryMediaTest extends TestCase
 
         $message = $this->validate($payload)->errors()->first('header.parameters.0.value');
 
-        $this->assertStringContainsString('فيديو الترويسة', $message);
+        $this->assertStringContainsString('فيديو العنوان', $message);
     }
 
     /** الترويسة النصّية ليست وسائط — تبقى لها الرسالة العامّة. */
