@@ -45,7 +45,7 @@
           {{ $t('Marks the contact as opted out of marketing') }}
         </div>
         <div class="text-amber-700 mt-1">
-          {{ $t('This cannot be undone from the flow. Re-subscribing a contact has to be done deliberately.') }}
+          {{ $t('To let the contact receive campaigns again, add the "Resubscribe to marketing" action after they ask for it.') }}
         </div>
       </div>
 

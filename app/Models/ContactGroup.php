@@ -41,6 +41,7 @@ class ContactGroup extends Model {
         return $this->withCount(['contacts as contact_count' => function ($query) use ($organizationId) {
             $query->where('organization_id', $organizationId);
         }])
+        ->where('organization_id', $organizationId)
         ->where('uuid', $uuid)
         ->where('deleted_at', null)
         ->first();

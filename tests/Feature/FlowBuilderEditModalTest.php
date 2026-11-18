@@ -25,10 +25,11 @@ class FlowBuilderEditModalTest extends TestCase
     private const ACTIONS = [
         'AddToGroup', 'RemoveFromGroup', 'UpdateContact', 'SendEmail',
         'Delay', 'Webhook', 'Conditional', 'AIResponse', 'AssignAgent',
+        'ResubscribeMarketing',
     ];
 
     /** بلا نافذة: لا إعداد لها، وحالة التفعيل تُبدَّل من شارة البطاقة. */
-    private const MODAL_LESS = ['RemoveFromGroup'];
+    private const MODAL_LESS = ['RemoveFromGroup', 'ResubscribeMarketing'];
 
     private function source(string $path): string
     {
@@ -113,6 +114,19 @@ class FlowBuilderEditModalTest extends TestCase
         $this->assertStringContainsString('role="switch"', $source);
         $this->assertStringContainsString('@click.stop="toggleActive"', $source);
         $this->assertStringContainsString('is_active: !isActive.value', $source);
+        $this->assertMatchesRegularExpression('/class="[^"]*\bnodrag\b/', $source);
+    }
+
+    /** وعكسه «إعادة الاشتراك في العروض» بلا إعداد كذلك: الشارة على البطاقة. */
+    public function test_resubscribe_marketing_toggles_active_from_its_card(): void
+    {
+        $source = $this->source(self::DIR . 'ResubscribeMarketing-node.vue');
+
+        $this->assertStringNotContainsString('NodeEditModal', $source);
+        $this->assertStringContainsString('role="switch"', $source);
+        $this->assertStringContainsString('@click.stop="toggleActive"', $source);
+        $this->assertStringContainsString('is_active: !isActive.value', $source);
+        $this->assertStringContainsString("actionType: 'resubscribe_marketing'", $source);
         $this->assertMatchesRegularExpression('/class="[^"]*\bnodrag\b/', $source);
     }
 

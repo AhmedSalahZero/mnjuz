@@ -129,6 +129,7 @@ const files = [
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/List-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/AddToGroup-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/RemoveFromGroup-node.vue',
+    'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/ResubscribeMarketing-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/UpdateContact-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/SendEmail-node.vue',
     'modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/Delay-node.vue',

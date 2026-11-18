@@ -14,7 +14,7 @@ import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 const DIR = new URL('../../modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/actions/', import.meta.url)
 const ACTIONS = ['AddToGroup', 'UpdateContact', 'SendEmail', 'Delay', 'Webhook', 'Conditional', 'AIResponse', 'AssignAgent']
 // بلا نافذة: الإجراء لا إعداد له، وحالة التفعيل تُبدَّل من شارة البطاقة.
-const MODAL_LESS = ['RemoveFromGroup']
+const MODAL_LESS = ['RemoveFromGroup', 'ResubscribeMarketing']
 
 let checks = 0
 const fail = []

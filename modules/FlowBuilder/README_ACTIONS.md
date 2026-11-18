@@ -103,6 +103,12 @@ The `FlowExecutionService` has been extended to:
   - Outside working hours automation doesn't run at all (existing behaviour).
 - **Service**: `App\Services\Chat\ConversationHandoff`.
 
+### 10. Resubscribe to marketing (`resubscribe_marketing`)
+- **Purpose**: Undoes `remove_from_group`'s opt-out: clears `contacts.marketing_opted_out_at`, so campaigns reach the contact again. Adding a contact to a group does **not** do this on purpose.
+- **Configuration**: none.
+- **Use**: only after the contact asks for it, e.g. a "Resubscribe" button that follows the opt-out step.
+- **Behavior**: groups removed at opt-out are not restored (add an `add_to_group` step after it if needed). A contact that never opted out is left as is. The cleared opt-out date is written to the log (`Contact resubscribed to marketing from a flow`).
+
 ## Flow Execution Process
 
 1. **Flow Detection**: FlowExecutionService detects when a user triggers a flow

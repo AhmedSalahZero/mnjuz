@@ -3,6 +3,7 @@
     import { ref, watchEffect } from 'vue';
     import { router, useForm } from '@inertiajs/vue3';
     import FormModal from '@/Components/FormModal.vue';
+    import ContactGroupContactsModal from '@/Components/ContactGroupContactsModal.vue';
     import { useTrans } from '@/Composables/useTrans';
 
 const trans = useTrans();
@@ -42,6 +43,8 @@ const trans = useTrans();
     const openModal = () => {
         isOpenFormModal.value = true;
     }
+
+    const isOpenContactsModal = ref(false);
 </script>
 <template>
     <div>
@@ -60,6 +63,9 @@ const trans = useTrans();
                         </button>
                         <button @click="deleteRow()" class="bg-gray-200 py-2 px-4 h-9 rounded-md flex items-center">
                             <span class="text-[14px]">{{ $t('Delete') }}</span>
+                        </button>
+                        <button @click="isOpenContactsModal = true" class="bg-gray-200 py-2 px-4 h-9 rounded-md flex items-center">
+                            <span class="text-[14px]">{{ $t('View contacts') }}</span>
                         </button>
                     </div>
                 </div>
@@ -88,5 +94,11 @@ const trans = useTrans();
         :url="'/contact-groups/' + group?.uuid" 
         :form="form"
         :formInputs="formInputs"
+    />
+    <ContactGroupContactsModal
+        :isOpen="isOpenContactsModal"
+        :groupUuid="group.uuid"
+        :label="group.name"
+        @close="isOpenContactsModal = false"
     />
 </template>

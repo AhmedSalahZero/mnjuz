@@ -198,10 +198,31 @@ class StoreCampaign extends FormRequest
                     'contacts',
                     $selection === 'all'
                         ? __('There are no contacts to send this campaign to.')
-                        : __('The selected group has no contacts to send to.')
+                        : $this->emptyGroupMessage($organizationId, $groupId, $channel)
                 );
             }
         });
+    }
+
+    /**
+     * مجموعة تعرض جهات اتصال وترفضها الحملة: كانت الرسالة «لا جهات اتصال»
+     * والتاجر يرى اثنتين، فلا يعرف السبب. السبب هنا بالعدد.
+     */
+    private function emptyGroupMessage(int $organizationId, int $groupId, string $channel): string
+    {
+        $exclusions = CampaignAudienceService::exclusions($organizationId, $groupId, $channel);
+
+        if ($exclusions['members'] === 0) {
+            return __('The selected group has no contacts to send to.');
+        }
+
+        $reasons = array_filter([
+            $exclusions['opted_out'] > 0 ? __('Opted out of marketing: :count', ['count' => $exclusions['opted_out']]) : null,
+            $exclusions['other_channel'] > 0 ? __('On another channel: :count', ['count' => $exclusions['other_channel']]) : null,
+        ]);
+
+        return __('No contact in this group can receive this campaign')
+            . ($reasons === [] ? '' : ' — ' . implode(' · ', $reasons));
     }
 
     /** القناة المطلوبة؛ بلا قناة = واتساب (الويب القديم وتطبيق الجوال). */

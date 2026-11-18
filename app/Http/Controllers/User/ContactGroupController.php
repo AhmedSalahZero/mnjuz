@@ -9,8 +9,10 @@ use App\Http\Controllers\Controller as BaseController;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Http\Requests\StoreContactGroup;
+use App\Services\Messaging\Channel;
 use App\Services\SubscriptionService;
 use App\Http\Resources\ContactGroupResource;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -20,6 +22,8 @@ use App\Services\ActivityLogger;
 
 class ContactGroupController extends BaseController
 {
+    private const CONTACTS_PER_PAGE = 20;
+
     private function getCurrentOrganizationId()
     {
         return session()->get('current_organization');
@@ -52,6 +56,46 @@ class ContactGroupController extends BaseController
                 'contactCategoriesEnabled' => $contactCategoriesEnabled,
             ]);
         }
+    }
+
+    /**
+     * جهات اتصال المجموعة، صفحة صفحة، لنافذة «عرض جهات الاتصال».
+     *
+     * أكبر مجموعة على الإنتاج فيها 18 ألف جهة، فلا تُرسل دفعة واحدة. والرقم
+     * يُخفى عن الموظف كما في صفحة جهات الاتصال حين يفعّل المالك ذلك.
+     */
+    public function contacts(Request $request, string $uuid): JsonResponse
+    {
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $organizationId = $this->getCurrentOrganizationId();
+        $group = ContactGroup::where('organization_id', $organizationId)
+            ->where('uuid', $uuid)
+            ->firstOrFail();
+
+        $maskPhone = Contact::contactPhoneNumberShouldEncrypted();
+
+        $contacts = $group->contacts()
+            ->where('contacts.organization_id', $organizationId)
+            ->searchTerm($request->query('search'))
+            // الأحدث إضافةً إلى المجموعة أولاً.
+            ->orderByDesc('contact_contact_group.id')
+            ->paginate(self::CONTACTS_PER_PAGE, ['contacts.*'])
+            ->through(fn (Contact $contact) => [
+                'uuid' => $contact->uuid,
+                'full_name' => $contact->full_name,
+                'phone' => $contact->encryptPhoneNumber($maskPhone),
+                'email' => $contact->email,
+                // ما يُبعدها عن الحملات، ظاهراً في القائمة نفسها.
+                'opted_out' => $contact->marketing_opted_out_at !== null,
+                'channel' => $contact->channel ?: Channel::DEFAULT,
+                'channel_label' => Channel::label($contact->channel ?: Channel::DEFAULT),
+            ]);
+
+        return response()->json($contacts);
     }
 
     public function exportContactGroups($format = 'xlsx')

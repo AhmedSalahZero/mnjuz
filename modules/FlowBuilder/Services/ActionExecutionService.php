@@ -62,6 +62,9 @@ class ActionExecutionService
                 
                 case 'remove_from_group':
                     return $this->executeRemoveFromGroup($config, $contact);
+
+                case 'resubscribe_marketing':
+                    return $this->executeResubscribeMarketing($contact);
                 
                 case 'update_contact':
                     return $this->executeUpdateContact($config, $contact, $userMessage);
@@ -164,6 +167,34 @@ class ActionExecutionService
         // وهو التاريخ الذي يُحتجّ به عند المراجعة.
         if ($contact->marketing_opted_out_at === null) {
             $contact->forceFill(['marketing_opted_out_at' => now()])->save();
+        }
+
+        return true;
+    }
+
+    /**
+     * إعادة جهة الاتصال إلى الرسائل التسويقية بعد انسحابها.
+     *
+     * الانسحاب (executeRemoveFromGroup) لا تُلغيه الإضافة إلى مجموعة، فكان
+     * العميل الذي يضغط «إعادة الاشتراك» يبقى خارج كل حملة رغم أن المسار يردّ
+     * عليه «لن يفوتك أي عرض». هذا الإجراء هو طريق العودة، ويوضع بعد طلب العميل.
+     *
+     * لا يُعيد المجموعات التي نُزع منها عند الانسحاب: لا سجلّ بها، والتاجر
+     * يضيف «إضافة إلى مجموعة» بعده إن أراد.
+     */
+    private function executeResubscribeMarketing($contact): bool
+    {
+        $optedOutAt = $contact->marketing_opted_out_at;
+
+        if ($optedOutAt !== null) {
+            $contact->forceFill(['marketing_opted_out_at' => null])->save();
+
+            // تاريخ الانسحاب يُمسح من جهة الاتصال، فيبقى هنا للمراجعة.
+            Log::info('Contact resubscribed to marketing from a flow', [
+                'organization_id' => $contact->organization_id,
+                'contact_id' => $contact->id,
+                'opted_out_at' => (string) $optedOutAt,
+            ]);
         }
 
         return true;

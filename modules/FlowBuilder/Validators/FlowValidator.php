@@ -335,6 +335,10 @@ class FlowValidator
             case 'remove_from_group':
                 break;
 
+            // بلا إعدادات: يمسح علامة الانسحاب من التسويق فقط.
+            case 'resubscribe_marketing':
+                break;
+
             case 'update_contact':
                 if (empty($config['target_field'])) {
                     $fail(__('Choose the contact field to update.'));

@@ -1,5 +1,6 @@
 export { default as AddToGroupNode } from './AddToGroup-node.vue'
 export { default as RemoveFromGroupNode } from './RemoveFromGroup-node.vue'
+export { default as ResubscribeMarketingNode } from './ResubscribeMarketing-node.vue'
 export { default as UpdateContactNode } from './UpdateContact-node.vue'
 export { default as SendEmailNode } from './SendEmail-node.vue'
 export { default as DelayNode } from './Delay-node.vue'

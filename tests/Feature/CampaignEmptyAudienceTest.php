@@ -306,10 +306,59 @@ class CampaignEmptyAudienceTest extends TestCase
         $this->assertFalse($this->validate((string) $group->uuid)->has('contacts'));
     }
 
+    /**
+     * من الإنتاج: مجموعة «إعادة الاشتراك في تلقي العروض» تعرض جهتين، والحملة
+     * تقول «المجموعة بلا جهات اتصال». الأولى منسحبة من التسويق، والثانية زائر
+     * محادثة مباشرة بلا رقم. الرسالة تقول السبب بالعدد.
+     */
+    public function test_a_group_that_shows_contacts_but_has_no_audience_says_why(): void
+    {
+        $group = $this->group();
+        $this->contact($group, ['marketing_opted_out_at' => now()]);
+        $this->contact($group, ['channel' => 'webchat', 'phone' => null]);
+
+        $errors = $this->validate((string) $group->uuid);
+
+        $this->assertSame(
+            __('No contact in this group can receive this campaign')
+                . ' — ' . __('Opted out of marketing: :count', ['count' => 1])
+                . ' · ' . __('On another channel: :count', ['count' => 1]),
+            $errors->first('contacts')
+        );
+    }
+
+    public function test_only_the_reasons_that_apply_are_listed(): void
+    {
+        $group = $this->group();
+        $this->contact($group, ['marketing_opted_out_at' => now()]);
+        $this->contact($group, ['marketing_opted_out_at' => now()]);
+
+        $this->assertSame(
+            __('No contact in this group can receive this campaign') . ' — ' . __('Opted out of marketing: :count', ['count' => 2]),
+            $this->validate((string) $group->uuid)->first('contacts')
+        );
+    }
+
+    /** منسحب على قناة أخرى يُعدّ مرّة واحدة: منسحباً. */
+    public function test_exclusions_count_each_member_once_and_skip_deleted_contacts(): void
+    {
+        $group = $this->group();
+        $this->contact($group, ['marketing_opted_out_at' => now(), 'channel' => 'telegram', 'phone' => null]);
+        $this->contact($group, ['channel' => 'webchat', 'phone' => null]);
+        $this->contact($group)->delete();
+        $this->contact($this->group('أخرى'), ['marketing_opted_out_at' => now()]);
+
+        $this->assertSame(
+            ['members' => 2, 'opted_out' => 1, 'other_channel' => 1],
+            CampaignAudienceService::exclusions($this->organization->id, $group->id)
+        );
+    }
+
     /** و«الكل» بلا جهات اتصال يُردّ كذلك. */
     public function test_all_contacts_with_an_empty_organization_is_rejected(): void
     {
         $this->assertTrue($this->validate('all')->has('contacts'));
+        $this->assertSame(__('There are no contacts to send this campaign to.'), $this->validate('all')->first('contacts'));
     }
 
     public function test_all_contacts_passes_when_the_organization_has_some(): void

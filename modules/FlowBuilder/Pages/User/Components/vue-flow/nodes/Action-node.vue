@@ -11,6 +11,7 @@
 import { computed } from 'vue'
 import AddToGroupNode from './actions/AddToGroup-node.vue'
 import RemoveFromGroupNode from './actions/RemoveFromGroup-node.vue'
+import ResubscribeMarketingNode from './actions/ResubscribeMarketing-node.vue'
 import UpdateContactNode from './actions/UpdateContact-node.vue'
 import SendEmailNode from './actions/SendEmail-node.vue'
 import DelayNode from './actions/Delay-node.vue'
@@ -37,6 +38,8 @@ const actionComponent = computed(() => {
       return AddToGroupNode
     case 'remove_from_group':
       return RemoveFromGroupNode
+    case 'resubscribe_marketing':
+      return ResubscribeMarketingNode
     case 'update_contact':
       return UpdateContactNode
     case 'send_email':

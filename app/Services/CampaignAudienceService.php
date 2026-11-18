@@ -87,6 +87,32 @@ class CampaignAudienceService
         });
     }
 
+    /**
+     * لماذا لا تصل الحملة إلى أعضاء المجموعة: عدد المنسحبين من التسويق، وعدد
+     * من هم على قناة غير قناة الحملة (ولم ينسحبوا، كي لا يُعدّ أحد مرّتين).
+     *
+     * تُسأل حين يكون الجمهور فارغاً فقط، فتشرح للتاجر مجموعةً تعرض جهات
+     * اتصال وترفضها الحملة.
+     *
+     * @return array{members: int, opted_out: int, other_channel: int}
+     */
+    public static function exclusions(int $organizationId, int $contactGroupId, string $channel = Channel::DEFAULT): array
+    {
+        $members = Contact::where('organization_id', $organizationId)
+            ->whereHas('contactGroups', function ($query) use ($contactGroupId) {
+                $query->where('contact_groups.id', $contactGroupId);
+            });
+
+        return [
+            'members' => (clone $members)->count(),
+            'opted_out' => (clone $members)->whereNotNull('marketing_opted_out_at')->count(),
+            'other_channel' => (clone $members)
+                ->whereNull('marketing_opted_out_at')
+                ->where('contacts.channel', '!=', $channel)
+                ->count(),
+        ];
+    }
+
     public static function count(int $organizationId, $contactGroupId, string $channel = Channel::DEFAULT): int
     {
         return self::query($organizationId, $contactGroupId, $channel)->count();

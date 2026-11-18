@@ -244,6 +244,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/contacts', [App\Http\Controllers\User\ContactController::class, 'delete']);
 
                 Route::get('/contact-groups/{uuid?}', [App\Http\Controllers\User\ContactGroupController::class, 'index']);
+                Route::get('/contact-groups/{uuid}/contacts', [App\Http\Controllers\User\ContactGroupController::class, 'contacts']);
                 Route::post('/contact-groups', [App\Http\Controllers\User\ContactGroupController::class, 'store']);
                 Route::post('/contact-groups/import', [App\Http\Controllers\User\ContactGroupController::class, 'import']);
                 Route::post('/contact-groups/{uuid}', [App\Http\Controllers\User\ContactGroupController::class, 'update']);

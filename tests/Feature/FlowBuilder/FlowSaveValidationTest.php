@@ -267,6 +267,7 @@ class FlowSaveValidationTest extends FlowBuilderTestCase
             $this->buttonsNode('2', 'اختر', ['نعم', 'لا']),
             $this->actionNode('3', 'add_to_group', ['group_id' => 5]),
             $this->actionNode('4', 'remove_from_group'),
+            $this->actionNode('8', 'resubscribe_marketing'),
             $this->actionNode('5', 'update_contact', ['target_field' => 'email']),
             $this->actionNode('6', 'delay', ['duration' => 5]),
             $this->actionNode('7', 'webhook', ['url' => 'https://example.com/hook']),
